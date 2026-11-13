@@ -26,6 +26,7 @@
  * Modified for SaturnExplorer: RuleMultiCollapse keeps two equal writes of a global that a memory access separates from the join, and RulePropagateCopy does not feed a global's value into the global's next write past one (patches/0085-engine-global-write-keeps-place.patch).
  * Modified for SaturnExplorer: RuleEarlyRemoval keeps a write of a global on a path that never reaches a return (patches/0087-engine-global-writes-without-return.patch).
  * Modified for SaturnExplorer: RulePushMulti and RuleConditionalMove do not move or join writes of a global an access holds (patches/0090-engine-hardware-access-orders-globals.patch).
+ * Modified for SaturnExplorer: RuleSubCommute does not commute a SUBPIECE into an address-forced write (patches/0094-engine-forced-write-and-pushed-join.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -4762,6 +4763,11 @@ int4 RuleSubCommute::applyOp(PcodeOp *op,Funcdata &data)
 
 				// Make sure no other piece of base is getting used
   if (base->loneDescend() != op) return 0;
+  // SaturnExplorer (0094): ...nor is base a write the analysis must keep where the code makes it (address forced: a write of a
+  // global before an access through a pointer or a register's, 0090's sink). The commuted op takes the SUBPIECE's output, so the global's
+  // write went and nothing wrote the global at the access: `tas.b @g ; mov.b @r4,r3 ; mov.w @g,r3 ; tas.b @g` printed the read through
+  // r4 before the one `g = g | 0x8000;`, the second tas.b's byte read being the SUBPIECE of the first's write (ledger A5-126)
+  if (base->isAddrForce()) return 0;
 
   if (offset == 0) {		// Look for overlap with RuleSubZext
     PcodeOp *nextop = outvn->loneDescend();

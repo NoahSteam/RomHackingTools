@@ -34,6 +34,7 @@
  * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
  * Modified for SaturnExplorer: nor a copy of an earlier write of a global with an access between them (patches/0088-engine-global-piece-read-and-join-copy.patch).
  * Modified for SaturnExplorer: a LOAD is not printed past a write of a global (patches/0090-engine-hardware-access-orders-globals.patch).
+ * Modified for SaturnExplorer: nor past an op whose output a call's INDIRECT on a global takes (patches/0094-engine-forced-write-and-pushed-join.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -3785,7 +3786,11 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
       if (global && other->code() == CPUI_COPY && other->getIn(0)->getAddr() == wvn->getAddr()) continue;
       for(list<PcodeOp *>::const_iterator diter=wvn->beginDescend();!global && diter!=wvn->endDescend();++diter) {
 	const Varnode *cvn = (*diter)->getOut();
-	global = (*diter)->code() == CPUI_COPY && cvn != (Varnode *)0 && cvn->isAddrTied() && cvn->getSpace()->getType() == IPTR_PROCESSOR;
+	// SaturnExplorer (0094): ...or the INDIRECT a call puts on a global, which takes the write as its input once RulePropagateCopy has
+	// fed the COPY into it: the merge makes the INDIRECT's input and output one variable, the global written at this op (`x = *p; g = g
+	// | 0x80; h = x; f();` printed `g = g | 0x80; h = *p;`, a `tas.b` between a read through a pointer and its store, ledger A5-127)
+	const bool marker = (*diter)->code() == CPUI_COPY || ((*diter)->code() == CPUI_INDIRECT && (*diter)->getIn(0) == wvn);
+	global = marker && cvn != (Varnode *)0 && cvn->isAddrTied() && cvn->getSpace()->getType() == IPTR_PROCESSOR;
       }
       if (!global) continue;
       for(int4 c=0;c<chain.size();++c)

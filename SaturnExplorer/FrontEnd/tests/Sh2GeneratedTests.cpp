@@ -6919,6 +6919,20 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                                                  "of the global, made a write of it");
                     }
                 }
+                // (a store no run makes, where the engine says it removed a block as unreachable, has no place to judge an access against, as for
+                // the reads below: its record stays a fold, and the mapping names it on the line of a later store of the same register, grammar
+                // 1 seed 6907692, `tst r3,r1` with r1 a literal of A5-122's production, so the `bt` always taken and `mov.l r3,@(0,r6)` skipped,
+                // named on the line of the `mov.l r3,@r6` after a `dt` loop)
+                if (!storeRan)
+                {
+                    bool removed = false;
+                    for (const std::string& w : r.warnings) removed = removed || w.find("Removing unreachable block") != std::string::npos;
+                    if (removed)
+                    {
+                        count("order.folded-store.unrun");
+                        continue;
+                    }
+                }
                 // (a store that writes back what the access just before it read from the same bytes, or wrote there, in every run that makes it,
                 // is no change of memory: the engine drops it as a copy of the global to itself or joins it with the equal store before it, and
                 // the mapping names it on the next line that shows the bytes, or on none: grammar 1 seed 4204949, `mov.w @(r0,r6),r3 ; mov.w
@@ -7124,9 +7138,12 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if ((!m.direct && !m.write) || m.firstLine < 0 || m.origBlock < 0) continue;
                     if (!runsAfter(static_cast<size_t>(rd.origBlock), rd.origOrder, static_cast<size_t>(m.origBlock), m.origOrder)) continue;
                     count(m.direct ? "order.folded-read-before-access.checked" : "order.folded-read-before-pointer-write.checked");
-                    if (shown > statementEnd(m.firstLine) && !m.direct && offPath(r.lines[static_cast<size_t>(shown)], m, rd.insn))
+                    // (...and a register's access too: a delay slot's read named on the return of the branch's other arm, which the access after
+                    // the slot is not on, grammar 1 seed 6906813, `bt/s L ; mov.w @(6,r6),r0 ; mov.l @(0x2c,r7),r1 ; rts ; L: rts`, the slot's
+                    // read printed `return CONCAT44((int4)iRam2600100e,in_r1);` on L's return)
+                    if (shown > statementEnd(m.firstLine) && offPath(r.lines[static_cast<size_t>(shown)], m, rd.insn))
                     {
-                        count("order.folded-read-before-pointer-write.other-path");
+                        count(m.direct ? "order.folded-read-before-access.other-path" : "order.folded-read-before-pointer-write.other-path");
                         continue;
                     }
                     if (shown > statementEnd(m.firstLine))
@@ -16418,6 +16435,62 @@ void TestA5119Pins(Sh2Decompiler& d)
     }
 }
 
+// A5-125 and A5-126 (area 5 fixer, patch 0094). A5-126: a tas.b's write of a byte of a global the code reads as a half-word, before a read
+// through a pointer, was dropped when a second tas.b of the byte followed (RuleSubCommute made the first write's op the second's byte read).
+// A5-125: a global read before a loop and stored into in it, the block between emptied, was not decompiled ("Forced merge caused
+// intersection": pushMultiequals gave the pushed join the global's storage). A5-127: a read through a pointer before a tas.b's write of a global
+// was printed after it when a call's INDIRECT took the write. Each passes with the patch and fails without it; the sweep's two oracle pins
+// (the order rules' own false positives) are counted.
+void TestA5126Pins(Sh2Decompiler& d)
+{
+    struct Pin
+    {
+        const char* name;
+        const char* words;
+        const char* count;
+        const char* alias;   // SE_GENERATED_ALIAS
+    };
+    const Pin kPins[] = {
+        // grammar 1 seed 5207741 shrunk: tas.b @g ; mov.b @r4,r3 ; mov.w @g,r3 ; tas.b @g (r4 may be &g: the first write must be made before it)
+        { "A5-126, grammar 1 seed 5207741 shrunk", "D604 461B 0229 6340 6361 461B 0129 000B 0009 0009 0600 220C", "order.folded-store.checked", nullptr },
+        // grammar 1 seed 6406139 shrunk: mov.l @g,r3 ; mac.w @r7+,@r6+ before a poll's loop that stores r3's byte at the stepped pointer
+        { "A5-125, grammar 1 seed 6406139 shrunk", "D606 D707 8803 8900 2530 6362 467F D705 2630 6072 C801 8BFB 000B 0009 2600 218C 2600 2204 1D80 0088",
+          "order.folded-store.checked", nullptr },
+        // The sweep of A5-122's production from 6,900,001 (the order oracle's own false positives): grammar 1 seed 6907692 shrunk, a store in
+        // a block the engine removed as unreachable (`tst r3,r1` with r1 the production's literal), no run makes it, named on a later
+        // store's line; and seed 6906813 shrunk, a delay slot's read named on the return of the branch's other arm, which the register
+        // read after the slot is not on
+        { "A5-122 sweep, grammar 1 seed 6907692 shrunk", "D108 E303 D608 D709 2138 8900 1630 E00D CE7A E301 461B 0129 4310 8BFB 2632 8545 000B 0009 2600 3C1C 2600 2200 2600 1000",
+          "order.folded-store.unrun", "4:26003C1C" },
+        { "A5-122 sweep, grammar 1 seed 6906813 shrunk", "D608 D709 2621 6072 C801 8BFB 2248 8907 8802 8D03 8563 517B 000B 0009 000B 0009 AFF8 0009 2600 1008 0818 0044",
+          "order.folded-read-before-access.other-path", "4:06003C10" },
+    };
+    for (const Pin& p : kPins)
+    {
+        const char* old = std::getenv("SE_GENERATED_ALIAS");
+        const std::string saved = old ? old : "";
+        SetOrClear("SE_GENERATED_ALIAS", p.alias);
+        const Subject subject = RawSubject(p.words);
+        SetOrClear("SE_GENERATED_ALIAS", old ? saved.c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        const auto it = rep.counts.find(p.count);
+        const int n = it == rep.counts.end() ? 0 : it->second;
+        std::printf("pin '%s': %zu finding(s), %s %d\n", p.name, rep.findings.size(), p.count, n);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(n > 0);
+    }
+    // (and A5-127's, grammar 1 seed 6907579: a read through a pointer printed after a tas.b's write of a global the call after them holds)
+    const long kSeeds[] = { 5207741, 6406139, 6809428, 6906813, 6907579, 6907692 };
+    for (long sd : kSeeds)
+    {
+        const Report rep = Evaluate(d, Generate(static_cast<uint64_t>(sd)), true);
+        std::printf("pin 'A5-125 and A5-126, grammar 1 seed %ld': %zu finding(s)\n", sd, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestA3RoutedPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -17142,6 +17215,7 @@ void TestGenerated()
         RUN(TestArea7Round14Pins(d));
         RUN(TestA5114Pins(d));
         RUN(TestA5119Pins(d));
+        RUN(TestA5126Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

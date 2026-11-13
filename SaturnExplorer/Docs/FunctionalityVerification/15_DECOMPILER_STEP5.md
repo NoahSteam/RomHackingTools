@@ -19989,3 +19989,85 @@ All after the last code edit (the A7-123 commit; the record and ledger changed a
 
 * **Area 5** (order classes, found in the fresh ranges on master's binary and untouched here): `folded-store-after-access` grammar 1 6602319; `read-after-folded-store` grammar 1 6605001 and specials 6702443; `folded-read-after-access` grammar 2 6607443 and specials 6703972. No area 5 ledger row was opened here (area 5 owns the numbering).
 * **Area 3**: nothing (no `endless-*` finding in the three ranges).
+## Area 5, A5-125 and A5-126
+
+Fixer, branch `review/5-round-a5126`, cut at master `72c1f4fd` (patches to 0093). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). One engine patch, **0094** (`ruleaction.cc`, `funcdata_block.cc`, `coreaction.cc`; 0089, 0091 and 0092 stay reserved); the oracle in `Sh2GeneratedTests.cpp`. The pins are `TestA5126Fix` (`Sh2DecompilerTests.cpp`) and `TestA5126Pins` (`Sh2GeneratedTests.cpp`), so the ctest count is unchanged. The causes were found with a temporary trace of the rules and actions (each rule that changed an op, the function's p-code after each action) and of the failing forced merge; it is not committed. Backups pushed to `backup/review-5-round-a5126`.
+
+| Row | P | Outcome |
+|---|---|---|
+| A5-126 | P2 | **fixed** (0094: `RuleSubCommute` leaves an address-forced input alone) |
+| A5-125 | P3 | **fixed** (0094: `pushMultiequals` scans every reader before it names the pushed join's storage) |
+| A5-127 | P1 | **filed and fixed** (the sweep's: a read through a pointer printed after a `tas.b`'s write when a call's INDIRECT takes the write; 0094, `ActionMarkImplied`) |
+| A5-128 | P3 | **filed and fixed** (the sweep's: two false positives of the order rules) |
+| A5-121 | P3 | as triaged (open): grammar 2 seed 3709052 gives the same four `cache-read-pointer-unsaid` findings on this branch |
+
+### 1. A5-126: `RuleSubCommute`
+
+The shrunk words, `mov.l @(lit),r6 (0x0600220C) ; tas.b @r6 ; movt r2 ; mov.b @r4,r3 ; mov.w @r6,r3 ; tas.b @r6 ; movt r1 ; rts`. The `mov.w` makes the global's range two bytes, so heritage writes the first `tas.b`'s byte as the half-word `r0x0600220c:2 = CONCAT11(b | 0x80, lo)`; 0090's sink before the LOAD through r4 address-forces it. The second `tas.b` reads its byte as `SUB21(write1, 1)`. The trace, in order:
+
+* `RuleConcatCommute` makes the first write `r0x0600220c:2 = x | 0x8000` (x the input), keeping its output.
+* `RuleShiftBitops` makes the second write's low byte `SUB21(x, 0)` (the first write leaves it), so the SUBPIECE of the second `tas.b` is the first write's only reader (the `mov.w`'s value is unused).
+* `RuleSubCommute` takes `SUB21(x | 0x8000, 1)`: a SUBPIECE whose input has no other reader commutes into the op that defines the input, the op taking the SUBPIECE's output. The global's write became the one-byte `SUB21(x,1) | 0x80` into a temporary. Nothing then writes the global before the read through r4, and the second write, `(SUB21(x,1) | 0x80) | 0x80` collapsed, is `x | 0x8000`: one statement, after the read.
+
+So the engine, not the host, and the oracle is right: with r4 at the global the code reads the byte with bit 7 set. Without the `mov.w` there is no SUBPIECE (the range is the byte), and without the second `tas.b` the write's reader is the RETURN's copy, which is why the row's two variants kept the write. Master's text was the same because before 0090 the write was dead code anyway (no barrier at the LOAD); since 0090 the write is address forced, and this rule was the one route that still dropped it.
+
+**0094** (`ruleaction.cc`): `RuleSubCommute` returns when the SUBPIECE's input is address forced. Text: `xVar2 = (xunknown1)uRam0600220c; uRam0600220c = uRam0600220c | 0x8000; xVar1 = *param_1; uRam0600220c = CONCAT11((char)(uRam0600220c >> 8),xVar2) | 0x8000;`. The low byte is read before the read through r4 and used after it, which is right: a read writes nothing, and the `tas.b`s do not touch that byte. The second statement is wordy; it is the value the code stores.
+
+### 2. A5-125: `pushMultiequals`
+
+The shrunk words (`mov.l @r6,r3 ; mac.w @r7+,@r6+` from a literal global, then a poll's loop storing r3's byte at the stepped pointer). The `mac.w`'s saturation test (`sr >> 1 & 1`) is a redundant branch; once it is gone its block is empty, and `ActionDoNothing` removes it. `Funcdata::pushMultiequals` pushes the block's join of the global 0x2600218C into the loop's head: that is the word `mov.l @r6,r3` read, which r3 carries into the loop. Upstream gives the pushed join a unique output when the head already joins the same address-tied storage through the removed edge. But its scan of the join's readers broke off at the first reader that was not that head join. Here the SUBPIECE of r3's byte came first, so the pushed join took the global's storage. The head then held two joins of 0x2600218C (`:7f = :7f ? in ? :72` beside the head's own `:76`), both live at the block's start. `Merge::eliminateIntersect` snipped the reads, but two joins of one storage in one block intersect at the block's start whatever is snipped, and `mergeRangeMust` threw "Forced merge caused intersection". The error depends only on the order of the readers, so it is the same on master and before 0090.
+
+**0094** (`funcdata_block.cc`): the scan does not break off, so the head's join of the same storage is always seen. Text: `xVar2 = xRam2600218c; if (in_r0 != 3) { *param_2 = in_r3; xVar2 = xRam2600218c; } do { xRam2600218c._2_2_ = CONCAT11((char)xVar2,(xunknown1)xRam2600218c); uVar1 = Ram1d800088; } while ((uVar1 & 1) != 0);`. The word is read again after the store through r5, which is 0093's barrier. Grammar 1 seeds 6406139 and 6809428 (the area 3 sweep's second instance, status 3 on master's engine) pass whole. Status 3 said the error, so the old cost was a missing text, not a wrong one.
+
+### 3. The sweeps (A5-122's production)
+
+`SE_GENERATED_GRAMMAR=<g> SE_GENERATED_FIRST=6900001 SE_GENERATED_SEEDS=10000 SE_GENERATED_CANARY=0`. In grammar 1 the production is in 3,536 programs (967 increments, 838 restores, 833 other globals, 898 through the other pointer). Grammar 2 does not draw it (version 1 only).
+
+| Run | First pass (0094 without the `coreaction.cc` change, the old oracle) | Final |
+|---|---|---|
+| grammar 1 | 7 failing seeds | **4**: area 7's 6900150 (`map-const-join`), 6901649 and 6902754 (`map-store-value`); area 3's 6906675 (`endless-store-dropped`) |
+| grammar 2 | 1 failing seed | **1**: area 7's 6906408 (`map-const-join`, function 1) |
+
+Each of the five fails the same way on master's engine (0094 reverted). The first pass's other three were area 5's:
+
+* **6907579, A5-127 (P1, engine).** Shrunk: `mov.b @r4,r3 ; tas.b @r7 (0x26001004) ; mov.w r3,@r6 (0x0600200C) ; bsr f` printed `uRam26001004 = uRam26001004 | 0x80; iRam0600200c = (int2)*param_1; func_0x06009020();`. With r4 at 0x26001004 the code stores the old byte and the text the byte the `tas.b` set. In the final p-code the two writes of the globals are the call's INDIRECTs on them: `RulePropagateCopy` fed each COPY into the call's INDIRECT, with no access between them, as 0082 allows. So the `tas.b`'s OR writes a temporary that only the INDIRECT reads. 0090's check in `ActionMarkImplied::checkImpliedCover` keeps a LOAD's implied chain from crossing an op that writes a global, or one whose output a COPY into a global reads; it did not count one whose output an INDIRECT takes, though `mergeIndirect` makes the INDIRECT's input and output one variable, the global, written at the OR. **0094** (`coreaction.cc`) counts it: `cVar1 = *param_1; uRam26001004 = uRam26001004 | 0x80; iRam0600200c = (int2)cVar1;`. The same on master.
+* **6907692, A5-128 (a), oracle.** `tst r3,r1` with r1 the production's literal and r3 = 3, so the `bt` is always taken. The engine removes the block of `mov.l r3,@(0,r6)` as unreachable (said in its warning); its record stays a fold, and the mapping names it on the line of the `mov.l r3,@r6` after a `dt` loop. `folded-store-after-access` judged that line against the accesses before it. A store no run makes, where the engine says it removed a block as unreachable, is now set aside (`order.folded-store.unrun`: 109 in the grammar 1 sweep, 28 in grammar 2), as `read-after-folded-store` already did (grammar 2 seed 5854).
+* **6906813, A5-128 (b), oracle.** `bt/s L ; mov.w @(6,r6),r0 ; mov.l @(0x2c,r7),r1 ; rts ; L: rts`, the slot also reached by a `bra`. The mapping names the slot's read on L's `return CONCAT44((int4)iRam2600100e,in_r1);` and draws the other copy (`iVar3 = (int4)iRam2600100e;`) at 0x06009016, the `mov.l` after the slot. `folded-read-after-access` judged L's line against the register read at 0x06009016, which L's path does not run. A5-119's `offPath` (a line printed on a path without the access) now applies to a register's access too (`order.folded-read-before-access.other-path`: 2). The token at 0x06009016 is area 7's.
+
+### 4. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_NOTES=1 SE_GAME_OUT=<dir>`, both images, this branch's binary against master `72c1f4fd`'s. Real entries lent **474 (645) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**; every ledger count 0; "all passed".
+
+**No function's text changes in either image**: the texts written to `SE_GAME_OUT` (alone, `lend_before/`, `lend_after/`) are byte for byte master's. Every log line but the new test's is master's too. So neither image has A5-126's shape (an address-forced write whose only reader is a SUBPIECE `RuleSubCommute` would commute), A5-125's (every function was decompiled before, 1,730 and 2,995 ok), or A5-127's.
+
+### 5. Mutation
+
+0094 reverted (master's three files), this branch's tests:
+
+* `SaturnExplorerSh2DecompilerTests` fails **6** checks, all in `TestA5126Fix`: `a5_125`'s status and its two text checks, `a5_126`'s two and `a5_127`'s one. Its two controls pass.
+* The generator fails **8**: A5-126's and A5-125's shrunk words (a finding and no count, each) and grammar 1 seeds 5207741, 6406139, 6809428 and 6907579.
+* The two oracle pins pass either way (the oracle's own); with the old oracle 6907692 and 6906813 fail (the first sweep).
+
+While fixing, each part was checked alone. A5-126's words passed with the `ruleaction.cc` change only. A5-125's words passed only once the `funcdata_block.cc` change was added. A5-127's seed failed with those two and passed with the `coreaction.cc` change.
+
+### 6. Runs
+
+All after the last code edit (`4145ece8`), with that build:
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` with Live | **117 of 117** passed (the 6 Live tests among them) |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed |
+| 20,000-seed matrix (`SE_GENERATED_SEEDS=20000`, the canary on) | **0 failing seeds, 0 findings** (the canary: 240 programs, 0 failing; `order.folded-store.unrun` 84, `order.folded-read-before-pointer-write.checked` 1,217) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, narrow-c 130, void-return 227, void-return-lent 24, skipped 8 |
+| grammar 1 and 2, 10,000 each from 6,900,001 | 4 and 1 failing seeds, none area 5's (section 3) |
+| game corpus (section 4) | both images "all passed"; lent 474 (645) of 999 and 724 (975) of 1,543; missing and said 0 and 4; texts unchanged |
+| `check-literal-size.py`, `check-vendored-tree.py lint --tests-dir` | ok, ok; 0094 applied to master's three files reproduces the tree's byte for byte |
+
+### 7. Routed
+
+* **Area 7**:
+  * grammar 1 seeds 6900150 (`map-const-join`), 6901649 and 6902754 (`map-store-value`), and grammar 2 seed 6906408 (`map-const-join`) of the 6,900,001 range. Each is the same on master's engine. 6902754 shrunk: `if (param_1 != 0) { do { } while (...); param_2 = 0x60; } xRam06003064 = param_2;`, a right value (the merge of r5) that the check reads as another register value.
+  * The token of 6906813's second copy of the slot's read, drawn at the instruction after the slot (A5-128 (b)).
+* **Area 3**: grammar 1 seed 6906675 (`endless-store-dropped`, and `endless-join-dropped` in the shrunk words `2448 8901 4115 8D00 814C D704 E001 2702 6072 C801 8BFC 000B 0009 0009 2600 1030` with `SE_GENERATED_ALIAS=4:06003C04`). A store through the production's pointer before an unmarked poll the analysis takes to run for ever; the same on master's engine.
+* **Area 5, next round**: A5-121 (open, as triaged).
