@@ -4722,11 +4722,33 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
             // (A5-91) ...and one that starts at no hardware: its first values are said nowhere, and the later ones reach a register area, the associative
             // purge or the cache address array (a pointer stepped from a cache data array cell, `p = (p + 4) ^ 0x20000000`, comes to the on-chip
             // registers on the second turn).
-            if (pv.steps && !steppedSaid && laterHardware && registers.empty())
-                noteRaw(insn, "the pointer is stepped in a loop from addresses that are no hardware's: the iterations after the first reach other addresses, "
-                        "which are not said, among them " + Hex8(laterAt) + " (" + HardwareRegionName(laterAt) + "): a " + std::to_string(size) +
-                        "-byte " + (write ? "write" : "read") + " there has the effects and is subject to the width rules of that hardware" +
-                        (pv.steppedCached && !write ? "; and " + cacheCaution : std::string()),
+            // (A5-136) ...or at a register area with no named register near, which the stepped note above leaves alone, as it has nothing to say of
+            // that register, when a later value leaves the register areas for the associative purge or the cache address array, where an access
+            // is no memory access whatever the register: `p = (p + 4) ^ 0x40000000` from 0x7DB00010 holds 0x3DB00014 (an SCSP slot's word through
+            // the cache-through partition) after the first turn and 0x7DB00018, the cache address array, after the second, where the store after the
+            // loop wrote: grammar 1 seed 7006344. (A walk that stays in register areas is left as A5-54 leaves it: A5-83's `p += 4` from
+            // 0x35B000C8 has nothing to say, and the games' walks down the SCSP's DSP area from 0x25B00BE2 are not said to reach the registers
+            // at 0x25B00522 a bounded walk of their later values comes to.)
+            uint32_t sayAt = laterAt;
+            bool say = registers.empty() && laterHardware;
+            if (pv.steps && !steppedSaid && !registers.empty())
+                for (uint32_t l : pv.later)
+                {
+                    const uint32_t partition = l >> 29;
+                    if (partition == 2 || partition == 3 || partition == 5)
+                    {
+                        say = true;
+                        sayAt = l;
+                        break;
+                    }
+                }
+            if (pv.steps && !steppedSaid && say)
+                noteRaw(insn, "the pointer is stepped in a loop from " +
+                                  (registers.empty() ? std::string("addresses that are no hardware's") : Hex8(registers[0].address)) +
+                                  ": the iterations after the first reach other addresses, which are not said, among them " + Hex8(sayAt) + " (" +
+                                  HardwareRegionName(sayAt) + "): a " + std::to_string(size) + "-byte " + (write ? "write" : "read") +
+                                  " there has the effects and is subject to the width rules of that hardware" +
+                                  (pv.steppedCached && !write ? "; and " + cacheCaution : std::string()),
                         true);
             continue;
         }
