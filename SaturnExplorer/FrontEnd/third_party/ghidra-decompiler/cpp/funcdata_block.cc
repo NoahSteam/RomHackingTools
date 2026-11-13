@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: an access folded into the stack frame that goes with an unreachable block is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a call that goes with an unreachable block drops its frame call records (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
+ * Modified for SaturnExplorer: pushMultiequals gives the new MULTIEQUAL a unique output whenever the output block joins the same address-tied storage (patches/0094-engine-forced-write-and-pushed-join.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -152,8 +153,11 @@ void Funcdata::pushMultiequals(BlockBasic *bb)
 	  continue;
 	}
       }
+      // SaturnExplorer (0094): no break here, so a MULTIEQUAL of the same address-tied storage in outblock, met after another reader,
+      // still asks for a unique output. Broken off at the first other reader, the new MULTIEQUAL took the storage too, and outblock
+      // held two joins of one global both live at its start, which the forced merge of address-tied Varnodes cannot unite ("Forced merge
+      // caused intersection": a global read before a loop and stored into in it, the block between emptied, ledger A5-125)
       needreplace = true;
-      break;
     }
     if (!needreplace) continue;
 				// Construct artificial MULTIEQUAL
