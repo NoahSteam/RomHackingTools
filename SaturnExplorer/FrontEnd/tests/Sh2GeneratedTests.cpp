@@ -16753,7 +16753,10 @@ void TestRouted345Pins(Sh2Decompiler& d)
             std::snprintf(words, sizeof words, kWords, control ? "E002" : "E003");
             const ModulePin m{ control ? "A4-18 control (the callee returns)" : "A4-18 shrunk", words, "0/0/6e,6e/6e/80", "36:6:6:5c:5c,54,54,54,58,5c", "1,1",
                                "40000,40000", "20000,0" };
-            const Report sh = EvaluateSubject(d, ModuleSubject(m), true);
+            // (the callee's poll, as the seed declares it: SE_GENERATED_POLL=26002108, which the shrinker's replay line leaves out)
+            Subject subject = ModuleSubject(m);
+            subject.polls.push_back({ Env::MemKey(0x26002108u), 1u, 0u, 0, 0x26002108u });
+            const Report sh = EvaluateSubject(d, subject, true);
             std::printf("pin '%s': %zu finding(s), unfinished %d\n", m.name, sh.findings.size(), count(sh, "folded-into-switch.unfinished"));
             for (const Finding& f : sh.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
             CHECK(sh.findings.empty());
