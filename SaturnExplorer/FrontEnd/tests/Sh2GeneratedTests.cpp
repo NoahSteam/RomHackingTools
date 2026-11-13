@@ -7031,6 +7031,58 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         count("order.folded-store.unrun");
                         continue;
                     }
+                    // (A5-138: ...nor one no run makes that stores back what a read of the same bytes put in the register, with no write between
+                    // them that may reach those bytes (a write of them, one through a pointer, a register's write, which may start a transfer):
+                    // whatever the path, it leaves memory as it was, and the engine drops it (the runs' write-back rule above needs a run that
+                    // makes it; a read between changes no memory). `mov.l @r6,r3 ; tst r3,r2 ; bt L ; mov.l r3,@r6 ; L: <poll>`
+                    // with r3 0 in every run printed `if ((uRam2600238c & in_r2) != 0) { }`, the mapping naming the store on a later byte
+                    // store's line after the poll, grammar 1 seed 7801382)
+                    const auto word = [&](uint32_t pc, uint16_t& w) {
+                        if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                        w = subject.WordAt(pc);
+                        return true;
+                    };
+                    int ssize = 0;
+                    const int reg = dts::StoredRegister(subject.WordAt(f.insn), ssize);
+                    std::set<uint32_t> makers;
+                    std::set<int> entry;
+                    if (reg >= 0 && ssize == f.size && dts::RegisterMakers(r, word, dts::BranchSources(r, word), f.insn, reg, makers, false, &entry) &&
+                        entry.empty() && !makers.empty())
+                    {
+                        const auto mayBetween = [&](size_t ab, uint32_t ao, size_t mb, uint32_t mo, size_t bb, uint32_t bo) {
+                            if (ab >= fr.reach.size() || mb >= fr.reach.size() || bb >= fr.reach.size()) return true;
+                            return (ab == mb ? mo > ao : fr.reach[ab][mb] != 0) && (mb == bb ? mo < bo : fr.reach[mb][bb] != 0);
+                        };
+                        bool back = true;
+                        for (uint32_t mk : makers)
+                        {
+                            const AccessFate* read = nullptr;
+                            for (const AccessFate& o : r.accessFates)
+                                if (!o.write && o.insn == mk && o.fate == AccessFate::FoldedOrdinary && o.constantAddress && !o.frame && o.origBlock >= 0 &&
+                                    o.address == f.address && o.size == f.size)
+                                    read = &o;
+                            if (!read)
+                            {
+                                back = false;
+                                break;
+                            }
+                            const size_t rb = static_cast<size_t>(read->origBlock), fb = static_cast<size_t>(f.origBlock);
+                            for (const MemoryAccess& m : got)
+                                if (m.write && (m.origBlock < 0 || mayBetween(rb, read->origOrder, static_cast<size_t>(m.origBlock), m.origOrder, fb, f.origOrder)))
+                                    back = false;
+                            for (const AccessFate& o : r.accessFates)
+                                if (o.write && o.insn != f.insn && (o.origBlock < 0 || !o.constantAddress ||
+                                                                    (o.address < f.address + f.size && f.address < o.address + o.size)) &&
+                                    (o.origBlock < 0 || mayBetween(rb, read->origOrder, static_cast<size_t>(o.origBlock), o.origOrder, fb, f.origOrder)))
+                                    back = false;
+                            if (!back) break;
+                        }
+                        if (back)
+                        {
+                            count("order.folded-store.unrun-write-back");
+                            continue;
+                        }
+                    }
                 }
                 // (a store that writes back what the access just before it read from the same bytes, or wrote there, in every run that makes it,
                 // is no change of memory: the engine drops it as a copy of the global to itself or joins it with the equal store before it, and
@@ -16873,7 +16925,7 @@ void TestRouted345Pins(Sh2Decompiler& d)
     }
 }
 
-// The folded-access round of area 5 (A5-136, A5-137): the routed seeds of `folded-store-after-access` and `pointer-effect-unsaid`, whole and
+// The folded-access round of area 5 (A5-136 to A5-138): the routed seeds of `folded-store-after-access` and `pointer-effect-unsaid`, whole and
 // shrunk. (The routed `folded-read-after-access` seeds, grammar 1 7005221 and 7008257, and `folded-store-after-access` 7002991 and 7009698
 // passed on master before this round: A5-128 (b) and A5-129; they are pinned whole here.)
 void TestA5FoldedPins(Sh2Decompiler& d)
@@ -16893,7 +16945,11 @@ void TestA5FoldedPins(Sh2Decompiler& d)
     for (const Pin& s : { Pin{ 1, 7002991, false, nullptr }, Pin{ 1, 7009698, false, nullptr }, Pin{ 1, 7005221, false, "order.folded-read-before-access.other-path" },
                           Pin{ 1, 7008257, false, "order.folded-read-before-access.other-path" }, Pin{ 1, 7402502, false, "order.folded-store.write-back-piece" },
                           Pin{ 2, 7001880, false, "order.folded-store.frame-between" }, Pin{ 2, 7401819, false, "order.folded-store.frame-between" },
-                          Pin{ 1, 7102142, true, "order.folded-store.instance-assigned" }, Pin{ 1, 7006344, false, "pointer.effect.excused" } })
+                          Pin{ 1, 7102142, true, "order.folded-store.instance-assigned" }, Pin{ 1, 7006344, false, "pointer.effect.excused" },
+                          Pin{ 1, 7801382, false, "order.folded-store.unrun-write-back" },
+                          // (A5-130's dead-store rule, which no pin reached since A5-124: two seeds of this round's sweep reach it; each passes with
+                          // the rule off too, the read printed before the earlier store's line either way, so they keep the rule run, not needed)
+                          Pin{ 1, 7804854, false, "order.read-before-folded-store.dead" }, Pin{ 1, 7809529, false, "order.read-before-folded-store.dead" } })
     {
         gSpecialReads = s.specials;
         const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(static_cast<int>(s.seed)) : Generate(static_cast<uint64_t>(s.seed)), true);
@@ -16922,6 +16978,9 @@ void TestA5FoldedPins(Sh2Decompiler& d)
         // read in the other slot, its line's token at the later `mov.l r3,@r6`
         { "A5-137 (c) grammar 1 specials seed 7102142 shrunk", "D609 2228 8B0E C840 8F0A 2620 2448 8904 E362 D706 6071 C801 8BFC 2632 000B 6342 000B 6342 AFF1 "
                                                                "0009 2600 2100 2600 1008", "26001000-2600100F", "26001008", "order.folded-store.instance-assigned" },
+        // A5-138, 7801382: `mov.l @r6,r3 ; tst r3,r2 ; bt L ; mov.l r3,@r6 ; L: <poll>`, the store no run makes a write-back of the word read
+        { "A5-138 grammar 1 seed 7801382 shrunk", "D606 6362 2238 8900 2632 D705 2411 6071 C801 8BFB 2660 000B 0009 0009 2600 238C 2600 1020", "26001020-2600102F",
+          "26001020", "order.folded-store.unrun-write-back" },
         // A5-136, 7006344: `p = (p + 4) ^ 0x40000000` from 0x7DB00010 twice, then `mov.l r6,@r6`: the cache address array's 0x7DB00018 is said
         { "A5-136 grammar 1 seed 7006344 shrunk", "D606 D107 2619 D107 261B E302 7604 D106 261A 4310 8BFA 2662 000B 0009 1DB0 0018 1FFF FFF0 6000 0000 4000 0000",
           nullptr, nullptr, "pointer.effect.excused" },
