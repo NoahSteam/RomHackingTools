@@ -4188,6 +4188,26 @@ private:
     static PointerValues Bitwise(ghidra::OpCode code, const PointerValues& x, const PointerValues& y)
     {
         PointerValues out = BitwiseOf(code, x, y);
+        // (A5-135) An AND with a known mask of the low 16 bits leaves a number of at most 0xFFFF whatever the other side was: no address that
+        // is hardware, so a pointer stepped round a loop is no longer one, and what its later values come to says nothing. The result is an
+        // index (`((uint4)pxVar4 & 0x1c) - 0x20` after a loop that steps pxVar4 from `param_2 | 0xe0000000`, grammar 2 seed 6803969: on-chip
+        // 0xFFFFFFE0 plus an index, said as the same code reached without the loop is; the stepped flag kept it from being taken as a base).
+        if (code == ghidra::CPUI_INT_AND && x.back.empty() && y.back.empty())
+        {
+            auto smallMask = [](const PointerValues& v) {
+                if (v.constants.empty() || !v.bases.empty() || v.others) return false;
+                for (const auto& c : v.constants)
+                    if (c.first > 0xFFFFu) return false;
+                return true;
+            };
+            if (smallMask(x) || smallMask(y))
+            {
+                out.steps = false;
+                out.later.clear();
+                out.steppedCached = false;
+                out.steppedCachedAt = 0;
+            }
+        }
         // An OR is at least each of its operands: whatever else is ORed with a value in [lo, 0xFFFFFFFF], the result is in it too (`(r4 | 0xFFFFFF00) |
         // r5`, A5-90).
         if (code == ghidra::CPUI_INT_OR)

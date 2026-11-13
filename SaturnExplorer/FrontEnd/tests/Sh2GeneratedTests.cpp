@@ -6480,11 +6480,43 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             }
             return false;
         };
-        auto separatedByRuns = [&](uint32_t x, uint32_t y) {
+        // (A4-18) ...and a run that did not finish, made the access the flow runs first and stopped where the other is still ahead of it (in the
+        // flow block of its last instruction of the function's own, or one that block reaches) has not chosen a way without it: it is still on
+        // the way. Grammar 2 seed 6805860: `tas.b @r5 ; tst r6,r7 ; bf/s J ; mov.w r3,@r5 ; add #k,r3 ; J: ... jsr` into a callee that polls
+        // unmarked memory for ever, then `and.b #k,@(r0,gbr)` and the switch. The skipped `add` is dead, so the engine joins the two accesses
+        // into the switch's block, rightly: every path from the first reaches the second. No run returned from the callee, and each was taken
+        // for one that made the `tas.b` without the `and.b`.
+        auto stillAhead = [&](const RunOut& run, const MemoryAccess& made, const MemoryAccess& missing) {
+            if (run.finished || made.origBlock < 0 || missing.origBlock < 0 || static_cast<size_t>(made.origBlock) >= fr.reach.size() ||
+                static_cast<size_t>(missing.origBlock) >= fr.reach.size())
+                return false;
+            if (made.origBlock != missing.origBlock && !fr.reach[static_cast<size_t>(made.origBlock)][static_cast<size_t>(missing.origBlock)]) return false;
+            const size_t handed = HandedOverAt(r, run);
+            uint32_t last = 0;
+            bool any = false;
+            for (size_t k = 0; k < run.pcs.size() && k < run.depths.size() && (handed == SIZE_MAX || k <= handed); ++k)
+                if (run.depths[k] == 0) last = run.pcs[k], any = true;
+            if (!any) return false;
+            bool ahead = false, placed = false;
+            for (size_t b = 0; b < r.flowBlockRanges.size() && b < fr.reach.size(); ++b)
+            {
+                if (r.flowBlockRanges[b].first > last || last > r.flowBlockRanges[b].second) continue;
+                placed = true;
+                ahead = ahead || static_cast<int>(b) == missing.origBlock || fr.reach[b][static_cast<size_t>(missing.origBlock)];
+            }
+            return placed && ahead;
+        };
+        auto separatedByRuns = [&](const MemoryAccess& x, const MemoryAccess& y) {
             for (const RunOut& run : runs)
             {
-                const bool hasX = Ran(run, x), hasY = Ran(run, y);
-                if (hasX != hasY) return true;
+                const bool hasX = Ran(run, x.insn), hasY = Ran(run, y.insn);
+                if (hasX == hasY) continue;
+                if (hasX ? stillAhead(run, x, y) : stillAhead(run, y, x))
+                {
+                    count("folded-into-switch.unfinished");
+                    continue;
+                }
+                return true;
             }
             return false;
         };
@@ -6496,7 +6528,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (Unordered(x, y)) add("same-statement", Hex(x.insn) + " and " + Hex(y.insn) + " are read in one statement");
                 else if (OutOfFlowOrder(fr, x, y))
                     add("out-of-order", Hex(x.insn) + " and " + Hex(y.insn) + " are out of the code's order in block " + std::to_string(x.block));
-                else if (FoldedIntoSwitch(fr, x, y) && separatedByRuns(x.insn, y.insn))
+                else if (FoldedIntoSwitch(fr, x, y) && separatedByRuns(x, y))
                     add("folded-into-switch", Hex(x.insn) + " and " + Hex(y.insn) + " were joined into a switch's block across a branch" +
                                                   ", and a run made one without the other");
             }
@@ -8110,6 +8142,23 @@ void ForEachItem(Func& f, const std::function<void(Item&)>& visit)
     ForEachItem(f.pathA, visit);
     ForEachItem(f.pathB, visit);
 }
+void ForEachConstItem(const std::vector<Item>& list, const std::function<void(const Item&)>& visit)
+{
+    for (const Item& it : list)
+    {
+        visit(it);
+        ForEachConstItem(it.slot, visit);
+        ForEachConstItem(it.kids, visit);
+        for (const std::vector<Item>& c : it.cases) ForEachConstItem(c, visit);
+    }
+}
+void ForEachConstItem(const Func& f, const std::function<void(const Item&)>& visit)
+{
+    ForEachConstItem(f.items, visit);
+    ForEachConstItem(f.tail, visit);
+    ForEachConstItem(f.pathA, visit);
+    ForEachConstItem(f.pathB, visit);
+}
 
 struct Shrinker
 {
@@ -8125,8 +8174,23 @@ struct Shrinker
     // writes it. Take that call out, or put another item after it, and the function writes r0 nowhere and `returns` is false, so a finding
     // that reads `returns` (`return-dropped`) would be a false one in the shrunk replay. The other declarations are words of the function
     // itself (retWord, which no step removes), or are checked against the run (`partial`).
+    // (A3-189) So is a production's declaration that the oracle reads: `postJoin` says the program ends with a poll inside a skip and a store
+    // at the skip's end (Gen::AddPostPollJoin), and `endless-join-dropped` asks for that store. Take the store or the skip out, or the item
+    // that sets the stored register, and the check asks for a store the program no longer makes: the shrunk words of grammar 1 seed 6906675
+    // were reported with an `endless-join-dropped` their replay does not give.
     static bool IntentHolds(const Program& p)
     {
+        if (p.postJoin != 0)
+        {
+            bool skip = false, store = false, set = false;
+            for (const Func& f : p.fns)
+                ForEachConstItem(f, [&](const Item& it) {
+                    skip = skip || it.shape == "post_join.skip";
+                    store = store || it.shape == "post_join.store";
+                    set = set || it.shape == "post_join.mov" || it.shape == "post_join.add" || it.shape == "post_join.mov_before";
+                });
+            if (!skip || !store || !set) return false;
+        }
         for (const Func& f : p.fns)
         {
             if (!f.v2 || !f.returns || f.end != Func::Rts || !f.retIsCall) continue;
@@ -16665,6 +16729,92 @@ void TestA5129Pins(Sh2Decompiler& d)
     }
 }
 
+// Routed seeds of areas 3, 4 and 5 (A3-189, A4-18, A5-135): each seed whole, its shrunk program, and a control.
+void TestRouted345Pins(Sh2Decompiler& d)
+{
+    auto count = [](const Report& rep, const char* name) {
+        const auto it = rep.counts.find(name);
+        return it == rep.counts.end() ? 0 : it->second;
+    };
+    // A3-189: grammar 1 seed 6906675, A3-188's class (the slot of a `bt/s` is two instances, r4 = 0 folded to the BIOS ROM's 0x18 and r4 the
+    // A5-122 production's global); its shrunk words with r4 at the global. The shrinker no longer takes the post-join store out (Shrinker::
+    // IntentHolds), so a program it hands on still makes the store `endless-join-dropped` asks for.
+    {
+        const Report rep = Evaluate(d, Generate(6906675), true);
+        std::printf("pin 'A3-189 grammar 1 seed 6906675': %zu finding(s), endless-store checked %d, endless-join said %d\n", rep.findings.size(),
+                    count(rep, "endless-store.checked"), count(rep, "endless-join.said"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "endless-join.said") > 0);
+        const char* old = std::getenv("SE_GENERATED_ALIAS");
+        const std::string saved = old ? old : "";
+        SetOrClear("SE_GENERATED_ALIAS", "4:06003C04");
+        const Subject subject = RawSubject("2448 8901 4115 8D00 814C D704 E001 2702 6072 C801 8BFC 000B 0009 0009 2600 1030");
+        SetOrClear("SE_GENERATED_ALIAS", old ? saved.c_str() : nullptr);
+        const Report sh = EvaluateSubject(d, subject, true);
+        std::printf("pin 'A3-189 shrunk': %zu finding(s), endless-store checked %d\n", sh.findings.size(), count(sh, "endless-store.checked"));
+        for (const Finding& f : sh.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(sh.findings.empty() && count(sh, "endless-store.checked") > 0);
+        Program p = Generate(6906675);
+        CHECK(p.postJoin != 0 && Shrinker::IntentHolds(p));
+        for (Func& f : p.fns)
+            for (size_t i = f.items.size(); i-- > 0;)
+                if (f.items[i].shape == "post_join.store") f.items.erase(f.items.begin() + static_cast<std::ptrdiff_t>(i));
+        CHECK(!Shrinker::IntentHolds(p));
+    }
+    // A4-18: grammar 2 seed 6805860, and its shrunk module: `tas.b @r5` and `and.b #0x67,@(r0,gbr)` joined into the switch's block across a
+    // `bf` whose skipped code is dead. The runs stay in the callee's poll and never come to the `and.b`; they are still on the way to it.
+    // Control: the callee writes 2, which its poll reads back and leaves at once: the runs finish and make both, and nothing is excused.
+    {
+        const Report rep = Evaluate(d, MakeV2(6805860), true);
+        std::printf("pin 'A4-18 grammar 2 seed 6805860': %zu finding(s), unfinished %d\n", rep.findings.size(), count(rep, "folded-into-switch.unfinished"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "folded-into-switch.unfinished") > 0);
+        const char* kWords = "2F86 2F96 2FA6 2FB6 2FD6 4F22 6843 6953 6A63 6B73 451B 2768 8BFF B028 0009 6483 6593 66A3 67B3 E00C CD67 E106 3612 8915 4608 "
+                             "C702 016E 412B 0009 0009 0600 905C 0600 9054 0600 9054 0600 9054 0600 9058 0600 905C A002 0009 A000 0009 6070 4F26 6DF6 6BF6 "
+                             "6AF6 69F6 68F6 000B 0009 D704 %s 2702 6072 C801 8BFC 6040 000B 0009 2600 2108";
+        for (int control = 0; control < 2; ++control)
+        {
+            char words[512];
+            std::snprintf(words, sizeof words, kWords, control ? "E002" : "E003");
+            const ModulePin m{ control ? "A4-18 control (the callee returns)" : "A4-18 shrunk", words, "0/0/6e,6e/6e/80", "36:6:6:5c:5c,54,54,54,58,5c", "1,1",
+                               "40000,40000", "20000,0" };
+            // (the callee's poll, as the seed declares it: SE_GENERATED_POLL=26002108, which the shrinker's replay line leaves out)
+            Subject subject = ModuleSubject(m);
+            subject.polls.push_back({ Env::MemKey(0x26002108u), 1u, 0u, 0, 0x26002108u });
+            const Report sh = EvaluateSubject(d, subject, true);
+            std::printf("pin '%s': %zu finding(s), unfinished %d\n", m.name, sh.findings.size(), count(sh, "folded-into-switch.unfinished"));
+            for (const Finding& f : sh.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(sh.findings.empty());
+            CHECK((count(sh, "folded-into-switch.unfinished") > 0) == (control == 0));
+        }
+    }
+    // A5-135: grammar 2 seed 6803969, and its shrunk module: `((uint4)pxVar4 & 0x1c) - 0x20` after a loop that steps pxVar4 from `param_2 |
+    // 0xe0000000` is the on-chip 0xFFFFFFE0 plus an index, said as function 1 alone says it. Control: the same function without the loop (the
+    // pointer not stepped), said before the fix too.
+    {
+        const Report rep = Evaluate(d, MakeV2(6803969), true);
+        std::printf("pin 'A5-135 grammar 2 seed 6803969': %zu finding(s), onchip span said %d\n", rep.findings.size(), count(rep, "onchip.span.said"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "onchip.span.said") > 0);
+        struct Shrunk { const char* name; const char* words; const char* funcs; };
+        const Shrunk kShrunk[] = {
+            { "A5-135 shrunk", "D105 251B E301 6256 4310 8901 AFFB 0009 D302 432B 0009 0009 E000 0000 0600 9020 7FF4 D304 2539 D304 353C 451B 7F0C 000B 0009 "
+                               "0009 0000 001C FFFF FFE0", "0/0/16,20/20/32" },
+            { "A5-135 control (no loop)", "D105 251B 0009 6256 0009 0009 0009 0009 D302 432B 0009 0009 E000 0000 0600 9020 7FF4 D304 2539 D304 353C 451B 7F0C "
+                                          "000B 0009 0009 0000 001C FFFF FFE0", "0/0/16,20/20/32" } };
+        for (const Shrunk& s : kShrunk)
+        {
+            const ModulePin m{ s.name, s.words, s.funcs, nullptr, "0,0", "180000,0", "0,0" };
+            const Report sh = EvaluateSubject(d, ModuleSubject(m), true);
+            const bool indexed = sh.text.find("0600902A (caution): the pointer is 0xFFFFFFE0 (SH2_BCR1) plus an index that is not known") != std::string::npos;
+            std::printf("pin '%s': %zu finding(s), onchip span said %d, the index note at 0600902A in function 0: %s\n", s.name, sh.findings.size(),
+                        count(sh, "onchip.span.said"), indexed ? "yes" : "no");
+            for (const Finding& f : sh.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(sh.findings.empty() && indexed);
+        }
+    }
+}
+
 void TestA3RoutedPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -17392,6 +17542,7 @@ void TestGenerated()
         RUN(TestA5119Pins(d));
         RUN(TestA5126Pins(d));
         RUN(TestA5129Pins(d));
+        RUN(TestRouted345Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
