@@ -20146,3 +20146,76 @@ The corpora's texts were not diffed against master's for this round (the corpus 
 
 * **Area 7** (mapping): grammar 1 seeds 7202663 and 7205591 (`map-const-join`); grammar 2 seeds 7202286 (`map-way-back`) and 7201580 (A5-134, the order rule's report of a mapping). The seeds area 7 round 15 already has (6800033, 6802425, 6807930, 6804434, 6806713, A5-124) and the queued ones (6900150, 6901649, 6902754, 6906408, 6803969, 6805860) were not taken.
 * **Area 3**: nothing (no `endless-*` finding in either sweep; 6906675 left to area 3).
+
+## Routed seeds, areas 3, 4 and 5
+
+Fixer, branch `review/routed-3-4-5`, cut at master `5966c858` (patches to 0094). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). **No engine patch**: 0089, 0092 and 0095 stay free, 0094 is unchanged. One host change (`Sh2Decompiler.cpp`, A5-135); the rest is the oracle and the shrinker (`Sh2GeneratedTests.cpp`). Pins: `TestRouted345Pins` (`Sh2GeneratedTests.cpp`), so the ctest count is unchanged. Backups pushed to `backup/review-routed-3-4-5`.
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-189 | P3 | **filed and fixed, oracle**: grammar 1 seed 6906675 is A3-188's class, already fixed on master; the shrinker's `endless-join-dropped` was a stale declaration (`Shrinker::IntentHolds`) |
+| A4-18 | P3 | **filed and fixed, oracle**: grammar 2 seed 6805860, a run that never came back from a callee taken for one that went around the second access |
+| A5-135 | P3 | **filed and fixed, host**: grammar 2 seed 6803969, an on-chip base plus an index after a loop that stepped the pointer was not said |
+
+### 1. A3-189: grammar 1 seed 6906675
+
+Replayed on this branch before any change: **passes** (status 0, no finding). The finding was made by the A5-125 and A5-126 fixer, whose branch was cut at `72c1f4fd`, before A3-188's fix (`541ddd00`, merged at `afa81800`). The mechanism is A3-188's: `mov.w r0,@(0x18,r4)` at 0x0600903A is the slot of a `bt/s` that the `bt` of `tst r4,r4` also targets, so it is two instances: r4 = 0, folded to a write of the BIOS ROM's 0x18 (`xRam00000018 = 4;`, said), and r4 the A5-122 production's global 0x06003C04 (`*(xunknown2 *)(param_1 + 6) = 4;`). The engine's record for the instruction is the constant instance's; the run stored at 0x06003C1C through the pointer, which the text prints. Shown by undoing A3-188's address test in `foldedStore` for one build: the seed fails again with `endless-store-dropped` at 0x0600903A (and at 0x06009008 in the shrunk program), and passes with it.
+
+The `endless-join-dropped` of the shrunk words was the shrinker's. The program declares `postJoin` (the store of 0x66 to 0x06003078 at the end of a skip around a poll, A3-182's production); the shrinker removed the store item and the skip and kept the declaration, so its last program was judged for a store it no longer makes. The replay line (words and alias) carries no `postJoin` and gives no such finding. Fix: `Shrinker::IntentHolds` (A2-50's rule for declarations) holds a program with `postJoin` only while the skip, the item that sets the stored register and the store are all in it. With the old rule (A3-188's test undone too) the seed shrinks to the brief's words exactly and reports `endless-join-dropped` with them; with the new one it shrinks to `2448 8901 4115 8D00 814C 2448 8906 E566 D704 E001 2702 6072 C801 8BFC 2652 000B ...`, which keeps the join, and reports `endless-store-dropped` only.
+
+Whole seed on this branch: the join's store is said ("the value of r5 here is missing on one path", the signature withheld: `endless-join.said`), the slot's two instances are printed.
+
+### 2. A4-18: grammar 2 seed 6805860
+
+Shrunk (34 evaluations): `tas.b @r5 ; tst r6,r7 ; bf <next> ; bsr f ; ... ; and.b #0x67,@(r0,gbr) ; switch on r6`; the callee polls unmarked work RAM (`mov #3,r0 ; mov.l r0,@r7 ; mov.l @r7,r0 ; tst #1,r0 ; bf`) for ever. In the whole seed the branch is `bf/s J ; mov.w r3,@r5 ; add #0x2b,r3 ; J:` and the call a `jsr`. The skipped `add` writes an r3 the call clobbers, so the branch guards nothing, and the engine joins the accesses before and after it (0x06009016 the `tas.b`, 0x0600901C the slot, 0x06009034 the `and.b`) into the switch's block. That is right: every path from the `tas.b` reaches the `and.b`. The text is right.
+
+`folded-into-switch` asks that no run make one of two accesses so joined without the other. No run returned from the callee (the poll reads back the 3 it wrote), so each made the `tas.b` and not the `and.b`: not a run that went another way, a run that had not got there. Fix (`separatedByRuns`): a run that did not finish, made the access the flow runs first, and stopped (its last instruction of the function's own, up to any hand-over, A4-17) in the flow block of the other access or in one that reaches it, separates nothing (`folded-into-switch.unfinished`). A finished run, or one that stopped where the other access is behind it, separates as before.
+
+Pins: the seed and the shrunk module (`unfinished` > 0, no finding); the control, the callee writing 2 (`E002`), which its poll leaves at once: the runs finish, make both accesses, and no excuse is taken (`unfinished` 0, no finding).
+
+### 3. A5-135: grammar 2 seed 6803969
+
+Shrunk (25 evaluations): function 0 is `mov.l @(lit),r1 (0xE0000000) ; or r1,r5 ; mov #1,r3 ; L: mov.l @r5+,r2 ; dt r3 ; bt X ; bra L` then a jump into function 1, `and #0x1c` on r5 (through r3), `add #0xFFFFFFE0`, `tas.b @r5`. Function 1 alone prints `puVar1 = (uint1 *)((param_2 & 0x1c) - 0x20);` with A5-101's notes ("the pointer is 0xFFFFFFE0 (SH2_BCR1) plus an index that is not known", and the BCR1 width notes "if the index is 0"). Function 0 prints `puVar4 = (uint1 *)(((uint4)pxVar4 & 0x1c) - 0x20);` with nothing at 0x0600902A. In the whole seed the same holds at 0x06009066 (the `tas.b`) and 0x06009068 (`mov.l r3,@r5`), reached at 0xFFFFFFEC.
+
+The text omits a note; no value is wrong. `PointerResolver` walks `pxVar4` as a pointer stepped round the loop (`steps`); `Bitwise` kept that flag through the AND, and A5-101's base rule in `CPUI_INT_ADD` takes no base for a stepped value (a stepped pointer plus a constant is an offset of it). But an AND with 0x1c leaves a number of 0 to 0x1C whatever it was given. Fix (`Sh2Decompiler.cpp`, `PointerResolver::Bitwise`): an AND with a known mask of the low 16 bits (every mask value at most 0xFFFF; no path round a loop through it) gives no stepped pointer: `steps`, the later values and the stepped cache address are dropped. Nothing at 0xFFFF or below is hardware, so the later values said nothing. Function 0 now gives the same notes at 0x06009066 and 0x06009068 as function 1 alone, and the oracle counts them (`onchip.span.said`).
+
+Pins: the seed and the shrunk module (the index note at 0x0600902A in function 0's text); the control, the same words with the loop taken out (the pointer not stepped), which was said before the fix too.
+
+### 4. The sweeps
+
+`SE_GENERATED_GRAMMAR=<g> SE_GENERATED_FIRST=7400001 SE_GENERATED_SEEDS=10000 SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`, with this branch's final build:
+
+| Run | Failing | Classes |
+|---|---|---|
+| grammar 1 | 1: 7402502 | area 5: `v:folded-store-after-access` |
+| grammar 2 | 3: 7401819, 7402123, 7407523 | area 5: `n:folded-store-after-access` (7401819); area 7: `n:map-const-join` (7402123, 7407523) |
+
+None in the three classes of this round: no `endless-*` (grammar 1: `endless-store.checked` 133,854, `said` 6,308; `endless-join.checked` and `said` 1,281), no `folded-into-switch`, no `onchip-span-unsaid` (`onchip.span.said` 788 and 1,428). `folded-into-switch.unfinished` was not drawn in either range (the seed's shape, a call into a callee that never returns before a switch, is rare); the pins hold it.
+
+### 5. Mutation
+
+* A3-189: A3-188's address test in `foldedStore` undone (for one build, then restored): seed 6906675 fails with `endless-store-dropped` at 0x0600903A; with the shrinker's old rule too, it shrinks to the routed words and reports `endless-join-dropped` with them. `TestRouted345Pins` checks that `IntentHolds` refuses the seed's program without its join store.
+* A4-18: master's oracle fails the seed (the replay before any change, 6 findings); the shrunk module's pin needs the excuse (`unfinished` 36), and the control shows it is not taken when the runs finish.
+* A5-135: master's host fails the seed (3 `n:` and 3 `v:` findings before the change); the shrunk pin asks for the index note at 0x0600902A in function 0's text, which master does not give.
+
+### 6. Runs
+
+All after the last code edit, with that build:
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` with Live | **117 of 117** passed |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (canary on) | **failing seeds=0; findings=0** (the canary: 240 programs, 0 failing) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, narrow-c 130, void-return 227, void-return-lent 24 |
+| grammar 1 and 2, 10,000 each from 7,400,001 | 1 and 3 failing seeds, none of this round's classes (section 4) |
+| game corpus, both images, `SE_GAME_LEND=1` | "all passed", every ledger count 0; missing and said 0 (hwram007) and 4 (hwram008); "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)" |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint --tests-dir` ok |
+
+The corpora's texts were not diffed against master's (A5-135 changes notes only, through `PointerResolver`, which nothing but the hardware notes reads; the lending counts are master's).
+
+### 7. Routed
+
+* **Area 5** (`folded-store-after-access`, not triaged): grammar 1 seed 7402502 (`v:`; shrunk `SE_GENERATED_WORDS="D606 6162 E003 0614 2448 8904 D704 6071 C801 8BFC 7363 2632 000B 0009 8000 2010 2600 1008"`, a store folded into the cache address array's 0x80002013) and grammar 2 seed 7401819 (`n:`; shrunk `SE_GENERATED_WORDS="7FFC D707 471B 62F3 7204 E101 2216 4110 8BFC E200 2711 604C 7F04 000B 0009 0009 2600 2288" SE_GENERATED_FUNCS="0/0/1e" SE_GENERATED_RETURNS="1" SE_GENERATED_CLOBBERS="0" SE_GENERATED_READS="20000"`).
+* **Area 7** (`map-const-join`): grammar 2 seeds 7402123 (`uVar2 = 0;` drawn at `movt r2`) and 7407523 (`xStack_16 = 0;` drawn at `dt r3`).
+* **Area 11** (the generator's replay line): a module's shrunk replay line leaves out the poll a function of it declares (`SE_GENERATED_POLL`), so the words replay with the "returns" contract on and give `generator:no-return` (A4-18's shrunk module; its pin adds the poll itself).
