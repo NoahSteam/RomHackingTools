@@ -20279,3 +20279,84 @@ The corpora's texts were not diffed against master's (A5-135 changes notes only,
 * **Area 5** (`folded-store-after-access`, not triaged): grammar 1 seed 7402502 (`v:`; shrunk `SE_GENERATED_WORDS="D606 6162 E003 0614 2448 8904 D704 6071 C801 8BFC 7363 2632 000B 0009 8000 2010 2600 1008"`, a store folded into the cache address array's 0x80002013) and grammar 2 seed 7401819 (`n:`; shrunk `SE_GENERATED_WORDS="7FFC D707 471B 62F3 7204 E101 2216 4110 8BFC E200 2711 604C 7F04 000B 0009 0009 2600 2288" SE_GENERATED_FUNCS="0/0/1e" SE_GENERATED_RETURNS="1" SE_GENERATED_CLOBBERS="0" SE_GENERATED_READS="20000"`).
 * **Area 7** (`map-const-join`): grammar 2 seeds 7402123 (`uVar2 = 0;` drawn at `movt r2`) and 7407523 (`xStack_16 = 0;` drawn at `dt r3`).
 * **Area 11** (the generator's replay line): a module's shrunk replay line leaves out the poll a function of it declares (`SE_GENERATED_POLL`), so the words replay with the "returns" contract on and give `generator:no-return` (A4-18's shrunk module; its pin adds the poll itself).
+
+## Area 5, folded-access round
+
+Fixer, branch `review/5-round-folded`, cut at master `4fee2d1d` (patches to 0094). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). **No engine patch**: 0094 is unchanged and 0095 stays free. One host change (`Sh2Decompiler.cpp`, `HardwareNotes`, A5-136); the rest is the oracle (`Sh2GeneratedTests.cpp`). Pins: `TestA5FoldedPins` (`Sh2GeneratedTests.cpp`), so the ctest count is unchanged at 117. Backups pushed to `backup/review-5-round-folded`.
+
+| Row | P | Outcome |
+|---|---|---|
+| A5-136 | P3 | **filed and fixed, host**: grammar 1 seed 7006344, a pointer stepped in a loop from a register area whose later values reach the cache address array, said nowhere |
+| A5-137 | P3 | **filed and fixed, oracle**: three false positives of `folded-store-after-access` (grammar 1 7402502; grammar 2 7001880 and 7401819; grammar 1 specials 7102142) |
+| A5-138 | P3 | **filed and fixed, oracle**: the sweep's, grammar 1 seed 7801382, a store no run makes that writes back the word read |
+
+### 1. The routed seeds, replayed on master `4fee2d1d` before any change
+
+`SE_GENERATED_GRAMMAR=<g> [SE_GENERATED_ALPHABET=specials] SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`:
+
+| Seed | Class | On master | Cause | Row |
+|---|---|---|---|---|
+| grammar 1 7002991 | `folded-store-after-access` | **passes** | not isolated (below) | pinned only |
+| grammar 1 7009698 | `folded-store-after-access` | **passes** | A5-129 (a statement the printer wraps after its `=`): with `AssignsAt`'s ` =` ending taken out it fails again with 2 `v:` findings | pinned only |
+| grammar 1 7005221 | `folded-read-after-access` | **passes** | A5-128 (b) (`offPath` for a register's access): with it taken out, 1 `n:` finding | pinned (`order.folded-read-before-access.other-path`) |
+| grammar 1 7008257 | `folded-read-after-access` | **passes** | A5-128 (b): with it taken out, `v:folded-read-after-access` and `v:folded-read-after-pointer-write` | pinned (the same count) |
+| grammar 1 7402502 | `folded-store-after-access` | fails | oracle | A5-137 (a) |
+| grammar 2 7001880 | `folded-store-after-access` | fails | oracle | A5-137 (b) |
+| grammar 2 7401819 | `folded-store-after-access` | fails | oracle | A5-137 (b) |
+| grammar 1 specials 7102142 | `folded-store-after-access` | fails | oracle (and area 7's token) | A5-137 (c) |
+| grammar 1 7006344 | `pointer-effect-unsaid` | fails | host, a missing note | A5-136 |
+
+Area 7's round 15 found the first four on master `79d907f7`, before A5-125 to A5-133 were merged. 7002991's text puts the slot's store in a condition, `if (((uVar6 & uVar5) != 0) || (uRam06002208 = uVar5, uVar6 == 0x55))`; which change made it pass was not found: it passes with 0094's three engine files taken back to `79d907f7`'s, with round 15's host changes reversed, and with each of A5-128 (a), A5-128 (b), A5-129's wrap and A5-133's in-condition rule taken out, one at a time and all four together. No text of the nine is wrong (no P1).
+
+### 2. A5-136: `pointer-effect-unsaid`, grammar 1 seed 7006344
+
+Shrunk (42 evaluations): `mov.l @(lit),r6 (0x1DB00018) ; and 0x1FFFFFF0 ; or 0x60000000 ; mov #2,r3 ; L: add #4,r6 ; xor 0x40000000,r6 ; dt r3 ; bf L ; mov.l r6,@r6`, printed `uVar2 = 0x7db00010; iVar1 = 2; do { uVar2 = uVar2 + 4 ^ 0x40000000; iVar1 = iVar1 + -1; } while (iVar1 != 0); *(uint4 *)uVar2 = uVar2;` with no note. The run wrote 0x7DB00018, an entry of the cache address array (a write sets its tag and LRU bits); in the whole seed the writes at 0x06009016 and 0x06009024 do the same. A temporary trace of `PointerResolver` at the store: first value 0x3DB00014 (an SCSP slot's word through the cache-through partition, a register area with no named register near and nothing to say), `steps`, and later values 0x7DB00018, 0x3DB0001C, 0x7DB00020, ... The stepped note of a register's pointer (A5-54) wants a named register near the first value, and A5-91's note of the later values a pointer whose first values are no register area: neither was given.
+
+Fix (`HardwareNotes`): when the first value is a register area and the stepped note is not given, A5-91's note is given for the first later value in the associative purge or the cache address array (partitions 2, 3 and 5), naming the first value: "the pointer is stepped in a loop from 0x3DB00014: the iterations after the first reach other addresses, which are not said, among them 0x7DB00018 (the cache address array): a 4-byte write there has the effects and is subject to the width rules of that hardware". The oracle's pointer-effect rule excuses an instruction whose notes say the pointer "is stepped in a loop" (`pointer.effect.excused`).
+
+A first form, which gave the note for any later register-area value, failed A5-83's control in `Sh2DecompilerTests` (`p += 4` from 0x35B000C8: a walk through an unnamed SCSP area has nothing to say) and gave two new cautions in each game image: functions 0602FE4C (hwram007) and 0606FA64 (hwram008), at the two reads of a walk down the SCSP's DSP area from 0x25B00BE2 and 0x25B00BE3, "among them 0x25B00522". The bounded walk of later values says nothing of how many turns the loop makes, so the form that only leaves the register areas for the purge or the address array was kept; with it, A5-83's control passes and both images' notes are the same as a build without A5-136.
+
+### 3. A5-137: three false positives of `folded-store-after-access`
+
+* **(a) 7402502.** Shrunk (19 evaluations, with the request that marks the mailbox): `mov.l @(lit),r6 (0x80002010) ; mov.l @r6,r1 ; mov #3,r0 ; mov.b r1,@(r0,r6) ; <poll of the mailbox> ; ...`. 0x80002010 is the cache data array, memory. The byte store writes back the last byte of the word read; the request that marks the mailbox drops it, and the rule took the dropped store for one the mailbox write after it is made without. The write-back rule compared an earlier access of the same address and size only. Fix: a wider *read* holding the bytes, whose piece there (big-endian: shifted by the bytes after it) is the value stored, makes the store a write-back (`order.folded-store.write-back-piece`; 37 in the grammar 1 sweep, 17 in the 20,000-seed matrix). A wider *write* is not taken: the first form took both, and A5-123's pin (5203228 shrunk, `mov.l r0,@r6` then the slot's `mov.w r3,@r6` writing the same half) then lost its `joined-earlier` count; that store is A5-123's rules' to judge.
+* **(b) 7001880 and 7401819.** A store, a frame walk through a copy of r15 (`mov r15,r2 ; add #n,r2 ; L: mov.l r1,@-r2 ; dt r1 ; bf L`, printed `piVar2 = (int4 *)&xStack00000000; do { piVar2 = piVar2 + -1; *piVar2 = iVar1; ...`), then a store of the same bytes: in 7001880 `mov.l r1,@r6` of 0 and the same store in the function a `jmp` runs into; in 7401819 `tas.b @r7` and `mov.w r1,@r7`. The engine joins the two stores (`xRam2600208c = 0;` after both loops), as with nothing between. A5-119's pointer form took the frame writes for writes that may reach the global. Fix: in the dropped-store rule a write through a pointer into the run's own frame (in the stack area and within 0x200 of the run's entry r15, the global outside the stack area) is no access the store is made without (`order.folded-store.frame-between`). The shrunk 7401819 needs only `SE_GENERATED_FUNCS="0/0/1e"` with its returns, clobbers and reads; no poll.
+* **(c) 7102142 (specials).** Shrunk (32 evaluations, with the mailbox marked): `mov.b r2,@r6` (0x0600900A) is the slot of `bf/s` and the target of a `bra`, two instances (two fates). With the mailbox marked: `if (in_r2 == 0) { uRam26002100 = (uint4)uRam26002100._1_3_; if ((in_r0 & 0x40) != 0) { xVar2 = *param_1; return; } } else { uRam26002100 = CONCAT13((char)in_r2,uRam26002100._1_3_); }`. The r2 = 0 instance is printed before the read in the other slot (0x06009022), as the code makes it; but the mapping draws that line at 0x0600901A, the later `mov.l r3,@r6`, and names 0x0600900A on the else arm's line only, so the rule judged the read against that line. Fix: a store with two instances, where a line before the access's line assigns the global's bytes, is set aside (`order.folded-store.instance-assigned`). The token is area 7's (routed).
+
+### 4. The sweeps (10,000 seeds each from 7,800,001, `SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`)
+
+| Run | First pass (A5-136, A5-137 in) | Final |
+|---|---|---|
+| grammar 1 | 4 failing seeds: 7801133, 7801382, 7803022, 7807800 | **3**: area 7's 7801133 (`v:map-way-back`), 7803022 (`n:map-copy-merge`), 7807800 (`n:map-way-back`) |
+| grammar 2 | 2: 7800677, 7807706 | **2**: area 7's (`map-const-join`) |
+
+* **7801382, A5-138 (oracle).** Shrunk (33 evaluations): `mov.l @r6,r3 ; tst r3,r2 ; bt L ; mov.l r3,@r6 ; L: <poll of the mailbox, a write through r4 in it> ; mov.b r6,@r6`. r3 is 0 in every run, so the `bt` is always taken and no run makes the store. The engine drops it, a write-back with no write between (`if ((uRam2600238c & in_r2) != 0) { }`), and the mapping names it on the byte store's line after the poll, `uRam2600238c = CONCAT13(0x8c,uRam2600238c._1_3_);`, against which the rule judged the poll's accesses. The runs' write-back rule needs a run that makes the store, and A5-128 (a)'s rule a block the engine removed. Fix: a store no run makes, whose stored register's every maker (`RegisterMakers`, no entry value) is a folded read of the same address and size, with no write between that may reach the bytes (a write of them or at no constant address, one through a pointer, a register's or marked memory's write), is set aside (`order.folded-store.unrun-write-back`). A read between changes no memory; a first form that counted every ledger access between did not set the whole seed's store aside (`mov.l @r7,r2` and `mov.w @r4,r1`, reads through pointers, are between).
+
+**A5-130's dead-store rule.** `order.read-before-folded-store.dead` is reached 9 times in the grammar 1 sweep, by seeds 7802856, 7804854, 7808522 and 7809529 (found with a temporary print), 5 times in the grammar 2 sweep (those seeds not looked for) and twice in the 20,000-seed matrix. None of the four grammar 1 seeds needs it: each passes with the rule taken out, the read printed before the earlier store's line either way. 7804854 and 7809529 are pinned with the count, which keeps the rule run, not shown needed. No routed seed reaches it.
+
+### 5. Mutation
+
+* All four changes switched off in one build (`false &&`; A5-136's condition as master's): `TestA5FoldedPins` fails 16 checks, every one of its own (each seed of A5-136 and A5-137 whole, a finding and no count; each shrunk program; A5-136's note text), and no other pin fails.
+* A5-138 switched off: 3 checks fail (7801382 whole, finding and count; the shrunk words).
+* A5-136's first form failed `Sh2DecompilerTests` (A5-83's control) and was narrowed (section 2).
+
+### 6. Runs
+
+All after the last code edit (`e3354b5a`; the ledger and this record changed after it), with that build:
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` with Live | **117 of 117** passed (6 Live) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (canary on, every pin) | **failing seeds=0; findings=0** (canary: 240 programs, 0 failing) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, narrow-c 130, void-return 227, void-return-lent 24 |
+| grammar 1 and 2, 10,000 each from 7,800,001 (`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`) | **3** and **2** failing seeds, all area 7's `map-*` (section 4); grammar 1: `write-back-piece` 37, `unrun-write-back` 1, `read-before-folded-store.dead` 9; grammar 2: `write-back-piece` 6, `dead` 5 |
+| game corpus, both images, `SE_GAME_LEND=1 SE_GAME_NOTES=1` | "all passed", every ledger count 0; missing and said 0 (hwram007) and 4 (hwram008); "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)". **No function's text changes**: the host change gives notes only, and both images' notes are line for line those of a build without A5-136 |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint --tests-dir` ok (no vendored file touched) |
+
+### 7. Routed
+
+* **Area 7** (mapping):
+  * grammar 1 sweep seeds 7801133 (`v:map-way-back`, 0x06009038 answered with a line that does not begin with it), 7803022 (`n:map-copy-merge`, `iRam26001000 = (int2)cVar1;` drawn only at instructions that make nothing, 0x06009022 first), 7807800 (`n:map-way-back`, 0x06009022 answered with a copy materialised there before its own statement); grammar 2 sweep seeds 7800677 (`map-const-join`, `uVar6 = 0;` drawn at `and r5,r1`, 0x06009060) and 7807706 (`map-const-join`, `uVar5 = 0x80000000;` drawn at `rotcr r3`, 0x060900BA).
+  * A5-137 (c)'s token: in grammar 1 specials seed 7102142 the line `uRam26002100 = (uint4)uRam26002100._1_3_;`, the slot store's r2 = 0 instance, is drawn at 0x0600901A (a later store) and not at 0x0600900A. The `map-*` checks do not report it.
+* **Area 11**: the shrunk replay lines of raw words leave out the request that marks the mailbox and its poll (`SE_GENERATED_VOLATILE`, `SE_GENERATED_POLL`), so 7102142's shrunk words replay without the finding (checked on master's oracle); the pins set both for 7402502's, 7102142's and 7801382's. The same class as the routed 3-4-5 round's area 11 item.
+* Not taken (area 7's round 16 and the queued seeds): the `map-*` seeds of the brief, A5-134, 6906813's token, grammar 2 7402123 and 7407523, and area 3's 7004216.
