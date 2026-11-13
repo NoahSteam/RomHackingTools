@@ -17766,6 +17766,77 @@ void TestArea5Review()
     CHECK(before(out["a5_118"], "xRam06030000 = in_r1;", "SCU_D0EN = 1;") && before(out["a5_118"], "SCU_D0EN = 1;", "xRam06030000 = in_r2;"));   // FIXED
 }
 
+// Area 5, review round after patch 0090 (rows A5-119 and A5-120). Each fixture holds the text the head prints; the checks marked DEFECT are the
+// wrong text and are to be turned round by the fix of the row, beside controls that have the right order. The global is 0x06030000; the code
+// reads it, stores through a pointer (which may be the global's address), and uses what it read.
+void TestArea5ReviewAfter0090()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw(0x100000u, 0);
+    struct W { const char* name; uint32_t base; std::vector<uint16_t> words; };
+    const std::vector<W> fx = {
+        // A5-119: mov.l @(lit),r6 (0x06030000) ; mov.l @r6,r1 ; mov.l r2,@r4 ; add #1,r1 ; mov.l r1,@r6 ; rts ; nop
+        // -- g = g + 1 where the code reads g before the store through r4 and adds after it
+        { "a5_119_inc", 0x06053000u, { 0xD603, 0x6162, 0x2422, 0x7101, 0x2612, 0x000B, 0x0009, 0x0009, 0x0603, 0x0000 } },
+        // ...the saved word stored back: mov.l @(lit),r6 ; mov.l @r6,r1 ; mov.l r2,@r4 ; mov.l r1,@r6 ; rts ; nop
+        { "a5_119_restore", 0x06053100u, { 0xD602, 0x6162, 0x2422, 0x2612, 0x000B, 0x0009, 0x0603, 0x0000 } },
+        // ...a store through a second pointer in the restore's way: mov.l @(lit),r6 ; mov.l @r6,r1 ; mov.l @r4,r3 ; mov.l r3,@r5 ; mov.l r1,@r6 ; rts ; nop
+        { "a5_119_restore2", 0x06053200u, { 0xD603, 0x6162, 0x6342, 0x2532, 0x2612, 0x000B, 0x0009, 0x0009, 0x0603, 0x0000 } },
+        // control: the read used by a store through a pointer after it (the read stays before the store): mov.l @(lit),r6 ; mov.l @r6,r1 ; mov.l r2,@r4 ; mov.l r1,@r5 ; rts ; nop
+        { "a5_119_ctl_use", 0x06053300u, { 0xD602, 0x6162, 0x2422, 0x2512, 0x000B, 0x0009, 0x0603, 0x0000 } },
+        // control: the register write (VDP2_TVSTAT) in the pointer store's place: the read is kept before it, and the restore is kept
+        // mov.l @(lit),r6 ; mov.l @(lit),r7 ; mov.l @r6,r1 ; mov.l r2,@r7 ; mov.l r1,@r6 ; rts ; nop
+        { "a5_119_ctl_reg", 0x06053400u, { 0xD603, 0xD704, 0x6162, 0x2722, 0x2612, 0x000B, 0x0009, 0x0009, 0x0603, 0x0000, 0x25F8, 0x0004 } },
+        // control: a call between (r13 holds the word, r14 the address): the restore is kept
+        { "a5_119_ctl_call", 0x06053500u, { 0x2FE6, 0x2FD6, 0x4F22, 0xDE04, 0x6DE2, 0x450B, 0x0009, 0x2ED2, 0x4F26, 0x6DF6, 0x000B, 0x6EF6, 0x0603, 0x0000 } },
+        // A5-120: mov.l @(lit),r6 (0x06030000) ; mov.l @(lit),r7 (VDP2_TVSTAT) ; mov.l @(lit),r5 (SMPC_SF) ; mov.l r5,@r6 ; mov.l @r7,r0 ; mov.l @r6,r1 ; mov #1,r2 ; rts ; mov.b r2,@r1
+        // -- the register's address stored to RAM, a register read, the address read back and written through
+        { "a5_120", 0x06053600u, { 0xD604, 0xD705, 0xD505, 0x2652, 0x6072, 0x6162, 0xE201, 0x000B, 0x2120, 0x0009, 0x0603, 0x0000, 0x25F8, 0x0004, 0x2010, 0x0063 } },
+    };
+    for (const W& w : fx)
+    {
+        size_t off = w.base - 0x06000000u;
+        for (uint16_t c : w.words) { dts::Put16(hw, off, c); off += 2; }
+    }
+    auto snap = MakeSnapshot(hw);
+    std::map<std::string, std::string> out;
+    for (const W& w : fx)
+    {
+        const DecompileResult r = d.Decompile(snap, Request(w.base));
+        Print(w.name, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        out[w.name] = r.Text();
+    }
+    auto before = [](const std::string& t, const char* a, const char* b) {
+        const size_t i = t.find(a), j = t.find(b);
+        return i != std::string::npos && j != std::string::npos && i < j;
+    };
+    // A5-119 (P1): a global read before a store through a pointer and used after it is printed as read after the store (the merge takes the
+    // register that only copies the global for the global itself, 0090's `Merge::heldAcrossAccess` exempts it), so when the pointer is the
+    // global's address the text uses the word just stored where the code uses the old one; and a restore of the word read, after the store,
+    // is not printed at all (when the pointer is the global's address the code ends with the old word, the text with the stored one).
+    // DEFECT (the head): `*param_1 = in_r2; iRam06030000 = iRam06030000 + 1;`, and no store of the global in the restore fixtures.
+    {
+        const std::string t = out["a5_119_inc"];
+        CHECK(before(t, "*param_1 = in_r2;", "iRam06030000 = iRam06030000 + 1;"));          // DEFECT (the read is after the store)
+        CHECK(!Has(t, "= iRam06030000;"));                                                   // DEFECT (no read of the global before the store)
+        CHECK(!Has(out["a5_119_restore"], "Ram06030000"));                                   // DEFECT (the restore is not printed)
+        CHECK(!Has(out["a5_119_restore2"], "Ram06030000"));                                  // DEFECT
+        CHECK(before(out["a5_119_ctl_use"], "= xRam06030000;", "*param_1 = in_r2;"));       // control: the read before the store
+        CHECK(before(out["a5_119_ctl_reg"], "= xRam06030000;", "_VDP2_TVSTAT = in_r2;") &&
+              before(out["a5_119_ctl_reg"], "_VDP2_TVSTAT = in_r2;", "xRam06030000 = xVar1;"));   // control: a register write keeps both
+        CHECK(Has(out["a5_119_ctl_call"], "xRam06030000 = xVar1;"));                         // control: a call keeps the restore
+    }
+    // A5-120 (P3): the address of a register stored to a RAM word, a register read, and the word read back: the write through it is a write
+    // through a pointer read from memory, the register not named and none of its notes said (before 0090: `SMPC_SF = 1;`). The value is the
+    // code's, the barrier's cost.
+    {
+        const std::string t = out["a5_120"];
+        CHECK(Has(t, "puRam06030000 = &SMPC_SF;") && Has(t, "*puRam06030000 = 1;"));
+        CHECK(!Has(t, "SMPC_SF = 1;"));
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -18276,6 +18347,7 @@ int main(int argc, char** argv)
         RUN(TestArea10Round2());
         RUN(TestArea5Confirm());
         RUN(TestArea5Review());
+        RUN(TestArea5ReviewAfter0090());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());
