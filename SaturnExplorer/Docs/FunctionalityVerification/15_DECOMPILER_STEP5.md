@@ -19813,7 +19813,7 @@ No `endless-*` finding in any of them.
 
 ### Runs
 
-All after the last code edit (`87ef0e61` and the ledger/record commits on it), with that build:
+All after the last code edit (the A7-123 commit; the record and ledger changed after it only in the fresh-range cell), with that build:
 
 | Run | Result |
 |---|---|
@@ -19823,7 +19823,7 @@ All after the last code edit (`87ef0e61` and the ledger/record commits on it), w
 | default run, grammar 1 and grammar 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds each |
 | printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
 | game corpus (`a7_round2/corpus.sh`, lent, token dump) | both images "all passed", every mapping violation 0; lent 474 (645) of 999 and 724 (975) of 1,543; missing and said 0 and 4 |
-| fresh ranges again (6,600,001 grammar 1 and 2, 6,700,001 specials) | FRESHRESULT |
+| fresh ranges again (6,600,001 grammar 1 and 2, 6,700,001 specials) | grammar 1: 2 failing seeds (6602319, 6605001), grammar 2: 1 (6607443), specials: 2 (6702443, 6703972): **only the area 5 order classes remain, no `map-*` and no `endless-*` finding** |
 | lints | `check-literal-size.py` ok; `check-vendored-tree.py lint` ok (no vendored file touched) |
 
 ### Routed
