@@ -94,8 +94,8 @@ cmake --build build-web
 This produces `build-web/bin/index.{html,js,wasm}`. Serve that directory over HTTP (a
 `file://` open won't load the `.wasm`), e.g. `python3 -m http.server -d build-web/bin`,
 and open it in a browser. Load a savestate by **dragging it onto the canvas** or via the
-toolbar's **Open** button. Every push to `master` also builds and publishes this to GitHub
-Pages via `.github/workflows/web.yml`.
+toolbar's **Open** button.
+CI does not build or publish the web version.
 
 ### Live mode — inspect a running emulator (native builds)
 The Windows and native-SDL2 builds can read a **running** Yabause in realtime
