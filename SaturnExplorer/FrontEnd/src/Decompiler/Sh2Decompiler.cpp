@@ -8292,7 +8292,7 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         const ghidra::Varnode* in = o->getIn(0);
         // (A7-116: or the low bytes of a variable that is no memory, `(char)param_1` or `(char)puVar6`, the SUBPIECE the engine made at a
         // store of its own and shares with a later narrow store of the same value; grammar 1 seed 6202214)
-        const bool inputPiece = o->code() == ghidra::CPUI_SUBPIECE && !in->isConstant();
+        const bool inputPiece = o->code() == ghidra::CPUI_SUBPIECE && !in->isConstant() && in->getSpace() != ram && (!stackSpace || in->getSpace() != stackSpace);
         if (in->isConstant() || (!inputPiece && in->getSpace() != ram && (!stackSpace || in->getSpace() != stackSpace))) continue;
         const uint32_t at = InstructionOf(o);
         if (flow.callInsns.count(at)) continue;
