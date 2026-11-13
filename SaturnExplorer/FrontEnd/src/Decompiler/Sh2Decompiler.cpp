@@ -8630,6 +8630,48 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
                 if (t.addr == own && t.begin < t.end) t.materialised = true;
         }
     }
+    // A7-145: a copy the engine made of the stores of a variable that join into one value -- `uRam06001000 = 0;` for a word store of
+    // `in_r2 & 0x80000000` and the byte store of 0 over its high byte, `xRam06001020 = 0x30009;` for two half-word stores -- drawn at the
+    // first store, whose own statement is another line (the variable's name drawn at that store there: `uRam06001000 = in_r2 &
+    // 0x80000000;`), and naming the later store: its tokens at the first store are a copy materialised there (A7-25), which the way back
+    // offers after that store's own line. Only a line that is a copy (`V = W;`), drawn at a store and naming another (the oracle's
+    // A7-129 rule: grammar 1 seeds 7907547, 8002145 and 8004782, specials for the last two)
+    for (size_t line = 0; line < lines.size(); ++line)
+    {
+        Line& l = lines[line];
+        const std::string& text = l.text;
+        if (!plainCopy(text)) continue;
+        const size_t nb = text.find_first_not_of(' '), eq = text.find(" = ");
+        const std::string name = text.substr(nb, eq - nb);
+        const auto isStore = [&flow](uint32_t a) { return flow.accessesByInsn.find(std::make_pair(a, true)) != flow.accessesByInsn.end(); };
+        bool namesOther = false;
+        std::set<uint32_t> drawnStores;
+        for (const Token& t : l.tokens)
+        {
+            if (!t.addr || !isStore(t.addr)) continue;
+            if (t.begin == t.end) namesOther = true;
+            else drawnStores.insert(t.addr);
+        }
+        if (!namesOther) continue;
+        for (uint32_t at : drawnStores)
+        {
+            bool named = false;   // (an empty token of this store: the line names it, not only draws it)
+            for (const Token& t : l.tokens) named = named || (t.addr == at && t.begin == t.end);
+            if (named) continue;
+            bool own = false;   // (another line, not a copy, whose assigned name is drawn at the store: the store's own statement)
+            for (size_t other = 0; other < lines.size() && !own; ++other)
+            {
+                if (other == line || plainCopy(lines[other].text)) continue;
+                const std::string& ot = lines[other].text;
+                const size_t ob = ot.find_first_not_of(' '), oa = ot.find(" = ");
+                if (ob == std::string::npos || oa == std::string::npos || oa <= ob || ot.compare(ob, oa - ob, name) != 0) continue;
+                for (const Token& u : lines[other].tokens) own = own || (u.addr == at && u.begin == ob && u.end == oa && !u.materialised);
+            }
+            if (!own) continue;
+            for (Token& t : l.tokens)
+                if (t.addr == at && t.begin < t.end) t.materialised = true;
+        }
+    }
 }
 
 // A7-135: a sign or zero extension the engine made itself -- after the flow, at the first address of a block -- as the twin of one the

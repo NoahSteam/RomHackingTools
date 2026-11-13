@@ -2366,6 +2366,14 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (shownValue.kind == WordValue::Param)
                     {
                         if (got == shownValue || (got.kind == WordValue::Number && got.byCondition)) return false;
+                        // (A7-146: a parameter the text assigns, `param_2 = param_2 + 2;` for the `mac.w @r5+,@r5+` that moves r5 on, is a
+                        // variable whose value is what the text gave it, not the input: not judged; grammar 1 seed 8002899 (specials))
+                        if (!A7RuleOff(146))
+                            for (const auto& other : r.lines)
+                            {
+                                const size_t s = other.text.find_first_not_of(' ');
+                                if (s != std::string::npos && other.text.compare(s, shownText.size() + 3, shownText + " = ") == 0) return false;
+                            }
                         // (A7-120: or the store writes only bytes the extension of a narrow unsigned parameter makes 0 -- `(uint4)param_2` of a
                         // `uint2`, the byte store of 0 at the word's high byte -- and its bytes there are 0; grammar 1 seed 6603025)
                         if (got.kind == WordValue::Number && cast && !A7RuleOff(120))
