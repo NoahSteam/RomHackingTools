@@ -556,7 +556,11 @@ inline bool EdgeImpossible(const sfe::decomp::DecompileResult& r, const std::fun
     if (r.InBody(p - 2) && word(p - 2, bw) && ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F))
     {
         const sfe::DisassembledInstruction br = sfe::Sh2Decode(p - 2, bw);
-        if (br.IsValid && br.BranchTarget != p + 2 && (p + 2 == a || br.BranchTarget == a))
+        // (A7-115: the code after the slot is entered by another way when a branch of its own enters the slot -- `bra L` to the slot of
+        // a `bf/s`, which runs on past it whatever the `bf/s`'s T says; grammar 1 seed 6601665)
+        const auto slotEntered = into.find(p);
+        const bool enteredElsewhere = p + 2 == a && slotEntered != into.end() && !slotEntered->second.empty();
+        if (br.IsValid && br.BranchTarget != p + 2 && (p + 2 == a || br.BranchTarget == a) && !enteredElsewhere)
         {
             const int t = TBefore(r, word, into, p - 2, depth + 1);
             const bool taken = p + 2 != a;
@@ -825,7 +829,9 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
                 uint16_t bw = 0;
                 sfe::DisassembledInstruction br;
                 if (depth < 6 && r.InBody(p - 2) && word(p - 2, bw) && ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F) && decode(p - 2, br) &&
-                    br.BranchTarget != p + 2 && (p + 2 == a || br.BranchTarget == a))
+                    br.BranchTarget != p + 2 && (p + 2 == a || br.BranchTarget == a) &&
+                    // (A7-115: not the fall-through past a slot a branch of its own enters too)
+                    !(p + 2 == a && into.find(p) != into.end() && !into.find(p)->second.empty()))
                 {
                     const int t = TBefore(r, word, into, p - 2, depth + 1);
                     const bool taken = p + 2 != a;
@@ -1083,6 +1089,9 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
         {
             sfe::DisassembledInstruction d;
             uint16_t w = 0;
+            // (A7-115: an edge that is never taken, the fall-through of a `bf` that T says always branches, gives T nothing: `cmp/pl r3 ;
+            // bf L ; cmp/hi r2,r1 ; L: rotcl r3` with r3 negative is run with T 0 only; grammar 1 seed 6201923)
+            if (depth < 6 && EdgeImpossible(r, word, into, p, a, depth + 1)) continue;
             if (!decode(p, d) || !word(p, w) || d.IsCall || d.Mnemonic == "rte") return -1;
             if ((w >> 8) == 0x89 || (w >> 8) == 0x8B)
             {
@@ -1794,6 +1803,26 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             for (const AccessFate& f : r.accessFates)
                                 readHere = readHere || (f.insn == t.addr && !f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
                         }
+                        // (A7-115: a frame local the line reads, `(int4)iStack_14` at the `mov.w @r14,r3` that loads it, is that load's own
+                        // statement as a global is: the copy of what the load read into the store after it; grammar 2 seed 6205642)
+                        const size_t sp = operand.find("Stack_");
+                        if (sp != std::string::npos && operand.find_first_not_of("abcdefghijklmnopqrstuvwxyz", 0) == sp)
+                        {
+                            uint32_t hexv = 0;
+                            size_t q = sp + 6, digits = 0;
+                            while (q < operand.size() && std::isxdigit(static_cast<unsigned char>(operand[q])) && digits < 8)
+                            {
+                                const char c = operand[q];
+                                hexv = hexv * 16 + static_cast<uint32_t>(c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10);
+                                ++q;
+                                ++digits;
+                            }
+                            uint32_t piece = 0;
+                            if (digits > 0 && operand.compare(q, 2, "._") == 0) piece = static_cast<uint32_t>(std::strtoul(operand.c_str() + q + 2, nullptr, 10));
+                            if (digits > 0)
+                                for (const AccessFate& f : r.accessFates)
+                                    readHere = readHere || (f.insn == t.addr && !f.write && f.frame && (0u - hexv + piece) - f.address < f.size);
+                        }
                     }
                     // (A7-78: the function's input drawn at its first instruction -- `in_r3` at the entry's pool load -- is where the engine
                     // keeps every input; it is no value materialised there; grammar 1 seed 3804173)
@@ -2124,7 +2153,56 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     }
                     const WordValue got = RegisterBefore(r, word, sources, store, reg);
                     if (got.kind == WordValue::Unknown) return false;
-                    if (shownValue.kind == WordValue::Param) return !(got == shownValue) && !(got.kind == WordValue::Number && got.byCondition);
+                    if (shownValue.kind == WordValue::Param)
+                    {
+                        if (got == shownValue || (got.kind == WordValue::Number && got.byCondition)) return false;
+                        // (A7-115: the parameter's variable is the number the text assigns it: `param_2 = 0x62;` before `uRam2600306c =
+                        // param_2;`, where the words give r5 that number on every run -- `bt` over the assignment never taken, which
+                        // the engine cannot know; grammar 1 seed 6209595)
+                        // (A7-115: or the store writes only bytes the extension of a narrow unsigned parameter makes 0 -- `(uint4)param_2` of a
+                        // `uint2`, the byte store of 0 at the word's high byte -- and its bytes there are 0; grammar 1 seed 6603025)
+                        if (got.kind == WordValue::Number && cast)
+                        {
+                            const int pw = DeclaredWidth(r, shownText);
+                            bool unsignedParam = false;
+                            for (const auto& sig : r.lines)
+                            {
+                                const size_t nm = sig.text.find(" " + shownText);
+                                if (nm == std::string::npos || nm + 1 + shownText.size() >= sig.text.size()) continue;
+                                const char after = sig.text[nm + 1 + shownText.size()];
+                                if (after != ',' && after != ')') continue;
+                                size_t b = nm;
+                                while (b > 0 && (std::isalnum(static_cast<unsigned char>(sig.text[b - 1])) || sig.text[b - 1] == '_')) --b;
+                                unsignedParam = b < nm && sig.text[b] == 'u';
+                                break;
+                            }
+                            const size_t open = text.find('(', text.find(" = "));
+                            const int vw = open != std::string::npos && text.find(')', open) == open + 6 && std::isdigit(static_cast<unsigned char>(text[open + 5])) ? text[open + 5] - '0' : 4;
+                            const int sh = std::min(std::max(storeShift[store], 0), size - 1);
+                            const int covered = std::min(size - sh, vw);
+                            if (unsignedParam && pw < vw && covered > 0 && covered <= vw - pw)
+                            {
+                                bool zero = true;
+                                for (int j = 0; j < covered; ++j) zero = zero && ((static_cast<uint64_t>(got.value) >> (8 * (size - 1 - (sh + j)))) & 0xFF) == 0;
+                                if (zero) return false;
+                            }
+                        }
+                        if (got.kind == WordValue::Number)
+                            for (const auto& other : r.lines)
+                            {
+                                const size_t s = other.text.find_first_not_of(' ');
+                                const std::string prefix = shownText + " = ";
+                                if (s == std::string::npos || other.text.compare(s, prefix.size(), prefix) != 0 || other.text.back() != ';') continue;
+                                const std::string rhs = other.text.substr(s + prefix.size(), other.text.size() - s - prefix.size() - 1);
+                                const bool neg = !rhs.empty() && rhs[0] == '-';
+                                char* end = nullptr;
+                                const uint64_t n = std::strtoull(rhs.c_str() + (neg ? 1 : 0), &end, 0);
+                                if (end != rhs.c_str() + (neg ? 1 : 0) && *end == '\0' &&
+                                    static_cast<uint32_t>(neg ? 0 - n : n) == static_cast<uint32_t>(got.value))
+                                    return false;
+                            }
+                        return true;
+                    }
                     if (shownValue.kind == WordValue::Number)
                     {
                         // (a parameter may be the number on the line's path: `param_4 == 0` tested before the store)

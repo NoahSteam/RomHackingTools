@@ -6383,6 +6383,8 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
 // read of memory the flow cannot place, and, for a statement that shows a number, an input or op the engine may have computed it from
 // (`param_4` where a test said it is 0, arithmetic of literals it folded). False only when every path ends at another value: the store
 // wrote, on every path, something the statement does not show.
+bool FlowLastWriters(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, std::vector<const FlowOp*>& out,
+                     bool* input = nullptr, bool throughMoves = true);
 bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, FlowVn vn, const ValueSet& want)
 {
     struct State
@@ -6580,13 +6582,33 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
             }
             // A7-31: arithmetic that leaves one input's value unchanged (`add r4,r3` with r3 0 after a `dt` loop, `add #0`, `and r1,r1`,
             // `or r2,r2`), which the engine folds to that input: the walk goes on from the input, which must still be the statement's
+            // A7-115: `xor r3,r1` with r3 0 (after a `dt` loop) is r1, whatever the paths into the instruction are: the walk goes on
+            // from the other input (FlowIdentitySources gives up when one path into the join goes around a cycle); grammar 1 seed 6206050
+            if (whole && !passes && op.numIn == 2 && (op.code == ghidra::CPUI_INT_XOR || op.code == ghidra::CPUI_INT_OR || op.code == ghidra::CPUI_INT_ADD ||
+                                                      op.code == ghidra::CPUI_INT_SUB))
+            {
+                bool moved = false;
+                for (int k = 0; k < 2 && !moved; ++k)
+                {
+                    if (op.code == ghidra::CPUI_INT_SUB && k == 0) continue;
+                    uint64_t z = 0;
+                    const bool zero = op.in[k].Constant() ? op.in[k].offset == 0 : FlowNumberBefore(flow, fd, st.blk, i, op.in[k], z) && z == 0;
+                    FlowVn from = op.in[1 - k];
+                    if (!zero || from.Constant() || from.size != op.out.size) continue;
+                    from.offset += st.vn.offset - op.out.offset;
+                    from.size = st.vn.size;
+                    todo.push_back(State{ st.blk, i, from, st.bit });
+                    moved = true;
+                }
+                if (moved) break;
+            }
             std::vector<IdentitySource> through;
             // (only the bytes the path reads: `xor #0x40000000` leaves a half-word store's half alone)
             const ghidra::uintb below = op.out.offset + static_cast<ghidra::uintb>(op.out.size) - (st.vn.offset + static_cast<ghidra::uintb>(st.vn.size));
             const uint64_t readBytes = below >= 8 ? 0 : MaskToSize(~0ull, st.vn.size) << (8 * below);
             if (whole && !passes && FlowIdentitySources(flow, fd, st.blk, i, through, readBytes))
             {
-                for (IdentitySource& t : through)
+                    for (IdentitySource& t : through)
                 {
                     t.vn.offset += st.vn.offset - op.out.offset;
                     t.vn.size = st.vn.size;
@@ -6596,6 +6618,21 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
             }
             if (!whole || !passes || op.numIn < 1)
             {
+                // A7-115: the register a computation wrote, which a store of the flow stored into the memory the statement reads
+                // (`uRam2600200c = uRam26001016;`, the engine's copy of the byte `mov.b r1,@(r0,r7)` stored, r1 the `rotl`'s and kept by a
+                // `xor` of 0 after it): the memory is that value; grammar 1 seed 6206050
+                if (whole && !want.locations.empty())
+                    for (size_t b = 0; b < flow.blockOps.size(); ++b)
+                        for (size_t j = 0; j < flow.blockOps[b].size(); ++j)
+                        {
+                            const FlowOp& sop = flow.blockOps[b][j];
+                            if (sop.code != ghidra::CPUI_STORE || sop.numIn < 3 || sop.in[2].Constant() || !SameStorage(sop.in[2], op.out)) continue;
+                            const std::pair<bool, FlowVn> sm = memoryOf(static_cast<int>(b), static_cast<int>(j));
+                            if (!sm.first || !want.HasLocation(sm.second)) continue;
+                            std::vector<const FlowOp*> writers;
+                            if (FlowLastWriters(flow, fd, static_cast<int>(b), static_cast<int>(j), sop.in[2], writers) && writers.size() == 1 && writers[0] == &op)
+                                return true;
+                        }
                 if (computed()) return true;
                 break;
             }
@@ -6663,7 +6700,7 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
 // and the walk goes on (the function's input is one of the values; A7-46: the push of `in_r3` is no store of a merged number). Without
 // `throughMoves`, a register move is the writer itself (A7-55: the `mov r4,r1` that put the input in a merged register).
 bool FlowLastWriters(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, std::vector<const FlowOp*>& out,
-                     bool* input = nullptr, bool throughMoves = true)
+                     bool* input, bool throughMoves)
 {
     struct State
     {
@@ -8253,7 +8290,10 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         // narrow store the engine made the piece at; grammar 1 seed 902)
         if ((o->code() != ghidra::CPUI_COPY && o->code() != ghidra::CPUI_SUBPIECE) || !out || !out->isImplied() || o->isFromDelaySlot()) continue;
         const ghidra::Varnode* in = o->getIn(0);
-        if (in->isConstant() || (in->getSpace() != ram && (!stackSpace || in->getSpace() != stackSpace))) continue;
+        // (A7-115: or the low bytes of a variable that is no memory, `(char)param_1` or `(char)puVar6`, the SUBPIECE the engine made at a
+        // store of its own and shares with a later narrow store of the same value; grammar 1 seed 6202214)
+        const bool inputPiece = o->code() == ghidra::CPUI_SUBPIECE && !in->isConstant();
+        if (in->isConstant() || (!inputPiece && in->getSpace() != ram && (!stackSpace || in->getSpace() != stackSpace))) continue;
         const uint32_t at = InstructionOf(o);
         if (flow.callInsns.count(at)) continue;
         const auto first = flow.insnFirst.find(at);
@@ -8268,7 +8308,7 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         for (size_t i = first->second.second; i < ops.size() && ops[i].insn == at && !reads; ++i)
         {
             if (ops[i].code == ghidra::CPUI_STORE) store = true;
-            if (ops[i].code != ghidra::CPUI_LOAD || ops[i].numIn < 2) continue;
+            if (inputPiece || ops[i].code != ghidra::CPUI_LOAD || ops[i].numIn < 2) continue;
             bool stack = false;
             ghidra::uintb offset = 0;
             if (!FlowPointer(flow, fd, first->second.first, static_cast<int>(i), ops[i].in[1], stack, offset))
@@ -8306,6 +8346,18 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         for (size_t line : printed.at(o).first)
         {
             if (line >= lines.size() || shared.count(std::make_pair(line, own)) || !plainCopy(lines[line].text)) continue;
+            // (an input's piece: only where the instruction has a statement of its own on another line -- a store of the piece alone is
+            // that line's own, `cRam2600200c = (char)param_1;` at the `mov.b r4,@r6`)
+            if (inputPiece)
+            {
+                bool elsewhere = false;
+                for (size_t other = 0; other < lines.size() && !elsewhere; ++other)
+                {
+                    if (other == line || plainCopy(lines[other].text)) continue;
+                    for (const Token& t : lines[other].tokens) elsewhere = elsewhere || (t.addr == own && t.begin < t.end && !t.materialised);
+                }
+                if (!elsewhere) continue;
+            }
             for (Token& t : lines[line].tokens)
                 if (t.addr == own && t.begin < t.end) t.materialised = true;
         }
