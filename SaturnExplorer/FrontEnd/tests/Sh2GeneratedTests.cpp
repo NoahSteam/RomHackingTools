@@ -9604,6 +9604,10 @@ template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::valu
 template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator||(const T<N, S>& a, I b) { return Bool4(a.Zext() != 0 || b != 0); }
 template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator||(I a, const T<N, S>& b) { return Bool4(a != 0 || b.Zext() != 0); }
 // the names the engine prints (xunknown: no sign, read as signed)
+// (A12-30) macOS's <sys/types.h>, which libc++ pulls in, already has `typedef unsigned short ushort;` and `uint`; ours are other types, so rename ours
+#define uchar se_uchar
+#define ushort se_ushort
+#define uint se_uint
 typedef T<1, false> undefined; typedef T<1, false> undefined1; typedef T<2, false> undefined2; typedef T<3, false> undefined3; typedef T<4, false> undefined4; typedef T<8, false> undefined8;
 typedef T<1, false> byte; typedef T<1, false> uchar; typedef T<2, false> ushort; typedef T<4, false> uint; typedef T<3, false> uint3; typedef T<8, true> longlong; typedef T<8, false> ulonglong;
 typedef T<2, false> word; typedef T<4, false> dword; typedef T<8, false> qword;
