@@ -8350,6 +8350,11 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
             // that line's own, `cRam2600200c = (char)param_1;` at the `mov.b r4,@r6`)
             if (inputPiece)
             {
+                // (and the line is already a copy the engine materialised at another instruction, A7-25's marks: the statement of a store of
+                // its own, `SMPC_OREG16 = (char)iVar2;` at that store, keeps the piece's instruction when it is the first it names)
+                bool materialisedElsewhere = false;
+                for (const Token& t : lines[line].tokens) materialisedElsewhere = materialisedElsewhere || t.materialised;
+                if (!materialisedElsewhere) continue;
                 bool elsewhere = false;
                 for (size_t other = 0; other < lines.size() && !elsewhere; ++other)
                 {
