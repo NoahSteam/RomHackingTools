@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="300" viewBox="0 0 960 300" role="img" aria-labelledby="title desc">
+  <title id="title">A path into a Saturn game</title>
+  <desc id="desc">Open a savestate or patched emulator, inspect sprites and backgrounds, then investigate game data, memory, and code.</desc>
+  <rect width="960" height="300" rx="16" fill="#101a2c"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="32" y="40" fill="#7de4d4" font-size="13" font-weight="700" letter-spacing="2">A PATH INTO THE GAME</text>
+    <text x="32" y="76" fill="#f2f6ff" font-size="26" font-weight="700">Start with what you see. Discover what’s behind it.</text>
+    <g fill="#19283e" stroke="#34465f">
+      <rect x="32" y="104" width="280" height="160" rx="12"/>
+      <rect x="340" y="104" width="280" height="160" rx="12"/>
+      <rect x="648" y="104" width="280" height="160" rx="12"/>
+    </g>
+    <g fill="#7de4d4" font-size="14" font-weight="700">
+      <text x="52" y="134">01 / OPEN</text>
+      <text x="360" y="134">02 / INSPECT</text>
+      <text x="668" y="134">03 / INVESTIGATE</text>
+    </g>
+    <g fill="#f2f6ff" font-size="21" font-weight="700">
+      <text x="52" y="172">Capture a moment</text>
+      <text x="360" y="172">Take the scene apart</text>
+      <text x="668" y="172">Follow the evidence</text>
+    </g>
+    <g fill="#bfcee2" font-size="16">
+      <text x="52" y="208">Load a savestate or dump.</text>
+      <text x="52" y="235">Or connect a patched emulator.</text>
+      <text x="360" y="208">Select sprites and textures.</text>
+      <text x="360" y="235">Explore colors and layers.</text>
+      <text x="668" y="208">Find matching game data.</text>
+      <text x="668" y="235">Inspect memory and code.</text>
+    </g>
+    <g stroke="#7de4d4" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M319 184h14m-5-5 5 5-5 5"/>
+      <path d="M627 184h14m-5-5 5 5-5 5"/>
+    </g>
+  </g>
+</svg>
