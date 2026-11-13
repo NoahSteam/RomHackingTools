@@ -1512,6 +1512,9 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
                 }
                 return true;
             }
+            // (A7-138: nor a store through gbr, `mov.b r0,@(0xa,gbr)` between `mov.l r1,@-r15` and `mov.l @r15+,r1`: the engine keeps gbr's
+            // memory apart from the frame; grammar 2 seed 7606857)
+            if (store && !A7RuleOff(138) && (iw >> 8) >= 0xC0 && (iw >> 8) <= 0xC2) return true;
             return !store;
         };
         const auto isPush = [&](uint32_t q) {
@@ -3490,6 +3493,69 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     }
                     if (all) computes = true;
                 }
+                // (A7-139: `mov.b @Rk,Rn` or `mov.w @Rk,Rn` of the first bytes of the word `mov.l Rs,@Rk` stored before it, when every maker of Rs is
+                // a `movt` (0 or 1): the high bytes are 0, whatever the T. Up to 10 instructions back, the conditional branches among them forward
+                // to the load or short of it (code skipped, which is scanned as well), none writing Rk or Rs or storing; grammar 2 seed 7608136, `movt r3 ; mov.l r3,@r15 ; tst r3,r4 ; bt L ;
+                // L: mov.b @r15,r1`)
+                if (!computes && want == 0 && (w >> 12) == 0x6 && ((w & 0xF) == 0x0 || (w & 0xF) == 0x1) && !A7RuleOff(139))
+                {
+                    const int rk = static_cast<int>((w >> 4) & 0xF);
+                    for (uint32_t q = at - 2, steps = 0; steps < 10 && r.InBody(q) && !computes; q -= 2, ++steps)
+                    {
+                        uint16_t qw = 0;
+                        if (!word(q, qw)) break;
+                        const sfe::DisassembledInstruction qd = sfe::Sh2Decode(q, qw);
+                        if (!qd.IsValid || qd.IsCall || qd.HasDelaySlot) break;
+                        const bool noopBranch = ((qw >> 8) == 0x89 || (qw >> 8) == 0x8B) && qd.BranchTarget > q && qd.BranchTarget <= at;
+                        if (qd.IsBranch && !noopBranch) break;
+                        if ((qw >> 12) == 0x2 && (qw & 0xF) == 0x2 && static_cast<int>((qw >> 8) & 0xF) == rk)
+                        {
+                            std::set<uint32_t> makersS;
+                            const int rs = static_cast<int>((qw >> 4) & 0xF);
+                            bool all = RegisterMakers(r, word, sources, q, rs, makersS) && !makersS.empty() && !makersS.count(0);
+                            for (uint32_t mk : makersS)
+                            {
+                                uint16_t mw = 0;
+                                all = all && word(mk, mw) && (mw & 0xF0FF) == 0x0029;
+                            }
+                            computes = all;
+                            break;
+                        }
+                        int sz = 0;
+                        if (StoredRegister(qw, sz) >= 0 || WrittenRegisters(qd).count(rk)) break;
+                    }
+                }
+                // (A7-137: `sub Rm,Rn` of a register and the word a store of it wrote just before: `mov.l r0,@r6 ; mov.l @r6,r2 ; ... ; sub
+                // r2,r0` is 0 whatever r0 is, the engine forwarding the stored word to the read. Rm's one maker is the `mov.l @Rk,Rm`, the
+                // instruction before it on the straight line (up to 8) that stores is `mov.l Rn,@Rk`, none of them writes Rk or Rn, and Rn has
+                // the same makers at the `sub` as at the store; grammar 1 seed 7600135)
+                if (!computes && want == 0 && (w >> 12) == 0x3 && (w & 0xF) == 0x8 && !A7RuleOff(137))
+                {
+                    const int dn = static_cast<int>((w >> 8) & 0xF), sm = static_cast<int>((w >> 4) & 0xF);
+                    std::set<uint32_t> makersM;
+                    uint16_t lw = 0;
+                    if (RegisterMakers(r, word, sources, at, sm, makersM) && makersM.size() == 1 && !makersM.count(0) && word(*makersM.begin(), lw) &&
+                        (lw >> 12) == 0x6 && (lw & 0xF) == 0x2 && static_cast<int>((lw >> 8) & 0xF) == sm)
+                    {
+                        const uint32_t load = *makersM.begin();
+                        const int k = static_cast<int>((lw >> 4) & 0xF);
+                        for (uint32_t q = load - 2, steps = 0; steps < 8 && r.InBody(q) && !computes; q -= 2, ++steps)
+                        {
+                            uint16_t qw = 0;
+                            if (!word(q, qw) || targets.count(q + 2) || sources.count(q + 2)) break;
+                            const sfe::DisassembledInstruction qd = sfe::Sh2Decode(q, qw);
+                            if (!qd.IsValid || qd.IsBranch || qd.IsCall || qd.HasDelaySlot) break;
+                            if (qw == static_cast<uint16_t>(0x2002u | (static_cast<unsigned>(k) << 8) | (static_cast<unsigned>(dn) << 4)))
+                            {
+                                std::set<uint32_t> before, now;
+                                computes = RegisterMakers(r, word, sources, q, dn, before) && RegisterMakers(r, word, sources, at, dn, now) && before == now;
+                                break;
+                            }
+                            int sz = 0;
+                            if (StoredRegister(qw, sz) >= 0 || WrittenRegisters(qd).count(k) || WrittenRegisters(qd).count(dn)) break;
+                        }
+                    }
+                }
                 // (A7-130: `and Rm,Rn` in a loop whose Rn is the mask a literal gave, `and`ed again each pass: `mov.l @(..),r1` of
                 // 0x20000000, then `and r5,r1` at the loop's head, r1 the literal's on the way in and the `and`'s own on the way round: every
                 // maker of a register is a number with the kept bits 0, or an `and` of such a register (a cycle is the loop's own `and`);
@@ -3562,6 +3628,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 {
                     const WordValue v = RegisterBefore(r, word, sources, at, (w >> 4) & 0xF);
                     computes = v.kind == WordValue::Number && sameNumber(static_cast<uint32_t>(v.value) << 16);
+                    // (A7-140: both registers numbers, the whole of the result: r0 = 3 and r2 = 0x20000000 give `iVar1 = 0x32000;`; grammar 1
+                    // seed 7702852, specials)
+                    const WordValue rn = RegisterBefore(r, word, sources, at, (w >> 8) & 0xF);
+                    if (!computes && !A7RuleOff(140) && v.kind == WordValue::Number && rn.kind == WordValue::Number)
+                        computes = sameNumber(static_cast<uint32_t>(v.value) << 16 | static_cast<uint32_t>(rn.value) >> 16);
                 }
                 // (A7-78: `xtrct r1,r1` of a register that is 0 -- a `dt` loop's counter, then kept 0 by the loop's own `extu.w r1,r1` and the
                 // `xtrct` itself, a cycle RegisterBefore cannot close: every maker a `dt`, a `mov #0` or an extension, a

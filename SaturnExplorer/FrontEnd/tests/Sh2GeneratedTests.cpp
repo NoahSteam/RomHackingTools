@@ -16399,17 +16399,22 @@ void TestArea7Round16Pins(Sh2Decompiler& d)
     {
         int grammar;
         int seed;
+        bool specials;
     };
-    for (const Pin& s : { Pin{ 1, 6900150 }, Pin{ 1, 6901649 }, Pin{ 1, 6902754 }, Pin{ 1, 7202663 }, Pin{ 1, 7205591 }, Pin{ 1, 6906813 },
-                          Pin{ 2, 6906408 }, Pin{ 2, 7202286 }, Pin{ 2, 7201580 } })
+    const bool savedSpecials = gSpecialReads;
+    for (const Pin& s : { Pin{ 1, 6900150, false }, Pin{ 1, 6901649, false }, Pin{ 1, 6902754, false }, Pin{ 1, 7202663, false }, Pin{ 1, 7205591, false },
+                          Pin{ 1, 6906813, false }, Pin{ 2, 6906408, false }, Pin{ 2, 7202286, false }, Pin{ 2, 7201580, false }, Pin{ 1, 7600135, false },
+                          Pin{ 2, 7608136, false }, Pin{ 2, 7606857, false }, Pin{ 1, 7702852, true } })
     {
+        gSpecialReads = s.specials;
         const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(s.seed) : Generate(s.seed), true);
-        std::printf("pin 'area 7 round 16: grammar %d seed %d': %zu finding(s)\n", s.grammar, s.seed, rep.findings.size());
+        std::printf("pin 'area 7 round 16: grammar %d seed %d%s': %zu finding(s)\n", s.grammar, s.seed, s.specials ? " (specials)" : "", rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         for (const Finding& f : rep.findings) CHECK(f.sig.find("map-") == std::string::npos);
         // (7201580 is A5-134's: the order rule's report of the mapping, which now draws the zero half at its store, is gone as well)
         if (s.seed == 7201580) CHECK(rep.findings.empty());
     }
+    gSpecialReads = savedSpecials;
 }
 
 // ---- A5-114 to A5-118 (patch 0090): a hardware access is a barrier no read or write of ordinary memory is moved, merged or dropped across ----
@@ -16516,7 +16521,7 @@ void TestA5119Pins(Sh2Decompiler& d)
         { "A5-118, g = r1 ; *r4 = 1 ; g = r2", "D602 E701 2612 2472 000B 2622 0603 0000", nullptr, "order.folded-store.checked", nullptr, nullptr },
         // A5-123: grammar 1 seed 5203228 shrunk (the mailbox marked): the slot's half-word store of 0 is joined into the long store's statement
         { "A5-123, grammar 1 seed 5203228 shrunk", "D607 E301 4310 8BFD D706 6071 C801 8BFC 461B 8554 2602 C808 8D00 2631 000B 0009 2600 2304 2600 1018", nullptr,
-          "order.folded-store.joined-earlier", "26001018-2600101B", "26001018" },
+          "order.folded-store.checked", "26001018-2600101B", "26001018" },   // (area 7 round 16, A7-136: the mapping names the zero half-word store on the zero extension's own line, so no set-aside, `joined-earlier`, is needed: the store is judged)
         // ...and 5207886 shrunk: the store's statement on the path through the register read is `xRam26001004 = VDP2_MPABN0;`, at the read
         { "A5-123, grammar 1 seed 5207886 shrunk", "D605 D706 2208 8B01 C810 8F02 816D 6245 6161 2711 000B 0009 25F8 0040 2600 1004", nullptr,
           "order.folded-store.at-maker", nullptr, nullptr },
@@ -16585,7 +16590,7 @@ void TestA5126Pins(Sh2Decompiler& d)
         { "A5-122 sweep, grammar 1 seed 6907692 shrunk", "D108 E303 D608 D709 2138 8900 1630 E00D CE7A E301 461B 0129 4310 8BFB 2632 8545 000B 0009 2600 3C1C 2600 2200 2600 1000",
           "order.folded-store.unrun", "4:26003C1C" },
         { "A5-122 sweep, grammar 1 seed 6906813 shrunk", "D608 D709 2621 6072 C801 8BFB 2248 8907 8802 8D03 8563 517B 000B 0009 000B 0009 AFF8 0009 2600 1008 0818 0044",
-          "order.folded-read-before-access.other-path", "4:06003C10" },
+          "order.folded-read-before-access.checked", "4:06003C10" },   // (area 7 round 16, A7-135: the other copy of the slot's read is drawn at the slot, so no set-aside, `other-path`, is needed: the read is judged)
     };
     for (const Pin& p : kPins)
     {
@@ -16655,7 +16660,7 @@ void TestA5129Pins(Sh2Decompiler& d)
         // 6602319: `mov.l r1,@r6` in the slot of a bt/s, a poll, a store of r5 (the text wraps `pxRam26002180 =` after the `=`); the mailbox is marked
         { "grammar 1 seed 6602319 shrunk", "2504 6148 D605 3540 8D00 2612 D704 6071 C801 8BFC 2652 000B 0009 0009 2600 2180 2600 1014", nullptr, nullptr },
         // 6605001: mov.w r2,@g ; mov.b @(2,r4),r0 ; mov.l r0,@g, which a later store of r1 on every path overwrites (the text has a goto)
-        { "grammar 1 seed 6605001 shrunk", "D605 2621 8442 2602 2558 8901 2328 8D01 2612 8446 000B 0009 2600 2208", nullptr, "order.read-before-folded-store.dead" },
+        { "grammar 1 seed 6605001 shrunk", "D605 2621 8442 2602 2558 8901 2328 8D01 2612 8446 000B 0009 2600 2208", nullptr, nullptr },   // (the `order.read-before-folded-store.dead` count it pinned is 0 on master eb8ede0d too: area 7 round 15's A5-124 piece rule moved the names of the first statement's stores, so the read is no longer judged against them; the rule is still reached by other seeds of the matrix: 22 in grammar 1 from 7,600,001)
         // 6703972: a byte store, a word read, a half-word store whose text keeps the other half of the global (`CONCAT22((int2)xVar2,xRam26002204._2_2_)`)
         { "grammar 1 specials seed 6703972 shrunk", "2432 D607 2610 200A C840 8B00 6162 D705 E003 2702 2611 6072 C801 8BFB 000B 0009 2600 2204 2DA0 009C", "4:26003C08", nullptr },
         // 7200345: a read of the global in a dt loop, used after two register reads (0094: the read is made where the code makes it)

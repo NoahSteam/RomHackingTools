@@ -3982,6 +3982,71 @@ void TestArea7Round16()
         CHECK(dts::AuditMapping(r, word, "a7_134_7202663").Violations() == 0);
         CHECK(mutated(r, "134", "a7_134_7202663 mutated") >= 1);
     }
+    // A7-137 (oracle) `sub r2,r0` of the word `mov.l r0,@r6` stored and `mov.l @r6,r2` read back is 0 whatever r0 is: `uVar1 = 0;` at the
+    // join of a `bf` to the next instruction (grammar 1 seed 7600135; the request that marks the poll's word volatile)
+    {
+        const std::vector<uint16_t> w = { 0xD606, 0x2602, 0x6262, 0x8800, 0x8BFF, 0x3028, 0x2448, 0x8903, 0xD703, 0x6072, 0xC801, 0x8BFC, 0x000B, 0x0009, 0x2600, 0x200C,
+                                          0x2600, 0x1010 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        const auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(0x06009000u);
+        q.volatileMemory.emplace_back(0x26001010u, 0x2600101Fu);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print("A7-137 sub of a register and the word stored from it (grammar 1 seed 7600135)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uVar1 = 0;") != nullptr && tokenAt(r, "uVar1 = 0;", 0x0600900Au));
+        CHECK(dts::AuditMapping(r, word, "a7_137_7600135").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "uVar1 = 0;", "uVar1 = 1;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_137_7600135 other").Violations() >= 1);
+        CHECK(mutated(r, "137", "a7_137_7600135 mutated") >= 1);
+    }
+    // A7-138 (oracle) a store through gbr between a push and its pop does not write the pushed word: `mov.l r1,@-r15 ; mov.b r0,@(0xa,gbr) ;
+    // mov.l @r15+,r1` then `add #-0x4a,r1`, `xVar1 = 0xffffffe8;` (grammar 2 seed 7606857)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x4F22, 0x6843, 0x6953, 0x6A63, 0x6B73, 0xE132, 0x2F16, 0xC00A, 0x61F6, 0x2258, 0x8901, 0xA003,
+                                          0xE1C6, 0x71B6, 0xA000, 0x0009, 0x6041, 0x4F26, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-138 a gbr store between a push and its pop (grammar 2 seed 7606857)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar1 = 0xffffffe8;") != nullptr && tokenAt(r, "xVar1 = 0xffffffe8;", 0x06009022u));
+        CHECK(dts::AuditMapping(r, word, "a7_138_7606857").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar1 = 0xffffffe8;", "xVar1 = 0xffffffe9;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_138_7606857 other").Violations() >= 1);
+        CHECK(mutated(r, "138", "a7_138_7606857 mutated") >= 1);
+    }
+    // A7-139 (oracle) a byte read of the first byte of a word `movt` stored (0 or 1): `movt r3 ; mov.l r3,@r15 ; tst r3,r4 ; bt L ; mov #..,r2 ;
+    // L: mov.b @r15,r1` is 0, `xVar1 = 0;` (grammar 2 seed 7608136)
+    {
+        const std::vector<uint16_t> w = { 0x7FF4, 0x7F0C, 0x000B, 0x0009, 0x7FC0, 0x0329, 0x2F32, 0x2438, 0x89FF, 0x61F0, 0xE301, 0x1713, 0x5150, 0x4310, 0x8BFB, 0x7F40,
+                                          0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009008u);
+        Print("A7-139 a byte of a word movt stored (grammar 2 seed 7608136)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar1 = 0;") != nullptr && tokenAt(r, "xVar1 = 0;", 0x06009012u));
+        CHECK(dts::AuditMapping(r, word, "a7_139_7608136").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar1 = 0;", "xVar1 = 1;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_139_7608136 other").Violations() >= 1);
+        CHECK(mutated(r, "139", "a7_139_7608136 mutated") >= 1);
+    }
+    // A7-140 (oracle) `xtrct r0,r2` of two numbers, r0 = 3 (the word the code stored and a poll reads back) and r2 = 0x20000000: `iVar1 =
+    // 0x32000;` (grammar 1 seed 7702852, specials)
+    {
+        const std::vector<uint16_t> w = { 0xD207, 0x272B, 0xD707, 0xE003, 0x2702, 0x6072, 0xC801, 0x89FC, 0x4215, 0x89FF, 0x220D, 0x2018, 0x8900, 0x6241, 0x000B, 0x2422,
+                                          0x2000, 0x0000, 0x2600, 0x218C };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-140 xtrct of two numbers (grammar 1 seed 7702852)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "iVar1 = 0x32000;") != nullptr && tokenAt(r, "iVar1 = 0x32000;", 0x06009014u));
+        CHECK(dts::AuditMapping(r, word, "a7_140_7702852").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "iVar1 = 0x32000;", "iVar1 = 0x32001;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_140_7702852 other").Violations() >= 1);
+        CHECK(mutated(r, "140", "a7_140_7702852 mutated") >= 1);
+    }
     // A7-135 (product) the engine's own copy of an extension the slot of a `bt/s` made -- `iVar3 = (int4)iRam2600100e;` on the fall-through,
     // the value of `mov.w @(6,r6),r0` the slot reads -- is the slot's statement: drawn at the slot (0x06009014), not at the `mov.l` after it
     // (grammar 1 seed 6906813)
