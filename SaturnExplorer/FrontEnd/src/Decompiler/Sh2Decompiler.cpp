@@ -8288,7 +8288,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     bool extends = false, memory = false;
                     for (size_t i = first->second.second; i < iops.size() && iops[i].insn == at; ++i)
                     {
-                        extends = extends || iops[i].code == ghidra::CPUI_INT_SEXT || iops[i].code == ghidra::CPUI_INT_ZEXT;
+                        extends = extends || ((iops[i].code == ghidra::CPUI_INT_SEXT || iops[i].code == ghidra::CPUI_INT_ZEXT) && iops[i].numIn >= 1 && !iops[i].in[0].Constant() && iops[i].hasOut && iops[i].out.space && iops[i].out.space->getType() == ghidra::IPTR_PROCESSOR);
                         memory = memory || iops[i].code == ghidra::CPUI_LOAD || iops[i].code == ghidra::CPUI_STORE;
                     }
                     extensionHere = extends && !memory;
@@ -8514,7 +8514,7 @@ int RetargetTwinExtensions(std::vector<Line>& lines, const PrintedOperations& pr
         const std::vector<FlowOp>& iops = flow.blockOps[static_cast<size_t>(first->second.first)];
         bool own = false;
         for (size_t i = first->second.second; i < iops.size() && iops[i].insn == at; ++i)
-            own = own || iops[i].code == ghidra::CPUI_INT_SEXT || iops[i].code == ghidra::CPUI_INT_ZEXT;
+            own = own || ((iops[i].code == ghidra::CPUI_INT_SEXT || iops[i].code == ghidra::CPUI_INT_ZEXT) && iops[i].numIn >= 1 && !iops[i].in[0].Constant() && iops[i].hasOut && iops[i].out.space && iops[i].out.space->getType() == ghidra::IPTR_PROCESSOR);
         if (own) continue;
         const ghidra::Varnode* in = o->getIn(0);
         uint32_t twin = 0;
