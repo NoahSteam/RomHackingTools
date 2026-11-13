@@ -6029,8 +6029,13 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (returning) count("endless-store.returning-lines", returning);
                 auto foldedStore = [&](const TraceRec& t) {
                     if (t.depth != 0 || !t.write) return false;
+                    // (A3-188: at the address the run wrote. An instruction two paths reach, a pointer on one and the constant 0 on the other
+                    // (grammar 1 seed 6204852's `mov.w r2,@r5` in a slot a `bra` also targets), has the constant path's record only; the run
+                    // that took the pointer path stored through the pointer, which the text prints, and is no folded store at the constant.)
                     for (const AccessFate& f : r.accessFates)
-                        if (f.insn == t.insn && f.write && !f.frame && f.constantAddress && f.fate == AccessFate::FoldedOrdinary) return true;
+                        if (f.insn == t.insn && f.write && !f.frame && f.constantAddress && f.fate == AccessFate::FoldedOrdinary &&
+                            ((f.address ^ t.addr) & 0x1FFFFFFFu) == 0)
+                            return true;
                     return false;
                 };
                 // (A3-171: a store whose every byte a later such store of the run writes again is dropped as in any function, a write the
@@ -16608,6 +16613,44 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& f : c.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
             CHECK(changed && count(c, "endless-after-store.said") > 0 && count(c, "endless-after-store.unmade") == 0);
             for (const Finding& f : c.findings) CHECK(f.sig.find("endless-") == std::string::npos);
+        }
+        // A3-187: the notes of the code after the poll are not said for code the engine removes for another reason. The same seed: the
+        // code from 0x06009036 on is reached on no path (the constant decides `bt B` and `bf/s R`), so the reads of r3 and r4 (0x0600903A,
+        // 0x06009042) and the call (0x06009052) are said as removed with the loop's exit before the fix, with the wrong cause. The control
+        // (`mov #0,r0`) makes the code reachable again and each of those is said on its instruction as the loop's.
+        {
+            const Program prog = Generate(5201834);
+            const Report rep = Evaluate(d, prog, true);
+            const char* ghost[] = { "note 0600903A", "note 06009042", "note 06009052" };
+            int said = 0;
+            for (const char* n : ghost) said += rep.text.find(n) != std::string::npos;
+            std::printf("pin 'A3-187 grammar 1 seed 5201834 (the code after the polled loop runs on no path)': notes on the ghost code %d\n", said);
+            CHECK(rep.findings.empty() && said == 0 && rep.text.find("note 0600901C") != std::string::npos);
+            Program made = prog;
+            bool changed = false;
+            for (Item& it : made.fns[0].items)
+                for (uint16_t& w : it.words)
+                    if (!changed && w == 0xE009) w = 0xE000, changed = true;
+            const Report c = Evaluate(d, made, true);
+            int cs = 0;
+            for (const char* n : ghost) cs += c.text.find(n) != std::string::npos;
+            std::printf("pin 'A3-187 control (mov #0,r0: the code runs)': notes on the same instructions %d\n", cs);
+            CHECK(changed && cs > 0 && c.findings.empty());
+        }
+        // A3-188: grammar 1 seed 6204852 (area 7 round 13): `mov.w r2,@r5` in the slot of a `bt/s` that a `bra` also targets is two instances,
+        // r5 = 0 (the engine folds it to the constant 0, a write to the BIOS ROM) and r5 a pointer (printed `*(xunknown2 *)param_2 = xVar2;`).
+        // The engine's record is the constant instance's; the oracle matched it to the run that stored through the pointer at 0x06021100 and
+        // took the text for dropping that store (`endless-store-dropped`): the oracle's, no store was lost. The record is taken for a run's
+        // store at the address it names.
+        {
+            const Report rep = Evaluate(d, Generate(6204852), true);
+            std::printf("pin 'A3-188 grammar 1 seed 6204852': %zu finding(s), endless-store checked %d\n", rep.findings.size(), count(rep, "endless-store.checked"));
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(rep.findings.empty());
+            const Report sh = EvaluateSubject(d, RawSubject("2558 8B0A C802 8D00 2521 D705 E001 2702 6072 C801 8BFC 000B 0009 AFF5 0009 0009 2600 1008"), true);
+            std::printf("pin 'A3-188 shrunk': %zu finding(s), endless-store checked %d\n", sh.findings.size(), count(sh, "endless-store.checked"));
+            for (const Finding& f : sh.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(sh.findings.empty());
         }
         // (since patch 0090 the seed's first store is kept before the store through gbr after it and printed, so no store is replaced there;
         // c2 above keeps the shape the check excuses)

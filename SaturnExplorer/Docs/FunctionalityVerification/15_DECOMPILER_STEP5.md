@@ -19873,3 +19873,48 @@ The new rules' own false positives, found and fixed on the way: a read on a wrap
 
 * **Area 7: A5-124** (above). A7-100's trimmed number no longer arises in its fixture (section 6). Grammar 1 seeds 6403189, 6403508, 6406365, 6407131, 6408035, 6409616 of A5-122's range (`map-way-back`, `map-const-join`, `map-copy-store`, `map-store-value`): none draws the production, each fails on master's binary.
 * **Area 5, next round:** A5-125 and A5-126 (open), A5-121 (as triaged).
+
+## Area 3, A3-187 and seed 6204852
+
+Fixer, branch `review/3-a3187-fix`, cut at master `a1584d60` (patch 0093 in). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). **No engine patch: 0089 stays free.** A3-187 (P3) is fixed in the host (`Sh2Decompiler.cpp`); the seed 6204852 finding is the oracle's, filed and fixed as **A3-188** (P3).
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-187 | P3 | **fixed** (host): the notes of the region after an endless loop leave out code the reference run removes too |
+| A3-188 | P3 | **filed and fixed** (oracle): `endless-store-dropped` took a pointer store for the constant instance's folded store |
+
+### A3-187: whose removal is it
+
+A3-173's, A3-175's and A3-178's passes (`StoresBeforeEndlessLoop`) name the region after a loop the analysis takes to run for ever from the flow graph alone: the flow blocks reached from the loop's block without entering a block that still has code. Code the engine removes for another reason (a branch a constant decides) is in that region too. Grammar 1 seed 5201834: `mov #9,r0 ; tst r0,r0 ; bt B ; cmp/eq #1,r0 ; bf/s R` takes the skip always, so the code from 0x06009036 on runs on no path, and the notes said "the analysis takes the loop at 0x06009014 to run for ever and removes the code after it" on 0x0600903A (the read of r3), 0x06009042 (r4) and 0x06009052 (the call).
+
+The request that marks all memory volatile (`NoteRemovedAccesses`' reference run) has no such loop, so a flow block it holds no code of is removed on its own account. The change:
+
+* `KeptFlowBlocks` (new, beside `StoresBeforeEndlessLoop`): for each flow block, whether the final p-code holds code of it (a live op; an op the actions made for its instruction when that is one block; a final block starting at its instruction: A3-184's reading). Filled in `DecompileResult::flowKept` for the reference run only.
+* `EndlessLoopRead::block` and `EndlessLoopStore::block` (new, default -1): the flow block of each item of the region (not the joins of A3-182, which are code the text keeps).
+* `NoteRemovedAccesses` makes the reference run also when the region has such items and no access was removed (before, only for a removed access); when the reference run has the same flow (successors and ranges equal) it drops the region's items whose block it holds nothing of. A failure of the run with no removed access is no caution (nothing is said). With removed accesses the behaviour is as before.
+
+Seed 5201834 now has no note on those three instructions; the notes of the code the loop does remove (0x0600901C and 0x06009026, r4 on entry; the write of 0x26001038) stand. Control (the pin): `mov #0,r0` for `mov #9,r0` makes the code run, and the same instructions are said. A flow block with no load, store, call or return is never taken as removed (it may hold dead ops only and still be reached: `TestA3182`'s jn3, r0 set after the poll, caught the first form of the rule that did).
+
+### A3-188: grammar 1 seed 6204852
+
+Replayed (`SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEED=6204852 SE_GENERATED_CANARY=0`, and `SE_GENERATED_ALPHABET=specials`): the same finding, shrunk (250 evaluations) to `2558 8B0A C802 8D00 2521 D705 E001 2702 6072 C801 8BFC 000B 0009 AFF5 0009 0009 2600 1008`.
+
+No store is lost. `mov.w r2,@r5` at 0x0600902A is the slot of a `bt/s` that a `bra` also targets: two instances, r5 = 0 (the engine folds it to the constant 0, a write to the BIOS ROM: `xRam00000000 = xVar2;`) and r5 a pointer (`*(xunknown2 *)param_2 = xVar2;`). The engine's access record for the instruction names the constant instance (address 0, `0600902AW2=folded`); the run took the pointer path and wrote 0x06021100, which the text prints through the pointer. The oracle's `foldedStore` matched the record by instruction alone, took that store for a folded store at 0x06021100 and looked for a `Ram` line there. Fix (`Sh2GeneratedTests.cpp`): the record is a run's store only at the address it names (masked to 29 bits, as the other records of the file). The check is as strict as before for a store at the record's own address (the A3-164 pins still count `endless-store.checked`). Pins (`TestA3RoutedPins`): the seed whole and the shrunk words, 0 findings.
+
+### Sweep
+
+`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`, 10,000 seeds from 6,800,001:
+
+| Run | Failing | Classes |
+|---|---|---|
+| grammar 1 | 4: 6800033, 6802425, 6807930, 6809428 | area 7: `v:map-store-value` (6800033), `n:map-way-back` and `v:map-way-back` (6802425), `n:map-way-back` (6807930); area 5: `n:status` "Forced merge caused intersection" (6809428; A5-125's class) |
+| grammar 2 | 4: 6803969, 6804434, 6805860, 6806713 | area 7: `n:map-const-join` (6804434), `n:map-copy-store` (6806713); `n:onchip-span-unsaid` and `v:` (6803969); `n:folded-into-switch` (6805860) |
+
+No area 3 class (no `endless-*`, `kept-read`, `lent.*`). Not triaged here; routed below.
+
+### Routed
+
+* **Area 7:** the map-* seeds above (6800033, 6802425, 6807930; grammar 2: 6804434, 6806713). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<seed> SE_GENERATED_CANARY=0`.
+* **Area 5:** grammar 1 seed 6809428 (`Forced merge caused intersection`, A5-125's class).
+* **On-chip registers (area 4 or 2, the coordinator to place):** grammar 2 seed 6803969, `onchip-span-unsaid`: a pointer made by ORing a constant that sets the top bits (reached 0xFFFFFFEC), no note says it may reach on-chip registers.
+* **Jump tables (the coordinator to place):** grammar 2 seed 6805860, `folded-into-switch`: 0x06009016 and 0x06009034 joined into a switch's block across a branch.
