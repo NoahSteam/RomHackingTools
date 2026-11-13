@@ -19718,3 +19718,47 @@ No area 5 class. The order rules' counts (grammar 1 / grammar 2): `order.folded-
 * **Area 7:** grammar 1 seeds 6201923 (`v:map-const-join`), 6202214 (`n:map-way-back`), 6206050 (`n:map-copy-store`), 6209595 (`v:map-store-value`); grammar 2 seed 6205642 (`n:map-way-back`). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<seed> SE_GENERATED_CANARY=0`.
 * **Area 3:** grammar 1 seed 6204852 (`n:endless-store-dropped`, the store of 2 bytes at 0600902A to 06021100).
 * **The coordinator:** the round's note that `ldc Rm,SR`, `sleep` and `trapa` are not barriers (A2-13, A2-30, the interrupt limit); and that a register read that cannot write RAM is a barrier too (A5-120's cost).
+## Area 3, A3-185 and A3-186 fixer
+
+Fixer, branch `review/3-a3185-fix`, cut at master `3c39e2c2` (v1.0). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). **Both rows are the oracle's, not the product's: A3-185 (P3) and A3-186 (P2) are fixed in `Sh2GeneratedTests.cpp` only.** No host or engine change, so 0089 stays free and the corpus texts are master's by construction. New rows: **A3-187** (P3, host, open: over-said notes found here) and **A5-123** (routed to area 5, open).
+
+### A3-186: an argument of the call, read before it
+
+Shrunk (23 evaluations): function 0 pushes r8, r9, r10 and r13 (last), `sts pr,r13`, `bsr` function 1, restores everything and tail-jumps to function 1. Function 1 pushes r13, `add #-0x18,r15`, and reads `mov.l @(0x1c,r15),r0`: the word at r15 when it was entered, a stack argument its caller never pushed for it. Through the `bsr` that word is function 0's push of r13, so the text `func_0x06009030(param_1,param_2,param_3,param_4,unaff_r13);` passes r13's entry value, read before the call: right. Nothing after the call reads r13.
+
+Function 1 is lent as changing r13. It does not (the emulator's `generator:callee-saved` contract holds), but its loop of stores through a copy of r15 (`mov r15,r2 ; add #0x18,r2 ; L: mov.l r1,@-r2 ; dt r1 ; bf L`) is not bounded by the summary interpreter, so the save slot may be written and `preserved` loses r13: the safe direction (a caller prints `extraout_r13`, which holds the right value). With the loop's store replaced by `nop` the function is lent as keeping r13 and `kept-read` is not asked. So no lent signature or call effect hides a change of r13, and there is no product sibling to look for; the class is the oracle's.
+
+`kept-read` reads `unaff_r13` anywhere in the text but the saves before the first call (`SavesBeforeCallsDropped`) as a read after a call. The fix: the register's reads inside the argument list of the first call that may change it (a callee lent as not keeping it) are dropped too, unless another such call is inside that list. Pins in `TestA3RoutedPins`: the whole seed (0 findings, `lent.changed.checked` 2) and four text controls (the argument dropped with its declaration; a read after the call, an argument of a later call and an argument behind a nested call kept; a call to a callee that keeps r13 is no call for the rule).
+
+Master's binary over grammar 2, 10,000 seeds from 6,000,001: 0 failing seeds, `lent.changed.checked` 508 + 648, no `kept-read`; this branch the same, every count equal.
+
+### A3-185: the store is made in no run
+
+Seed 5201834 (grammar 1): after the poll of the mailbox 0x26001038 the program has `mov #9,r0 ; tst.b #0x71,@(r0,gbr) ; tst r0,r0 ; bt B ; cmp/eq #1,r0 ; bf/s R ; mov.w r0,@(0xe,r7)`, with `B: bra` into that slot and `R: rts`. r0 is 9, so the `bt` is never taken and the `bf/s` always is: the code from 0x06009036 on, the post-poll store `mov.b r1,@r6` at 0x0600904A to 0x26003008 and the `jsr` with it, runs on no path, the poll answered or not. The emulator's runs with the mailbox marked (the other processor answers) end with the slot's write at 0x26001046 and the `rts` at 0x0600905E; the engine removes that code as unreachable in that request too (fates `0600904AW1=unreachable` in both). The text that drops the store with nothing said is right; `endless-after-store-dropped` took the production's last item for code the hardware runs after the poll.
+
+`PostPollUnmade`: `endless-after-store-dropped`, `endless-read-dropped` and `endless-call-dropped` are not found when every run of the other world finished and none made the item (a write of a byte of the address by the function itself; its own `mov.b Rm,@r6`; the callee entered), counted `endless-*.unmade`. A run that does not finish keeps the finding. The limit: an item an input decides is exempted if the runs' inputs miss it on every path; the counts show how often the gate is taken (once in all the runs below: 5201834). Control (`TestA3RoutedPins`): `mov #0,r0` for `mov #9,r0` takes the `bt`, the `bra` enters the slot's second instance and the store is made after the poll; the host says it on 0x0600904A ("the 1-byte write of 0x26003008 here is missing") and withholds the signature, and the gate does not take it.
+
+What the host says for the unreachable code is filed as **A3-187** (P3, open): A3-173's and A3-178's passes read the region after the loop from the flow graph alone, so the reads of r3 and r4 at 0x0600903A and 0x06009042 and the call at 0x06009052 are said as removed with the loop's exit, a wrong cause for code that never runs. The stores of the same code (0x0600903C, 0x06009044, 0x0600904A) are not said only because their blocks went before the literal reached them (A3-175's pass needs the removal's constant address). Over-said, nothing lost; the signature is withheld either way.
+
+### Mutation
+
+With the argument rule and the gate both taken out (one build): the A3-185 pin fails (`endless-after-store-dropped` on 5201834), the A3-186 pin fails (`kept-read:r13` on 5202322), and the two "dropped" text controls fail; the control of A3-185 and the three "kept" text controls pass. Restored: all pass.
+
+### Runs, after the last code edit (`2d6de335`)
+
+| run | result |
+|---|---|
+| full `ctest -j2` with Live | **117 of 117** passed (the 6 Live tests among them) |
+| fault suite | **0 of 94** jobs failed |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| 20,000-seed matrix (pieces of 5,000, canary in the first) | 0 failing seeds, 0 findings in each piece |
+| default run, grammar 1 and grammar 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds each |
+| grammar 2, 10,000 seeds from 6,000,001 (the new range) | 0 failing seeds; endless-after-store 93 + 100 checked, all said; endless-read 125 + 103, all withheld; equal to master's binary |
+| grammar 1, 10,000 seeds from 5,200,001 (area 7 round 13's range) | 5201834 clean (`endless-after-store.unmade` 1, the only one); 3 failing seeds, all `read-after-folded-store` and all on master's binary: 5203228 (`v:`), 5207177, 5207886 (`n:`), filed **A5-123**; endless-after-store 299 + 342 checked (298 + 342 said), endless-call 314 + 337 all said, endless-read 322 + 309 all withheld |
+| game corpus (`a7_round2/corpus.sh`, lent, token dump) | hwram007: lent **474 (645)** of 999, missing and said **0**; hwram008: lent **724 (975)** of 1,543, missing and said **4**; both "all passed". No change, and none possible: `git diff master` touches `Sh2GeneratedTests.cpp` and the docs only, so the decompiler and the corpus test are master's sources |
+| lints | `check-literal-size.py` ok; the vendored tree untouched |
+
+### Routed
+
+* **Area 5: A5-123** (new, P2 as A5-115's class, not triaged): `read-after-folded-store` after patch 0090 on grammar 1 seeds 5203228, 5207177 and 5207886; master's binary too. 5203228's shrunk text reads right on its value; whether the folded store's record names the wrong line or the text reorders is for area 5.
+* **Area 3: A3-187** (new, P3, open): above.

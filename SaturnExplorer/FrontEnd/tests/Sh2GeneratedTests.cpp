@@ -4399,6 +4399,40 @@ std::string SavesBeforeCallsDropped(const std::string& text, const char* reg, co
             continue;
         }
         if (called && reassigned && !inLoop) line = std::regex_replace(line, word, "reassigned_" + std::string(reg));   // read before this line's call
+        // (A3-186) The arguments of the first call that may change the register are read before that call is made. A callee that takes a stack
+        // argument its caller never pushed for it reads the word at r15 when the call is made, and where the caller pushed the register there
+        // that word is the entry value, rightly shown so: grammar 2 seed 5202322, `func_0x06009030(param_1,param_2,param_3,param_4,unaff_r13);`
+        // (function 0 pushes r13 last and `bsr`s a function that reads `@(0x1c,r15)` after its own push and `add #-0x18`). Only when no other
+        // such call is inside the argument list (one there might run first).
+        if (callHere && !called)
+        {
+            const std::sregex_iterator none;
+            auto changes = [&](const std::smatch& m) {
+                return !changers || changers->count(static_cast<uint32_t>(std::stoul(m[1].str(), nullptr, 16))) != 0;
+            };
+            for (std::sregex_iterator it(line.begin(), line.end(), call); it != none; ++it)
+            {
+                if (!changes(*it)) continue;
+                const size_t open = static_cast<size_t>(it->position(0) + it->length(0)) - 1;   // its '('
+                size_t close = open;
+                int depth = 0;
+                for (size_t c = open; c < line.size(); ++c)
+                {
+                    if (line[c] == '(') ++depth;
+                    else if (line[c] == ')' && --depth == 0)
+                    {
+                        close = c;
+                        break;
+                    }
+                }
+                if (close == open) break;
+                const std::string args = line.substr(open + 1, close - open - 1);
+                bool inner = false;
+                for (std::sregex_iterator jt(args.begin(), args.end(), call); jt != none && !inner; ++jt) inner = changes(*jt);
+                if (!inner) line = line.substr(0, open + 1) + std::regex_replace(args, word, "argument_" + std::string(reg)) + line.substr(close);
+                break;
+            }
+        }
         if (callHere)
         {
             staleAtCall = called && (!reassigned || inLoop);
@@ -5477,6 +5511,23 @@ bool PostPollFn(const Subject& s, int fi)
     return s.v2 ? s.postPollFn == fi : fi == 0;
 }
 
+// (A3-185) Whether the item a program ends with after a poll is made in no run once the poll ends. The oracles of that code (endless-read,
+// endless-after-store, endless-call) take the item for code the hardware runs after the poll, but an earlier item can leave before it on every
+// path: grammar 1 seed 5201834's `mov #9,r0 ; tst.b ; tst r0,r0 ; bt ; cmp/eq #1,r0 ; bf/s R` is a skip to its own return that the constant
+// takes always, so its store at 0x26003008 after the poll is made in no run, and the text that drops it with nothing said is right (the
+// engine removes that code as unreachable in the request that marks the mailbox too). The runs of the other world (the other processor answers
+// the poll), every one finished and none making the item: it is not made. A run that does not finish keeps the finding; so does an item an
+// input decides, if the runs' inputs happen to miss it on every path (counted, `*.unmade`, so a range shows how often the gate is taken).
+bool PostPollUnmade(Runner& runner, const Subject& s, int fi, bool volatileRun, const std::vector<RunOut>& runs,
+                    const std::function<bool(const RunOut&)>& made)
+{
+    const std::vector<RunOut> answered = volatileRun ? runs : runner.Ordinary(s.fns[static_cast<size_t>(fi)], true);
+    if (answered.empty()) return false;
+    for (const RunOut& run : answered)
+        if (!run.finished || made(run)) return false;
+    return true;
+}
+
 void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const Subject& subject, int fi,
              const std::map<uint32_t, Prototype>& lent, const std::vector<DecompileResult>& results, bool volatileRun,
              const std::vector<RunOut>& runs, Runner& runner, Report& rep, bool wantText, DecompileResult& r)
@@ -5702,7 +5753,16 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             if (forEver)
             {
                 count("endless-read.checked");
+                // (A3-185) the item's own `mov.b Rm,@r6`, run by the function itself
+                const uint16_t item = static_cast<uint16_t>(0x2600 | subject.postPollRead << 4);
+                auto made = [&](const RunOut& run) {
+                    for (const TraceRec& t : run.trace)
+                        if (t.write && t.depth == 0 && t.size == 1 && subject.WordAt(t.insn) == item) return true;
+                    return false;
+                };
                 if (!r.prototype.known) count("endless-read.withheld");
+                else if (r.prototype.params.size() < static_cast<size_t>(subject.postPollRead - 3) && PostPollUnmade(runner, subject, fi, volatileRun, runs, made))
+                    count("endless-read.unmade");
                 else if (r.prototype.params.size() < static_cast<size_t>(subject.postPollRead - 3))
                     add("endless-read-dropped", "the program stores r" + std::to_string(subject.postPollRead) + " after a poll the text takes to run for ever, and the lent signature has " +
                                                     std::to_string(r.prototype.params.size()) + " parameter(s)");
@@ -5738,8 +5798,15 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     std::smatch m;
                     if (n.caution && std::regex_search(n.text, m, missing) && (static_cast<uint32_t>(std::stoul(m[1].str(), nullptr, 16)) & 0x1FFFFFFFu) == a) said = true;
                 }
+                // (A3-185) a write of a byte of it by the function itself
+                auto made = [&](const RunOut& run) {
+                    for (const TraceRec& t : run.trace)
+                        if (t.write && t.depth == 0 && (t.addr & 0x1FFFFFFFu) <= last && a <= (t.addr & 0x1FFFFFFFu) + static_cast<uint32_t>(t.size) - 1) return true;
+                    return false;
+                };
                 if (printed) count("endless-after-store.printed");
                 else if (said && !r.prototype.known) count("endless-after-store.said");
+                else if (PostPollUnmade(runner, subject, fi, volatileRun, runs, made)) count("endless-after-store.unmade");
                 else
                     add("endless-after-store-dropped", "the program stores " + std::to_string(subject.postPollStoreWidth) + " byte(s) at " + Hex(subject.postPollStore) +
                                                            " after a poll the text takes to run for ever, and the text " + (said ? "says it is missing but lends the signature" : "neither stores there nor says it is missing"));
@@ -5768,8 +5835,16 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 count("endless-call.checked");
                 bool said = false;
                 for (const HardwareNote& n : r.hardwareNotes) said = said || (n.caution && n.text.find("the call here is missing") != std::string::npos);
+                // (A3-185) the callee entered by a call
+                const uint32_t callee = subject.fns[static_cast<size_t>(subject.postPollCall)].layout.entry & 0x0FFFFFFFu;
+                auto made = [&](const RunOut& run) {
+                    for (size_t k = 0; k < run.pcs.size() && k < run.depths.size(); ++k)
+                        if (run.depths[k] > 0 && run.pcs[k] == callee) return true;
+                    return false;
+                };
                 if (printed) count("endless-call.printed");
                 else if (said && !r.prototype.known) count("endless-call.said");
+                else if (PostPollUnmade(runner, subject, fi, volatileRun, runs, made)) count("endless-call.unmade");
                 else
                     add("endless-call-dropped", "the program calls " + Hex(subject.fns[static_cast<size_t>(subject.postPollCall)].layout.entry) +
                                                     (subject.postPollCallStore ? " (which writes " + Hex(subject.postPollCallStore) + ")" : std::string()) +
@@ -16150,6 +16225,31 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(count(rep, "endless-read.withheld") == count(rep, "endless-read.checked") && count(rep, "endless-after-store.said") == count(rep, "endless-after-store.checked"));
             for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-") == std::string::npos);
         }
+        // A3-185 (routed by area 7 round 13): grammar 1 seed 5201834's post-poll store at 0x26003008 comes after `mov #9,r0 ; tst.b ; tst r0,r0 ;
+        // bt B ; cmp/eq #1,r0 ; bf/s R ; (slot)`, a skip to its own return that the constant takes always (B: `bra` into the slot). The store is
+        // made in no run, the poll answered or not; the text drops it with nothing said, rightly (`endless-after-store-dropped` before the gate).
+        // The control, `mov #0,r0`: the `bt` is taken, the `bra` enters the slot's second instance and the store is made after the poll: it is
+        // said on its instruction and the signature withheld, and the gate does not take it.
+        {
+            const Program prog = Generate(5201834);
+            const Report rep = Evaluate(d, prog, true);
+            std::printf("pin 'A3-185 grammar 1 seed 5201834 (the post-poll store at %08X, made in no run)': %zu finding(s), endless-after-store checked %d, said %d, unmade %d\n",
+                        prog.postPollStore, rep.findings.size(), count(rep, "endless-after-store.checked"), count(rep, "endless-after-store.said"),
+                        count(rep, "endless-after-store.unmade"));
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(prog.postPollStore == 0x26003008u && rep.findings.empty() && count(rep, "endless-after-store.unmade") > 0);
+            Program made = prog;
+            bool changed = false;
+            for (Item& it : made.fns[0].items)
+                for (uint16_t& w : it.words)
+                    if (!changed && w == 0xE009) w = 0xE000, changed = true;
+            const Report c = Evaluate(d, made, true);
+            std::printf("pin 'A3-185 control (mov #0,r0: the store is made)': %zu finding(s), endless-after-store checked %d, said %d, unmade %d\n", c.findings.size(),
+                        count(c, "endless-after-store.checked"), count(c, "endless-after-store.said"), count(c, "endless-after-store.unmade"));
+            for (const Finding& f : c.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(changed && count(c, "endless-after-store.said") > 0 && count(c, "endless-after-store.unmade") == 0);
+            for (const Finding& f : c.findings) CHECK(f.sig.find("endless-") == std::string::npos);
+        }
         // (since patch 0090 the seed's first store is kept before the store through gbr after it and printed, so no store is replaced there;
         // c2 above keeps the shape the check excuses)
         const Report seed = Evaluate(d, Generate(3704634), true);
@@ -16203,6 +16303,29 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         CHECK(!EffectClaimsContradicted(none, run, &sig, &moved, &unmoved).empty() && sig == "claim-wrong:leaks" && unmoved == 0);
         CHECK(EffectClaimsContradicted(none, run, &sig, &still, &unmoved).empty() && unmoved == 1);
         CHECK(!EffectClaimsContradicted(none, run, &sig).empty());   // without a confirmation, as before
+    }
+    {
+        // A3-186 (routed by area 7 round 13): grammar 2 seed 5202322. Function 0 pushes r13 last and `bsr`s function 1, which pushes r13,
+        // drops r15 by 0x18 and reads `@(0x1c,r15)`: a stack argument, the word at r15 when the call is made, which is function 0's push of r13.
+        // The text passes it, `func_0x06009030(param_1,param_2,param_3,param_4,unaff_r13);`, rightly: the entry value, read before the call.
+        // Function 1 is lent as changing r13 (its loop of stores through a copy of r15 is not bounded, so the save slot may be written: the
+        // safe reading), and `kept-read:r13` took the argument for a read after the call. The arguments of the first call that may change it
+        // are read before it.
+        const Report rep = Evaluate(d, MakeV2(5202322), true);
+        std::printf("pin 'A3-186 grammar 2 seed 5202322 (r13 passed as a stack argument)': %zu finding(s), lent.changed checked %d\n", rep.findings.size(),
+                    count(rep, "lent.changed.checked"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "lent.changed.checked") > 0);
+        const std::set<uint32_t> changers = { 0x06009030u };
+        const std::string head = "xunknown4 func_0x06009000(void)\n{\n  int4 unaff_r13;\n";
+        // the argument of the call: dropped, and the declaration with it
+        CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009030(param_1,unaff_r13);\n  return 0;\n}\n", "r13", &changers), "unaff_r13"));
+        // controls: a read after the call, an argument of a later call, and an argument behind a call that may run first are all kept
+        CHECK(WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009030(param_1,unaff_r13);\n  return unaff_r13;\n}\n", "r13", &changers), "unaff_r13"));
+        CHECK(WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009030(param_1);\n  func_0x06009030(unaff_r13);\n  return 0;\n}\n", "r13", &changers), "unaff_r13"));
+        CHECK(WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009030(func_0x06009030(1),unaff_r13);\n  return 0;\n}\n", "r13", &changers), "unaff_r13"));
+        // a call to a function that keeps r13 is no call for this: the argument of the later one that changes it is read before it
+        CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009060(1);\n  func_0x06009030(unaff_r13);\n  return 0;\n}\n", "r13", &changers), "unaff_r13"));
     }
 }
 
