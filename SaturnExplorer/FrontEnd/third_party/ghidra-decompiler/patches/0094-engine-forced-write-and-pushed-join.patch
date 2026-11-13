@@ -1,0 +1,71 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -34,6 +34,7 @@
+  * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
+  * Modified for SaturnExplorer: nor a copy of an earlier write of a global with an access between them (patches/0088-engine-global-piece-read-and-join-copy.patch).
+  * Modified for SaturnExplorer: a LOAD is not printed past a write of a global (patches/0090-engine-hardware-access-orders-globals.patch).
++ * Modified for SaturnExplorer: nor past an op whose output a call's INDIRECT on a global takes (patches/0094-engine-forced-write-and-pushed-join.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -3785,7 +3786,11 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
+       if (global && other->code() == CPUI_COPY && other->getIn(0)->getAddr() == wvn->getAddr()) continue;
+       for(list<PcodeOp *>::const_iterator diter=wvn->beginDescend();!global && diter!=wvn->endDescend();++diter) {
+ 	const Varnode *cvn = (*diter)->getOut();
+-	global = (*diter)->code() == CPUI_COPY && cvn != (Varnode *)0 && cvn->isAddrTied() && cvn->getSpace()->getType() == IPTR_PROCESSOR;
++	// SaturnExplorer (0094): ...or the INDIRECT a call puts on a global, which takes the write as its input once RulePropagateCopy has
++	// fed the COPY into it: the merge makes the INDIRECT's input and output one variable, the global written at this op (`x = *p; g = g
++	// | 0x80; h = x; f();` printed `g = g | 0x80; h = *p;`, a `tas.b` between a read through a pointer and its store, ledger A5-127)
++	const bool marker = (*diter)->code() == CPUI_COPY || ((*diter)->code() == CPUI_INDIRECT && (*diter)->getIn(0) == wvn);
++	global = marker && cvn != (Varnode *)0 && cvn->isAddrTied() && cvn->getSpace()->getType() == IPTR_PROCESSOR;
+       }
+       if (!global) continue;
+       for(int4 c=0;c<chain.size();++c)
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+@@ -20,6 +20,7 @@
+  * Modified for SaturnExplorer: an access folded into the stack frame that goes with an unreachable block is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
+  * Modified for SaturnExplorer: a call that goes with an unreachable block drops its frame call records (patches/0072-engine-frame-chains-and-save-slots.patch).
+  * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
++ * Modified for SaturnExplorer: pushMultiequals gives the new MULTIEQUAL a unique output whenever the output block joins the same address-tied storage (patches/0094-engine-forced-write-and-pushed-join.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -152,8 +153,11 @@ void Funcdata::pushMultiequals(BlockBasic *bb)
+ 	  continue;
+ 	}
+       }
++      // SaturnExplorer (0094): no break here, so a MULTIEQUAL of the same address-tied storage in outblock, met after another reader,
++      // still asks for a unique output. Broken off at the first other reader, the new MULTIEQUAL took the storage too, and outblock
++      // held two joins of one global both live at its start, which the forced merge of address-tied Varnodes cannot unite ("Forced merge
++      // caused intersection": a global read before a loop and stored into in it, the block between emptied, ledger A5-125)
+       needreplace = true;
+-      break;
+     }
+     if (!needreplace) continue;
+ 				// Construct artificial MULTIEQUAL
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+@@ -26,6 +26,7 @@
+  * Modified for SaturnExplorer: RuleMultiCollapse keeps two equal writes of a global that a memory access separates from the join, and RulePropagateCopy does not feed a global's value into the global's next write past one (patches/0085-engine-global-write-keeps-place.patch).
+  * Modified for SaturnExplorer: RuleEarlyRemoval keeps a write of a global on a path that never reaches a return (patches/0087-engine-global-writes-without-return.patch).
+  * Modified for SaturnExplorer: RulePushMulti and RuleConditionalMove do not move or join writes of a global an access holds (patches/0090-engine-hardware-access-orders-globals.patch).
++ * Modified for SaturnExplorer: RuleSubCommute does not commute a SUBPIECE into an address-forced write (patches/0094-engine-forced-write-and-pushed-join.patch).
+  */
+ #include "ruleaction.hh"
+ #include "coreaction.hh"
+@@ -4762,6 +4763,11 @@ int4 RuleSubCommute::applyOp(PcodeOp *op,Funcdata &data)
+ 
+ 				// Make sure no other piece of base is getting used
+   if (base->loneDescend() != op) return 0;
++  // SaturnExplorer (0094): ...nor is base a write the analysis must keep where the code makes it (address forced: a write of a
++  // global before an access through a pointer or a register's, 0090's sink). The commuted op takes the SUBPIECE's output, so the global's
++  // write went and nothing wrote the global at the access: `tas.b @g ; mov.b @r4,r3 ; mov.w @g,r3 ; tas.b @g` printed the read through
++  // r4 before the one `g = g | 0x8000;`, the second tas.b's byte read being the SUBPIECE of the first's write (ledger A5-126)
++  if (base->isAddrForce()) return 0;
+ 
+   if (offset == 0) {		// Look for overlap with RuleSubZext
+     PcodeOp *nextop = outvn->loneDescend();

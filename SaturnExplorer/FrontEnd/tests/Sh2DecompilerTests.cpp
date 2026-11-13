@@ -17844,6 +17844,72 @@ void TestArea5ReviewAfter0090()
     }
 }
 
+// Area 5, A5-125 and A5-126 (patch 0094). A5-126 (P2): a tas.b's write of a byte of a global the code reads as a half-word, before a read
+// through a pointer (which may be the global's address), was dropped when a second tas.b of the byte followed: RuleSubCommute commuted the
+// second tas.b's byte read, a SUBPIECE of the first write, into the write's own op, which then wrote a temporary. A5-125 (P3): a global read
+// before a loop and stored into in it, the block between emptied, was not decompiled, "Forced merge caused intersection": pushMultiequals
+// gave the join it pushed into the loop's head the global's storage, beside the head's own join of the global. Controls: the shape without
+// the second tas.b, and without the half-word read. A5-127 (P1): a read through a pointer before a tas.b's write of a global, printed at its
+// use after the write when the call after both holds the global (its INDIRECT takes the write, which ActionMarkImplied did not count).
+void TestA5126Fix()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw(0x100000u, 0);
+    struct W { const char* name; uint32_t base; std::vector<uint16_t> words; };
+    const std::vector<W> fx = {
+        // A5-126: mov.l @(lit),r6 (0x0600220C) ; tas.b @r6 ; movt r2 ; mov.b @r4,r3 ; mov.w @r6,r3 ; tas.b @r6 ; movt r1 ; rts ; nop
+        { "a5_126", 0x06053700u, { 0xD604, 0x461B, 0x0229, 0x6340, 0x6361, 0x461B, 0x0129, 0x000B, 0x0009, 0x0009, 0x0600, 0x220C } },
+        // control: no second tas.b
+        { "a5_126_ctl_one", 0x06053800u, { 0xD604, 0x461B, 0x0229, 0x6340, 0x6361, 0x0009, 0x0129, 0x000B, 0x0009, 0x0009, 0x0600, 0x220C } },
+        // control: no half-word read (the byte range)
+        { "a5_126_ctl_byte", 0x06053900u, { 0xD604, 0x461B, 0x0229, 0x6340, 0x0009, 0x461B, 0x0129, 0x000B, 0x0009, 0x0009, 0x0600, 0x220C } },
+        // A5-125: mov.l @(lit),r6 (0x2600218C) ; mov.l @(lit),r7 (0x26002204) ; cmp/eq #3,r0 ; bt L ; mov.b r3,@r5 ; L: mov.l @r6,r3 ;
+        // mac.w @r7+,@r6+ ; mov.l @(lit),r7 (CD_HIRQ, cached) ; P: mov.b r3,@r6 ; mov.l @r7,r0 ; tst #1,r0 ; bf P ; rts ; nop
+        // A5-127: sts.l pr,@-r15 ; mov.l @(lit),r6 (0x0600200C) ; mov.l @(lit),r7 (0x26001004) ; mov.b @r4,r3 ; tas.b @r7 ; mov.w r3,@r6 ;
+        // bsr f ; nop ; lds.l @r15+,pr ; rts ; nop -- f: rts ; nop
+        { "a5_127", 0x06053B00u, { 0x4F22, 0xD605, 0xD705, 0x6340, 0x471B, 0x2631, 0xB008, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x200C,
+                                   0x2600, 0x1004, 0x000B, 0x0009 } },
+        { "a5_125", 0x06053A00u, { 0xD606, 0xD707, 0x8803, 0x8900, 0x2530, 0x6362, 0x467F, 0xD705, 0x2630, 0x6072, 0xC801, 0x8BFB, 0x000B, 0x0009,
+                                   0x2600, 0x218C, 0x2600, 0x2204, 0x1D80, 0x0088 } },
+    };
+    for (const W& w : fx)
+    {
+        size_t off = w.base - 0x06000000u;
+        for (uint16_t c : w.words) { dts::Put16(hw, off, c); off += 2; }
+    }
+    auto snap = MakeSnapshot(hw);
+    std::map<std::string, std::string> out;
+    for (const W& w : fx)
+    {
+        const DecompileResult r = d.Decompile(snap, Request(w.base));
+        Print(w.name, r);
+        CHECK(r.status == DecompileStatus::Ok);   // FIXED (a5_125: status 3, "Forced merge caused intersection", without the patch)
+        out[w.name] = r.Text();
+    }
+    auto before = [](const std::string& t, const char* a, const char* b) {
+        const size_t i = t.find(a), j = t.find(b);
+        return i != std::string::npos && j != std::string::npos && i < j;
+    };
+    // A5-126: the first tas.b's write before the read through r4 (without the patch only `xVar1 = *param_1; uRam0600220c = uRam0600220c |
+    // 0x8000;`), and the second's after it
+    {
+        const std::string t = out["a5_126"];
+        CHECK(before(t, "uRam0600220c = uRam0600220c | 0x8000;", "= *param_1;"));   // FIXED
+        CHECK(before(t, "= *param_1;", "uRam0600220c = CONCAT11("));                  // FIXED
+    }
+    CHECK(before(out["a5_126_ctl_one"], "uRam0600220c = uRam0600220c | 0x8000;", "= *param_1;"));   // control
+    CHECK(before(out["a5_126_ctl_byte"], "uRam0600220c = uRam0600220c | 0x80;", "= *param_1;"));    // control
+    // A5-127 (P1): the read through r4 before the tas.b's write of the global (without the patch `uRam26001004 = uRam26001004 | 0x80;
+    // iRam0600200c = (int2)*param_1;`, the byte the tas.b wrote when r4 is its address)
+    CHECK(before(out["a5_127"], "= *param_1;", "uRam26001004 = uRam26001004 | 0x80;"));   // FIXED
+    // A5-125: decompiled; the word read before the loop is held in a variable of its own, and its low byte is stored in the loop
+    {
+        const std::string t = out["a5_125"];
+        CHECK(Has(t, "xVar2 = xRam2600218c;") && Has(t, "xRam2600218c._2_2_ = CONCAT11((char)xVar2,"));   // FIXED
+        CHECK(before(t, "*param_2 = in_r3;", "do {"));
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -18355,6 +18421,7 @@ int main(int argc, char** argv)
         RUN(TestArea5Confirm());
         RUN(TestArea5Review());
         RUN(TestArea5ReviewAfter0090());
+        RUN(TestA5126Fix());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());
