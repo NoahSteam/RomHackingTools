@@ -6929,6 +6929,10 @@ bool StoreShowsValue(const ghidra::AccessRecord& r, const FlowRecord& flow, cons
             return want.Has(known, store->in[2].size);
     }
     if (want.times.count(r.time)) return true;
+    // (A7-126: a store whose instruction the flow's record has no op of -- flow reached it only after the record was taken, past a `jmp`
+    // the engine resolved later, `mov.l r3,@r7` of a callee the code jumps into -- is a value the walk knows nothing of: it may be the
+    // statement's, as the walk answers for a computation it does not know; grammar 2 seed 6806713)
+    if (!placed && !flow.insnFirst.count(InstructionOf(r)) && !flow.insnBlock.count(InstructionOf(r))) return true;
     if (!isStore) return false;
     return FlowValueMayBe(flow, fd, at->second.first, static_cast<int>(at->second.second), store->in[2], want);
 }
@@ -7265,7 +7269,17 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
     {
         const ghidra::PcodeOp* o = kv.first;
         const ghidra::Varnode* out = o->getOut();
-        if (!out || out->getSize() > 16 || o->isCall() || o->code() == ghidra::CPUI_LOAD || o->code() == ghidra::CPUI_CALLOTHER) continue;
+        // (A5-124: a register's read the engine stores as read, 0090's merge, is a statement of the global it is stored into --
+        // `xRam26001028 = SH2_RTCSR;` for `mov.l @(0,r7),r2 ; mov.l r2,@r6` -- whose store is folded into it like a COPY's: the read's
+        // CALLOTHER with an explicit output is taken as the statement; any other CALLOTHER is not)
+        bool registerRead = false;
+        if (o->code() == ghidra::CPUI_CALLOTHER && out && !out->isImplied() && o->numInput() >= 2 && o->getIn(0)->isConstant())
+        {
+            const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(o->getIn(0)->getOffset()));
+            registerRead = u && u->getType() == ghidra::UserPcodeOp::volatile_read;
+        }
+        // (a CALLOTHER is a call to the engine, isCall)
+        if (!out || out->getSize() > 16 || (o->isCall() && !registerRead) || o->code() == ghidra::CPUI_LOAD) continue;
         const uint32_t at = InstructionOf(o);
         const auto when = flow.loadCallTime.find(at);
         const bool atLoadOrCall = when != flow.loadCallTime.end();
@@ -7273,7 +7287,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         const bool conversion = code == ghidra::CPUI_INT_ZEXT || code == ghidra::CPUI_INT_SEXT || code == ghidra::CPUI_SUBPIECE || code == ghidra::CPUI_CAST;
         // (A7-69: a PIECE with an explicit output is a statement too: `xRam06030000 = CONCAT11(in_r2,in_r1);` shows the bytes of two stores, which it
         // names, not only the one at its own instruction; the A5-114 fixture)
-        if (!atLoadOrCall && ((code != ghidra::CPUI_COPY && !conversion && code != ghidra::CPUI_PIECE) || out->isImplied())) continue;
+        if (!atLoadOrCall && !registerRead && ((code != ghidra::CPUI_COPY && !conversion && code != ghidra::CPUI_PIECE) || out->isImplied())) continue;
         // The storage the statement assigns: the output itself when it is in a space a store was folded into (a piece of a local, a
         // global), else the storage the output's variable is mapped to (a copy is a temporary the engine names after the variable).
         const ghidra::AddrSpace* space = nullptr;
@@ -7543,9 +7557,36 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 }
             }
         }
+        // A5-124: the bytes of a PIECE that keep the variable's own memory -- `xRam26001028 = CONCAT22(in_r2,xRam26001028._2_2_);`, the
+        // half-word store of in_r2 over the high half, the low half the global's as it was -- are no later store's value: the store the
+        // statement is ahead of is not searched for them (it named the poll's later `mov.l r2,@r6` of SH2_RTCSR, a line that is not its
+        // statement). A store before it that wrote those bytes still shows them.
+        std::vector<bool> kept(static_cast<size_t>(out->getSize()), false);
+        if (code == ghidra::CPUI_PIECE && o->numInput() == 2)
+        {
+            const ghidra::uintb mask = space->getHighest();
+            ghidra::int4 start = 0;   // (big-endian: the first input is the more significant part, at the lower address)
+            for (int k = 0; k < 2; ++k)
+            {
+                const ghidra::Varnode* part = o->getIn(k);
+                const ghidra::int4 size = part->getSize();
+                for (int hop = 0; hop < 4 && part->isWritten() && part->getDef()->code() == ghidra::CPUI_COPY; ++hop) part = part->getDef()->getIn(0);
+                bool self = part->getSpace() == space && part->getOffset() == ((base + static_cast<ghidra::uintb>(start)) & mask) && part->getSize() == size;
+                if (!self && part->isWritten() && part->getDef()->code() == ghidra::CPUI_SUBPIECE)
+                {
+                    const ghidra::Varnode* whole = part->getDef()->getIn(0);
+                    self = whole->getSpace() == space && whole->getOffset() == base && whole->getSize() == out->getSize() &&
+                           part->getDef()->getIn(1)->getOffset() == static_cast<ghidra::uintb>(out->getSize() - start - size);
+                }
+                if (self && space->isBigEndian())
+                    for (ghidra::int4 b = start; b < start + size && b < out->getSize(); ++b) kept[static_cast<size_t>(b)] = true;
+                start += size;
+            }
+        }
         for (ghidra::int4 b = 0; b < out->getSize(); ++b)
         {
             const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(b)) & space->getHighest();
+            const bool keptByte = kept[static_cast<size_t>(b)];
             const auto writes = [&](const ghidra::AccessRecord* r) {
                 return r->addr.getSpace() == space && ((byte - r->addr.getOffset()) & space->getHighest()) < static_cast<ghidra::uintb>(r->size);
             };
@@ -7666,7 +7707,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     }
                 if (latest) reached = take(latest);
             }
-            if (reached || take(nextInHome())) continue;
+            if (reached || (!keptByte && take(nextInHome()))) continue;
             // A7-78: the stores of the byte the engine emptied and joined into one statement in a block with no way in -- the two
             // instances of one instruction, a delay slot run on both ways of a branch and again after it (`bt/s` over a `mov.w r1,@r6`),
             // whose line the engine put after both: every emptied store of the byte whose flow reaches the statement's instruction is
@@ -7707,7 +7748,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // the nearest stores of the byte after the statement's instruction in the flow: in its flow block after it, else the first in
             // each block of the nearest level of successors that has one
             const auto fb = flow.insnBlock.find(at);
-            if (fb == flow.insnBlock.end()) continue;
+            if (fb == flow.insnBlock.end() || keptByte) continue;
             // (the first store of the byte in a block that shows the value; a store of another value on the way does not end the search,
             // A7-34's triage: `xRam2e001018 = 0xffffff00;` is ahead of a poll's store of 2 and then of its own store)
             const auto firstIn = [&](int blk, uint32_t after) -> const ghidra::AccessRecord* {
@@ -8283,9 +8324,60 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
     const std::set<std::pair<size_t, uint32_t>> shared = SharedInstructionLines(printed, ordered);
     const ghidra::AddrSpace* stackSpace = fd.getArch()->getStackSpace();
     const ghidra::AddrSpace* ram = fd.getArch()->getDefaultDataSpace();
+    const auto plainCopy = [](const std::string& text) {
+        const auto word = [](const std::string& x) {
+            return !x.empty() && x.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-") == std::string::npos;
+        };
+        const size_t b = text.find_first_not_of(' '), eq = text.find(" = ");
+        if (b == std::string::npos || eq == std::string::npos || eq < b || text.empty() || text.back() != ';') return false;
+        size_t v = eq + 3;
+        if (v < text.size() && text[v] == '(')
+        {
+            const size_t close = text.find(')', v);
+            if (close == std::string::npos || !word(text.substr(v + 1, close - v - 1))) return false;
+            v = close + 1;
+        }
+        return word(text.substr(b, eq - b)) && v < text.size() && word(text.substr(v, text.size() - 1 - v));
+    };
     for (const ghidra::PcodeOp* o : ordered)
     {
         const ghidra::Varnode* out = o->getOut();
+        // A7-124: the extension a load makes of what it read (`mov.w @r4,r1`: a LOAD into a variable the text names, `iVar1 = *(int2
+        // *)...;`, and the INT_SEXT of it), printed as the cast on a later line that stores it, `iRam06001044 = (int4)iVar1;`, which names
+        // that store: the line is a copy of the load's value, drawn at the load, and the load's own statement is the line that assigns
+        // the variable. Its tokens there are a copy materialised at the load (A7-25), which the way back offers after the load's line --
+        // when the copy line's lowest address is the load, it came first. Only on a plain copy that names a store of another instruction
+        // (as the oracle takes a copy) and when another line draws the instruction as its own; grammar 1 seed 6802425.
+        if ((o->code() == ghidra::CPUI_INT_SEXT || o->code() == ghidra::CPUI_INT_ZEXT) && out && out->isImplied() && !o->isFromDelaySlot() &&
+            o->getIn(0)->isWritten() && !o->getIn(0)->isImplied())
+        {
+            const ghidra::PcodeOp* def = o->getIn(0)->getDef();
+            const uint32_t at = InstructionOf(o);
+            const auto defLines = printed.find(def);
+            if (def->code() != ghidra::CPUI_LOAD || InstructionOf(def) != at || defLines == printed.end() || flow.callInsns.count(at)) continue;
+            uint32_t own = at, c = 0;
+            if (CanonicalAddress(own, c)) own = c;
+            for (size_t line : printed.at(o).first)
+            {
+                if (line >= lines.size() || shared.count(std::make_pair(line, own)) || defLines->second.first.count(line) || !plainCopy(lines[line].text)) continue;
+                bool namesStore = false;
+                for (const Token& t : lines[line].tokens)
+                    if (t.addr && t.addr != own && t.begin == t.end)
+                    {
+                        const auto st = flow.accessesByInsn.find(std::make_pair(t.addr, true));
+                        namesStore = namesStore || st != flow.accessesByInsn.end();
+                    }
+                if (!namesStore) continue;
+                bool elsewhere = false;
+                for (size_t other : defLines->second.first)
+                    if (other < lines.size() && other != line)
+                        for (const Token& t : lines[other].tokens) elsewhere = elsewhere || (t.addr == own && t.begin < t.end && !t.materialised);
+                if (!elsewhere) continue;
+                for (Token& t : lines[line].tokens)
+                    if (t.addr == own && t.begin < t.end) t.materialised = true;
+            }
+            continue;
+        }
         // (A7-78: a piece of the memory's value is the same copy, `(uint2)uRam26001034` shared by the statement that stores it and the
         // narrow store the engine made the piece at; grammar 1 seed 902)
         if ((o->code() != ghidra::CPUI_COPY && o->code() != ghidra::CPUI_SUBPIECE) || !out || !out->isImplied() || o->isFromDelaySlot()) continue;
@@ -8328,21 +8420,6 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         if (CanonicalAddress(own, c)) own = c;
         // (only on a line that is itself a copy, `V = W;` or `V = (T)W;`: the value shown again. In a larger expression -- `return
         // CONCAT44((int4)iRam2600210c,in_r1);` -- the read is part of what the line computes, and the line stays the instruction's)
-        const auto plainCopy = [](const std::string& text) {
-            const auto word = [](const std::string& x) {
-                return !x.empty() && x.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-") == std::string::npos;
-            };
-            const size_t b = text.find_first_not_of(' '), eq = text.find(" = ");
-            if (b == std::string::npos || eq == std::string::npos || eq < b || text.empty() || text.back() != ';') return false;
-            size_t v = eq + 3;
-            if (v < text.size() && text[v] == '(')
-            {
-                const size_t close = text.find(')', v);
-                if (close == std::string::npos || !word(text.substr(v + 1, close - v - 1))) return false;
-                v = close + 1;
-            }
-            return word(text.substr(b, eq - b)) && v < text.size() && word(text.substr(v, text.size() - 1 - v));
-        };
         for (size_t line : printed.at(o).first)
         {
             if (line >= lines.size() || shared.count(std::make_pair(line, own)) || !plainCopy(lines[line].text)) continue;
