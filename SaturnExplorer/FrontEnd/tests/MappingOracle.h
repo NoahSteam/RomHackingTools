@@ -781,7 +781,19 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
     std::vector<std::pair<uint32_t, int>> todo = { { at, reg } };
     int steps = 0;
     const auto give = [&](const WordValue& v) {
-        if (v.kind == WordValue::Unknown || (any && !(v == result))) return false;
+        if (v.kind == WordValue::Unknown) return false;
+        if (any && !(v == result))
+        {
+            // (A7-115: a number a branch's condition gives is what a parameter holds there too, as the consumers of `byCondition` take it:
+            // `tst r3,r3 ; bf L` over a `tas.b`, r3 the copy of r5 -- 0 on the fall-through, r5 on the branch; grammar 2 seed 6605587)
+            if (v.kind == WordValue::Number && v.byCondition && result.kind == WordValue::Param) return true;
+            if (result.kind == WordValue::Number && result.byCondition && v.kind == WordValue::Param)
+            {
+                result = v;
+                return true;
+            }
+            return false;
+        }
         result = v;
         any = true;
         return true;
@@ -848,7 +860,8 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
             // L` (or `tst rN,rN`) branches, only when rN is 0; `cmp/eq #imm,r0` likewise with the number (as the engine's conditional
             // constants know)
             {
-                const bool fallsThrough = (w >> 8) == 0x8B && p + 2 == a, branches = (w >> 8) == 0x89 && p + 2 != a;
+                // (A7-115: not a `bf` to the next instruction, which goes there on either T; grammar 2 seed 6605587)
+                const bool fallsThrough = (w >> 8) == 0x8B && p + 2 == a && d.BranchTarget != p + 2, branches = (w >> 8) == 0x89 && p + 2 != a;
                 uint16_t cw = 0;
                 if ((fallsThrough || branches) && r.InBody(p - 2) && word(p - 2, cw))
                 {
@@ -1134,6 +1147,9 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
     }
     return any ? result : -1;
 }
+inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                           const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, std::set<uint32_t>& makers,
+                           bool throughUpdate = false, std::set<int>* entryRegs = nullptr);
 inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                               const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int reg, int depth)
 {
@@ -1198,6 +1214,22 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
         {
             const WordValue pn = before(n), pm = before(m);
             if (pn.kind == WordValue::Param && pm.kind == WordValue::Param && pn.value == pm.value) return NumberValue(0);
+            // (A7-115: `xor Rm,Rn` of a register and its complement -- every maker of Rn a `not Rm,Rn` and Rm made by the same
+            // instructions at both -- is all ones; grammar 2 seed 6604995)
+            const auto complementOf = [&](int holder, int other) {
+                std::set<uint32_t> makers, there;
+                if (!RegisterMakers(r, word, into, p, holder, makers) || makers.empty() || makers.count(0) || !RegisterMakers(r, word, into, p, other, there)) return false;
+                for (uint32_t mk : makers)
+                {
+                    uint16_t mw = 0;
+                    std::set<uint32_t> atMaker;
+                    if (!word(mk, mw) || (mw & 0xF00F) != 0x6007 || static_cast<int>((mw >> 8) & 0xF) != holder || static_cast<int>((mw >> 4) & 0xF) != other ||
+                        !RegisterMakers(r, word, into, mk, other, atMaker) || atMaker != there)
+                        return false;
+                }
+                return true;
+            };
+            if (complementOf(n, m) || complementOf(m, n)) return NumberValue(0xFFFFFFFFu);
         }
         // (an AND with a known 0 is 0 whatever the other is)
         if (lo == 0x9 && ((number(before(n), a) && a == 0) || (number(before(m), b) && b == 0))) return NumberValue(0);
@@ -1375,7 +1407,7 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
 // that stores `r0 - r5`)
 inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                            const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, std::set<uint32_t>& makers,
-                           bool throughUpdate = false, std::set<int>* entryRegs = nullptr)
+                           bool throughUpdate, std::set<int>* entryRegs)
 {
     const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
         uint16_t w = 0;
