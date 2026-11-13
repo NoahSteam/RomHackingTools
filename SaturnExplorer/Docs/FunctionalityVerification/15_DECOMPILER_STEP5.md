@@ -19918,3 +19918,7 @@ No area 3 class (no `endless-*`, `kept-read`, `lent.*`). Not triaged here; route
 * **Area 5:** grammar 1 seed 6809428 (`Forced merge caused intersection`, A5-125's class).
 * **On-chip registers (area 4 or 2, the coordinator to place):** grammar 2 seed 6803969, `onchip-span-unsaid`: a pointer made by ORing a constant that sets the top bits (reached 0xFFFFFFEC), no note says it may reach on-chip registers.
 * **Jump tables (the coordinator to place):** grammar 2 seed 6805860, `folded-into-switch`: 0x06009016 and 0x06009034 joined into a switch's block across a branch.
+
+### Runs (after the last code edit, read by the coordinator)
+
+ctest 117 of 117; fault matrix 0 of 94 failed; printed-C agrees=5196; the 20k matrix in four runs of 5,000 seeds, failing seeds=0; findings=0 each; the sweep above re-run after the block-kind guard, the same 4 and 4 seeds (grammar 1: 5 findings, grammar 2: 14), none area 3's; corpus with lending: missing and said 0 (hwram007) and 4 (hwram008), "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)", all passed. Both lints pass.
