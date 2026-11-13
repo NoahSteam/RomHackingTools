@@ -73,6 +73,5 @@ encoder validation is part of `App::VerifyEncoder`; see [DiscAndPatching](System
 
 CI entry points (repository-root paths):
 [verification](../../../.github/workflows/saturn-explorer-verify.yml),
-[decompiler](../../../.github/workflows/saturn-explorer-decompiler.yml),
-[web deployment](../../../.github/workflows/web.yml). Exact matrix/commands should be read from
+[decompiler](../../../.github/workflows/saturn-explorer-decompiler.yml). Exact matrix/commands should be read from
 those files when changing build or release behavior; they were surveyed here, not rerun.

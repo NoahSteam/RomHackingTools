@@ -6,7 +6,7 @@ Saturn Explorer lets you look inside Sega Saturn games. Open a saved game state 
 
 Built for **fan translators, ROM hackers, and curious developers**, it helps answer questions like “Where is this character’s artwork stored?”, “How is this background drawn?”, and “What changes in memory when this happens?”
 
-**[Try it in your browser](https://noahsteam.github.io/RomHackingTools/)** · **[Download a release](https://github.com/NoahSteam/RomHackingTools/releases)** · **[Build from source](Docs/BUILD.md)**
+**[Download a release](https://github.com/NoahSteam/RomHackingTools/releases)** · **[Build from source](Docs/BUILD.md)**
 
 ![Saturn Explorer inspecting Dragon Force: the game scene in the center, a selected soldier’s texture and video memory on the left, drawing commands and colors on the right, and debugging panels below.](Docs/Images/SaturnExplorerLightTheme.png)
 
@@ -34,14 +34,6 @@ Built for **fan translators, ROM hackers, and curious developers**, it helps ans
 
 ## Get started
 
-### Explore in your browser
-
-**[Open Saturn Explorer →](https://noahsteam.github.io/RomHackingTools/)**
-
-Load your own supported savestate using the Open button or drag it onto the canvas. Start with the game output, select an object, and inspect its texture and colors. Yabause / Yaba Sanshiro `.yss` files, Mednafen savestates, and raw memory dumps are supported.
-
-The browser version supports savestate and dump analysis. **Live emulator debugging and the SH-2 decompiler require the desktop version.**
-
 ### Debug a running game on desktop
 
 Get a desktop build from the **[releases page](https://github.com/NoahSteam/RomHackingTools/releases)** or follow the **[build guide](Docs/BUILD.md)** for Windows, macOS, or Linux.
@@ -52,9 +44,9 @@ Live debugging requires an emulator with the Saturn Explorer integration patch. 
 
 You don’t need to know the Saturn’s hardware terminology to begin. These guides explain the chips and the panels used to inspect them:
 
-- **[Sprites and textures (VDP1)](https://noahsteam.github.io/RomHackingTools/guides/vdp1.html)** — how the Saturn draws objects and how to inspect them.
-- **[Backgrounds and layers (VDP2)](https://noahsteam.github.io/RomHackingTools/guides/vdp2.html)** — how scrolling layers and colors combine into a scene.
-- **[Sound and music](https://noahsteam.github.io/RomHackingTools/guides/audio.html)** — the audio hardware and tracing sounds to game data.
+- **[Sprites and textures (VDP1)](web/guides/vdp1.html)** — how the Saturn draws objects and how to inspect them.
+- **[Backgrounds and layers (VDP2)](web/guides/vdp2.html)** — how scrolling layers and colors combine into a scene.
+- **[Sound and music](web/guides/audio.html)** — the audio hardware and tracing sounds to game data.
 - **[Reading SH-2 pseudocode](Docs/DECOMPILER_GUIDE.md)** — using the desktop decompiler.
 
 For detailed setup and feature reference, see [ReadMe.txt](ReadMe.txt). For the implementation, start with the [codebase guide](Docs/Codebase/README.md).

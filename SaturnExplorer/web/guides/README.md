@@ -13,9 +13,7 @@ thin pointer stubs, not copies — so there is nothing to keep in sync.
 
 ## Publishing
 
-The GitHub Pages workflow (`.github/workflows/web.yml`) copies this folder into the deployed
-site under `/guides/` on every push to `master` that touches `SaturnExplorer/**`. Live at:
-
-- https://noahsteam.github.io/RomHackingTools/guides/
+Nothing publishes this folder automatically (the GitHub Pages workflow that built the web version
+and copied the guides was removed). Each page is self-contained: open it in a browser.
 
 No build step — just edit an HTML file and push.
