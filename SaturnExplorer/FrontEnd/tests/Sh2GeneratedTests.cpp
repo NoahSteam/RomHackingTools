@@ -16370,6 +16370,29 @@ void TestArea7Round14Pins(Sh2Decompiler& d)
     gSpecialReads = savedSpecials;
 }
 
+// Area 7 round 15: the whole seeds of A7-124 to A7-129 and A5-124 (the routed seeds 6800033 and 6807930 too, which master after round 14
+// passes already), pinned to no `map-*` finding.
+void TestArea7Round15Pins(Sh2Decompiler& d)
+{
+    struct Pin
+    {
+        int grammar;
+        int seed;
+        bool specials;
+    };
+    const bool savedSpecials = gSpecialReads;
+    for (const Pin& s : { Pin{ 1, 6800033, false }, Pin{ 1, 6802425, false }, Pin{ 1, 6807930, false }, Pin{ 2, 6804434, false }, Pin{ 2, 6806713, false },
+                          Pin{ 1, 7001742, false }, Pin{ 2, 7006020, false }, Pin{ 1, 7102553, true }, Pin{ 1, 5207177, false }, Pin{ 1, 5207886, false } })
+    {
+        gSpecialReads = s.specials;
+        const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(s.seed) : Generate(s.seed), true);
+        std::printf("pin 'area 7 round 15: grammar %d seed %d%s': %zu finding(s)\n", s.grammar, s.seed, s.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        for (const Finding& f : rep.findings) CHECK(f.sig.find("map-") == std::string::npos);
+    }
+    gSpecialReads = savedSpecials;
+}
+
 // ---- A5-114 to A5-118 (patch 0090): a hardware access is a barrier no read or write of ordinary memory is moved, merged or dropped across ----
 // The area 5 review round's fixtures (A5-114 to A5-117, Sh2DecompilerTests' TestArea5Review), the coordinator's A5-118 (a whole overwrite of a
 // global across a DMA enable), and the seeds that failed on master 43e945b2 with `folded-store-after-access`. Each module pin passes with the
@@ -17362,6 +17385,7 @@ void TestGenerated()
         RUN(TestArea7Round12Pins(d));
         RUN(TestArea7Round13Pins(d));
         RUN(TestArea7Round14Pins(d));
+        RUN(TestArea7Round15Pins(d));
         RUN(TestA5114Pins(d));
         RUN(TestA5119Pins(d));
         RUN(TestA5126Pins(d));

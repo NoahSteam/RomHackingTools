@@ -3591,6 +3591,241 @@ void TestArea7Round14()
     }
 }
 
+// Area 7 round 15: the fixtures of A7-124 to A7-129 and A5-124, each the shrunk program of its seed. The audit passes on the result; a damaged
+// control puts the finding back; for an oracle row, the audit with SE_A7_RULE_OFF=<row> finds the violation again (A5-124's rule is 5124).
+void TestArea7Round15()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto run = [&](const std::vector<uint16_t>& w, uint32_t entry) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        const auto snap = MakeSnapshot(hw);
+        return d.Decompile(snap, Request(entry));
+    };
+    const auto changed = [](const DecompileResult& r, const std::string& from, const std::string& to, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+        {
+            const size_t at = l.text.find(from);
+            if (at == std::string::npos) continue;
+            l.text.replace(at, from.size(), to);
+            ++n;
+        }
+        return x;
+    };
+    const auto tokenAt = [](const DecompileResult& r, const char* what, uint32_t insn) {
+        const Line* l = LineWith(r, what);
+        if (!l) return false;
+        for (const Token& t : l->tokens)
+            if (t.addr == insn) return true;
+        return false;
+    };
+    // the line without its tokens at `insn` (firstAddr again the lowest left)
+    const auto dropToken = [](const DecompileResult& r, const char* what, uint32_t insn, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+            if (l.text.find(what) != std::string::npos)
+            {
+                std::vector<Token> kept;
+                for (const Token& t : l.tokens)
+                    if (t.addr != insn) kept.push_back(t);
+                n += static_cast<int>(l.tokens.size() - kept.size());
+                l.tokens = kept;
+                l.firstAddr = 0;
+                for (const Token& t : l.tokens)
+                    if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+            }
+        return x;
+    };
+    const auto ruleOff = [](const char* rows) {
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", rows ? rows : "");
+#else
+        if (rows) setenv("SE_A7_RULE_OFF", rows, 1);
+        else unsetenv("SE_A7_RULE_OFF");
+#endif
+    };
+    const auto mutated = [&](const DecompileResult& r, const char* row, const char* name) {
+        ruleOff(row);
+        const int v = dts::AuditMapping(r, word, name).Violations();
+        ruleOff(nullptr);
+        return v;
+    };
+    // A7-124 (product) the extension a load makes of what it read, printed as the cast on a later line that stores it: `iRam06001044 =
+    // (int4)iVar1;` drawn at `mov.w @r4,r1` is a copy materialised there, which the way back offers after the load's own `iVar1 = ...;`
+    // (grammar 1 seed 6802425)
+    {
+        const std::vector<uint16_t> w = { 0xD107, 0x2419, 0x6141, 0xD707, 0x6072, 0xC801, 0x8BFC, 0x2502, 0x1719, 0xB009, 0x0009, 0x63F6, 0x432A, 0x000B, 0x0009, 0x0009,
+                                          0x0000, 0x000C, 0x0600, 0x1020, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-124 a load's extension stored on a later line (grammar 1 seed 6802425)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* copy = "iRam06001044 = (int4)iVar1;";
+        CHECK(LineWith(r, copy) != nullptr && tokenAt(r, copy, 0x06009004u));
+        const LineLookup at = LineForInstruction(r, 0x06009004u);
+        CHECK(at.kind == LineLookup::Exact && !at.lines.empty() && r.lines[at.lines[0]].text.find("iVar1 = *(int2 *)") != std::string::npos);
+        CHECK(dts::AuditMapping(r, word, "a7_124_6802425").Violations() == 0);
+        DecompileResult before = r;
+        int n = 0;
+        for (Line& l : before.lines)
+            if (l.text.find(copy) != std::string::npos)
+            {
+                for (Token& t : l.tokens) t.materialised = false;
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_124_6802425 before").Violations() >= 1);
+    }
+    // A7-125 (oracle) `cmp/pl r1 ; bf L` with r1 an `extu.w` inside the `dt` loop before it: r1 is 0 on the edge to L, so `dt r1` makes
+    // `uVar1 = 0xffffffff;` (grammar 2 seed 6804434)
+    {
+        const std::vector<uint16_t> w = { 0x2FD6, 0xE301, 0x614D, 0x4310, 0x8901, 0xAFFB, 0x0009, 0x4115, 0x8B01, 0xA003, 0x0009, 0x4110, 0xA000, 0x0009, 0x6073, 0x6DF6,
+                                          0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-125 cmp/pl of an extension made inside a loop before it (grammar 2 seed 6804434)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uVar1 = 0xffffffff;") != nullptr && tokenAt(r, "uVar1 = 0xffffffff;", 0x06009016u));
+        CHECK(dts::AuditMapping(r, word, "a7_125_6804434").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "uVar1 = 0xffffffff;", "uVar1 = 0xfffffffe;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_125_6804434 other").Violations() >= 1);
+        CHECK(mutated(r, "125", "a7_125_6804434 mutated") >= 1);
+    }
+    // A7-126 (product) a store the flow reached only past a `jmp` the engine resolved after the flow's record was taken (`jmp @r3` into a callee
+    // that jumps on, whose `mov.l r3,@r7` stores the 0 a `dt` loop left): `xRam26001034 = 0;` names it (grammar 2 seed 6806713)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x2FD6, 0x0D2A, 0x7FF8, 0x6843, 0x6953, 0x6A63, 0x6B73, 0xD708, 0x2758, 0x8901, 0xA002, 0x0009,
+                                          0xA000, 0x0009, 0xD305, 0x7F08, 0x4D2A, 0x6DF6, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6, 0x432B, 0x0009, 0x2600, 0x1034, 0x0600, 0x9040,
+                                          0x2FD6, 0x2FE6, 0x0D2A, 0x7FD0, 0x6EF3, 0xD104, 0x7E30, 0x6FE3, 0x4D2A, 0x6EF6, 0x6DF6, 0x412B, 0x0009, 0x0009, 0x0600, 0x9060,
+                                          0x2FD6, 0x7FFC, 0xE301, 0xA000, 0x0009, 0x4310, 0x8BFD, 0x2F36, 0x63F6, 0x4515, 0x8901, 0xA003, 0x0009, 0x2732, 0xA000, 0xE10A,
+                                          0x7F04, 0x6DF6, 0x000B, 0x0009 };
+        // (the generator's request: the other two functions known, their prototypes lent from their own decompilation)
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        const auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(0x06009000u);
+        q.knownFunctions = { 0x06009040u, 0x06009060u };
+        for (uint32_t callee : { 0x06009040u, 0x06009060u })
+        {
+            DecompileRequest cq = Request(callee);
+            for (uint32_t other : { 0x06009000u, 0x06009040u, 0x06009060u })
+                if (other != callee) cq.knownFunctions.push_back(other);
+            const DecompileResult cr = d.Decompile(snap, cq);
+            if (cr.status == DecompileStatus::Ok && cr.prototype.known) q.prototypes.emplace_back(callee, cr.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        Print("A7-126 a store the flow's record did not reach (grammar 2 seed 6806713)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam26001034 = 0;") != nullptr && tokenAt(r, "xRam26001034 = 0;", 0x0600907Au));
+        CHECK(dts::AuditMapping(r, word, "a7_126_6806713").Violations() == 0);
+        // (damaged: the line as master drew it, every token at the `bra` that ends the store's block and the store named nowhere)
+        DecompileResult before = r;
+        int n = 0;
+        for (Line& l : before.lines)
+            if (l.text.find("xRam26001034 = 0;") != std::string::npos)
+            {
+                std::vector<Token> kept;
+                for (const Token& t : l.tokens)
+                    if (t.begin < t.end) kept.push_back(t);
+                for (Token& t : kept) t.addr = 0x0600907Cu;
+                l.tokens = kept;
+                l.firstAddr = 0x0600907Cu;
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_126_6806713 before").Violations() >= 1);
+    }
+    // A7-127 (oracle) an extension of a register the paths into it give other numbers in, which agree in the low bytes: `extu.w r3,r1` of the
+    // literal 0xA0000000 or of `rotcr r3`'s 0xD0000000 is 0 (grammar 1 seed 7001742)
+    {
+        const std::vector<uint16_t> w = { 0xD306, 0x243A, 0xD606, 0x8579, 0xC801, 0x8B01, 0x4325, 0x70F5, 0x613D, 0x2448, 0x8900, 0xE150, 0x000B, 0x0009, 0xA000, 0x0000,
+                                          0x2600, 0x1030 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-127 an extension whose low bytes the paths agree on (grammar 1 seed 7001742)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar2 = 0;") != nullptr && tokenAt(r, "xVar2 = 0;", 0x06009010u));
+        CHECK(dts::AuditMapping(r, word, "a7_127_7001742").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar2 = 0;", "xVar2 = 1;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_127_7001742 other").Violations() >= 1);
+        CHECK(mutated(r, "127", "a7_127_7001742 mutated") >= 1);
+    }
+    // A7-128 (oracle) a pop of what a push put, with a store through a parameter between them (`mov.l r2,@-r15 ; mov.l r1,@r6 ; mov.l @r15+,r2`):
+    // r2 is the pushed 0x45, and the default case's `add #0x6E,r2` makes `uVar1 = 0xb3;` (grammar 2 seed 7006020)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FC6, 0x0C2A, 0x7FE8, 0x6843, 0x6953, 0x2318, 0x8D00, 0xE245, 0x2F26, 0x2612, 0x62F6, 0xE102, 0x3416, 0x8911,
+                                          0x4408, 0xC702, 0x014E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9038, 0x0600, 0x903C, 0x0600, 0x9040, 0xA005, 0x0009, 0xA003, 0x0009,
+                                          0xA001, 0x0009, 0x726E, 0x2328, 0x8903, 0xB00D, 0x0009, 0x6483, 0x6593, 0xD204, 0x7F18, 0x4C2A, 0x6CF6, 0x69F6, 0x68F6, 0x422B,
+                                          0x0009, 0x0009, 0x0600, 0x9068, 0x2FE6, 0x7FE8, 0x6EF3, 0xE004, 0x7E18, 0x6FE3, 0x6EF6, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-128 a pop across a store through a parameter (grammar 2 seed 7006020)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uVar1 = 0xb3;") != nullptr && tokenAt(r, "uVar1 = 0xb3;", 0x06009044u));
+        CHECK(dts::AuditMapping(r, word, "a7_128_7006020").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "uVar1 = 0xb3;", "uVar1 = 0xb4;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_128_7006020 other").Violations() >= 1);
+        CHECK(mutated(r, "128", "a7_128_7006020 mutated") >= 1);
+    }
+    // A7-129 (oracle) a line's operand drawn at a store of its own variable is that store's statement only when no other line assigns the
+    // variable with its name drawn there: `cRam06001008 = (char)param_2;` with the piece `(char)param_2` made at the first store, whose own line
+    // is `cRam06001008 = (char)in_r3 + (char)param_2;`, is a copy materialised there (A7-116), offered second (grammar 1 seed 7102553, specials)
+    {
+        const std::vector<uint16_t> w = { 0x2532, 0xD606, 0x335C, 0x2630, 0xE002, 0x014D, 0x2650, 0xB007, 0x0009, 0x63F6, 0x432A, 0x000B, 0x0009, 0x0009, 0x0600, 0x1008,
+                                          0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-129 a shared piece drawn at the store of another line (grammar 1 seed 7102553)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "cRam06001008 = (char)param_2;") != nullptr && tokenAt(r, "cRam06001008 = (char)param_2;", 0x06009006u));
+        const LineLookup at = LineForInstruction(r, 0x06009006u);
+        CHECK(at.kind == LineLookup::Exact && !at.lines.empty() && r.lines[at.lines[0]].text.find("(char)in_r3 + (char)param_2") != std::string::npos);
+        CHECK(dts::AuditMapping(r, word, "a7_129_7102553").Violations() == 0);
+        CHECK(mutated(r, "129", "a7_129_7102553 mutated") >= 1);
+    }
+    // A5-124 (product and oracle) a register's read the engine stores as read, `xRam26001004 = VDP2_MPABN0;` for `mov.w @r6,r1 ; mov.w
+    // r1,@r7`: the line names the store (0x06009012) beside the read; the other path's `xRam26001004 = in_r1;` names it too. The oracle's copy
+    // check at a load judges this shape now (grammar 1 seed 5207886 shrunk; 5207177 whole is pinned in the generator)
+    {
+        const std::vector<uint16_t> w = { 0xD605, 0xD706, 0x2208, 0x8B01, 0xC810, 0x8F02, 0x816D, 0x6245, 0x6161, 0x2711, 0x000B, 0x0009, 0x25F8, 0x0040, 0x2600, 0x1004 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A5-124 a register's read stored as read names its store (grammar 1 seed 5207886)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* read = "xRam26001004 = VDP2_MPABN0;";
+        CHECK(LineWith(r, read) != nullptr && tokenAt(r, read, 0x06009010u) && tokenAt(r, read, 0x06009012u));
+        CHECK(dts::AuditMapping(r, word, "a5_124_5207886").Violations() == 0);
+        int n = 0;
+        const DecompileResult before = dropToken(r, read, 0x06009012u, n);
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a5_124_5207886 before").Violations() >= 1);
+        CHECK(mutated(before, "5124", "a5_124_5207886 before, rule off") == 0);
+        // (grammar 1 seed 5207177, its function 0 and callee: the poll loop's `xRam26001028 = CONCAT22(in_r2,xRam26001028._2_2_);` names its own
+        // half-word store and not, for the low half it keeps, the later `mov.l r2,@r6` (0x06009030), whose statement `xRam26001028 =
+        // SH2_RTCSR;` names it)
+        const std::vector<uint16_t> w2 = { 0xD611, 0xD712, 0xE002, 0x2702, 0x2621, 0x6072, 0xC801, 0x89FB, 0x856E, 0x846A, 0xE006, 0x035D, 0xC40A, 0xE303,
+                                           0xC82C, 0x6051, 0x4310, 0x8BFB, 0x7246, 0x6072, 0xC609, 0x8152, 0x6060, 0x5270, 0x2622, 0x6241, 0x032A, 0x2F36,
+                                           0xD205, 0x420B, 0x0009, 0x63F6, 0x432A, 0x000B, 0x0009, 0x0009, 0x2600, 0x1028, 0xFFFF, 0xFFF0, 0x0600, 0x9054,
+                                           0xD102, 0xE20F, 0x2122, 0x000B, 0xE00F, 0x0009, 0x0600, 0x2000 };
+        const DecompileResult r2 = run(w2, 0x06009000u);
+        Print("A5-124 a kept half and a register's read stored as read (grammar 1 seed 5207177)", r2);
+        CHECK(r2.status == DecompileStatus::Ok);
+        const char* piece = "xRam26001028 = CONCAT22(in_r2,xRam26001028._2_2_);";
+        const char* read2 = "xRam26001028 = SH2_RTCSR;";
+        CHECK(LineWith(r2, piece) != nullptr && tokenAt(r2, piece, 0x06009008u) && !tokenAt(r2, piece, 0x06009030u));
+        CHECK(LineWith(r2, read2) != nullptr && tokenAt(r2, read2, 0x0600902Eu) && tokenAt(r2, read2, 0x06009030u));
+        const LineLookup back = LineForInstruction(r2, 0x06009030u);
+        CHECK(back.kind == LineLookup::Exact && !back.lines.empty() && r2.lines[back.lines[0]].text.find(read2) != std::string::npos);
+        CHECK(dts::AuditMapping(r2, word, "a5_124_5207177").Violations() == 0);
+        n = 0;
+        const DecompileResult before2 = dropToken(r2, read2, 0x06009030u, n);
+        CHECK(n == 1 && dts::AuditMapping(before2, word, "a5_124_5207177 before").Violations() >= 1);
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -18574,6 +18809,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round12());
         RUN(TestArea7Round13());
         RUN(TestArea7Round14());
+        RUN(TestArea7Round15());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());

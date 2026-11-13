@@ -503,6 +503,9 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
                    const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int depth);
 inline bool NeverRun(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                      const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int depth);
+inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                           const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, std::set<uint32_t>& makers,
+                           bool throughUpdate, std::set<int>* entryRegs);
 inline WordValue NumberValue(uint64_t v)
 {
     return WordValue{ WordValue::Number, static_cast<int64_t>(static_cast<int32_t>(static_cast<uint32_t>(v))) };
@@ -923,6 +926,22 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
                         if (extended) break;
                         if (xd.IsBranch || xd.IsCall || xd.HasDelaySlot || WrittenRegisters(xd).count(rg) || into.find(q + 2) != into.end()) break;
                     }
+                    // (A7-125: or an extension further back, past a loop -- `extu.w r4,r1` inside a `dt` loop the compare follows: every
+                    // instruction that made Rn before the compare, on every path, is an `extu.b` or `extu.w`; grammar 2 seed 6804434)
+                    if (!extended && !A7RuleOff(125))
+                    {
+                        std::set<uint32_t> makers;
+                        if (RegisterMakers(r, word, into, p - 2, rg, makers, false, nullptr) && !makers.empty())
+                        {
+                            bool all = true;
+                            for (uint32_t m : makers)
+                            {
+                                uint16_t mw = 0;
+                                all = all && m != 0 && word(m, mw) && ((mw & 0xF00F) == 0x600C || (mw & 0xF00F) == 0x600D);
+                            }
+                            extended = all;
+                        }
+                    }
                     if (extended)
                     {
                         if (!give(WordValue{ WordValue::Number, 0, true })) return WordValue();
@@ -1279,11 +1298,37 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
                 ((sw >> 8) & 0xF) == m && ((sw & 0xFF) == 0x28 || (lo == 0xC && (sw & 0xFF) == 0x18)))
                 return NumberValue(0);
         }
+        bool lowKnown = false;
         if (!number(before(m), a))
         {
+            // (A7-127: an extension needs only the low bytes: when the paths into it give other numbers that agree there -- `extu.w r3,r1`
+            // of the literal 0xA0000000 on one path and of `rotcr r3`'s 0xD0000000 on the other, both 0 -- the number each instruction
+            // that made Rm writes, extended, is the same; grammar 1 seed 7001742)
+            if (lo >= 0xC && !A7RuleOff(127) && depth < 6)
+            {
+                std::set<uint32_t> makers;
+                bool agree = RegisterMakers(r, word, into, p, m, makers, false, nullptr) && !makers.empty() && !makers.count(0) && !makers.count(p);
+                bool first = true;
+                uint32_t low = 0;
+                for (uint32_t mk : makers)
+                {
+                    if (!agree) break;
+                    uint16_t mw = 0;
+                    std::set<int> wrote;
+                    if (word(mk, mw)) wrote = WrittenRegisters(sfe::Sh2Decode(mk, mw));
+                    uint32_t v = 0;
+                    agree = wrote.size() == 1 && number(WrittenValue(r, word, into, mk, *wrote.begin(), depth + 1), v);
+                    v = lo == 0xC || lo == 0xE ? v & 0xFFu : v & 0xFFFFu;
+                    agree = agree && (first || v == low);
+                    low = v;
+                    first = false;
+                }
+                if (agree) a = low;
+                lowKnown = agree;
+            }
             // (A7-64: an extension that reads its own result round a loop, `extu.w r1,r1` at the head: what the entries into the loop
             // give, extended, and the extension of that is itself; grammar 1 seed 2607749, 0x60000000 and then 0)
-            if (m != n || lo < 0xC || !number(RegisterBefore(r, word, into, p, m, depth, p), a)) return WordValue();
+            if (!lowKnown && (m != n || lo < 0xC || !number(RegisterBefore(r, word, into, p, m, depth, p), a))) return WordValue();
         }
         switch (lo)
         {
@@ -1365,6 +1410,23 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
             if (in == m || im == m) return false;   // (any field that may name the stack register)
             const bool store = (ih == 0x2 && il <= 6) || ih == 0x1 || (ih == 0x0 && il >= 4 && il <= 6) || (iw >> 8) == 0x80 || (iw >> 8) == 0x81 ||
                                ((iw >> 8) >= 0xC0 && (iw >> 8) <= 0xC2) || (iw >> 8) >= 0xCC || (ih == 0x4 && (il == 0x2 || il == 0x3 || il == 0xB));
+            // (A7-128: a store through a register that holds a parameter or a number -- `mov.l r1,@r6` of param_3 between `mov.l r2,@-r15`
+            // and `mov.l @r15+,r2` -- does not write the word just pushed: no caller's pointer reaches below its own stack, as the engine
+            // takes the frame; grammar 2 seed 7006020)
+            if (store && !A7RuleOff(128) && depth < 6 && ((ih == 0x2 && (il <= 2 || (il >= 4 && il <= 6))) || ih == 0x1 || (iw >> 8) == 0x80 || (iw >> 8) == 0x81))
+            {
+                const int base = (iw >> 8) == 0x80 || (iw >> 8) == 0x81 ? im : in;
+                std::set<uint32_t> makers;
+                std::set<int> entryRegs;
+                if (base == m || !RegisterMakers(r, word, into, q, base, makers, false, &entryRegs) || makers.empty() || entryRegs.count(m)) return false;
+                for (uint32_t mk : makers)
+                {
+                    uint16_t mw = 0;
+                    if (mk == 0) continue;
+                    if (!word(mk, mw) || !((mw >> 12) == 0xD || (mw >> 12) == 0x9 || (mw >> 12) == 0xE || (mw >> 8) == 0xC7)) return false;
+                }
+                return true;
+            }
             return !store;
         };
         const auto isPush = [&](uint32_t q) {
@@ -1833,6 +1895,19 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 const uint32_t va = static_cast<uint32_t>(std::strtoul(name.c_str() + name.size() - 8, nullptr, 16));
                                 for (const AccessFate& f : r.accessFates)
                                     ownStoreHere = ownStoreHere || (f.insn == t.addr && f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
+                                // (A7-129: not when another line assigns the variable with its name drawn at that store -- `cRam06001008 =
+                                // (char)in_r3 + (char)param_2;` at `mov.b r3,@r6` -- which is the store's statement: this line's operand
+                                // drawn there, `cRam06001008 = (char)param_2;` with the piece `(char)param_2` the engine made at the first
+                                // store, is a copy materialised there (A7-116's mark); grammar 1 seed 7102553 (specials))
+                                for (size_t lj = 0; lj < r.lines.size() && ownStoreHere && !A7RuleOff(129); ++lj)
+                                {
+                                    if (lj == li) continue;
+                                    const std::string& ot = r.lines[lj].text;
+                                    const size_t ob = ot.find_first_not_of(' '), oa = ot.find(" = ");
+                                    if (ob == std::string::npos || oa == std::string::npos || oa <= ob || ot.compare(ob, oa - ob, name) != 0) continue;
+                                    for (const Token& u : r.lines[lj].tokens)
+                                        if (u.addr == t.addr && u.begin == ob && u.end == oa) ownStoreHere = false;
+                                }
                             }
                         }
                     }
@@ -3021,11 +3096,40 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 }
                 ++a.copyStoreMissing;
                 ++(frame ? a.copyFrameMissing : a.copyGlobalMissing);
-                ++(atCall ? a.copyAtCall : atReturn ? a.copyAtReturn : atBranch ? a.copyAtBranch : atLoad ? a.copyAtLoad : a.copyAtOther);
+                // (A5-124: not a register's read the engine stores as read -- `xRam26001028 = SH2_RTCSR;`, 0090's merge of `mov.l @(0,r7),r2 ;
+                // mov.l r2,@r6` -- whose store stores the register the read wrote: the line is that store's statement as much as the read's,
+                // and a click on the store's instruction must reach it (grammar 1 seeds 5207177, 5207886). Switched off by
+                // SE_A7_RULE_OFF=5124)
+                bool readStored = false;
+                if (atLoad && !atCall && !atReturn && !atBranch && !frame && !A7RuleOff(5124))
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        uint16_t lw = 0;
+                        if (readStored || !t.addr || t.begin == t.end || !word(t.addr, lw)) continue;
+                        bool registerRead = false;
+                        for (const MemoryAccess& m : r.accesses) registerRead = registerRead || (m.insn == t.addr && !m.write && m.direct);
+                        if (!registerRead) continue;
+                        const std::set<int> loaded = WrittenRegisters(sfe::Sh2Decode(t.addr, lw));
+                        for (uint32_t st : candidates)
+                        {
+                            uint16_t sw = 0;
+                            int size = 0;
+                            const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
+                            if (reg < 0 || !loaded.count(reg)) continue;
+                            if (!haveSources)
+                            {
+                                sources = BranchSources(r, word);
+                                haveSources = true;
+                            }
+                            std::set<uint32_t> makers;
+                            if (RegisterMakers(r, word, sources, st, reg, makers) && makers.count(t.addr)) readStored = true;
+                        }
+                    }
+                ++(atCall ? a.copyAtCall : atReturn ? a.copyAtReturn : atBranch ? a.copyAtBranch : atLoad && !readStored ? a.copyAtLoad : a.copyAtOther);
                 // (at a load it is counted: A7-16's shape, a global named after a hardware register is its load)
                 const std::string what = "line " + std::to_string(li) + " '" + text + "' names none of the " + std::to_string(candidates.size()) +
                                          " store(s) folded into the variable (first " + MappingHex(*candidates.begin()) + "); a click goes to " + MappingHex(r.lines[li].firstAddr);
-                if (atLoad && !atCall && !atReturn && !atBranch) a.Keep("copy-store (counted): " + where + ": " + what);
+                if (atLoad && !atCall && !atReturn && !atBranch && !readStored) a.Keep("copy-store (counted): " + where + ": " + what);
                 else problem("copy-store", what);
             }
     }
