@@ -6986,6 +6986,25 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }
                 return e;
             };
+            // (a line one of whose instructions -- not the read's -- runs in no block the write's block reaches is printed on a path without the
+            // write: the read printed there reads what the code read, `return (int4)cRam06002395;` on the return the store through r4 is not
+            // on, grammar 1 seed 5203136; a slot's read printed on the other arm's return, 5203691)
+            const auto offPath = [&](const Line& l, const MemoryAccess& m, uint32_t own) {
+                const size_t mb = static_cast<size_t>(m.origBlock);
+                for (const Token& t : l.tokens)
+                {
+                    if (!t.addr || t.addr == own || !r.InBody(t.addr)) continue;
+                    bool inBlock = false, reached = false;
+                    for (size_t k = 0; k < r.flowBlockRanges.size() && k < fr.reach.size() && !reached; ++k)
+                    {
+                        if (r.flowBlockRanges[k].first > t.addr || t.addr > r.flowBlockRanges[k].second) continue;
+                        inBlock = true;
+                        reached = mb < fr.reach.size() && ((k == mb && t.addr > m.insn) || fr.reach[mb][k]);
+                    }
+                    if (inBlock && !reached) return true;
+                }
+                return false;
+            };
             for (const AccessFate& rd : r.accessFates)
             {
                 if (rd.write || rd.fate != AccessFate::FoldedOrdinary || !rd.constantAddress || rd.frame || rd.origBlock < 0) continue;
@@ -7084,7 +7103,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         };
                         for (size_t li = mEnd + 1; li < r.lines.size(); ++li)
                         {
-                            if (!readsGlobal(r.lines[li]) || !derives(r.lines[li])) continue;
+                            if (!readsGlobal(r.lines[li]) || !derives(r.lines[li]) || offPath(r.lines[li], m, rd.insn)) continue;
                             add("folded-read-after-pointer-write", "the read at " + Hex(rd.insn) + " the engine folded from " + Hex(rd.address) +
                                                                        " is named on no line, and line " + std::to_string(li) + " reads the global after the write through a pointer at " +
                                                                        Hex(m.insn) + " (line " + std::to_string(m.firstLine) + "), which the code makes after the read and before no other read of it");
@@ -7100,6 +7119,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if ((!m.direct && !m.write) || m.firstLine < 0 || m.origBlock < 0) continue;
                     if (!runsAfter(static_cast<size_t>(rd.origBlock), rd.origOrder, static_cast<size_t>(m.origBlock), m.origOrder)) continue;
                     count(m.direct ? "order.folded-read-before-access.checked" : "order.folded-read-before-pointer-write.checked");
+                    if (shown > statementEnd(m.firstLine) && !m.direct && offPath(r.lines[static_cast<size_t>(shown)], m, rd.insn))
+                    {
+                        count("order.folded-read-before-pointer-write.other-path");
+                        continue;
+                    }
                     if (shown > statementEnd(m.firstLine))
                         add(m.direct ? "folded-read-after-access" : "folded-read-after-pointer-write",
                             "the read at " + Hex(rd.insn) + " the engine folded from " + Hex(rd.address) + " is printed (line " + std::to_string(shown) +
@@ -16352,9 +16376,10 @@ void TestA5119Pins(Sh2Decompiler& d)
         CHECK(rep.findings.empty());
         CHECK(n > 0);
     }
-    // The seeds, whole: A5-123's three, and A5-122's range (grammar 1 from 6,400,001), seeds whose production each form of A5-119 fails
-    // without patch 0093
-    const long kSeeds[] = { 5203228, 5207177, 5207886, 6400009, 6400011, 6400021, 6400029 };
+    // The seeds, whole: A5-123's three; 5203136 and 5203691, where the new rule took a read printed on the return of the path without the
+    // store through a pointer for one printed after it (`offPath`); and A5-122's range (grammar 1 from 6,400,001), seeds whose production
+    // each form of A5-119 fails without patch 0093
+    const long kSeeds[] = { 5203228, 5207177, 5207886, 5203136, 5203691, 6400009, 6400011, 6400021, 6400029 };
     for (long sd : kSeeds)
     {
         const Report rep = Evaluate(d, Generate(static_cast<uint64_t>(sd)), true);
