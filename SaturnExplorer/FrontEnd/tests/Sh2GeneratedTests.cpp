@@ -6636,7 +6636,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }
                 bool storeRan = false;   // (some run made the store: a store in a block the engine removed as unreachable is named, never made)
                 {
-                    bool made = false, writeBack = true, undone = false;
+                    bool made = false, writeBack = true, undone = false, piece = false;
                     for (const RunOut& run : runs)
                         for (size_t k = 0; k < run.trace.size(); ++k)
                         {
@@ -6655,6 +6655,19 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 if (p.addr == t.addr && p.size == t.size)
                                 {
                                     same = p.value == t.value;
+                                    break;
+                                }
+                                // (A5-137 (a): ...or a wider read holding them, whose bytes there are the value stored: `mov.l @r6,r1 ; ... ; mov.b
+                                // r1,@(3,r6)` writes back the word's last byte, which the engine drops in the request that marks the mailbox,
+                                // grammar 1 seed 7402502. The bus is big-endian: the piece's offset from the end of the wider access is its shift. A
+                                // wider write is left to the rules below, which judge where the engine joins the narrow store into it, A5-123's
+                                // `joined-earlier`, grammar 1 seed 5203228.)
+                                if (!p.write && p.addr <= t.addr && t.addr + static_cast<uint32_t>(t.size) <= p.addr + static_cast<uint32_t>(p.size) && p.size <= 8 && t.size < 8)
+                                {
+                                    const uint32_t shift = 8u * (p.addr + static_cast<uint32_t>(p.size) - t.addr - static_cast<uint32_t>(t.size));
+                                    const uint64_t mask = (uint64_t(1) << (8 * t.size)) - 1;
+                                    same = ((p.value >> shift) & mask) == (t.value & mask);
+                                    piece = piece || same;
                                     break;
                                 }
                                 if (overlaps || InHardwareRange(p.addr) || inMarked(p.addr)) break;
@@ -6686,6 +6699,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (undone) count("order.folded-store.write-back-undone");
                     if (made && writeBack)
                     {
+                        if (piece) count("order.folded-store.write-back-piece");
                         count("order.folded-store.write-back");
                         continue;
                     }
@@ -6845,8 +6859,17 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     // `tst #0x40,r0 ; bf/s L ; mov.b r2,@r6 ; mov.l r2,@r6` with r0 0xC, grammar 1 seed 4202386)
                     // (A5-119: ...or one through a pointer, which may be the global's address: the pointer form of `g = r1 ; *r4 = 1 ; g = r2`,
                     // judged as the register's, after patch 0090 put a sink of the global before each LOAD and STORE through a pointer)
+                    // (A5-137 (b): ...but not one through a pointer into the run's own frame, which the text derives from the stack: a frame walk,
+                    // `mov r15,r2 ; add #n,r2 ; L: mov.l r1,@-r2 ; dt r1 ; bf L`, printed `piVar2 = (int4 *)&xStack00000000; do { piVar2 =
+                    // piVar2 + -1; *piVar2 = iVar1; ...`, between a store and a later store of the same bytes, grammar 2 seeds 7001880 and
+                    // 7401819. The stack is the function's own, apart from every global the code names by a literal; the engine joins the two
+                    // stores, as it may with nothing between them.)
+                    const auto inOwnFrame = [&](const RunOut& run, const TraceRec& t) {
+                        const int32_t c = static_cast<int32_t>(t.addr - run.init[15]);
+                        return InStack(t.addr) && !InStack(f.address) && c > -0x200 && c < 0x200;
+                    };
                     uint32_t without = 0;
-                    bool isWrite = false, viaPointer = false;
+                    bool isWrite = false, viaPointer = false, frameSkipped = false;
                     for (const RunOut& run : runs)
                     {
                         bool live = false;
@@ -6864,7 +6887,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 continue;
                             }
                             for (const MemoryAccess& m : got)
-                                if (t.depth == 0 && m.insn == t.insn && m.write == t.write && !without)
+                                if (t.depth == 0 && m.insn == t.insn && m.write == t.write && !without && !m.direct && inOwnFrame(run, t))
+                                    frameSkipped = true;
+                            for (const MemoryAccess& m : got)
+                                if (t.depth == 0 && m.insn == t.insn && m.write == t.write && !without && (m.direct || !inOwnFrame(run, t)))
                                 {
                                     without = m.insn;
                                     isWrite = m.write;
@@ -6876,6 +6902,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     // write through a pointer that the text prints, of another value: the text leaves that value in memory at the return, the code
                     // the store's. `x = g; *p = v; g = x` printed `*p = v;`, no store of the global, which with p the global's address (A5-122's
                     // runs) ends with v where the code ends with the word it read.)
+                    if (!without && frameSkipped) count("order.folded-store.frame-between");
                     if (!without)
                     {
                         uint32_t lostTo = 0;
@@ -7004,6 +7031,58 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         count("order.folded-store.unrun");
                         continue;
                     }
+                    // (A5-138: ...nor one no run makes that stores back what a read of the same bytes put in the register, with no write between
+                    // them that may reach those bytes (a write of them, one through a pointer, a register's write, which may start a transfer):
+                    // whatever the path, it leaves memory as it was, and the engine drops it (the runs' write-back rule above needs a run that
+                    // makes it; a read between changes no memory). `mov.l @r6,r3 ; tst r3,r2 ; bt L ; mov.l r3,@r6 ; L: <poll>`
+                    // with r3 0 in every run printed `if ((uRam2600238c & in_r2) != 0) { }`, the mapping naming the store on a later byte
+                    // store's line after the poll, grammar 1 seed 7801382)
+                    const auto word = [&](uint32_t pc, uint16_t& w) {
+                        if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                        w = subject.WordAt(pc);
+                        return true;
+                    };
+                    int ssize = 0;
+                    const int reg = dts::StoredRegister(subject.WordAt(f.insn), ssize);
+                    std::set<uint32_t> makers;
+                    std::set<int> entry;
+                    if (reg >= 0 && ssize == f.size && dts::RegisterMakers(r, word, dts::BranchSources(r, word), f.insn, reg, makers, false, &entry) &&
+                        entry.empty() && !makers.empty())
+                    {
+                        const auto mayBetween = [&](size_t ab, uint32_t ao, size_t mb, uint32_t mo, size_t bb, uint32_t bo) {
+                            if (ab >= fr.reach.size() || mb >= fr.reach.size() || bb >= fr.reach.size()) return true;
+                            return (ab == mb ? mo > ao : fr.reach[ab][mb] != 0) && (mb == bb ? mo < bo : fr.reach[mb][bb] != 0);
+                        };
+                        bool back = true;
+                        for (uint32_t mk : makers)
+                        {
+                            const AccessFate* read = nullptr;
+                            for (const AccessFate& o : r.accessFates)
+                                if (!o.write && o.insn == mk && o.fate == AccessFate::FoldedOrdinary && o.constantAddress && !o.frame && o.origBlock >= 0 &&
+                                    o.address == f.address && o.size == f.size)
+                                    read = &o;
+                            if (!read)
+                            {
+                                back = false;
+                                break;
+                            }
+                            const size_t rb = static_cast<size_t>(read->origBlock), fb = static_cast<size_t>(f.origBlock);
+                            for (const MemoryAccess& m : got)
+                                if (m.write && (m.origBlock < 0 || mayBetween(rb, read->origOrder, static_cast<size_t>(m.origBlock), m.origOrder, fb, f.origOrder)))
+                                    back = false;
+                            for (const AccessFate& o : r.accessFates)
+                                if (o.write && o.insn != f.insn && (o.origBlock < 0 || !o.constantAddress ||
+                                                                    (o.address < f.address + f.size && f.address < o.address + o.size)) &&
+                                    (o.origBlock < 0 || mayBetween(rb, read->origOrder, static_cast<size_t>(o.origBlock), o.origOrder, fb, f.origOrder)))
+                                    back = false;
+                            if (!back) break;
+                        }
+                        if (back)
+                        {
+                            count("order.folded-store.unrun-write-back");
+                            continue;
+                        }
+                    }
                 }
                 // (a store that writes back what the access just before it read from the same bytes, or wrote there, in every run that makes it,
                 // is no change of memory: the engine drops it as a copy of the global to itself or joins it with the equal store before it, and
@@ -7033,6 +7112,37 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (!m.write) count(m.direct ? "order.folded-store.hardware-read" : "order.folded-store.read");
                     else if (m.direct) count("order.folded-store.hardware-write");
                     count("order.folded-store.checked");
+                    // (A5-137 (c): a store the engine makes two of, a delay slot also reached by a branch to it, is printed once per instance; the
+                    // mapping can name one instance's line at another store, so the lines naming the instruction are the other instance's,
+                    // printed on the path without the access. Its own statement is then a line before the access's that assigns the global:
+                    // `mov.b r2,@r6` in the slot of `bf/s` and the target of a `bra` printed `if (in_r2 == 0) { uRam26002100 =
+                    // (uint4)uRam26002100._1_3_; if (c) { xVar2 = *param_1; return; } } else { uRam26002100 = CONCAT13((char)in_r2,...); }`,
+                    // the first line's token at the later `mov.l r3,@r6`, grammar 1 specials seed 7102142. Area 7 has the token.)
+                    if (first > m.firstLine)
+                    {
+                        int instances = 0;
+                        for (const AccessFate& o : r.accessFates) instances += o.write && o.insn == f.insn && o.fate == AccessFate::FoldedOrdinary;
+                        bool assignedBefore = false;
+                        for (int li = 0; instances > 1 && li < m.firstLine && !assignedBefore; ++li)
+                        {
+                            const std::string& text = r.lines[static_cast<size_t>(li)].text;
+                            const size_t b = text.find_first_not_of(' ');
+                            if (b == std::string::npos) continue;
+                            size_t e = b;
+                            while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_' || text[e] == '.')) ++e;
+                            const size_t at = text.find("Ram", b);
+                            unsigned v = 0;
+                            if (at == std::string::npos || at >= e || at + 11 > text.size() || std::sscanf(text.c_str() + at + 3, "%8x", &v) != 1 ||
+                                v > f.address || f.address >= v + 8u)
+                                continue;
+                            assignedBefore = AssignsAt(text, e);
+                        }
+                        if (assignedBefore)
+                        {
+                            count("order.folded-store.instance-assigned");
+                            continue;
+                        }
+                    }
                     if (first > m.firstLine)
                         add("folded-store-after-access", "the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) + " is printed (line " +
                                                              std::to_string(first) + ") after the " + (m.write ? "write" : "read") + " at " + Hex(m.insn) +
@@ -16862,6 +16972,109 @@ void TestRouted345Pins(Sh2Decompiler& d)
     }
 }
 
+// The folded-access round of area 5 (A5-136 to A5-138): the routed seeds of `folded-store-after-access` and `pointer-effect-unsaid`, whole and
+// shrunk. (The routed `folded-read-after-access` seeds, grammar 1 7005221 and 7008257, and `folded-store-after-access` 7002991 and 7009698
+// passed on master before this round: A5-128 (b) and A5-129; they are pinned whole here.)
+void TestA5FoldedPins(Sh2Decompiler& d)
+{
+    auto count = [](const Report& rep, const char* name) {
+        const auto it = rep.counts.find(name);
+        return it == rep.counts.end() ? 0 : it->second;
+    };
+    struct Pin
+    {
+        int grammar;
+        long seed;
+        bool specials;
+        const char* count;   // a count the seed must reach (nullptr: none)
+    };
+    const bool savedSpecials = gSpecialReads;
+    for (const Pin& s : { Pin{ 1, 7002991, false, nullptr }, Pin{ 1, 7009698, false, nullptr }, Pin{ 1, 7005221, false, "order.folded-read-before-access.other-path" },
+                          Pin{ 1, 7008257, false, "order.folded-read-before-access.other-path" }, Pin{ 1, 7402502, false, "order.folded-store.write-back-piece" },
+                          Pin{ 2, 7001880, false, "order.folded-store.frame-between" }, Pin{ 2, 7401819, false, "order.folded-store.frame-between" },
+                          Pin{ 1, 7102142, true, "order.folded-store.instance-assigned" }, Pin{ 1, 7006344, false, "pointer.effect.excused" },
+                          Pin{ 1, 7801382, false, "order.folded-store.unrun-write-back" },
+                          // (A5-130's dead-store rule, which no pin reached since A5-124: two seeds of this round's sweep reach it; each passes with
+                          // the rule off too, the read printed before the earlier store's line either way, so they keep the rule run, not needed)
+                          Pin{ 1, 7804854, false, "order.read-before-folded-store.dead" }, Pin{ 1, 7809529, false, "order.read-before-folded-store.dead" } })
+    {
+        gSpecialReads = s.specials;
+        const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(static_cast<int>(s.seed)) : Generate(static_cast<uint64_t>(s.seed)), true);
+        std::printf("pin 'A5 folded: grammar %d seed %ld%s': %zu finding(s), %s %d\n", s.grammar, s.seed, s.specials ? " (specials)" : "", rep.findings.size(),
+                    s.count ? s.count : "-", s.count ? count(rep, s.count) : 0);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        if (s.count) CHECK(count(rep, s.count) > 0);
+    }
+    gSpecialReads = savedSpecials;
+    // The shrunk programs. A raw one may need the request that marks the mailbox (the seed's second request) and its poll.
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* volatileRange;
+        const char* poll;
+        const char* count;
+    };
+    const Shrunk kShrunk[] = {
+        // A5-137 (a), 7402502: `mov.l @r6,r1 ; ... ; mov.b r1,@(r0,r6)` with r0 3 writes back the last byte of the word read at 0x80002010 (the
+        // cache data array, memory), which the engine drops in the request that marks the mailbox
+        { "A5-137 (a) grammar 1 seed 7402502 shrunk", "D606 6162 E003 0614 2448 8904 D704 6071 C801 8BFC 7363 2632 000B 0009 8000 2010 2600 1008", "26001000-2600100F",
+          "26001008", "order.folded-store.write-back-piece" },
+        // A5-137 (c), 7102142 (specials): `mov.b r2,@r6` in the slot of a `bf/s` and the target of a `bra`; the r2 = 0 instance is printed before the
+        // read in the other slot, its line's token at the later `mov.l r3,@r6`
+        { "A5-137 (c) grammar 1 specials seed 7102142 shrunk", "D609 2228 8B0E C840 8F0A 2620 2448 8904 E362 D706 6071 C801 8BFC 2632 000B 6342 000B 6342 AFF1 "
+                                                               "0009 2600 2100 2600 1008", "26001000-2600100F", "26001008", "order.folded-store.instance-assigned" },
+        // A5-138, 7801382: `mov.l @r6,r3 ; tst r3,r2 ; bt L ; mov.l r3,@r6 ; L: <poll>`, the store no run makes a write-back of the word read
+        { "A5-138 grammar 1 seed 7801382 shrunk", "D606 6362 2238 8900 2632 D705 2411 6071 C801 8BFB 2660 000B 0009 0009 2600 238C 2600 1020", "26001020-2600102F",
+          "26001020", "order.folded-store.unrun-write-back" },
+        // A5-136, 7006344: `p = (p + 4) ^ 0x40000000` from 0x7DB00010 twice, then `mov.l r6,@r6`: the cache address array's 0x7DB00018 is said
+        { "A5-136 grammar 1 seed 7006344 shrunk", "D606 D107 2619 D107 261B E302 7604 D106 261A 4310 8BFA 2662 000B 0009 1DB0 0018 1FFF FFF0 6000 0000 4000 0000",
+          nullptr, nullptr, "pointer.effect.excused" },
+    };
+    for (const Shrunk& p : kShrunk)
+    {
+        const char* names[] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL" };
+        const char* values[] = { p.volatileRange, p.poll };
+        std::string saved[2];
+        bool had[2];
+        for (int i = 0; i < 2; ++i)
+        {
+            const char* old = std::getenv(names[i]);
+            had[i] = old != nullptr;
+            if (old) saved[i] = old;
+            SetOrClear(names[i], values[i]);
+        }
+        const Subject subject = RawSubject(p.words);
+        for (int i = 0; i < 2; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s), %s %d\n", p.name, rep.findings.size(), p.count, count(rep, p.count));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, p.count) > 0);
+        if (std::strcmp(p.count, "pointer.effect.excused") == 0)
+            CHECK(rep.text.find("06009016 (caution): the pointer is stepped in a loop from 0x3DB00014: the iterations after the first reach other addresses, "
+                                "which are not said, among them 0x7DB00018 (the cache address array)") != std::string::npos);
+    }
+    // A5-137 (b), 7001880 and 7401819: a store, a frame walk through a copy of r15 (`mov r15,r2 ; add #n,r2 ; L: mov.l r1,@-r2 ; dt r1 ; bf L`), a
+    // later store of the same bytes; the engine joins the two stores, as with nothing between them
+    {
+        const ModulePin kModules[] = {
+            { "A5-137 (b) grammar 2 seed 7001880 shrunk",
+              "2F86 2F96 2FA6 2FB6 2FD6 0D2A 6843 6953 6A63 6B73 4D2A 6DF6 6BF6 6AF6 69F6 68F6 000B 0009 7FD0 62F3 7230 E103 2216 4110 8BFC E200 D602 2612 D302 7F30 "
+              "432B 0009 2600 208C 0600 9048 7FF0 62F3 7210 E103 2216 4110 8BFC E200 2612 7F10 000B 0009",
+              "0/0/24,24/24/40,48/48/60", nullptr, "0,0,0", "181000,181000,101000", "0,2,8" },
+            { "A5-137 (b) grammar 2 seed 7401819 shrunk", "7FFC D707 471B 62F3 7204 E101 2216 4110 8BFC E200 2711 604C 7F04 000B 0009 0009 2600 2288", "0/0/1e",
+              nullptr, "1", "0", "20000" } };
+        for (const ModulePin& m : kModules)
+        {
+            const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+            std::printf("pin '%s': %zu finding(s), frame between %d\n", m.name, rep.findings.size(), count(rep, "order.folded-store.frame-between"));
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(rep.findings.empty() && count(rep, "order.folded-store.frame-between") > 0);
+        }
+    }
+}
+
 void TestA3RoutedPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -17592,6 +17805,7 @@ void TestGenerated()
         RUN(TestA5126Pins(d));
         RUN(TestA5129Pins(d));
         RUN(TestRouted345Pins(d));
+        RUN(TestA5FoldedPins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
