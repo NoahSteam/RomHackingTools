@@ -1,5 +1,7 @@
 # RomHackingTools
 
+> **⬇ [Download Saturn Explorer for Windows and macOS](https://github.com/NoahSteam/RomHackingTools/releases/latest)** (latest release)
+
 A collection of tools for reverse-engineering and translating Sega Saturn games —
 including project-specific tooling (Sakura Taisen, Dragon Force, Slayers Royal, …) and
 general-purpose utilities.
