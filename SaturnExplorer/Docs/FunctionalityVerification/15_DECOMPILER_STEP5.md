@@ -19922,3 +19922,70 @@ No area 3 class (no `endless-*`, `kept-read`, `lent.*`). Not triaged here; route
 ### Runs (after the last code edit, read by the coordinator)
 
 ctest 117 of 117; fault matrix 0 of 94 failed; printed-C agrees=5196; the 20k matrix in four runs of 5,000 seeds, failing seeds=0; findings=0 each; the sweep above re-run after the block-kind guard, the same 4 and 4 seeds (grammar 1: 5 findings, grammar 2: 14), none area 3's; corpus with lending: missing and said 0 (hwram007) and 4 (hwram008), "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)", all passed. Both lints pass.
+## Area 7, round 14
+
+Fixer, branch `review/7-round14` from master `00dccb11` (patches to 0090; no engine patch: 0091 stays free). The worktree's RelWithDebInfo build (`-j2` and `-j3`, every binary under `ulimit -v 6000000`). Nine rows filed and fixed: **A7-115 to A7-123**, all P3, for the five seeds the area 5 review round routed (grammar 1 6201923, 6202214, 6206050, 6209595; grammar 2 6205642), and the `map-*` findings of fresh ranges (grammar 1 and 2 over 6,600,001 to 6,610,000; grammar 1 specials over 6,700,001 to 6,705,000), and one more (6609800) that only the rerun of those ranges, with the first fixes in, showed. **Two are the product's (A7-116, A7-117) and seven the oracle's** (A7-115, A7-118 to A7-123). Changes are in `Sh2Decompiler.cpp` (`MarkMaterialisedReads`, `FlowValueMayBe`) and `MappingOracle.h`; generator productions untouched. The oracle's new rules read `SE_A7_RULE_OFF=<row,row>` (`A7RuleOff`), so a fixture can show with one binary that its rule is what passes it (the product never reads it).
+
+### The routed seeds, replayed on master
+
+All five reproduced as listed (`SE_GENERATED_SEED=<s>`, `SE_GENERATED_CANARY=0`):
+
+| Seed | Class | Row |
+|---|---|---|
+| 6201923 (grammar 1) | `v:` and `n:map-const-join`: `xVar1 = 0x40000000;` at `rotcl r3` | A7-115 |
+| 6202214 (grammar 1) | `n:map-way-back`: a copy of `(char)puVar6` offered before the store's own line | A7-116 |
+| 6206050 (grammar 1) | `n:map-copy-store`: `cRam2600200c = xRam26001016;` | A7-117 |
+| 6209595 (grammar 1) | `v:map-store-value`: `uRam2600306c = param_2;` | A7-118 |
+| 6205642 (grammar 2) | `n:map-way-back`: `uRam260021c0 = (int4)iStack_14;` | A7-119 |
+
+### Fresh ranges, on master's binary before any change
+
+`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`, one run at a time:
+
+| Run | Failing | Classes |
+|---|---|---|
+| grammar 1, 6,600,001 to 6,610,000 | 4: 6601665, 6602319, 6603025, 6605001 | map: `v:map-store-value` (6601665), `n:map-store-value` (6603025); order: `v:folded-store-after-access` (6602319), `n:` and `v:read-after-folded-store` (6605001) |
+| grammar 2, 6,600,001 to 6,610,000 | 3: 6604995, 6605587, 6607443 | map: `n:map-const-join` (6604995, 6605587); order: `v:folded-read-after-access` (6607443) |
+| grammar 1 specials, 6,700,001 to 6,705,000 | 4: 6700393, 6702443, 6702976, 6703972 | map: `v:map-way-back` (6700393), `n:map-way-back` (6702976); order: `v:read-after-folded-store` (6702443), `n:folded-read-after-access` (6703972) |
+
+No `endless-*` finding in any of them.
+
+### Rows
+
+| Row | Whose | Cause | Fix |
+|---|---|---|---|
+| A7-115 | oracle | `TBefore` (T before an instruction) took the fall-through instruction of a `bf` that always branches for a path: `cmp/pl r3 ; bf L ; cmp/hi r2,r1 ; L: rotcl r3`, r3 negative, the `cmp/hi` never run, so T was unknown and `rotcl`'s 0x40000000 was no number the oracle knew | `TBefore` passes an edge `EdgeImpossible` says is never taken |
+| A7-116 | product | `cRam2600200c = (char)puVar6;` (the byte store after a loop) shares the SUBPIECE `(char)puVar6` with the loop's store `mov.b r1,@r4` of `neg r4,r1`; the line draws that store's instruction and nothing marked it a copy, so the way back from the store offered this line before its own `*puVar6 = -(char)puVar6;` | `MarkMaterialisedReads` also takes a SUBPIECE of a register source (not memory: A7-57's and A7-78's), marked only on a line that is already a copy materialised elsewhere (A7-25's marks) and when another line that is no plain copy draws the instruction. Without the "already materialised" condition 20,000-seed seeds 2018, 4347, 7989 and 13449 fail (`SMPC_OREG16 = (char)iVar2;` at its own store keeps the piece's instruction first); without "register source" the A7-78 pin (seed 902) fails; both found by the first full run and fixed before this record |
+| A7-117 | product | `uRam2600200c = uRam26001016;`, the engine's copy of the byte a loop store wrote, stored by `mov.b r1,@r6` after `xor r3,r1` with r3 0 after a `dt` loop: `FlowIdentitySources` gave up at the `xor` (one of the paths into the join goes round a cycle, the build exceeds its depth), so no store was named, and the line stayed drawn at the `rotcl` that made r1 | `FlowValueMayBe` goes through `xor`, `or`, `add`, `sub` of a known 0 (`FlowNumberBefore`) to the other input, and, at a computed register a flow store stored into the memory the statement reads, answers "shows" |
+| A7-118 | oracle | the fall-through past the slot of a `bf/s` was taken for never run (the `bf/s` always branches), though a `bra` enters the slot too and runs on past it: the one path left gave r3 0x5d (6601665) or r5 0x62 (6209595) | `EdgeImpossible` and `RegisterBefore` keep the slot's fall-through when a branch of its own enters the slot |
+| A7-119 | oracle | `uRam260021c0 = (int4)iStack_14;` draws `iStack_14` at the load `mov.w @r14,r3` that reads the local, naming the store of r3; the `if` reads it too. A7-79's `readHere` knew a global only | `readHere` takes a frame local read at its load |
+| A7-120 | oracle | `uRam26002000 = (uint4)param_2;` of a `uint2` parameter names the byte store of 0 over the word's high byte beside the word store of `extu.w r5,r1`; the oracle took 0 for another value than the parameter's | a store of 0 over only the bytes the zero extension of a narrow unsigned parameter makes 0 shows it |
+| A7-121 | oracle | `param_1 = 0xffffffff;` at `xor r4,r1`, r1 = `not r4,r1` | `WrittenValue`: `xor` of a register and its complement (every maker a `not`, the other register made by the same instructions at both) is all ones |
+| A7-122 | oracle | `xVar1 = 0;` at `extu.w r3,r1`, r3 the copy of r5 that `xor r5,r3` made 0 after `tst r3,r3 ; bf L` over a `tas.b`: the condition's 0 on the fall-through and the parameter on the branch did not join, and a `bf` to the next instruction gave a fact | a number a condition gives joins with the parameter (as `byCondition`'s consumers take it); no fact from a `bf` to the next instruction |
+| A7-123 | oracle | seed 6609800 (found in the rerun of the range): `movt r1` after a `bf/s` whose slot is `cmp/hi r1,r1`, which always falls through: `TBefore` took the slot for one that leaves T (`SetsT` lists only what `TSetBy` does not evaluate) and gave the edge's 1 for the compare's 0; the shrunk program fails on master too, the whole seed only with the other fixes in (A7-122's join) | the slot rule asks `TSetBy` (-2) too; a compare of a register with itself is known |
+
+6209595's finding turned out to be A7-118's, not a rule of its own (a first rule, "the parameter's variable is the number the text assigns it", was written and taken out again: a mutation run showed the fixture did not need it).
+
+### Fixtures and mutation
+
+`TestArea7Round14` (inside `SaturnExplorerSh2DecompilerTests`, so the ctest count is unchanged at 117) holds one fixture per row (A7-118 two), each the shrunk program of its seed: the audit passes on the result; a damaged control puts the finding back (the number or cast changed, the tokens redrawn at the old instruction, the `materialised` flag cleared); and for each oracle row the same audit with `SE_A7_RULE_OFF=<row>` finds the violation again. `TestArea7Round14Pins` (`Sh2GeneratedTests.cpp`) pins the twelve whole seeds, specials included, to no `map-*` finding. Product mutation: with A7-116's and A7-117's code switched off (`false &&`) in one build, the A7-116 fixture fails twice (the way back's first line, the audit) and the A7-117 fixture twice (the token, the audit); restored before the runs.
+
+### Runs
+
+All after the last code edit (the A7-123 commit; the record and ledger changed after it only in the fresh-range cell), with that build:
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` with Live | **117 of 117** passed |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (pieces of 5,000, canary in the first) | **0 failing seeds**, 0 findings in each |
+| default run, grammar 1 and grammar 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds each |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus (`a7_round2/corpus.sh`, lent, token dump) | both images "all passed", every mapping violation 0; lent 474 (645) of 999 and 724 (975) of 1,543; missing and said 0 and 4 |
+| fresh ranges again (6,600,001 grammar 1 and 2, 6,700,001 specials) | grammar 1: 2 failing seeds (6602319, 6605001), grammar 2: 1 (6607443), specials: 2 (6702443, 6703972): **only the area 5 order classes remain, no `map-*` and no `endless-*` finding** |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint` ok (no vendored file touched) |
+
+### Routed
+
+* **Area 5** (order classes, found in the fresh ranges on master's binary and untouched here): `folded-store-after-access` grammar 1 6602319; `read-after-folded-store` grammar 1 6605001 and specials 6702443; `folded-read-after-access` grammar 2 6607443 and specials 6703972. No area 5 ledger row was opened here (area 5 owns the numbering).
+* **Area 3**: nothing (no `endless-*` finding in the three ranges).

@@ -16249,6 +16249,30 @@ void TestArea7Round13Pins(Sh2Decompiler& d)
     gSpecialReads = savedSpecials;
 }
 
+// Area 7 round 14 (A7-115 to A7-122): the seeds the area 5 review round routed (6201923, 6202214, 6205642, 6206050, 6209595) and the
+// `map-*` findings of the round's fresh ranges (6,600,001 and 6,700,001 (specials)), each a whole-seed pin: no `map-*` finding.
+void TestArea7Round14Pins(Sh2Decompiler& d)
+{
+    struct Pin
+    {
+        int grammar;
+        int seed;
+        bool specials;
+    };
+    const bool savedSpecials = gSpecialReads;
+    for (const Pin& s : { Pin{ 1, 6201923, false }, Pin{ 1, 6202214, false }, Pin{ 1, 6206050, false }, Pin{ 1, 6209595, false }, Pin{ 2, 6205642, false },
+                          Pin{ 1, 6601665, false }, Pin{ 1, 6603025, false }, Pin{ 2, 6604995, false }, Pin{ 2, 6605587, false }, Pin{ 1, 6700393, true },
+                          Pin{ 1, 6702976, true }, Pin{ 1, 6609800, false } })
+    {
+        gSpecialReads = s.specials;
+        const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(s.seed) : Generate(s.seed), true);
+        std::printf("pin 'area 7 round 14: grammar %d seed %d%s': %zu finding(s)\n", s.grammar, s.seed, s.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        for (const Finding& f : rep.findings) CHECK(f.sig.find("map-") == std::string::npos);
+    }
+    gSpecialReads = savedSpecials;
+}
+
 // ---- A5-114 to A5-118 (patch 0090): a hardware access is a barrier no read or write of ordinary memory is moved, merged or dropped across ----
 // The area 5 review round's fixtures (A5-114 to A5-117, Sh2DecompilerTests' TestArea5Review), the coordinator's A5-118 (a whole overwrite of a
 // global across a DMA enable), and the seeds that failed on master 43e945b2 with `folded-store-after-access`. Each module pin passes with the
@@ -17115,6 +17139,7 @@ void TestGenerated()
         RUN(TestA3RoutedPins(d));
         RUN(TestArea7Round12Pins(d));
         RUN(TestArea7Round13Pins(d));
+        RUN(TestArea7Round14Pins(d));
         RUN(TestA5114Pins(d));
         RUN(TestA5119Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));

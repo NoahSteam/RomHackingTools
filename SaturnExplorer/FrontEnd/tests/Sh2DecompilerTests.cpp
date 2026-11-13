@@ -3376,6 +3376,221 @@ void TestArea7Round13()
     }
 }
 
+// Area 7 round 14 (A7-115 to A7-123): the seeds the area 5 review round routed (grammar 1 6201923, 6202214, 6206050, 6209595, grammar 2
+// 6205642) and the `map-*` findings of the fresh ranges (6,600,001 and 6,700,001, specials). Each fixture is the shrunk program, the audit
+// of its result (0 violations), a damaged control (the text or the tokens put back as the finding had them), and, for an oracle rule, the
+// mutation run: the same audit with the rule switched off (SE_A7_RULE_OFF) finds the violation again.
+void TestArea7Round14()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto run = [&](const std::vector<uint16_t>& w, uint32_t entry) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        const auto snap = MakeSnapshot(hw);
+        return d.Decompile(snap, Request(entry));
+    };
+    const auto changed = [](const DecompileResult& r, const std::string& from, const std::string& to, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+        {
+            const size_t at = l.text.find(from);
+            if (at == std::string::npos) continue;
+            l.text.replace(at, from.size(), to);
+            ++n;
+        }
+        return x;
+    };
+    const auto tokenAt = [](const DecompileResult& r, const char* what, uint32_t insn) {
+        const Line* l = LineWith(r, what);
+        if (!l) return false;
+        for (const Token& t : l->tokens)
+            if (t.addr == insn) return true;
+        return false;
+    };
+    const auto ruleOff = [](const char* rows) {
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", rows ? rows : "");
+#else
+        if (rows) setenv("SE_A7_RULE_OFF", rows, 1);
+        else unsetenv("SE_A7_RULE_OFF");
+#endif
+    };
+    // the mutation run: the audit of `r` with row `row`'s rule off
+    const auto mutated = [&](const DecompileResult& r, const char* row, const char* name) {
+        ruleOff(row);
+        const int v = dts::AuditMapping(r, word, name).Violations();
+        ruleOff(nullptr);
+        return v;
+    };
+    // A7-115 (oracle) T through the fall-through of a `bf` that always branches: `cmp/pl r3` of a negative number, `bf L ; cmp/hi r2,r1 ;
+    // L: rotcl r3` runs with T 0 only, so `rotcl` makes 0x40000000 (grammar 1 seed 6201923)
+    {
+        const std::vector<uint16_t> w = { 0xD307, 0x263B, 0x4315, 0x8B00, 0x3126, 0x4324, 0x2558, 0x8904, 0xD704, 0x6072,
+                                          0xC801, 0x8BFC, 0x7368, 0x2632, 0x000B, 0x0009, 0xA000, 0x0000, 0x2600, 0x1004 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-115 T through the fall-through of a bf that always branches (grammar 1 seed 6201923)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar1 = 0x40000000;") != nullptr && tokenAt(r, "xVar1 = 0x40000000;", 0x0600900Au));
+        CHECK(dts::AuditMapping(r, word, "a7_115_6201923").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar1 = 0x40000000;", "xVar1 = 0x40000001;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_115_6201923 other").Violations() >= 1);
+        CHECK(mutated(r, "115", "a7_115_6201923 mutated") >= 1);
+    }
+    // A7-116 (product) the low byte of a register a store of its own stores and a later narrow store shares (`(char)param_1`, the piece of
+    // `neg r4,r1`'s byte store and of `mov.b r4,@r6`): the copy `cRam2600200c = (char)param_1;` is drawn at the first store and marked a copy
+    // materialised there, so the way back from `mov.b r1,@r4` offers that store's own line first (grammar 1 seed 6202214; specials 6700393, 6702976)
+    {
+        const std::vector<uint16_t> w = { 0xD606, 0x614B, 0xD706, 0x2410, 0x6071, 0xC801, 0x8BFB, 0x2640, 0xB008, 0x0009,
+                                          0x63F6, 0x432A, 0x000B, 0x0009, 0x2600, 0x200C, 0x05D0, 0x0012, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-116 a copy of an input's low byte shared with the store before it (grammar 1 seed 6202214)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* copy = "cRam2600200c = (char)param_1;";
+        CHECK(LineWith(r, copy) != nullptr && tokenAt(r, copy, 0x06009006u));
+        const LineLookup at = LineForInstruction(r, 0x06009006u);
+        CHECK(at.kind == LineLookup::Exact && !at.lines.empty() && r.lines[at.lines[0]].text.find("*param_1 = ") != std::string::npos);
+        CHECK(dts::AuditMapping(r, word, "a7_116_6202214").Violations() == 0);
+        DecompileResult before = r;
+        int n = 0;
+        for (Line& l : before.lines)
+            if (l.text.find(copy) != std::string::npos)
+            {
+                for (Token& t : l.tokens) t.materialised = false;
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_116_6202214 before").Violations() >= 1);
+    }
+    // A7-117 (product) a copy of the byte a store before it wrote (`uRam2600200c = uRam26001016;`), r1 kept by `xor r3,r1` with r3 0 after a
+    // `dt` loop and stored into the memory the line reads: the line is the store after the `xor`'s, which it names (grammar 1 seed 6206050)
+    {
+        const std::vector<uint16_t> w = { 0xD70B, 0x8803, 0x8B00, 0xD60B, 0x8800, 0x8D00, 0x4104, 0xD60A, 0xE301, 0xE006, 0x0714, 0x4310, 0x8BFB, 0x213A, 0x2258,
+                                          0x8904, 0x3120, 0x8D00, 0x2610, 0x000B, 0x0009, 0xAFFB, 0x0009, 0x0009, 0x2600, 0x1010, 0x0DD0, 0x004C, 0x2600, 0x200C };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-117 a copy of a byte whose register a xor of 0 keeps (grammar 1 seed 6206050)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "uRam2600200c = uRam26001016;";
+        CHECK(LineWith(r, line) != nullptr && tokenAt(r, line, 0x06009024u));
+        CHECK(dts::AuditMapping(r, word, "a7_117_6206050").Violations() == 0);
+        DecompileResult before = r;
+        int n = 0;
+        for (Line& l : before.lines)
+            if (l.text.find(line) != std::string::npos)
+            {
+                std::vector<Token> kept;
+                for (const Token& t : l.tokens)
+                    if (t.begin < t.end) kept.push_back(t);
+                for (Token& t : kept) t.addr = 0x0600900Cu;
+                l.tokens = kept;
+                l.firstAddr = 0x0600900Cu;
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_117_6206050 before").Violations() >= 1);
+    }
+    // A7-119 (oracle) a frame local the line reads, drawn at the load that reads it: `(int4)iStack_14` at `mov.w @r14,r3`, the copy the store
+    // after the load stores, is that load's own statement beside the `if` that reads it too (grammar 2 seed 6205642)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x4F22, 0x6843, 0x6953, 0x6043, 0x4F26, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x2FE6, 0x7FF0, 0x6EF3,
+                                          0xD306, 0x253A, 0x63E1, 0xD606, 0x3350, 0x8B01, 0x163F, 0xD705, 0x7E10, 0x6FE3, 0x6EF6, 0x000B, 0x0009, 0x0009,
+                                          0xE000, 0x0000, 0x2600, 0x2184, 0x25F8, 0x0078 };
+        const DecompileResult r = run(w, 0x06009016u);
+        Print("A7-119 a frame local read at its load (grammar 2 seed 6205642)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uRam260021c0 = (int4)iStack_14;") != nullptr && tokenAt(r, "uRam260021c0 = (int4)iStack_14;", 0x06009020u));
+        CHECK(dts::AuditMapping(r, word, "a7_119_6205642").Violations() == 0);
+        CHECK(mutated(r, "119", "a7_119_6205642 mutated") >= 1);
+    }
+    // A7-120 (oracle) a narrow unsigned parameter extended to a word: the byte store of 0 over the word's high byte writes bytes the extension
+    // makes 0 (`(uint4)param_2` of a `uint2`; grammar 1 seed 6603025)
+    {
+        const std::vector<uint16_t> w = { 0xD602, 0x615D, 0x2612, 0x2660, 0x000B, 0x0009, 0x2600, 0x2000 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-120 the byte store over the zero extension of a narrow parameter (grammar 1 seed 6603025)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uRam26002000 = (uint4)param_2;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_120_6603025").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "(uint4)param_2", "(uint2)param_2", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_120_6603025 other").Violations() >= 1);
+        CHECK(mutated(r, "120", "a7_120_6603025 mutated") >= 1);
+    }
+    // A7-118 (oracle) the code after the slot of a `bf/s` a `bra` enters too is reached by that way: `xRam06003064 = 0;` stores r3 0 on the
+    // one path the engine keeps (the slot's `mov.w r3,@r6` run by the `bra`, then `tst r5,r5 ; bt`), not 0x5d of the path the `bf/s` never
+    // takes (grammar 1 seed 6601665)
+    {
+        const std::vector<uint16_t> w = { 0xE301, 0xE006, 0x027D, 0x4310, 0x8BFB, 0xC840, 0x8901, 0xE000, 0x015D, 0x2558, 0x890F, 0x8801, 0x8F0B, 0x2631, 0xD607, 0x2558,
+                                          0x8904, 0xD707, 0x6071, 0xC801, 0x8BFC, 0xE35D, 0x2632, 0x000B, 0x0009, 0x000B, 0x0009, 0xAFF0, 0x0009, 0x0009, 0x0600, 0x3064,
+                                          0x2600, 0x1024 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-118 the fall-through past a slot a bra enters too (grammar 1 seed 6601665)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam06003064 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_118_6601665").Violations() == 0);
+        CHECK(mutated(r, "118", "a7_118_6601665 mutated") >= 1);
+        // (grammar 1 seed 6209595, the same cause: `bf L` to `L: bra M` into the slot of a `bt/s`, and `if (param_1 != 0) param_2 = 0x62;`
+        // before `uRam2600306c = param_2;`: r5 is 0x62 on every run the words give, which the oracle took for another value than the line's)
+        const std::vector<uint16_t> w2 = { 0xD609, 0xE000, 0x0405, 0x2548, 0x8B0B, 0xC808, 0x8D07, 0x2622, 0xD606, 0x2448, 0x8900, 0xE562,
+                                           0x2652, 0x000B, 0x0009, 0x000B, 0x0009, 0xAFF4, 0x0009, 0x0009, 0x2600, 0x1034, 0x2600, 0x306C };
+        const DecompileResult r2 = run(w2, 0x06009000u);
+        CHECK(r2.status == DecompileStatus::Ok);
+        CHECK(LineWith(r2, "uRam2600306c = param_2;") != nullptr && LineWith(r2, "param_2 = 0x62;") != nullptr);
+        CHECK(dts::AuditMapping(r2, word, "a7_118_6209595").Violations() == 0);
+        CHECK(mutated(r2, "118", "a7_118_6209595 mutated") >= 1);
+    }
+    // A7-121 (oracle) `xor r4,r1` of r1 = `not r4` is all ones: `param_1 = 0xffffffff;` (grammar 2 seed 6604995)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x4F22, 0x6843, 0x6953, 0x6A63, 0x6B73, 0x4F26, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009,
+                                          0x7FF4, 0x6147, 0x4615, 0x8B01, 0xA003, 0x0009, 0x214A, 0xA000, 0x0009, 0x6050, 0x7F0C, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009020u);
+        Print("A7-121 a register xor its complement (grammar 2 seed 6604995)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "param_1 = 0xffffffff;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_121_6604995").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "param_1 = 0xffffffff;", "param_1 = 0xfffffffe;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_121_6604995 other").Violations() >= 1);
+        CHECK(mutated(r, "121", "a7_121_6604995 mutated") >= 1);
+    }
+    // A7-122 (oracle) `xor r5,r3` of r3 the copy of r5 is 0 when a `tst r3,r3 ; bf L` over a `tas.b` gives r3 0 on its fall-through: the
+    // number a condition gives is what the parameter holds there too (grammar 2 seed 6605587)
+    {
+        const std::vector<uint16_t> w = { 0x000B, 0x0009, 0x4515, 0x8D00, 0x6353, 0x2338, 0x8B00, 0x441B, 0x235A, 0xE104, 0x3516, 0x8913, 0x4508, 0xC702, 0x015E, 0x412B,
+                                          0x0009, 0x0009, 0x0600, 0x9038, 0x0600, 0x903C, 0x0600, 0x903C, 0x0600, 0x903C, 0x0600, 0x9040, 0xA003, 0x0009, 0xA001, 0x0009,
+                                          0x613D, 0x6063, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009004u);
+        Print("A7-122 a number a condition gives joined with the parameter it is (grammar 2 seed 6605587)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar1 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_122_6605587").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar1 = 0;", "xVar1 = 1;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_122_6605587 other").Violations() >= 1);
+        CHECK(mutated(r, "122", "a7_122_6605587 mutated") >= 1);
+    }
+    // A7-123 (oracle) the slot of a `bf/s` that sets T itself (`cmp/hi r1,r1`, always 0) is not one that leaves T: `movt r1` after the `bf/s`
+    // that always falls through is the slot's T, 0, not the edge's 1 (grammar 1 seed 6609800; the shrunk program fails on master too)
+    {
+        const std::vector<uint16_t> w = { 0xE301, 0x4310, 0x8BFD, 0x2328, 0x8F01, 0x3116, 0x0129, 0xD604, 0xD704, 0x6071,
+                                          0xC801, 0x8BFC, 0x2610, 0x000B, 0x0009, 0x0009, 0x0600, 0x2084, 0x2600, 0x1030 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-123 a slot that sets T beside a bf/s (grammar 1 seed 6609800)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam06002084 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_123_6609800").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xRam06002084 = 0;", "xRam06002084 = 1;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_123_6609800 other").Violations() >= 1);
+        CHECK(mutated(r, "123", "a7_123_6609800 mutated") >= 1);
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -18292,6 +18507,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round11());
         RUN(TestArea7Round12());
         RUN(TestArea7Round13());
+        RUN(TestArea7Round14());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());

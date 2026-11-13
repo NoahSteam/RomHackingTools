@@ -403,6 +403,15 @@ struct WordValue
     bool byCondition = false;   // (A7-34: a number a branch's condition gives on the path, which a parameter may equal there)
     bool operator==(const WordValue& o) const { return kind == o.kind && value == o.value; }
 };
+// Area 7 round 14: a rule of this round's oracle fixes, switched off by SE_A7_RULE_OFF=<row numbers, comma separated> -- for the mutation
+// runs that show each fixture judges its rule (the product never reads it, and an unset variable leaves every rule on).
+inline bool A7RuleOff(int row)
+{
+    const char* v = std::getenv("SE_A7_RULE_OFF");
+    if (!v) return false;
+    const std::string list = std::string(",") + v + ",";
+    return list.find("," + std::to_string(row) + ",") != std::string::npos;
+}
 // The register an instruction stores, and how many bytes; -1 when it is no store of a register.
 inline int StoredRegister(uint16_t w, int& size)
 {
@@ -556,7 +565,11 @@ inline bool EdgeImpossible(const sfe::decomp::DecompileResult& r, const std::fun
     if (r.InBody(p - 2) && word(p - 2, bw) && ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F))
     {
         const sfe::DisassembledInstruction br = sfe::Sh2Decode(p - 2, bw);
-        if (br.IsValid && br.BranchTarget != p + 2 && (p + 2 == a || br.BranchTarget == a))
+        // (A7-118: the code after the slot is entered by another way when a branch of its own enters the slot -- `bra L` to the slot of
+        // a `bf/s`, which runs on past it whatever the `bf/s`'s T says; grammar 1 seed 6601665)
+        const auto slotEntered = into.find(p);
+        const bool enteredElsewhere = !A7RuleOff(118) && p + 2 == a && slotEntered != into.end() && !slotEntered->second.empty();
+        if (br.IsValid && br.BranchTarget != p + 2 && (p + 2 == a || br.BranchTarget == a) && !enteredElsewhere)
         {
             const int t = TBefore(r, word, into, p - 2, depth + 1);
             const bool taken = p + 2 != a;
@@ -777,7 +790,20 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
     std::vector<std::pair<uint32_t, int>> todo = { { at, reg } };
     int steps = 0;
     const auto give = [&](const WordValue& v) {
-        if (v.kind == WordValue::Unknown || (any && !(v == result))) return false;
+        if (v.kind == WordValue::Unknown) return false;
+        if (any && !(v == result))
+        {
+            // (A7-122: a number a branch's condition gives is what a parameter holds there too, as the consumers of `byCondition` take it:
+            // `tst r3,r3 ; bf L` over a `tas.b`, r3 the copy of r5 -- 0 on the fall-through, r5 on the branch; grammar 2 seed 6605587)
+            if (A7RuleOff(122)) return false;
+            if (v.kind == WordValue::Number && v.byCondition && result.kind == WordValue::Param) return true;
+            if (result.kind == WordValue::Number && result.byCondition && v.kind == WordValue::Param)
+            {
+                result = v;
+                return true;
+            }
+            return false;
+        }
         result = v;
         any = true;
         return true;
@@ -825,7 +851,9 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
                 uint16_t bw = 0;
                 sfe::DisassembledInstruction br;
                 if (depth < 6 && r.InBody(p - 2) && word(p - 2, bw) && ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F) && decode(p - 2, br) &&
-                    br.BranchTarget != p + 2 && (p + 2 == a || br.BranchTarget == a))
+                    br.BranchTarget != p + 2 && (p + 2 == a || br.BranchTarget == a) &&
+                    // (A7-118: not the fall-through past a slot a branch of its own enters too)
+                    !(!A7RuleOff(118) && p + 2 == a && into.find(p) != into.end() && !into.find(p)->second.empty()))
                 {
                     const int t = TBefore(r, word, into, p - 2, depth + 1);
                     const bool taken = p + 2 != a;
@@ -842,7 +870,8 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
             // L` (or `tst rN,rN`) branches, only when rN is 0; `cmp/eq #imm,r0` likewise with the number (as the engine's conditional
             // constants know)
             {
-                const bool fallsThrough = (w >> 8) == 0x8B && p + 2 == a, branches = (w >> 8) == 0x89 && p + 2 != a;
+                // (A7-122: not a `bf` to the next instruction, which goes there on either T; grammar 2 seed 6605587)
+                const bool fallsThrough = (w >> 8) == 0x8B && p + 2 == a && (A7RuleOff(122) || d.BranchTarget != p + 2), branches = (w >> 8) == 0x89 && p + 2 != a;
                 uint16_t cw = 0;
                 if ((fallsThrough || branches) && r.InBody(p - 2) && word(p - 2, cw))
                 {
@@ -961,6 +990,8 @@ inline int TSetBy(const sfe::decomp::DecompileResult& r, const std::function<boo
     if (hi == 0x3 && (lo == 0x0 || lo == 0x2 || lo == 0x3 || lo == 0x6 || lo == 0x7))
     {
         if (lo == 0x0 && n == m) return 1;
+        // (A7-123: a compare of a register with itself: equal, so `hs` and `ge` are 1 and `hi` and `gt` 0)
+        if (n == m) return lo == 0x2 || lo == 0x3 ? 1 : 0;
         if (!value(n, a) || !value(m, b)) return -1;
         switch (lo)
         {
@@ -1083,6 +1114,9 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
         {
             sfe::DisassembledInstruction d;
             uint16_t w = 0;
+            // (A7-115: an edge that is never taken, the fall-through of a `bf` that T says always branches, gives T nothing: `cmp/pl r3 ;
+            // bf L ; cmp/hi r2,r1 ; L: rotcl r3` with r3 negative is run with T 0 only; grammar 1 seed 6201923)
+            if (!A7RuleOff(115) && depth < 6 && EdgeImpossible(r, word, into, p, a, depth + 1)) continue;
             if (!decode(p, d) || !word(p, w) || d.IsCall || d.Mnemonic == "rte") return -1;
             if ((w >> 8) == 0x89 || (w >> 8) == 0x8B)
             {
@@ -1104,7 +1138,10 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
             // triage of grammar 2 seed 1804151: `tst r1,r1 ; bt/s L ; mov.l r1,@(0x18,r6) ; sett ; L: movt r2` puts 1 in r2 either way)
             uint16_t bw = 0;
             sfe::DisassembledInstruction b;
-            if (!SetsT(w) && decode(p - 2, b) && word(p - 2, bw) && ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F) && b.BranchTarget != p + 2)
+            // (A7-123: a slot that sets T from what the words give -- `cmp/hi r1,r1`, a compare, a `tst` -- is not one that leaves it; SetsT
+            // lists only the instructions TSetBy does not evaluate; grammar 1 seed 6609800)
+            if (!SetsT(w) && (A7RuleOff(123) || TSetBy(r, word, into, p, w, depth + 1) == -2) && decode(p - 2, b) && word(p - 2, bw) &&
+                ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F) && b.BranchTarget != p + 2)
             {
                 const int t = TBefore(r, word, into, p - 2, depth + 1);
                 const bool taken = p + 2 != a;
@@ -1125,6 +1162,9 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
     }
     return any ? result : -1;
 }
+inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                           const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, std::set<uint32_t>& makers,
+                           bool throughUpdate = false, std::set<int>* entryRegs = nullptr);
 inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                               const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int reg, int depth)
 {
@@ -1189,6 +1229,22 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
         {
             const WordValue pn = before(n), pm = before(m);
             if (pn.kind == WordValue::Param && pm.kind == WordValue::Param && pn.value == pm.value) return NumberValue(0);
+            // (A7-121: `xor Rm,Rn` of a register and its complement -- every maker of Rn a `not Rm,Rn` and Rm made by the same
+            // instructions at both -- is all ones; grammar 2 seed 6604995)
+            const auto complementOf = [&](int holder, int other) {
+                std::set<uint32_t> makers, there;
+                if (!RegisterMakers(r, word, into, p, holder, makers) || makers.empty() || makers.count(0) || !RegisterMakers(r, word, into, p, other, there)) return false;
+                for (uint32_t mk : makers)
+                {
+                    uint16_t mw = 0;
+                    std::set<uint32_t> atMaker;
+                    if (!word(mk, mw) || (mw & 0xF00F) != 0x6007 || static_cast<int>((mw >> 8) & 0xF) != holder || static_cast<int>((mw >> 4) & 0xF) != other ||
+                        !RegisterMakers(r, word, into, mk, other, atMaker) || atMaker != there)
+                        return false;
+                }
+                return true;
+            };
+            if (!A7RuleOff(121) && (complementOf(n, m) || complementOf(m, n))) return NumberValue(0xFFFFFFFFu);
         }
         // (an AND with a known 0 is 0 whatever the other is)
         if (lo == 0x9 && ((number(before(n), a) && a == 0) || (number(before(m), b) && b == 0))) return NumberValue(0);
@@ -1366,7 +1422,7 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
 // that stores `r0 - r5`)
 inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                            const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, std::set<uint32_t>& makers,
-                           bool throughUpdate = false, std::set<int>* entryRegs = nullptr)
+                           bool throughUpdate, std::set<int>* entryRegs)
 {
     const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
         uint16_t w = 0;
@@ -1794,6 +1850,26 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             for (const AccessFate& f : r.accessFates)
                                 readHere = readHere || (f.insn == t.addr && !f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
                         }
+                        // (A7-119: a frame local the line reads, `(int4)iStack_14` at the `mov.w @r14,r3` that loads it, is that load's own
+                        // statement as a global is: the copy of what the load read into the store after it; grammar 2 seed 6205642)
+                        const size_t sp = operand.find("Stack_");
+                        if (!A7RuleOff(119) && sp != std::string::npos && operand.find_first_not_of("abcdefghijklmnopqrstuvwxyz", 0) == sp)
+                        {
+                            uint32_t hexv = 0;
+                            size_t q = sp + 6, digits = 0;
+                            while (q < operand.size() && std::isxdigit(static_cast<unsigned char>(operand[q])) && digits < 8)
+                            {
+                                const char c = operand[q];
+                                hexv = hexv * 16 + static_cast<uint32_t>(c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10);
+                                ++q;
+                                ++digits;
+                            }
+                            uint32_t piece = 0;
+                            if (digits > 0 && operand.compare(q, 2, "._") == 0) piece = static_cast<uint32_t>(std::strtoul(operand.c_str() + q + 2, nullptr, 10));
+                            if (digits > 0)
+                                for (const AccessFate& f : r.accessFates)
+                                    readHere = readHere || (f.insn == t.addr && !f.write && f.frame && (0u - hexv + piece) - f.address < f.size);
+                        }
                     }
                     // (A7-78: the function's input drawn at its first instruction -- `in_r3` at the entry's pool load -- is where the engine
                     // keeps every input; it is no value materialised there; grammar 1 seed 3804173)
@@ -2124,7 +2200,39 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     }
                     const WordValue got = RegisterBefore(r, word, sources, store, reg);
                     if (got.kind == WordValue::Unknown) return false;
-                    if (shownValue.kind == WordValue::Param) return !(got == shownValue) && !(got.kind == WordValue::Number && got.byCondition);
+                    if (shownValue.kind == WordValue::Param)
+                    {
+                        if (got == shownValue || (got.kind == WordValue::Number && got.byCondition)) return false;
+                        // (A7-120: or the store writes only bytes the extension of a narrow unsigned parameter makes 0 -- `(uint4)param_2` of a
+                        // `uint2`, the byte store of 0 at the word's high byte -- and its bytes there are 0; grammar 1 seed 6603025)
+                        if (got.kind == WordValue::Number && cast && !A7RuleOff(120))
+                        {
+                            const int pw = DeclaredWidth(r, shownText);
+                            bool unsignedParam = false;
+                            for (const auto& sig : r.lines)
+                            {
+                                const size_t nm = sig.text.find(" " + shownText);
+                                if (nm == std::string::npos || nm + 1 + shownText.size() >= sig.text.size()) continue;
+                                const char after = sig.text[nm + 1 + shownText.size()];
+                                if (after != ',' && after != ')') continue;
+                                size_t b = nm;
+                                while (b > 0 && (std::isalnum(static_cast<unsigned char>(sig.text[b - 1])) || sig.text[b - 1] == '_')) --b;
+                                unsignedParam = b < nm && sig.text[b] == 'u';
+                                break;
+                            }
+                            const size_t open = text.find('(', text.find(" = "));
+                            const int vw = open != std::string::npos && text.find(')', open) == open + 6 && std::isdigit(static_cast<unsigned char>(text[open + 5])) ? text[open + 5] - '0' : 4;
+                            const int sh = std::min(std::max(storeShift[store], 0), size - 1);
+                            const int covered = std::min(size - sh, vw);
+                            if (unsignedParam && pw < vw && covered > 0 && covered <= vw - pw)
+                            {
+                                bool zero = true;
+                                for (int j = 0; j < covered; ++j) zero = zero && ((static_cast<uint64_t>(got.value) >> (8 * (size - 1 - (sh + j)))) & 0xFF) == 0;
+                                if (zero) return false;
+                            }
+                        }
+                        return true;
+                    }
                     if (shownValue.kind == WordValue::Number)
                     {
                         // (a parameter may be the number on the line's path: `param_4 == 0` tested before the store)
