@@ -1,15 +1,16 @@
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
-@@ -34,6 +34,7 @@
+@@ -34,6 +34,8 @@
   * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
   * Modified for SaturnExplorer: nor a copy of an earlier write of a global with an access between them (patches/0088-engine-global-piece-read-and-join-copy.patch).
   * Modified for SaturnExplorer: a LOAD is not printed past a write of a global (patches/0090-engine-hardware-access-orders-globals.patch).
 + * Modified for SaturnExplorer: nor past an op whose output a call's INDIRECT on a global takes (patches/0094-engine-forced-write-and-pushed-join.patch).
++ * Modified for SaturnExplorer: nor is a value made from a global's own word printed past a hardware access the code makes after the read (patches/0094-engine-forced-write-and-pushed-join.patch).
   */
  #include "coreaction.hh"
  #include "condexe.hh"
-@@ -3785,7 +3786,11 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
+@@ -3785,13 +3787,50 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
        if (global && other->code() == CPUI_COPY && other->getIn(0)->getAddr() == wvn->getAddr()) continue;
        for(list<PcodeOp *>::const_iterator diter=wvn->beginDescend();!global && diter!=wvn->endDescend();++diter) {
  	const Varnode *cvn = (*diter)->getOut();
@@ -22,6 +23,45 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra
        }
        if (!global) continue;
        for(int4 c=0;c<chain.size();++c)
+ 	if (chain[c]->getCover()->contain(other,2)) return false;
+     }
+   }
++  if (op->code() != CPUI_LOAD && op->code() != CPUI_MULTIEQUAL && op->code() != CPUI_INDIRECT) {
++    // SaturnExplorer (0094): a value made from a global's own word, a read of a global the engine folded, is printed where the implied
++    // chain it starts ends up being used, which is not before a hardware access the code made after the read: the access may change the
++    // global (a read made in a loop and used after two register reads printed `return CONCAT44(r,(int4)iRam2600210e);` after them, ledger A5-129)
++    bool readsGlobal = false;
++    for(i=0;i<op->numInput();++i) {
++      const Varnode *in = op->getIn(i);
++      if (in->isAddrTied() && !in->isVolatile() && in->getSpace()->getType() == IPTR_PROCESSOR) readsGlobal = true;
++    }
++    if (readsGlobal) {
++      vector<Varnode *> chain;
++      chain.push_back(vn);
++      for(Varnode *cur = vn;;) {
++	PcodeOp *use = cur->loneDescend();
++	if (use == (PcodeOp *)0) break;
++	Varnode *out = use->getOut();
++	if (out == (Varnode *)0 || !out->isImplied() || out->isExplicit()) break;
++	chain.push_back(out);
++	cur = out;
++      }
++      list<PcodeOp *>::const_iterator hiter = data.beginOp(CPUI_CALLOTHER);
++      list<PcodeOp *>::const_iterator hend = data.endOp(CPUI_CALLOTHER);
++      for(;hiter!=hend;++hiter) {
++	PcodeOp *other = *hiter;
++	if (other->isDead() || other->numInput() < 2 || !other->getIn(0)->isConstant()) continue;
++	const UserPcodeOp *uop = data.getArch()->userops.getOp((uint4)other->getIn(0)->getOffset());
++	if (uop == (const UserPcodeOp *)0) continue;
++	if (uop->getType() != UserPcodeOp::volatile_read && uop->getType() != UserPcodeOp::volatile_write) continue;
++	for(int4 c=0;c<chain.size();++c)
++	  if (chain[c]->getCover()->contain(other,2)) return false;
++      }
++    }
++  }
+   if (op->code() == CPUI_LOAD) { // Check for loads crossing stores
+     list<PcodeOp *>::const_iterator oiter,iterend;
+     iterend = data.endOp(CPUI_STORE);
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
