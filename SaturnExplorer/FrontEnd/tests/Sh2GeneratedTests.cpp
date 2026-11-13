@@ -16635,8 +16635,10 @@ void TestA5129Pins(Sh2Decompiler& d)
     const Shrunk kShrunk[] = {
         // 6602319: `mov.l r1,@r6` in the slot of a bt/s, a poll, a store of r5 (the text wraps `pxRam26002180 =` after the `=`); the mailbox is marked
         { "grammar 1 seed 6602319 shrunk", "2504 6148 D605 3540 8D00 2612 D704 6071 C801 8BFC 2652 000B 0009 0009 2600 2180 2600 1014", nullptr, nullptr },
-        // 6605001: mov.w r2,@g ; mov.b @(2,r4),r0 ; mov.l r0,@g, which a later store of r1 on every path overwrites (the text has a goto)
-        { "grammar 1 seed 6605001 shrunk", "D605 2621 8442 2602 2558 8901 2328 8D01 2612 8446 000B 0009 2600 2208", nullptr, "order.read-before-folded-store.dead" },
+        // 6605001: mov.w r2,@g ; mov.b @(2,r4),r0 ; mov.l r0,@g, which a later store of r1 on every path overwrites (the text has a goto).
+        // (No count: since A5-124's fix the mapping no longer names the dead store at 06009006 on the earlier store's line, so the
+        // A5-130 dead-store rule is not reached here; the pin keeps the text free of findings.)
+        { "grammar 1 seed 6605001 shrunk", "D605 2621 8442 2602 2558 8901 2328 8D01 2612 8446 000B 0009 2600 2208", nullptr, nullptr },
         // 6703972: a byte store, a word read, a half-word store whose text keeps the other half of the global (`CONCAT22((int2)xVar2,xRam26002204._2_2_)`)
         { "grammar 1 specials seed 6703972 shrunk", "2432 D607 2610 200A C840 8B00 6162 D705 E003 2702 2611 6072 C801 8BFB 000B 0009 2600 2204 2DA0 009C", "4:26003C08", nullptr },
         // 7200345: a read of the global in a dt loop, used after two register reads (0094: the read is made where the code makes it)
