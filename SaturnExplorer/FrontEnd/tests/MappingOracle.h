@@ -990,6 +990,8 @@ inline int TSetBy(const sfe::decomp::DecompileResult& r, const std::function<boo
     if (hi == 0x3 && (lo == 0x0 || lo == 0x2 || lo == 0x3 || lo == 0x6 || lo == 0x7))
     {
         if (lo == 0x0 && n == m) return 1;
+        // (A7-123: a compare of a register with itself: equal, so `hs` and `ge` are 1 and `hi` and `gt` 0)
+        if (n == m) return lo == 0x2 || lo == 0x3 ? 1 : 0;
         if (!value(n, a) || !value(m, b)) return -1;
         switch (lo)
         {
@@ -1136,7 +1138,10 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
             // triage of grammar 2 seed 1804151: `tst r1,r1 ; bt/s L ; mov.l r1,@(0x18,r6) ; sett ; L: movt r2` puts 1 in r2 either way)
             uint16_t bw = 0;
             sfe::DisassembledInstruction b;
-            if (!SetsT(w) && decode(p - 2, b) && word(p - 2, bw) && ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F) && b.BranchTarget != p + 2)
+            // (A7-123: a slot that sets T from what the words give -- `cmp/hi r1,r1`, a compare, a `tst` -- is not one that leaves it; SetsT
+            // lists only the instructions TSetBy does not evaluate; grammar 1 seed 6609800)
+            if (!SetsT(w) && (A7RuleOff(123) || TSetBy(r, word, into, p, w, depth + 1) == -2) && decode(p - 2, b) && word(p - 2, bw) &&
+                ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F) && b.BranchTarget != p + 2)
             {
                 const int t = TBefore(r, word, into, p - 2, depth + 1);
                 const bool taken = p + 2 != a;

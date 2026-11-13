@@ -3373,7 +3373,7 @@ void TestArea7Round13()
     }
 }
 
-// Area 7 round 14 (A7-115 to A7-122): the seeds the area 5 review round routed (grammar 1 6201923, 6202214, 6206050, 6209595, grammar 2
+// Area 7 round 14 (A7-115 to A7-123): the seeds the area 5 review round routed (grammar 1 6201923, 6202214, 6206050, 6209595, grammar 2
 // 6205642) and the `map-*` findings of the fresh ranges (6,600,001 and 6,700,001, specials). Each fixture is the shrunk program, the audit
 // of its result (0 violations), a damaged control (the text or the tokens put back as the finding had them), and, for an oracle rule, the
 // mutation run: the same audit with the rule switched off (SE_A7_RULE_OFF) finds the violation again.
@@ -3570,6 +3570,21 @@ void TestArea7Round14()
         const DecompileResult other = changed(r, "xVar1 = 0;", "xVar1 = 1;", n);
         CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_122_6605587 other").Violations() >= 1);
         CHECK(mutated(r, "122", "a7_122_6605587 mutated") >= 1);
+    }
+    // A7-123 (oracle) the slot of a `bf/s` that sets T itself (`cmp/hi r1,r1`, always 0) is not one that leaves T: `movt r1` after the `bf/s`
+    // that always falls through is the slot's T, 0, not the edge's 1 (grammar 1 seed 6609800; the shrunk program fails on master too)
+    {
+        const std::vector<uint16_t> w = { 0xE301, 0x4310, 0x8BFD, 0x2328, 0x8F01, 0x3116, 0x0129, 0xD604, 0xD704, 0x6071,
+                                          0xC801, 0x8BFC, 0x2610, 0x000B, 0x0009, 0x0009, 0x0600, 0x2084, 0x2600, 0x1030 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-123 a slot that sets T beside a bf/s (grammar 1 seed 6609800)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam06002084 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_123_6609800").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xRam06002084 = 0;", "xRam06002084 = 1;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_123_6609800 other").Violations() >= 1);
+        CHECK(mutated(r, "123", "a7_123_6609800 mutated") >= 1);
     }
 }
 
