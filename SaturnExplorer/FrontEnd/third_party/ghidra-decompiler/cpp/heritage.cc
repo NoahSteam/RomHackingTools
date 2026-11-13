@@ -25,6 +25,7 @@
  * Modified for SaturnExplorer: the pieces heritage makes at a delay slot's op for it are the slot's too (patches/0079-engine-heritage-slot-pieces-marked.patch).
  * Modified for SaturnExplorer: a read of a piece of a global the range holds wider is read into a temporary, not written to the piece (patches/0088-engine-global-piece-read-and-join-copy.patch).
  * Modified for SaturnExplorer: a hardware access is a barrier to the writes and reads of a global (patches/0090-engine-hardware-access-orders-globals.patch).
+ * Modified for SaturnExplorer: the guard a STORE through a pointer puts on a global is kept, as a call's is (patches/0093-engine-pointer-store-guard-kept.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -2656,7 +2657,7 @@ void Heritage::guardHardwareAccesses(uint4 fl,const Address &addr,int4 size,vect
       // anything reads it. Dead, the guard left nothing of the global spanning the STORE, and a read made before it was printed at its use
       // after it, the value written then (`x = g; *p = v; g = x + 1` printed `*p = v; g = g + 1;`), or dropped when stored back (`g = x`
       // printed nothing: the old word the code stores when p is &g, A5-119))
-      if (opc == CPUI_STORE && op->getBasicIter() != op->getParent()->beginOp() && getenv("SE_TMP_A5119_OFF") == nullptr) {
+      if (opc == CPUI_STORE && op->getBasicIter() != op->getParent()->beginOp()) {
 	list<PcodeOp *>::iterator pit = op->getBasicIter();
 	PcodeOp *prev = *(--pit);
 	if (prev->code() == CPUI_INDIRECT && prev->isIndirectStore() && prev->getOut()->getAddr() == addr &&

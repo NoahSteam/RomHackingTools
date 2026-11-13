@@ -228,7 +228,8 @@
 //   SE_GENERATED_FENCE=selfops|folds  keep a known open class out of the grammar (see gFenceFolds)
 //   SE_GENERATED_WORDS="D102 6010 ..."  check one hand-written function (hex words from the entry,
 //                            literal pool among them) instead of generated ones; with
-//                            SE_GENERATED_VOLATILE=<first>-<last> and SE_GENERATED_POLL=<addr>[:until-set].
+//                            SE_GENERATED_VOLATILE=<first>-<last> and SE_GENERATED_POLL=<addr>[:until-set], and
+//                            SE_GENERATED_ALIAS=<4..7>:<addr> (every run starts that register at addr, A5-122).
 //                            A failing seed prints the line that replays it, which for a module adds
 //                            SE_GENERATED_FUNCS="start/entry/end,..." (hex offsets from the first word),
 //                            SE_GENERATED_TABLES="jmp:sel:n:default:entry,...;...", SE_GENERATED_DATA and
@@ -6558,7 +6559,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }
                 bool storeRan = false;   // (some run made the store: a store in a block the engine removed as unreachable is named, never made)
                 {
-                    bool made = false, writeBack = true;
+                    bool made = false, writeBack = true, undone = false;
                     for (const RunOut& run : runs)
                         for (size_t k = 0; k < run.trace.size(); ++k)
                         {
@@ -6597,7 +6598,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                             const TraceRec& w = run.trace[i];
                                             if (w.depth != 0 || !w.write || w.addr >= t.addr + static_cast<uint32_t>(t.size) || t.addr >= w.addr + static_cast<uint32_t>(w.size)) continue;
                                             for (const MemoryAccess& m : got)
-                                                if (m.write && m.insn == w.insn) same = false;
+                                                if (m.write && m.insn == w.insn) same = false, undone = true;
                                         }
                                         break;
                                     }
@@ -6605,6 +6606,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             writeBack = writeBack && same;
                         }
                     storeRan = made;
+                    if (undone) count("order.folded-store.write-back-undone");
                     if (made && writeBack)
                     {
                         count("order.folded-store.write-back");
@@ -6759,9 +6761,9 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         count("order.folded-store.in-expression");
                         continue;
                     }
-                    // (...made without it: in a run, a register's access, or one of memory the request marks, comes after the store and before a
-                    // write of all of its bytes (a read or write through a pointer between is judged by the rules above when the store is printed;
-                    // a store the mapping names on no line beside one through a pointer is the mapping's to name, and not judged here). The
+                    // (...made without it: in a run, an access the ledger holds -- a register's, one of memory the request marks, or, since A5-119,
+                    // one through a pointer -- comes after the store and before a write of all of its bytes. The text that assigns the global
+                    // before the access, which the mapping may name after another store, is set aside below (`dropped-assigned`). The
                     // runs say which paths are taken, the static order cannot: a slot's byte store a long store of the same word always follows,
                     // `tst #0x40,r0 ; bf/s L ; mov.b r2,@r6 ; mov.l r2,@r6` with r0 0xC, grammar 1 seed 4202386)
                     // (A5-119: ...or one through a pointer, which may be the global's address: the pointer form of `g = r1 ; *r4 = 1 ; g = r2`,
@@ -7002,7 +7004,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 // (A5-119: a read named on no line, folded into the expression of a later statement, `iRam06030000 = iRam06030000 + 1;` for
                 // `mov.l @r6,r1 ; mov.l r2,@r4 ; add #1,r1 ; mov.l r1,@r6`, the mapping naming the `add` and the store only: a line after a write
                 // through a pointer that the code makes after the read, which reads the global on the value side, is the read's when no read of
-                // those bytes the code makes can run after that write (none in a block the write's reaches, or later in its own))
+                // those bytes the code makes can run after that write (none in a block the write's reaches, or later in its own; a read through
+                // a pointer prints as one, never by the global's name))
                 if (shown < 0)
                 {
                     for (const MemoryAccess& m : got)
@@ -7017,13 +7020,6 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             const size_t ob = static_cast<size_t>(o.origBlock);
                             if (ob >= fr.reach.size() || mb >= fr.reach.size()) { readAgain = true; continue; }
                             if ((ob == mb && o.origOrder > m.origOrder) || fr.reach[mb][ob]) readAgain = true;
-                        }
-                        for (const MemoryAccess& o : got)
-                        {
-                            if (o.write || o.origBlock < 0 || &o == &m) continue;
-                            const size_t ob = static_cast<size_t>(o.origBlock);
-                            if (ob >= fr.reach.size() || mb >= fr.reach.size()) { readAgain = true; continue; }
-                            if ((ob == mb && o.origOrder > m.origOrder) || fr.reach[mb][ob]) readAgain = true;   // (a read through a pointer may be of the global too)
                         }
                         if (readAgain) continue;
                         count("order.folded-read-before-pointer-write.unnamed");
@@ -16282,6 +16278,77 @@ void TestA5114Pins(Sh2Decompiler& d)
     }
 }
 
+// A5-119 to A5-123 (area 5 fixer after the review round after 0090). A5-119: a global read before a store through a pointer and used after
+// it was printed as read after the store, and a store of the word read back dropped; patch 0093 keeps the STORE's guard on the global. The
+// words run with the pointer at the global (SE_GENERATED_ALIAS, A5-122's production), where the old text reads or leaves the word the
+// pointer wrote: each passes with the patch and fails without it (`folded-read-after-pointer-write`, the dropped store at the return). A5-123:
+// three grammar 1 seeds the order rule `read-after-folded-store` judged against a line the mapping names the store on that is not its
+// statement (an earlier store's line, a PIECE's), now against every line that names it or assigns it at the stored register's maker.
+void TestA5119Pins(Sh2Decompiler& d)
+{
+    struct Pin
+    {
+        const char* name;
+        const char* words;
+        const char* alias;           // SE_GENERATED_ALIAS
+        const char* count;
+        const char* volatileRange;   // SE_GENERATED_VOLATILE and SE_GENERATED_POLL
+        const char* poll;
+    };
+    const Pin kPins[] = {
+        { "A5-119, x = g ; *r4 = v ; g = x + 1, r4 = &g", "D603 6162 2422 7101 2612 000B 0009 0009 0603 0000", "4:06030000",
+          "order.folded-read-before-pointer-write.unnamed", nullptr, nullptr },
+        { "A5-119, x = g ; *r4 = v ; g = x, r4 = &g", "D602 6162 2422 2612 000B 0009 0603 0000", "4:06030000", "order.folded-store.write-back-undone", nullptr, nullptr },
+        { "A5-119, x = g ; *r5 = *r4 ; g = x, r5 = &g", "D603 6162 6342 2532 2612 000B 0009 0009 0603 0000", "5:06030000", "order.folded-store.write-back", nullptr, nullptr },   // (the word copied is the one the global holds: a write-back in every run)
+        { "A5-119 control, x = g ; *r4 = v ; *r5 = x, r4 = &g", "D602 6162 2422 2512 000B 0009 0603 0000", "4:06030000", "order.folded-read-before-pointer-write.unnamed", nullptr, nullptr },
+        // A5-122's range shrunk (each found without patch 0093): the restore dropped before the marked mailbox's literal load, grammar 1 seed
+        // 6400009 (the mailbox unmarked here: the store is judged against r5's write at the return); and through r4, 6400011
+        { "A5-122, grammar 1 seed 6400009 shrunk", "D103 6212 2532 2122 D702 000B 0009 0009 0600 3C14 2600 1014", "5:06003C14", "order.folded-store.write-back-undone", nullptr, nullptr },
+        { "A5-122, grammar 1 seed 6400011 shrunk", "D102 6212 2432 2122 000B 0009 2600 3C0C", "4:26003C0C", "order.folded-store.write-back-undone", nullptr, nullptr },
+        // A5-118's pointer form, judged by the dropped rule now (the first store printed, so counted as a store checked)
+        { "A5-118, g = r1 ; *r4 = 1 ; g = r2", "D602 E701 2612 2472 000B 2622 0603 0000", nullptr, "order.folded-store.checked", nullptr, nullptr },
+        // A5-123: grammar 1 seed 5203228 shrunk (the mailbox marked): the slot's half-word store of 0 is joined into the long store's statement
+        { "A5-123, grammar 1 seed 5203228 shrunk", "D607 E301 4310 8BFD D706 6071 C801 8BFC 461B 8554 2602 C808 8D00 2631 000B 0009 2600 2304 2600 1018", nullptr,
+          "order.folded-store.joined-earlier", "26001018-2600101B", "26001018" },
+        // ...and 5207886 shrunk: the store's statement on the path through the register read is `xRam26001004 = VDP2_MPABN0;`, at the read
+        { "A5-123, grammar 1 seed 5207886 shrunk", "D605 D706 2208 8B01 C810 8F02 816D 6245 6161 2711 000B 0009 25F8 0040 2600 1004", nullptr,
+          "order.folded-store.at-maker", nullptr, nullptr },
+    };
+    for (const Pin& p : kPins)
+    {
+        const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
+        const char* values[3] = { p.volatileRange, p.poll, p.alias };
+        std::string saved[3];
+        bool had[3];
+        for (int k = 0; k < 3; ++k)
+        {
+            const char* old = std::getenv(names[k]);
+            had[k] = old != nullptr;
+            if (had[k]) saved[k] = old;
+            SetOrClear(names[k], values[k]);
+        }
+        const Subject subject = RawSubject(p.words);
+        for (int k = 0; k < 3; ++k) SetOrClear(names[k], had[k] ? saved[k].c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        const auto it = rep.counts.find(p.count);
+        const int n = it == rep.counts.end() ? 0 : it->second;
+        std::printf("pin '%s': %zu finding(s), %s %d\n", p.name, rep.findings.size(), p.count, n);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(n > 0);
+    }
+    // The seeds, whole: A5-123's three, and A5-122's range (grammar 1 from 6,400,001), seeds whose production each form of A5-119 fails
+    // without patch 0093
+    const long kSeeds[] = { 5203228, 5207177, 5207886, 6400009, 6400011, 6400021, 6400029 };
+    for (long sd : kSeeds)
+    {
+        const Report rep = Evaluate(d, Generate(static_cast<uint64_t>(sd)), true);
+        std::printf("pin 'A5-119 to A5-123, grammar 1 seed %ld': %zu finding(s)\n", sd, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestA3RoutedPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -16966,6 +17033,7 @@ void TestGenerated()
         RUN(TestArea7Round12Pins(d));
         RUN(TestArea7Round13Pins(d));
         RUN(TestA5114Pins(d));
+        RUN(TestA5119Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
