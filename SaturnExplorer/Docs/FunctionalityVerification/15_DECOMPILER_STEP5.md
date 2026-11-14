@@ -21045,10 +21045,11 @@ A first form of the fix (before `mayEntry`, the joins of a marked value, and the
 |---|---|
 | ctest `-j2` | **117 of 117** (111 and the 6 Live tests) |
 | fault suite | fault matrix: **0 of 94** job(s) failed |
-| 20,000-seed matrix (canary on) | RESULT20K |
-| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | RESULTPC |
+| 20,000-seed matrix (canary on) | `failing seeds=0; findings=0` |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
 | game corpus, lent (`a3_round25/corpus.sh`, both images, this branch's final binary) | both "all passed", every ledger count 0; missing and said **0** and **4**; "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**"; texts against round 25's dumps: 007 10 alone and 14 lent, 008 9 and 13, each only the caution, each right (above) |
-| lints | `check-literal-size.py`: RESULTLINT; `check-vendored-tree.py lint`: RESULTVLINT (no vendored file touched) |
+| binaries | a comment-only edit (`27` to `28` calls) came after the runs above began; the rebuilt `SaturnExplorerSh2GeneratedTests`, `SaturnExplorerDecompilerFaultTests` and `SaturnExplorerSh2DecompilerTests` are byte-identical (md5) to the ones run |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: ok (no vendored file touched) |
 
 No generator change: no seed's program changes.
 
