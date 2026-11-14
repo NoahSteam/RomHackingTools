@@ -7963,10 +7963,12 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                             ((static_cast<const ghidra::BlockBasic*>(home)->contains(rec.pc) && (!prior || key(rec.pc, rec.slot) >= before)) ||
                              (join->contains(rec.pc) && key(rec.pc, rec.slot) < key(first->pc, first->slot))))
                             read = true;
-                // (A7-161: the join's store stores a register the paths bring it, which the copy on this path is the engine's split of: one
-                // the join itself sets before the store -- a call's result, `jsr @r9 ; ... ; bt/s L ; mov.l r0,@(0xc,r14)` at a loop's head --
-                // is no path's value, and the copy, `iStack_c = 0;`, is the variable's own value going into the join, the store before it
-                // (the slot store of a `bt/s` that took r0 = 0; hwram007 0x0601FA28, a regression of A7-141 the review found in the corpus)
+                // (A7-161: the join's store stores a value the paths bring it, which the copy on this path is the engine's split of. One the
+                // join itself makes before the store -- a call's result, `jsr @r9 ; ... ; bt/s L ; mov.l r0,@(0xc,r14)` at a loop's head, a
+                // load, a number -- is no path's value, and the copy, `iStack_c = 0;`, is the variable's own value going into the join, the
+                // store before it (the slot store of a `bt/s` that took r0 = 0; hwram007 0x0601FA28, a regression of A7-141 the review found
+                // in the corpus). A computation of the paths' registers passes them on: `add r2,r1 ; mov.l r1,@r3` after the cases that set
+                // r2, `iStack_24 = 0x328;` in each, is that store's (hwram008 0x06046C06))
                 bool passes = false;
                 {
                     FlowVn v;
@@ -7975,10 +7977,19 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                         static_cast<size_t>(pos->second.first) < flow.blockOps.size())
                     {
                         passes = true;
+                        bool lastFound = false;
                         const std::vector<FlowOp>& jops = flow.blockOps[static_cast<size_t>(pos->second.first)];
                         for (size_t i = std::min<size_t>(pos->second.second, jops.size()); i-- > 0 && passes;)
-                            passes = jops[i].code != ghidra::CPUI_CALL && jops[i].code != ghidra::CPUI_CALLIND &&
-                                     !(jops[i].hasOut && FlowStorageOverlaps(jops[i].out, v));
+                        {
+                            const FlowOp& op = jops[i];
+                            if (op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) passes = false;
+                            else if (!lastFound && op.hasOut && FlowStorageOverlaps(op.out, v))
+                            {
+                                uint64_t number = 0;
+                                lastFound = true;
+                                passes = op.code != ghidra::CPUI_LOAD && !FlowNumber(op, number);
+                            }
+                        }
                     }
                 }
                 if (first && !read && passes && take(first)) continue;
