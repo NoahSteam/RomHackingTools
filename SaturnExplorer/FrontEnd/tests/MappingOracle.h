@@ -1499,7 +1499,11 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
             const int ih = iw >> 12, in = (iw >> 8) & 0xF, im = (iw >> 4) & 0xF, il = iw & 0xF;
             if (in == m || im == m) return false;   // (any field that may name the stack register)
             const bool store = (ih == 0x2 && il <= 6) || ih == 0x1 || (ih == 0x0 && il >= 4 && il <= 6) || (iw >> 8) == 0x80 || (iw >> 8) == 0x81 ||
-                               ((iw >> 8) >= 0xC0 && (iw >> 8) <= 0xC2) || (iw >> 8) >= 0xCC || (ih == 0x4 && (il == 0x2 || il == 0x3 || il == 0xB));
+                               ((iw >> 8) >= 0xC0 && (iw >> 8) <= 0xC2) || ((iw >> 8) >= 0xCC && (A7RuleOff(162) || (iw >> 8) <= 0xCF)) ||
+                               (ih == 0x4 && (il == 0x2 || il == 0x3 || il == 0xB));
+            // (A7-162: the stores of 0xC0 to 0xCF are the gbr ones, and 0xCC to 0xCF the `@(r0,gbr)` byte operations; the word `mov #imm,Rn`
+            // (0xE...) and the pc-relative loads (0xD...) between a push and its pop are no stores -- `mov #0xe,r1 ; mov.l r1,@-r15 ;
+            // mov #-0x52,r0 ; mov.l @r15+,r1` is r1 = 0xe; grammar 2 seed 9002796)
             // (A7-128: a store through a register that holds a parameter or a number -- `mov.l r1,@r6` of param_3 between `mov.l r2,@-r15`
             // and `mov.l @r15+,r2` -- does not write the word just pushed: no caller's pointer reaches below its own stack, as the engine
             // takes the frame; grammar 2 seed 7006020)

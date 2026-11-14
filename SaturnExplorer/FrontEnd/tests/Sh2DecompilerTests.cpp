@@ -4855,6 +4855,47 @@ void TestArea7Review20()
     }
 }
 
+// Area 7 review round 21. A7-162 (oracle): the oracle's value of a register a pop gives, over a `mov #imm` between the push and the pop.
+void TestArea7Round21()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto ruleOff = [](const char* rows) {
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", rows ? rows : "");
+#else
+        if (rows) setenv("SE_A7_RULE_OFF", rows, 1);
+        else unsetenv("SE_A7_RULE_OFF");
+#endif
+    };
+    // A7-162 `mov #0xe,r1 ; mov.l r1,@-r15 ; mov #-0x52,r0 ; mov.l @r15+,r1 ; and r1,r0 ; mov #5,r1 ; cmp/hs r1,r4 ; bt L ; ... ; L: or r0,r1`:
+    // `xVar1 = 0xf;` at the `or` (5 | 0xe) is right; the oracle's pop walk took the `mov #imm` (0xE...) between the push and the pop for a
+    // store (its test was every opcode from 0xCC up) and gave no number for the pop (grammar 2 seed 9002796, shrunk)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FC6, 0x0C2A, 0x7FE8, 0x6843, 0x6953, 0x6A63, 0x7F18, 0x4C2A, 0x6CF6, 0x6AF6, 0x69F6,
+                                          0x68F6, 0x000B, 0x0009, 0x2FE6, 0x7FE8, 0x6EF3, 0xE10E, 0x2F16, 0xE0AE, 0x61F6, 0x2019, 0xE105, 0x3412, 0x8915,
+                                          0x4408, 0xC702, 0x014E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9058, 0x0600, 0x905C, 0x0600, 0x905C, 0x0600, 0x9060,
+                                          0x0600, 0x9060, 0xA005, 0x0009, 0xA003, 0x0009, 0xA001, 0x0009, 0x210B, 0x6060, 0x7E18, 0x6FE3, 0x6EF6, 0x000B,
+                                          0x0009 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * static_cast<uint32_t>(i), w[i]);
+        const DecompileResult r = d.Decompile(MakeSnapshot(hw), Request(0x06009022u));
+        Print("A7-162 a pop over a mov #imm (grammar 2 seed 9002796)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar1 = 0xf;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_162").Violations() == 0);
+        ruleOff("162");
+        const int off = dts::AuditMapping(r, word, "a7_162 mutated").Violations();
+        ruleOff(nullptr);
+        CHECK(off >= 1);
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -19844,6 +19885,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round18());
         RUN(TestArea7Round19());
         RUN(TestArea7Review20());
+        RUN(TestArea7Round21());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());
