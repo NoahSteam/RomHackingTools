@@ -17917,7 +17917,8 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         // return 5, and nothing said. Now the walk of F1 shows r8 changed and the caller reads r8 after the call: a caution at the call. vCr10 to
         // vCr14 the same for r10, r12, r13, r14; vEr8 with the read a later walked callee's store through r8; w3 (`tools/a3_a3197/fixtures.src`) r9
         // returned; w4 r11 changed one level down by a lent G. Controls, no caution: vCr0 (r0, which the call kills), w1 (F1 saves and restores
-        // r8), w2 (the caller does not read r8 after the call), w5 (G restores r11).
+        // r8), w2 (the caller does not read r8 after the call), w5 (G restores r11), w9 (F1 restores r8 from a word its store through an index
+        // the walk cannot bound may have hit: the restored r8 may be its entry value, Value::mayEntry).
         struct Fixture
         {
             const char* name;
@@ -17951,6 +17952,8 @@ void TestA3RoutedPins(Sh2Decompiler& d)
               "0/0/20,20/20/2e", "1,0", "" },
             { "A3-197 control w2", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 60F2 7F08 68F6 4F26 000B 0009 0009 0009 2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/1c,20/20/32", "1,0", "" },
+            { "A3-197 control w9", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 2F86 7FF8 E800 6043 C904 0F86 7F08 68F6 000B 6033 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/34", "1,0", "" },
             { "A3-197 control w5", "4F22 2FB6 EB05 B00B 0009 60B3 7001 6BF6 4F26 000B 0009 0009 0009 0009 0009 0009 4F22 2338 8901 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
                                    "2FB6 2448 8B00 EB00 000B 6BF6 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/16,20/20/30,40/40/4c", "1,0,0", "" },
@@ -17964,6 +17967,22 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             std::printf("pin '%s': %zu finding(s), caution %s%s\n", f.name, w.findings.size(), any ? "said" : "not said", named ? (std::string(" for ") + f.reg).c_str() : "");
             for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
             CHECK(w.findings.empty() && (*f.reg != '\0' ? named : !any));
+        }
+        // ...and w8: a register set said once, at the first call, "likewise at the calls below"; another set at another call (r9 at the first two
+        // calls, read by the next call's F1; r9 and r10 at the third, read by the add)
+        {
+            const ModulePin m = { "A3-197 w8", "4F22 2F96 2FA6 E901 EA02 B019 0009 B017 0009 B015 0009 6093 30AC 6AF6 69F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 "
+                                                "0009 0009 0009 0009 0009 0009 0009 0009 6033 2338 8903 2448 8B01 6A93 7901 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+                                  "0/0/24,40/40/52", nullptr, "1,0", nullptr, nullptr };
+            const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+            size_t cautions = 0;
+            for (size_t at = w.text.find("this call may change "); at != std::string::npos; at = w.text.find("this call may change ", at + 1)) ++cautions;
+            const bool one = w.text.find("this call may change r9, read after it") != std::string::npos;
+            const bool two = w.text.find("this call may change r9 and r10, read after it") != std::string::npos;
+            const bool likewise = w.text.find("likewise at the calls") != std::string::npos;
+            std::printf("pin 'A3-197 w8': %zu finding(s), %zu caution(s), r9 %d, r9 and r10 %d, likewise %d\n", w.findings.size(), cautions, int(one), int(two),
+                        int(likewise));
+            CHECK(w.findings.empty() && cautions == 2 && one && two && likewise);
         }
     }
     {

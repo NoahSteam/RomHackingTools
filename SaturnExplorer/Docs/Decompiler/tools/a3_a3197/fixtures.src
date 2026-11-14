@@ -221,3 +221,71 @@ mov #0,r11
 K1:
 rts
 mov.l @r15+,r11
+name w8
+# two registers and three calls (0600DC56/007's shape): F1 (not lent: returns r3) moves r9 to r10 and adds 1 to r9 on one path (r3 != 0,
+# r4 == 0); the caller sets r9 = 1, r10 = 2, calls F1 three times and returns r9 + r10 (`return 3;`): a caution at the first call naming r9
+# (read by the next call's F1) with "likewise at the calls below" (the second), and one at the third naming r9 and r10 (read by the add)
+ret 1,0
+.word 0x4F22
+mov.l r9,@-r15
+mov.l r10,@-r15
+mov #1,r9
+mov #2,r10
+bsr F1
+nop
+bsr F1
+nop
+bsr F1
+nop
+mov r9,r0
+add r10,r0
+mov.l @r15+,r10
+mov.l @r15+,r9
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r3,r0
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov r9,r10
+add #1,r9
+K1:
+rts
+nop
+name w9
+# control: vCr8's caller; F1 (not lent: returns r3) saves r8, clears it, stores it through an index the walk cannot bound (`mov.l r8,@(r0,r15)`,
+# r0 = r4 & 4: a local on every run), and restores r8. The store may have hit the saved word as the walk sees it, so the restored r8 may be
+# its entry value (Value::mayEntry): no caution; every run returns 7
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r8,@-r15
+add #-8,r15
+mov #0,r8
+mov r4,r0
+and #4,r0
+mov.l r8,@(r0,r15)
+add #8,r15
+mov.l @r15+,r8
+rts
+mov r3,r0
