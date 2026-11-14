@@ -8304,6 +8304,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             flag("map-case-entry", audit.caseOtherEntry);
             flag("map-store-after", audit.storeAfterUse);
             flag("map-conversion-branch", audit.conversionAtBranch);   // (A7-175, area 7 review round 24)
+            flag("map-store-twin", audit.storeTwin);                   // (A7-176, area 7 round 25)
+            flag("map-slot-number", audit.numberAtSlotBranch);         // (A7-178)
             // A7-52: a statement line with no instruction that does not say so. Until then the audit counted the lines with none
             // (nonCodeLines) and judged only the shapes above, so a statement named by no check passed with a click that did nothing.
             flag("map-no-instruction", audit.noInstruction);
@@ -18526,6 +18528,62 @@ void TestArea7Review24Pins(Sh2Decompiler& d)
     gSpecialReads = savedSpecials;
 }
 
+// Area 7 round 25 (A7-176 to A7-180): the routed seeds and the sweep from 10,200,001. A7-177 (grammar 1 seed 9905215: the number join's address hid the
+// slot store from the walk; 10105433: the chain of a literal the engine folded to the number), A7-180 (grammar 2 seed 10107462, the oracle: an
+// extension of a register it cannot evaluate), and the shrunk words of A7-176 (a hoisted store in a loop) and A7-178 (a register's copy at a `bra`
+// whose slot makes the number). With the product's switch off (tools/a7_round25/mutation.sh) the oracle's rules find each.
+void TestArea7Round25Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 1, 9905215 }, Whole{ 1, 10105433 }, Whole{ 2, 10107462 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 25: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* volatileRange;
+        const char* poll;
+    };
+    const Shrunk kShrunk[] = {
+        { "A7-176 a hoisted store in a loop", "D60A E703 6341 3238 2508 8901 3310 8F01 2630 2400 2418 8B06 3030 8D02 2620 4710 8BF0 000B 0009 AFF9 0009 0009 2600 1008",
+          nullptr, "26001000-2600100f", nullptr },
+        { "A7-177 grammar 1 seed 10105433 shrunk", "D109 D60A 3100 8B01 4124 4125 6018 E301 610C 4310 8BFC E00C 005E 8802 8900 615A 2612 000B 0009 0009 0600 3C10 2600 1024",
+          "4:06003C10", "26001020-2600102f", nullptr },
+        { "A7-178 a copy at a bra whose slot makes the number", "D606 2508 8902 6243 A001 E105 E102 2610 6342 3030 8B00 2610 000B 0009 2600 1008", nullptr,
+          "26001008-2600100f", nullptr },
+    };
+    const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
+    for (const Shrunk& p : kShrunk)
+    {
+        const char* values[3] = { p.volatileRange, p.poll, p.alias };
+        std::string saved[3];
+        bool had[3];
+        for (int i = 0; i < 3; ++i)
+        {
+            const char* old = std::getenv(names[i]);
+            had[i] = old != nullptr;
+            if (old) saved[i] = old;
+            SetOrClear(names[i], values[i]);
+        }
+        const Subject subject = RawSubject(p.words);
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round23Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -20197,6 +20255,7 @@ void TestGenerated()
         RUN(TestArea7Round22Pins(d));
         RUN(TestArea7Round23Pins(d));
         RUN(TestArea7Review24Pins(d));
+        RUN(TestArea7Round25Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

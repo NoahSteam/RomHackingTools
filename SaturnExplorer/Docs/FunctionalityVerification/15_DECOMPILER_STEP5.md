@@ -21960,3 +21960,81 @@ Generator: no seed below 12,000,001 changes its program (every new draw and over
 
 * **Area 7:** grammar 1 seeds 12006099 and 12009772 (`n:map-way-back`: "the instruction 0600902C (06009034) is answered with a line that does not begin with it"), from this sweep; no caution in either text (the same on master's product). Replay: `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`. Not shrunk.
 * **Coordinator:** the container's disk was at 30-200 MB free during this work (16 GB of earlier rounds' scratch under the session's scratchpad); this fixer's corpus dumps and sweep output went to `/dev/shm`.
+
+## Area 7, round 25
+
+Fixer, branch `review/7-round25` from master `739bb5ae` (area 7's review round 24 merged). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). The round's rows: the routed A7-176 to A7-179 and the routed seeds, then a fresh sweep of grammars 1 and 2 from 10,200,001. Host changes in `Sh2Decompiler.cpp` (`FinalValues`, `FlowValueMayBe`, `AddJoinConstantTokens`, `RetargetHoistedConversions`); oracle rules in `MappingOracle.h` (`store-twin` A7-176, `slot-number` A7-178, an extension the words do not give A7-180; `SE_A7_RULE_OFF=176`, `178`, `180`; flagged `map-store-twin`, `map-slot-number`); fixtures and pins. **No engine patch: 0091 and 0095 stay free.** Scripts: `Docs/Decompiler/tools/a7_round25/` (`asm25.py` and `fixtures25.s`, the hand fixtures through round 5's assembler; `run25.sh`; `sweep.sh`; `mutation.sh`; `final.sh`). Backups on `backup/review-7-round25`; the mutation build is this tree with a temporary switch of each product change (`SE_R25_OFF`, in the six places of `Sh2Decompiler.cpp` the commit changes; not in the final tree, and not kept as a commit).
+
+| Row | P | Outcome |
+|---|---|---|
+| A7-176 | P2 | **fixed, product and oracle**: the walk's "not known" for a read through an unplaced pointer; oracle rule `store-twin` |
+| A7-177 | P2 | **fixed, product**: a join of numbers took the join's address for an instruction that makes the value |
+| A7-178 | P3 | **fixed, product and oracle**: a register's merge copy of a number at a branch whose slot makes it, `slot-number`; 578 statements in the corpus |
+| A7-179 | P3 | **fixed in part**: a conversion's global operand (the global after a call); counted 2/2 and 2/7 became 0/0 and 0/3; the 3 left are hardware registers' addresses |
+| A7-180 | P3 | **filed and fixed** (routed seeds grammar 1 10105433, grammar 2 10107462): a chain of ops on a literal folded to a number; an extension the oracle cannot evaluate |
+| A5-150 | P3 | **judged, stays open, area 5**: not a wrong value (below) |
+| A7-181 | P2 | **filed open** (the new rule's find): a statement putting together the bytes of two stores drawn at the other store; grammar 1 seeds 10202304, 10203009, 10205147 |
+| A7-182 | P2 | **filed open**: grammar 1 seed 10201358 `n:map-store-value` |
+| A7-183 | P2 | **filed open**: grammar 1 seed 10202031 `v:map-conversion-branch` |
+| A7-184 | P3 | **filed open**: grammar 1 seeds 10202748, 10204148 `n:map-store-dead` |
+| A7-185 | P3 | **filed open**: grammar 2 seeds 10201911, 10206181 `n:map-const-join` |
+
+**The round is not clean**: three P2 rows are open (A7-181 to A7-183), two P3. Area 7's count of consecutive clean review rounds stays 0.
+
+### 1. A7-176 (the hoisted store of the loop)
+
+A7-171's loop fixture (`a7_171_loop`): the store run on every path after the join, hoisted before the `if`, `xRam26001008 = (xunknown1)in_r2;`, was drawn at the `mov.b r3,@r6` (0x06009010), whose own line is `= (xunknown1)iVar1;`; its own store 0x0600901C was on no line. `AddFrameStoreTokens` walked back to the store of r3 and asked `StoreShowsValue`, which asked `FlowValueMayBe`: r3 was loaded through `@r4`, a pointer the flow does not place, and the walk answers "not known" there. The statement's value is `in_r2 - r3` (the `sub`, no read of memory), so a read of memory is another value than the computation's; the walk now says so when the statement's value has instructions of its own, reads no memory, is no number and no engine-made sum, and none of those instructions reads memory (A7-150's two reads of one address stay). The line is drawn at 0x0600901C and the way back from it answers the line. **The oracle**: `store-twin` (`MappingAudit::storeTwin`): a folded store of a global that is on no line, while two lines assigning the same name, each a plain copy `(type)name;` or a `CONCAT`, are drawn only at one other store of it that stores another register. The first form (any two lines at one store) failed A7-104, A7-105 and A7-159's fixtures (a store the engine duplicated on two paths, one store with two statements, a number written two ways): it takes statements of different values, one name, no number, no sum, a store of another register. The rule found three genuine bugs of one class (A7-181 below) in the sweep.
+
+### 2. A7-177 and A7-180 (numbers the engine folded)
+
+**A7-177** (grammar 1 seed 9905215): the copy at the `bsr`, `xRam26001010 = xVar1;`, shows the number two paths set (`xVar1 = 0xffda;` and `= 0xda00;`), which the `bt/s` slot's `mov.w r2,@r6` stores. The MULTIEQUAL of the two numbers has the address of the join's first instruction, and `FinalValues` added that instruction to the value's makers, so the value was "a computation at 0x06009010" and no number, and the walk (`numbers only`) could not match the slot store. A join whose every input is a number (or the engine's copy of one) adds no instruction. The line now names 0x06009014 (an empty token; the call's own tokens marked materialised, A7-11). **A7-180** (routed seeds grammar 1 10105433, grammar 2 10107462): (a) `swap.b r1,r0 ; extu.b r0,r1` of a literal (0x06003C10) folds to 0x3c, a copy that is an op of the flow itself and was drawn at the join's first instruction (the `swap.b`), which makes the value only as one step; `AddJoinConstantTokens` looked at the engine's later copies only. A copy of a number that is not 0 (the zero of a shift or an extension is the instruction's own, A7-58, A7-64, A7-143: their fixtures failed on a first form that moved those) at the first instruction of a flow block that does not itself write the number into the variable's register goes to the later instruction (into the block it falls into, a loop's head) whose extension, narrowing, mask or shift by a number ends a chain fed by the first instruction's results and writes a register of the variable (`extu.b`, 0x06009010). The first form took any later write and moved a loop-carried `iVar1 = 1;` to a `sub r4,r2` (a7_34's triage fixture) and `uVar1 = 0xd9ffc437;` off the `sub r1,r3` that makes it (sweep seed 10208918): the chain and the instruction's own write are tested. (b) the oracle took `extu.w r0,r2` of a loop that keeps r0 and r2 at 0 (`iVar2 = 0;`, seed 10107462) and the `extu.b` of the swap for violations: it cannot evaluate them. An extension of a register whose value the words do not give is the instruction that computes the number when every maker of the source permutes bits (a swap, `xtrct`, shifts, rotations, one of them a swap) or, for 0, when each maker is a number whose extension is 0 or a sum, difference, logical operation or shift of the source and the extension's register (`SE_A7_RULE_OFF=180`); a first form (any unknown source) failed A7-58's and A7-64's damaged controls.
+
+### 3. A7-178 (the copy at a branch whose slot makes the number)
+
+`bra L ; mov #5,r1` with r1 merged into a variable: `xVar1 = 5;` was drawn at the `bra` (hwram008 0x0604BCE8, 0x0604BD42), the row before the maker. `AddJoinConstantTokens` already knew the case and left the line alone (`AddFrameStoreTokens` moves a memory number's); a register variable's line is now drawn at the slot (`slotMakes`), as A7-10's lines are. The oracle (`slot-number`, `numberAtSlotBranch`): `V = <number>;` of a register variable, every drawn token at one delayed jump (a call is not judged) whose slot is `mov #imm` of that number. **The corpus**: 578 statements moved from a `bra`, `bf/s`, `bt/s` or `jsr` to its slot (section 7).
+
+### 4. A7-179 (a conversion's global operand at a branch)
+
+hwram007 `0x06006426`: `iRam0603ad32 = (int2)uRam0603a9d0;` with `uRam0603a9d0` at the `bf/s` 0x060066CC. The operand is the global as the engine's INDIRECT of the call before it left it, among the other paths' values; `RetargetHoistedConversions` took the INDIRECT at a branch for a value it could not place and gave up. The paths that have a maker keep it (the stores that may change the global, as the engine's own INDIRECTs say), the global's path names nothing (as an input's); a path that is only the global, with a folded store's line, takes the makers of the register the store stores (FlowLastWriters). Counted `conversionAtBranchInside`: hwram007 0 and 0 (alone and lent; was 2 and 2), hwram008 0 and 3 (was 2 and 7). The 3 left (hwram008 lent 0x060670C0): `pcVar5 = (code *)((int4)&SH2_RTCOR + 2);` and two `&SH2_RTCNT + 1`, a hardware register's address as a number; kept open (`SE_A7_INSIDE=1` lists the counted lines).
+
+### 5. A5-150 (grammar 1 seed 9902422)
+
+Read against the disassembly (`mov.b r2,@r6` of the byte at 0x26002384; `mov.l @r6,r0` and `mov.b @r6,r0` read it back): the text reads the three bytes at entry, `Var2 = xRam26002384._1_3_;`, and writes them back after the byte store, `xRam26002384._1_3_ = Var2;`. The code writes only byte 0. The value written is the value the bytes held and nothing in the function changes them (the generator's runs have no other writer of the word, and the emulator's final state agrees), so no printed value is wrong; the text writes bytes the code does not write, which matters only where another processor or a device may change them between the read and the write-back (a lost update). **P3, not P1; stays open, area 5's** (heritage's pieces of a wider read, the 0085 to 0094 family; patch 0095 was not used).
+
+### 6. The sweeps (`sweep.sh`, `SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`)
+
+| Run | Master `739bb5ae`'s behaviour on its seeds (round's product changes off) | Final tree |
+|---|---|---|
+| grammar 1, 10,000 from 10,200,001 | 10201358, 10202031, 10202748, 10204148 fail the same with the round's product changes off (the three `store-twin` seeds are the new rule's) | **7 failing seeds, 8 findings**: 10201358 (A7-182), 10202031 (A7-183), 10202304, 10203009, 10205147 (A7-181), 10202748, 10204148 (A7-184) |
+| grammar 2, 10,000 from 10,200,001 | 10201911, 10206181 fail the same with the product changes off | **2 failing seeds, 3 findings**: 10201911, 10206181 (A7-185) |
+
+Every failing seed was shrunk and filed (A7-181 to A7-185, all open, with replay words where the shrinker gave them); none is a wrong printed value (the generator's emulator runs agree on all of them): each is a token or a mapping the oracle judges. A7-181 is new: the `store-twin` rule finds a class the oracle had no rule for.
+
+The first sweep binary found two regressions of this round's own changes, each fixed before the final runs: the INDIRECT case of A7-179 taken ahead of the engine's own computation at a non-branch instruction (8 seeds of `conversion-branch`), and A7-176's rule taking a store of a load through the same pointer as another value (grammar 2 seed 10203259); the chain pass of A7-180 moved `uVar3 = 0xd9ffc437;` off the instruction that makes it (seed 10208918). The seeds that fail now fail the same without the round's product changes (the mutation build, `SE_R25_OFF`), except the three the new oracle rule finds (A7-181).
+
+### 7. The corpus
+
+**Token diff** (`tools/a7_review20/token_diff.py`, the final tree's four token dumps against the same tree with every product change of the round switched off, lent and alone, both images): 50, 94, 165 and 279 lines differ (hwram007 alone and lent, hwram008 alone and lent; of 92,937, 197,743, 262,626 and 438,806 dump lines), each a statement or an operand drawn at a different instruction; no text changes. Every one was read: 578 are a number statement moved from the delayed branch (`bra` 387, `bf/s` 102, `bt/s` 72, `jsr` 9, and the comma expressions' `cVar1 = ':'` of 0x0602FEC4 and 0x0606FADC, the `bt/s` of the condition to its slot's `mov #0x3a,r1`) to the slot's `mov #imm` at the branch address plus 2, the number the text shows (checked by script: 0 mismatches); 10 are A7-179's lines of 0x06006426 (hwram007) and 0x06006482 / 0x0600647C (hwram008): `uRam0603a9d0` was drawn at the `bf/s` 0x060066CC and is at the store the engine's INDIRECT names (0x060065C8, with the stores 0x06006670 and 0x060066AC as empty tokens), the same for `uRam0608cf60`. No other line changed.
+
+### 8. Fixtures, pins, mutation
+
+`TestArea7Round25` (`Sh2DecompilerTests.cpp`): A7-176's loop (the line at 0x0600901C, the way back from it, the other line at 0x06009010; damaged back at the store of r3: `storeTwin` 1, and 0 with `SE_A7_RULE_OFF=176`), A7-177's copy at the `bsr` (names 0x06009014; way back) and its chain of a literal (0x3c at the `extu.b` 0x06009010; damaged at the join: `constAtJoin`), A7-178's `bra` slot (the line at 0x0600900A; damaged at the `bra`: `numberAtSlotBranch`, 0 with `SE_A7_RULE_OFF=178`). `TestArea7Round25Pins` (`Sh2GeneratedTests.cpp`): grammar 1 seeds 9905215 and 10105433, grammar 2 seed 10107462 whole; A7-176's, A7-177's and A7-178's shrunk words. `mutation.sh` on the mutation build (this tree with the switch): the decompiler suite fails 11 CHECKs with the product off, none as built; the generator's default run's pins fail 6 with the product off, 5 with the product and the rules off, none as built; grammar 1 seed 9905215 fails with the product off and passes with rule 180 off; 10105433 fails with the product off and with rule 180 off; grammar 2 seed 10107462 passes with the product off and fails with rule 180 off; the fixture `a7_178_slot` gives `n:` and `v:map-slot-number` with the product off.
+
+### 9. Runs after the last code edit
+
+After the last code edit (`Sh2Decompiler.cpp`, `MappingOracle.h` and the tests as committed; only the record, the ledger and scripts changed after it), on its build:
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` (run beside the two sweeps and the corpus) | **115 of 117** in the default 120 s: `SaturnExplorerSh2DecompilerTests` and `SaturnExplorerSh2GeneratedTests` timed out at 120 s under that load; run alone (`ctest -R ... --timeout 1500`) both **passed** (65 s for the generator's) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (canary on, every pin) | **failing seeds=0; findings=0** (the canary: 240 programs, 0 failing) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus, both images, `SE_GAME_LEND=1` | "all passed", every ledger count and mapping violation 0 (`store-twin` 0 and `slot-number` 0 in both images, alone and lent; `conversionAtBranchInside`, counted: 0 and 0 in hwram007, 0 and 3 in hwram008); missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**": unchanged |
+| sweeps (section 6) | grammar 1: 7 failing seeds, 8 findings; grammar 2: 2 failing seeds, 3 findings (all filed) |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint --tests-dir` ok (no vendored file touched) |
+
+### 10. Routed
+
+* **Area 7 (next fixer):** A7-181, A7-182, A7-183 (P2, open); A7-179's rest, A7-184, A7-185 (P3, open).
+* **Area 5:** A5-150 (P3, open; judged not a wrong value).
