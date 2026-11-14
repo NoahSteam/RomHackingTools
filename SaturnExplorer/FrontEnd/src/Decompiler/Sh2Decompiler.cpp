@@ -11457,74 +11457,71 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                            : (m & 0x8000u) ? ((sure & 0x8000u) ? kFrameEscapeNoteStack : kFrameEscapeNoteMayStack)
                            : (m & (1u << 17)) && !(m & (1u << 16)) ? kFrameEscapeNoteSaved : kFrameEscapeNoteSlot;
         }
-        // (area 3, A3-204) "Below" is the text's order, as for A3-202's cautions: a call is left to an earlier note only when every path to it
-        // passes the call that says it (BlockDominates over the final blocks), so the text prints it after; a call on another path (f1: the
-        // two arms of an `if`, the later address printed first) says its own note.
         {
-            std::map<uint32_t, const ghidra::FlowBlock*> blockOf;   // the call's final block
-            if (noteAt.size() > 1)
-                for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it)
-                    if (((*it)->code() == ghidra::CPUI_CALL || (*it)->code() == ghidra::CPUI_CALLIND) && (*it)->getParent() != nullptr &&
-                        noteAt.count(static_cast<uint32_t>((*it)->getAddr().getOffset())))
-                        blockOf[static_cast<uint32_t>((*it)->getAddr().getOffset())] = (*it)->getParent();
-            // Of the calls in 'said', the ones every path to 'site' passes, the nearest (the one the others dominate) first; empty when none.
-            auto dominating = [&](const std::vector<uint32_t>& said, uint32_t site) {
-                std::vector<uint32_t> doms;
-                const auto b = blockOf.find(site);
-                if (b == blockOf.end()) return doms;
-                for (uint32_t sd : said)
-                {
-                    const auto a = blockOf.find(sd);
-                    if (a != blockOf.end() && BlockDominates(fd->getBasicBlocks(), a->second, b->second)) doms.push_back(sd);
-                }
-                // the dominators of one block form a chain: the nearest is the one each other dominates (in one block: the later address)
-                for (size_t k = 1; k < doms.size(); ++k)
-                    if (BlockDominates(fd->getBasicBlocks(), blockOf[doms[0]], blockOf[doms[k]])) std::swap(doms[0], doms[k]);
-                return doms;
-            };
-            std::map<int, std::vector<uint32_t>> regSaid;   // a register's note: the calls it was said at
-            std::vector<uint32_t> stackSaid;                 // the calls a stack note was said at
-            std::set<uint32_t> skipped, likewise;
+            std::map<int, uint32_t> regSaid;       // a register's note: the call it was said at
+            std::set<int64_t> wordsSaid;            // the stack words a stack note was said for
+            uint32_t lastStack = 0;                 // the call the last stack note was said at
+            std::set<uint32_t> skipped;
+            std::map<uint32_t, std::vector<uint32_t>> likewise;   // a call said at -> the calls left to its note
             for (const auto& sn : noteAt)
             {
                 const auto r = regOf.find(sn.first);
                 if (r != regOf.end())
                 {
-                    std::vector<uint32_t>& calls = regSaid[r->second];
-                    const std::vector<uint32_t> doms = dominating(calls, sn.first);
-                    if (doms.empty()) calls.push_back(sn.first);
+                    const auto said = regSaid.find(r->second);
+                    if (said == regSaid.end()) regSaid[r->second] = sn.first;
                     else
                     {
                         skipped.insert(sn.first);
-                        likewise.insert(doms[0]);
+                        likewise[said->second].push_back(sn.first);
                     }
                     continue;
                 }
                 if (sn.second != std::string(kFrameEscapeNoteStack) && sn.second != std::string(kFrameEscapeNoteMayStack)) continue;
-                // the stack words the notes of the calls on every path to this one were said for
-                const std::vector<uint32_t> doms = dominating(stackSaid, sn.first);
-                std::set<int64_t> wordsSaid;
-                for (uint32_t d : doms)
-                {
-                    const auto dw = escapeWords.find(d);
-                    if (dw != escapeWords.end()) wordsSaid.insert(dw->second.begin(), dw->second.end());
-                }
                 const auto w = escapeWords.find(sn.first);
-                bool fresh = doms.empty();
+                bool fresh = lastStack == 0;
                 if (w != escapeWords.end())
                     for (int64_t off : w->second) fresh = fresh || wordsSaid.count(off) == 0;
-                if (fresh) stackSaid.push_back(sn.first);
+                if (fresh)
+                {
+                    if (w != escapeWords.end()) wordsSaid.insert(w->second.begin(), w->second.end());
+                    lastStack = sn.first;
+                }
                 else
                 {
                     skipped.insert(sn.first);
-                    likewise.insert(doms[0]);
+                    likewise[lastStack].push_back(sn.first);
                 }
             }
+            // (area 3, A3-204) "Below" is the text's order, not the addresses': the text prints a call after the one that says the note when
+            // every path to it passes that call (BlockDominates over the final blocks, A3-202's rule for the cautions). When a call left to the
+            // note is not so (f1: the two arms of an `if`, the lower address printed second), the note says "likewise at other calls of this
+            // function" instead: true wherever they are printed, and the note is still said once (one per arm put 341 more notes in 008's lent
+            // texts, mostly a frame pointer in r14 at every arm of an `if` or a `switch`). A call the final code does not hold is printed nowhere.
+            std::map<uint32_t, const ghidra::FlowBlock*> blockOf;   // a call's final block
+            if (!likewise.empty())
+                for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it)
+                    if (((*it)->code() == ghidra::CPUI_CALL || (*it)->code() == ghidra::CPUI_CALLIND) && (*it)->getParent() != nullptr &&
+                        noteAt.count(static_cast<uint32_t>((*it)->getAddr().getOffset())))
+                        blockOf[static_cast<uint32_t>((*it)->getAddr().getOffset())] = (*it)->getParent();
             for (const auto& sn : noteAt)
             {
                 if (skipped.count(sn.first)) continue;
-                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, sn.first),
-                                            likewise.count(sn.first) ? sn.second + kFrameEscapeNoteLikewise : sn.second);
+                std::string note = sn.second;
+                const auto lw = likewise.find(sn.first);
+                if (lw != likewise.end())
+                {
+                    bool below = true;
+                    const auto from = blockOf.find(sn.first);
+                    for (uint32_t c : lw->second)
+                    {
+                        const auto to = blockOf.find(c);
+                        if (to == blockOf.end()) continue;   // not in the text
+                        if (from == blockOf.end() || !BlockDominates(fd->getBasicBlocks(), from->second, to->second)) below = false;
+                    }
+                    note += below ? kFrameEscapeNoteLikewise : kFrameEscapeNoteLikewiseOther;
+                }
+                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, sn.first), note);
             }
         }
         // (area 3, A3-197) A call whose unlent callee returns with one of r8-r14 changed on some path, read after the call: the text takes the call

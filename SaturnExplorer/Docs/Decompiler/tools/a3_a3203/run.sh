@@ -18,7 +18,7 @@ for m in re.finditer(r"/\* (.*?) \*/", flat):
     c = m.group(1)
     call = re.search(r"func_0x[0-9a-f]{8}", flat[m.end():])
     kind = ("caution " + re.match(r"this call may change ((?:(?:r\d+|gbr|vbr)(?:, | and )?)+)", c).group(1).replace(" and ", ",").replace(", ", ",").rstrip(",")) if c.startswith("this call may change") else "frame" if c.startswith("a frame address") else c[:30]
-    notes.append("%s@%s%s" % (kind, call.group(0)[7:] if call else "?", " +likewise" if "likewise" in c else ""))
+    notes.append("%s@%s%s" % (kind, call.group(0)[7:] if call else "?", " +likewise" if "likewise at the calls below" in c else " +likewise-other" if "likewise at other calls" in c else ""))
 print("%s: %s | %s | findings %d" % (sys.argv[1], " ".join(rets), "; ".join(notes) or "no note", out.count("\n  [")))
 ' "$f"
 done

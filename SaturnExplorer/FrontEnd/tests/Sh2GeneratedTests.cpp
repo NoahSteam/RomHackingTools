@@ -18361,13 +18361,15 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             }
         }
         // A3-203 and A3-204 (`tools/a3_a3203/fixtures.src`; each note given as what it says, the call printed after it, "+" for "likewise at the
-        // calls below"). A3-203: a call's mark replaced an earlier call's, so of two calls in a row only the second was cautioned (x4s, the A3-202
+        // calls below", "*" for "likewise at other calls of this function"). A3-203: a call's mark replaced an earlier call's, so of two calls in a row only the second was cautioned (x4s, the A3-202
         // fixer's: vCr8's F1 twice); adding to the marks instead named r10-r13 at 0602481C/007's `bsr 06025604`, whose values 06024B18 and
         // 06024B34 overwrite at entry. Now a call replaces the marks only when its callee overwrites the register on every path (CalleeWritten):
         // x4s, x4p (F2 clears r8 on one path, joined), x4a (F2 steps r8: computed from what F1 left) and x4t (F2's other path tail-jumps to F3,
         // which keeps r8: a path the walk does not read to a return) mark both calls, one caution at F1's, "likewise"; controls x4w (F2 writes a constant on both returns) and x4j (both paths joined at one `rts`, Value::sureWritten): the
-        // caution at F2's call only. A3-204: A3-108's frame notes are placed as A3-202's cautions (BlockDominates): f1 (r3, A3-194's k4e) and f2
-        // (a stack argument word) on the two arms of an `if` say the note at each call; the controls f1r and f2r (in a row) one, "likewise".
+        // caution at F2's call only. A3-204: A3-108's frame note, said once at the first call by address, sent the reader "below" for calls the text
+        // prints above it: f1 (r3, A3-194's k4e) and f2 (a stack argument word) on the two arms of an `if`. It is still said once, and says
+        // "likewise at other calls of this function" when a call left to it is not on every path after it (BlockDominates); the controls f1r
+        // and f2r (in a row) keep "likewise at the calls below".
         {
             struct Placement
             {
@@ -18397,10 +18399,10 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                 { "A3-203 control x4j", x4j.c_str(), "0/0/24,40/40/52,60/60/6e", "1,0,0", "return 7;", "r8@func_0x06009060" },
                 { "A3-204 f1", "4F22 7FF8 E205 2F22 63F3 2668 8903 B017 0009 A002 0009 B013 0009 60F2 7F08 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
                                "E207 000B 2322 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
-                  "0/0/24,40/40/46", "1,0", "return xStack_c;", "frame@func_0x06009040 frame@func_0x06009040" },
+                  "0/0/24,40/40/46", "1,0", "return xStack_c;", "frame@func_0x06009040*" },
                 { "A3-204 f2", "4F22 7FF0 E005 1F01 61F3 7104 2F12 2668 8903 B015 0009 A002 0009 B011 0009 50F1 7F10 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
                                "000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
-                  "0/0/28,40/40/44", "1,0", "return axStack_10[0];", "frame@func_0x06009040 frame@func_0x06009040" },
+                  "0/0/28,40/40/44", "1,0", "return axStack_10[0];", "frame@func_0x06009040*" },
                 { "A3-204 control f1r", "4F22 7FF8 E205 2F22 63F3 B009 0009 63F3 B006 0009 60F2 7F08 4F26 000B 0009 0009 E207 000B 2322 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
                   "0/0/1e,20/20/26", "1,0", "return xStack_c;", "frame@func_0x06009020+" },
                 { "A3-204 control f2r", "4F22 7FF0 E005 1F01 61F3 7104 2F12 B007 0009 B005 0009 50F1 7F10 4F26 000B 0009 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
@@ -18425,7 +18427,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                     else continue;
                     const size_t call = w.text.find("func_0x", end);
                     notes += (notes.empty() ? "" : " ") + kind + "@" + (call != std::string::npos ? w.text.substr(call, 15) : std::string("?")) +
-                             (c.find("likewise at the calls below") != std::string::npos ? "+" : "");
+                             (c.find("likewise at the calls below") != std::string::npos ? "+" : c.find("likewise at other calls of this function") != std::string::npos ? "*" : "");
                 }
                 std::printf("pin '%s': %zu finding(s), notes [%s]\n", f.name, w.findings.size(), notes.c_str());
                 for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
