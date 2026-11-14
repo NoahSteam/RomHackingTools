@@ -3858,6 +3858,7 @@ struct CallRet
     uint32_t target = 0;     // the callee's entry, canonical
     bool returned = false;
     uint32_t before[kKeptN] = {}, after[kKeptN] = {};
+    uint32_t args[5] = {};   // (area 3, round 28) r2 and r4-r7 at the callee's entry: what the convention hands it (the text's arguments)
 };
 
 // One run: where it started, where each instruction was, what it touched, where the registers ended.
@@ -3985,6 +3986,8 @@ public:
                     c.callPc = Env::Canon(pc);
                     c.target = Env::Canon(static_cast<uint32_t>(mEmu->getExecuteAddress().getOffset()));
                     KeptRegisters(c.before);
+                    static const char* const kArgs[5] = { "r2", "r4", "r5", "r6", "r7" };
+                    for (int n = 0; n < 5; ++n) c.args[n] = Get(kArgs[n]);
                     out.calls.push_back(c);
                     openCall = static_cast<int>(out.calls.size()) - 1;
                 }
@@ -4838,7 +4841,11 @@ std::string SavesBeforeCallsDropped(const std::string& text, const char* reg, co
     const std::regex word("\\bunaff_" + std::string(reg) + "\\b");
     static const std::regex jump("\\bgoto\\b");
     static const std::regex loopOpen("^\\s*(do|while|for)\\b");
-    const bool straight = !std::regex_search(text, jump);
+    // (area 3, round 28, A3-218) ...in the text's order up to the first goto or label: a goto and its label both after the assignment below do
+    // not reach it from before the call (grammar 2 seed 12024784: a switch's `goto` after `unaff_r11 = extraout_r11;`), where a goto anywhere
+    // took the whole text out before
+    static const std::regex label("^\\s*(?!case\\b|default\\b)[A-Za-z_]\\w*:\\s*$");
+    bool straight = true;
     std::vector<bool> loops;   // the open blocks of the body, each a loop or not
     bool reassigned = false, staleAtCall = false, blockSinceCall = false;
     std::istringstream in(text);
@@ -4852,6 +4859,7 @@ std::string SavesBeforeCallsDropped(const std::string& text, const char* reg, co
             out += line + "\n";
             continue;
         }
+        if (std::regex_search(line, jump) || std::regex_match(line, label)) straight = false;
         bool callHere = false;
         for (std::sregex_iterator it(line.begin(), line.end(), call), end; it != end; ++it)
             callHere |= !changers || changers->count(static_cast<uint32_t>(std::stoul((*it)[1].str(), nullptr, 16))) != 0;
@@ -4915,6 +4923,10 @@ std::string SavesBeforeCallsDropped(const std::string& text, const char* reg, co
         if (line.find('{') != std::string::npos || line.find('}') != std::string::npos)
             blockSinceCall = true;
         if (!called && std::regex_match(line, save)) continue;
+        // (area 3, round 28, A3-218) ...and the function's own write of the register before the first such call (`unaff_r8 = 0xc;`: A11-33's
+        // changer in a function that runs on into one that saves r8, grammar 2 seed 12010184): no call has run, so the variable is the entry
+        // value or what the function put there itself; a read of it after the call still prints `unaff_r8` and is found
+        if (!called && std::regex_match(line, assign)) continue;
         out += line + "\n";
     }
     // ...and then the register's declaration, if nothing else names it
@@ -5749,8 +5761,75 @@ bool PartOwn(const RunOut& a, const RunOut& b, const FnInfo& fn, size_t& step)
     const uint32_t pc = a.pcs[s];
     return a.depths[s] == 0 && pc >= fn.layout.start && pc < fn.layout.end;
 }
-void CheckCautions(const Subject& subject, int fi, const std::map<uint32_t, Prototype>& lent, const std::vector<RunOut>& runs, Runner& runner,
-                   const DecompileResult& r, const std::function<void(const std::string&, const std::string&)>& add,
+// (area 3, round 28, A3-216) What the reruns compare: every access the runs make but the stack's and the program's own words (its code and
+// literals: the same instructions read the same ones), so a store of the register to work RAM outside the scratch arenas (`xRam26002000 =
+// 5;`, o1) is a difference as a store through a parameter is (SameBehaviour reads the scratch arenas, hardware and marked memory only); r0
+// when the function returns it; and whether the run finishes.
+bool CautionSame(const Subject& subject, const RunOut& a, const RunOut& b, bool compareR0)
+{
+    const uint32_t lo = kCode & 0x0FFFFFFFu, hi = lo + 2u * static_cast<uint32_t>(subject.words.size());
+    auto kept = [&](const RunOut& r) {
+        std::vector<TraceRec> v;
+        for (const TraceRec& t : r.trace)
+        {
+            const uint32_t m = t.addr & 0x0FFFFFFFu;
+            if (InStack(t.addr) || (m >= lo && m < hi)) continue;
+            v.push_back(t);
+        }
+        return v;
+    };
+    const std::vector<TraceRec> x = kept(a), y = kept(b);
+    if (x.size() != y.size() || a.finished != b.finished) return false;
+    for (size_t i = 0; i < x.size(); ++i)
+        if (x[i] != y[i] || x[i].value != y[i].value) return false;
+    return !compareR0 || a.fin[0] == b.fin[0];
+}
+// (area 3, round 28, A3-216) ...and a parting inside a later callee is the function's own when that call (depth 0) was handed other values
+// in r2 or r4-r7 (the convention's registers, A3-194's reading of a read after a call, UseUnkept): the text prints the arguments it hands
+// (`func_0x06009040(5);` where the runs that the earlier callee changed r8 in pass 0, o2).
+bool PartAtArgs(const RunOut& a, const RunOut& b, size_t step)
+{
+    for (size_t i = 0; i < a.calls.size() && i < b.calls.size(); ++i)
+    {
+        const CallRet& x = a.calls[i];
+        if (x.callStep > step) break;
+        if (x.returned && x.retStep <= step) continue;
+        for (int n = 0; n < 5; ++n)
+            if (x.args[n] != b.calls[i].args[n]) return true;
+        return false;
+    }
+    return false;
+}
+// (area 3, round 28, A3-217) Whether a stack read that two runs (the same inputs, the stack below the entry r15 refilled in 'b') see
+// otherwise (the n-th read of the address by the instruction in each) read in 'a' the entry value of register 'bit' (8-14: r8-r14; 17, 18: GBR, VBR) or a
+// part of it at its width: the stale word held that register's saved value (A3-212's case), not only some other uninitialised word (12006529
+// and 12003477 read one an earlier callee left before the word of the register, and the traces part after it).
+bool StaleReadOf(const RunOut& a, const RunOut& b, int bit)
+{
+    const uint32_t e = bit >= 8 && bit <= 14 ? a.init[bit] : bit == 17 ? a.initState[0] : bit == 18 ? a.initState[1] : 0u;
+    auto slice = [e](const TraceRec& x) {
+        const uint32_t v = static_cast<uint32_t>(x.value);
+        return x.size == 4 ? v == e : x.size == 2 ? v == (e >> 16) || v == (e & 0xFFFFu)
+                                                  : v == (e >> 24) || v == ((e >> 16) & 0xFFu) || v == ((e >> 8) & 0xFFu) || v == (e & 0xFFu);
+    };
+    // the n-th read of a stack address by an instruction in one run against the n-th in the other (a stale value may move the traces apart)
+    std::map<std::pair<uint32_t, uint32_t>, std::vector<uint64_t>> other;
+    for (const TraceRec& y : b.trace)
+        if (!y.write && InStack(y.addr)) other[std::make_pair(y.insn, y.addr)].push_back(y.value);
+    std::map<std::pair<uint32_t, uint32_t>, size_t> seen;
+    for (const TraceRec& x : a.trace)
+    {
+        if (x.write || !InStack(x.addr)) continue;
+        const std::pair<uint32_t, uint32_t> key(x.insn, x.addr);
+        const size_t n = seen[key]++;
+        const auto o = other.find(key);
+        if (o == other.end() || n >= o->second.size() || o->second[n] == x.value) continue;
+        if (slice(x)) return true;
+    }
+    return false;
+}
+void CheckCautions(const Subject& subject, int fi, const std::map<uint32_t, Prototype>& lent, const std::vector<DecompileResult>& results,
+                   const std::vector<RunOut>& runs, Runner& runner, const DecompileResult& r, const std::function<void(const std::string&, const std::string&)>& add,
                    const std::function<void(const std::string&, int)>& count)
 {
     static const std::string mode = [] { const char* e = std::getenv("SE_GENERATED_CAUTION"); return std::string(e ? e : ""); }();
@@ -5762,7 +5841,7 @@ void CheckCautions(const Subject& subject, int fi, const std::map<uint32_t, Prot
     {
         bool matters = false, own = false;
         int run = -1;
-        size_t step = 0;
+        size_t step = 0, call = 0;   // (round 28) ...call: the index of the call in that run (run.calls)
         uint32_t target = 0, from = 0, to = 0;
         RunOut kept;
     };
@@ -5813,10 +5892,11 @@ void CheckCautions(const Subject& subject, int fi, const std::map<uint32_t, Prot
                 const RunOut kept = runner.One(fn, rs);
                 ++reruns;
                 count("caution.reruns", 1);
-                if (SameBehaviour(run, kept, compareR0, std::vector<HardwareRange>()) && run.finished == kept.finished) continue;
+                if (CautionSame(subject, run, kept, compareR0)) continue;
                 n.matters = true;
                 n.run = static_cast<int>(ri);
-                n.own = PartOwn(run, kept, fn, n.step);
+                n.call = ci;
+                n.own = PartOwn(run, kept, fn, n.step) || PartAtArgs(run, kept, n.step);
                 n.target = c.target;
                 n.from = c.before[k];
                 n.to = c.after[k];
@@ -5832,11 +5912,20 @@ void CheckCautions(const Subject& subject, int fi, const std::map<uint32_t, Prot
         const int k = kv.first.second;
         count("caution.required", 1);
         bool here = false, likewise = false, elsewhere = false;
+        // (area 3, round 28, A3-216) "likewise" covers this call only when the note's own call ran before it in the run that needs it (the
+        // calls below the saying one, A3-202/A3-108): a "likewise" anywhere in the text covered every call before
+        const RunOut& needRun = runs[static_cast<size_t>(n.run)];
         for (const CautionNote& c : notes)
         {
             if (!((c.regs >> k) & 1u)) continue;
             if (c.at.count(pc)) here = true;
-            else if (c.likewise) likewise = true;
+            else if (c.likewise)
+            {
+                bool before = false;
+                for (size_t q = 0; q < n.call && q < needRun.calls.size() && !before; ++q) before = c.at.count(needRun.calls[q].callPc) != 0;
+                if (before) likewise = true;
+                else elsewhere = true;
+            }
             else elsewhere = true;
         }
         if (here || likewise)
@@ -5849,8 +5938,23 @@ void CheckCautions(const Subject& subject, int fi, const std::map<uint32_t, Prot
                                  " changed in the run of input mode " + std::to_string(run.mode) + " (" + Hex(n.from) + " at the callee's entry, " +
                                  Hex(n.to) + " after), and set back there the run does otherwise (they part at " +
                                  (n.step < run.pcs.size() ? Hex(run.pcs[n.step]) : std::string("the end")) + ")";
-        if (elsewhere) add("caution-elsewhere", what + "; the text names " + kKeptNames[k] + " in a caution at another call only, with no \"likewise\"");
-        else if (n.own) add("caution-unsaid", what + "; the text says no caution naming " + kKeptNames[k]);
+        // (area 3, round 28, A3-219) ...and a parting inside a later function of the module whose own text reads the register as its entry value
+        // (`unaff_r10`, `in_gbr`): that text shows what this one says the call kept, which the runs do not have (a210d: F2 pops the r10 it
+        // pushed around an inner call and stores it, `*extraout_r4 = unaff_r10;`, the value F1 left)
+        std::string readBy;
+        if (!n.own && n.step < run.pcs.size())
+        {
+            const int j = subject.UnitOf(run.pcs[n.step]);
+            if (j >= 0 && j != fi && static_cast<size_t>(j) < results.size() && results[static_cast<size_t>(j)].status == DecompileStatus::Ok)
+            {
+                const std::string other = results[static_cast<size_t>(j)].Text();
+                for (const char* pre : { "unaff_", "in_" })
+                    if (readBy.empty() && WholeWord(other, std::string(pre) + kKeptNames[k]))
+                        readBy = "; function " + std::to_string(j) + " reads it there as its entry value (" + pre + kKeptNames[k] + ")";
+            }
+        }
+        if (elsewhere) add("caution-elsewhere", what + "; the text names " + kKeptNames[k] + " in a caution at another call only, with no \"likewise\" from a call made before it");
+        else if (n.own || !readBy.empty()) add("caution-unsaid", what + readBy + "; the text says no caution naming " + kKeptNames[k]);
         else
         {
             // (the function's own accesses and its return compared alone: a later callee's read reaching what the function itself does)
@@ -8858,7 +8962,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             }
                             rs.stackFill = fill;
                             const RunOut other = runner.One(fn, rs);
-                            if (!other.addressError && !SameBehaviour(base, other, true, marked)) stale = true;
+                            // (area 3, round 28, A3-217) ...a stale read of this register's saved word: the first stack word the refilled run
+                            // reads otherwise held, in this run, the register's entry value (or a part of it: `mov.w @r15,r1` of 12006529's r11).
+                            // Any stale read excused every register's check before (a function that read one uninitialised local and printed
+                            // `unaff_r9` after a lent changer of r9 was passed).
+                            if (!other.addressError && !SameBehaviour(base, other, true, marked) && StaleReadOf(base, other, k.bit)) stale = true;
                         }
                     if (stale)
                     {
@@ -8872,7 +8980,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         }
 
         // (A11-33) A3-197's caution against the runs (CheckCautions), in the default request
-        if (!volatileRun) CheckCautions(subject, fi, lent, runs, runner, r, add, count);
+        if (!volatileRun) CheckCautions(subject, fi, lent, results, runs, runner, r, add, count);
 
         // The generator's own contract: a version 2 function returns, restores what it saved, and ends
         // at the return address. A run that does not is the generator's fault, said so it is fixed.
@@ -19791,6 +19899,69 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         std::printf("pin 'A11-33 grammar below kCautionFirst': %d caution shape(s) in grammar 2 seeds 1-300\n", below);
         CHECK(below == 0);
     }
+    // Area 3, round 28 review (`tools/a3_round28/fixtures.src`). A3-215: an unlent U clears r12 when r3 = 0, then a lent L (it clears r12 when
+    // r5 = 0, so its signature does not keep r12), and the caller stores r12 after both (mx2, the shape of grammar 2 seed 12010219): the lent
+    // call's new value lost U's mark and no caution was said. A3-219: a later callee F2 pushes r10, calls G, pops r10 and stores it (a210d): the
+    // popped word may still be the entry value (mayEntry), which the walk did not count as a read of it. Both now say the caution at U's (F1's)
+    // call, required by the runs. A3-216 (the oracle): o1 stores the changed r8 to work RAM outside the scratch arenas, o2 and o2l hand it to a
+    // later call in r4 (the text prints the argument): before, o1 required no caution and o2, o2l were counted as later-callee misses. For each,
+    // as printed: no finding, the caution required and said; with every caution taken out: `caution-unsaid` (a210d's by a later function's
+    // text that reads `unaff_r10`). A3-217: kn1 reads an uninitialised word of its frame and calls a lent L that sets r9; with the text made to
+    // read `unaff_r9` (SE_GENERATED_MUTATE=kept's damage) the kept-read check reports r9 (before: excused by the unrelated stale read). A3-218
+    // and A3-215 in the grammar: seeds 12010184 and 12024784 (the function's own write of r8 before the call; a goto after
+    // `unaff_r11 = extraout_r11;`) and 12010219, no finding.
+    {
+        const ModulePin cases[] = {
+            { "A3-215 mx2", "4F22 2F96 2FC6 6943 EC05 B009 0009 B017 0009 29C2 6CF6 69F6 4F26 000B 0009 0009 2338 8B00 EC00 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                            "2558 8B00 EC00 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/1e,20/20/2a,40/40/4a", nullptr, "0,0,0", "0,1000,1000", nullptr },
+            { "A3-219 a210d", "4F22 2FA6 B00C 0009 B01A 0009 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 2338 8900 EA08 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                              "4F22 2FA6 B00C 0009 6AF6 24A2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/14,20/20/2a,40/40/52,60/60/66", nullptr, "1,0,0,0", "0,400,0,400", nullptr },
+            { "A3-216 o1", "4F22 2F86 E805 B00B 0009 D10D 2182 68F6 4F26 000B 0009 0009 0009 0009 0009 0009 2338 8B00 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2600 2000",
+              "0/0/16,20/20/2a", nullptr, "0,0", "0,100", nullptr },
+            { "A3-216 o2", "4F22 2F86 E805 B00B 0009 B019 6483 68F6 4F26 000B 0009 0009 0009 0009 0009 0009 2338 8B00 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                           "2542 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/16,20/20/2a,40/40/46", nullptr, "0,0,0", "0,100,0", nullptr },
+            { "A3-216 o2l", "4F22 2F86 E805 B00B 0009 B019 6483 68F6 4F26 000B 0009 0009 0009 0009 0009 0009 2338 8B00 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                            "000B 2542 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/16,20/20/2a,40/40/44", nullptr, "0,0,0", "0,100,0", nullptr },
+        };
+        for (const ModulePin& m : cases)
+        {
+            const Report clean = EvaluateSubject(d, ModuleSubject(m), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(m), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin '%s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", m.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
+        }
+        {
+            const ModulePin m = { "A3-217 kn1", "4F22 7FF8 60F2 2402 B00A 0009 7F08 4F26 000B 0009 0009 0009 0009 0009 0009 0009 E903 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                                  "0/0/14,20/20/26", nullptr, "0,0", "200,200", nullptr };
+            const Report clean = EvaluateSubject(d, ModuleSubject(m), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "kept";
+            const Report cut = EvaluateSubject(d, ModuleSubject(m), true);
+            gMutateKind = kept;
+            std::printf("pin '%s': as printed %zu finding(s); `unaff_r9` read: kept-read:r9 %d, excused %d\n", m.name, clean.findings.size(), int(Has(cut, "n:kept-read:r9")),
+                        count(cut, "excluded.stale-stack-read.kept-read"));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && Has(cut, "n:kept-read:r9"));
+        }
+        for (uint64_t seed : { 12010184ull, 12024784ull, 12010219ull })
+        {
+            const Report rep = Evaluate(d, MakeV2(seed), false);
+            std::printf("pin 'A3-218/A3-215 grammar 2 seed %llu': %zu finding(s), caution said %d\n", static_cast<unsigned long long>(seed), rep.findings.size(),
+                        count(rep, "caution.said"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(rep.findings.empty());
+        }
+    }
 }
 
 void TestA365Pins(Sh2Decompiler& d)
@@ -20154,7 +20325,10 @@ void TestGenerated()
         const Report rep = EvaluateSubject(d, s, true);
         std::printf("%s", rep.text.c_str());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
-        std::printf("%zu finding(s)\n", rep.findings.size());
+        // (area 3, round 28) the checks' counts, as a seed's run prints them: a hand fixture's caution.required, caution.said, ...
+        std::printf("checks:");
+        for (const auto& kv : rep.counts) std::printf(" %s=%d", kv.first.c_str(), kv.second);
+        std::printf("\n%zu finding(s)\n", rep.findings.size());
         CHECK(rep.findings.empty());
         return;
     }

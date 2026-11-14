@@ -1038,13 +1038,17 @@ private:
     // (area 3, A3-210) The register whose entry value 'v' is, as the walked function was entered with it (not overwritten by an inner call:
     // Value::stale), as a bit; 0 for any other value. Every register, not only kModelKept's: a copy of r9 in r1 read by an inner callee that
     // reads r1 is a read of r9 (Call maps the inner callee's record through the values it is handed).
+    // (area 3, round 28, A3-219) ...and a value that may still be one (Value::mayEntry: a saved word an inner call's model wrote over, popped
+    // back): the engine's text of the walked function reads it as the entry value (`*extraout_r4 = unaff_r10;`), and the runs read what the
+    // caller had there (a210d: F2 pushes r10, calls G, pops r10 and stores it).
     static uint32_t EntryOf(const Value& v)
     {
         int r = -1;
         if (v.kind == Value::Reg) r = static_cast<int>(v.v);
         else if (v.kind == Value::Fuzzy && v.part >= 0) r = v.part;
-        if (r < 0 || r >= kTracked || ((v.stale >> r) & 1u)) return 0;
-        return 1u << r;
+        const uint32_t may = v.mayEntry & kModelKept & ~v.stale;
+        if (r < 0 || r >= kTracked || ((v.stale >> r) & 1u)) return may;
+        return (1u << r) | may;
     }
     // ...of the values in 'regs' and the words from the call's r15 up: what a callee reads of them (an inner call, a tail jump)
     uint32_t EntryOfRegs(const State& s, uint32_t regs) const
@@ -1551,7 +1555,24 @@ private:
         if (keepKept)
             for (int r = 0; r < kTracked; ++r)
                 if (r != kR15) keptClass[r] = KeptClass(s, Get(s, mReg[r]));
+        // (area 3, round 28, A3-215) A lent callee whose signature does not keep a register of kUnkeptRegs gets a new value there (Apply), the
+        // call's output (`extraout_r12`), and the mark of an earlier unlent call that may have changed it was lost with the old one. Where the
+        // lent callee does not overwrite it on every path (CalleeWritten, A3-203's reading of an unlent callee), what it returns there may be
+        // what the earlier call left: the marks go on with the new value, and a read of the output cautions the earlier call (mx2, grammar 2
+        // seed 12010219: U clears r12 when r3 = 0, the lent L clears it when r5 = 0, the caller stores r12; the runs store U's 0).
+        std::vector<std::pair<int, std::vector<uint64_t>>> carried;
+        if (keepKept && mUnkeptSeen && signatureLent && haveTarget)
+        {
+            const uint32_t through = kUnkeptRegs & ~e.preserved & ~CalleeWritten(target);
+            for (int r = 0; r < kTracked; ++r)
+                if (((through >> r) & 1u) && !Get(s, mReg[r]).unkept.empty()) carried.emplace_back(r, Get(s, mReg[r]).unkept);
+        }
         Apply(s, e, targetIsR0);
+        for (const auto& c : carried)
+        {
+            auto f = s.vars.find(KeyOf(mReg[c.first]));
+            if (f != s.vars.end()) Value::JoinUnkept(f->second.unkept, c.second);
+        }
         // (area 3, A3-207) In a walk of a callee's code, a call of an unlent callee is the convention's (above: it keeps r8-r14, GBR, VBR and
         // r15), and what the walk records of this function's frame is made with that model. What the inner callee's own walk shows it returning
         // with changed (InnerChanged) is put beside the values as a mark (Value::innerChanged), which no frame rule reads: held in the register
