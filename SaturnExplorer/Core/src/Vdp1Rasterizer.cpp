@@ -253,9 +253,9 @@ void ApplyGouraudPixel(uint8_t& cr, uint8_t& cg, uint8_t& cb, uint16_t& word, fl
 // pixel (3D view). For each covered pixel the final texel colour (after gouraud) is handed
 // to 'sink(idx, r, g, b, fx, word)', which decides how it lands: the 2D path writes the packed
 // 'word' into the VDP1 framebuffer (applying draw-mode effects against the pixel already there);
-// the 3D path writes RGBA and ignores the word. Keeping the sink out of here lets
-// both paths share the coverage/UV/gouraud walk without either owning the other's compositing
-// rules.
+// the 3D path resolves the same word to a colour the way VDP2 would and writes RGBA. Keeping the
+// sink out of here lets both paths share the coverage/UV/gouraud walk without either owning the
+// other's compositing rules.
 //
 // 'word' is the framebuffer word the texel came from, which is where the sprite's priority bits
 // live -- gouraud shading changes the colour handed over but not the word, because the hardware
@@ -1105,6 +1105,7 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
         return;
     }
 
+    std::vector<uint8_t> shadowed(static_cast<size_t>(width) * height, 0);   // pixels a shadow marker already halved
     for (size_t i = 0; i < scene.sprites3d.size(); ++i)
     {
         const SpriteRender& r = scene.render[i];
@@ -1114,27 +1115,45 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
             Project(s.corners[1], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(s.corners[2], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(s.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
-        // The exploded view separates sprites along Z by draw order, so a pixel's VDP2 priority
-        // plays no part in it. The colour does: a framebuffer word is a CRAM code that VDP2 reads
-        // through the sprite type (which bits are dot colour) and CRAOFB's sprite colour offset,
-        // not the raw bank+texel value DecodeTexelWord indexed CRAM with. Where the two differ
-        // (Virtua Fighter 2: type C, offset 0x300) the raw lookup lands on another palette
-        // entirely, so resolve the word the way the composite does. A word that is a colour
-        // (MSB set in mixed mode) comes back as that colour, Gouraud-shaded already; a palette
-        // code is never shaded, as in the composite. A solid run repeats one word, so the last
-        // lookup is kept.
+        // A pixel's VDP2 priority plays no part here (sprites are separated along Z by draw order),
+        // but its colour does: the framebuffer word is a CRAM code that VDP2 reads through the
+        // sprite type and CRAOFB's sprite colour offset, not the raw bank+texel DecodeTexelWord
+        // indexed CRAM with (Virtua Fighter 2: type C, offset 0x300). So resolve the word as the
+        // composite does; a palette code is never Gouraud-shaded, a colour word already is. The
+        // last lookup is kept, since a solid run repeats one word.
+        //
+        // A shadow marker is not a colour: VDP2 shows what lies under it at half brightness. Here
+        // that is whatever the view already holds at the pixel. 'shadowed' keeps overlapping
+        // markers to one halving (a marker replaces a marker in the framebuffer, it does not
+        // stack) and is cleared by any colour written afterwards. Gated by show_shadow_highlight.
         uint16_t lastWord = 0;
         Rgba lastColor{};
+        bool lastMarker = false;
         bool haveLast = false;
+        const bool shadows = opts.show_shadow_highlight != 0;
         auto lineSink = [&](size_t idx, uint8_t, uint8_t, uint8_t, const DrawFx&, uint16_t word)
         {
             if (!haveLast || word != lastWord)
             {
-                lastColor = prios.Resolve(word, cram, cramMode).color;
+                const SpritePixel p = prios.Resolve(word, cram, cramMode);
+                const int dim = (shadows && p.shadowSelf) ? 1 : 0;   // an MSB-shadow pixel dims itself
+                lastColor = { static_cast<uint8_t>(p.color.r >> dim), static_cast<uint8_t>(p.color.g >> dim),
+                              static_cast<uint8_t>(p.color.b >> dim), 255 };
+                lastMarker = p.shadowMarker;
                 lastWord = word;
                 haveLast = true;
             }
             const size_t o = idx * 4;
+            if (lastMarker)
+            {
+                if (shadows && !shadowed[idx] && outRgba[o + 3] != 0)
+                {
+                    outRgba[o + 0] >>= 1; outRgba[o + 1] >>= 1; outRgba[o + 2] >>= 1;
+                    shadowed[idx] = 1;
+                }
+                return;
+            }
+            shadowed[idx] = 0;
             outRgba[o + 0] = lastColor.r; outRgba[o + 1] = lastColor.g;
             outRgba[o + 2] = lastColor.b; outRgba[o + 3] = 255;
         };
@@ -1157,7 +1176,12 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
         // The exploded 3D view keeps sprites opaque (no shadow/half-transparency against
         // the depth-sorted stack); only Gouraud and solid polygon fills carry over. The
         // depth test in RasterTriangle has already run by the time the sink sees a pixel.
-        const DrawAttribs da{ DrawFx{}, r.solid ? &solidCol : nullptr, nullptr, nullptr, r.color };
+        //
+        // The exception is mesh: a checkerboard, not a blend, so it keeps the game's intent. Dropped
+        // pixels skip the depth write, so a mesh does not occlude what shows through it.
+        DrawFx meshOnly;
+        meshOnly.mesh = r.fx.mesh;
+        const DrawAttribs da{ meshOnly, r.solid ? &solidCol : nullptr, nullptr, nullptr, r.color };
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
                    vram, cram, cramMode, width, height, &depth, r.gouraud, da, lineSink);
     }

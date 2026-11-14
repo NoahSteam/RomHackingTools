@@ -159,6 +159,7 @@ Image Render(se_context* context, const se_camera3d* camera)
     se_render_opts options = {};
     for (int i = 0; i < SE_LAYER_COUNT; ++i) options.show_layer[i] = 1;
     options.show_vdp1_sprites = 1;
+    options.show_shadow_highlight = 1;   // as the viewer's defaults have it
 
     se_image image = {};
     size_t needed = 0;
@@ -233,6 +234,12 @@ Blob Find(const Image& image, uint8_t r, uint8_t g, uint8_t b)
 }
 
 bool Near(float a, float b, float tolerance) { return std::fabs(a - b) <= tolerance; }
+
+bool IsRgb(const Image& image, int x, int y, uint8_t r, uint8_t g, uint8_t b)
+{
+    const size_t o = (static_cast<size_t>(y) * image.width + static_cast<size_t>(x)) * 4;
+    return image.pixels[o] == r && image.pixels[o + 1] == g && image.pixels[o + 2] == b;
+}
 
 // The world the core hands out, checked at the seam rather than through a render.
 void TestWorldSpaceIsRightHanded()
@@ -466,6 +473,72 @@ void AddWhiteNbg3(State& state)
     PutBE16(state.cram, 2, 0x7FFF);
 }
 
+// A mesh primitive is a checkerboard, not a solid: the game asked for every other pixel to be left
+// alone. Virtua Fighter 2's ground shadows are meshed black polygons; the 3D view drew them solid, a
+// black slab where the composite shows the floor dithered. The mesh also must not occlude: what lies
+// behind the undrawn pixels is the red backdrop here, and it has to show through.
+void TestMeshPolygonIsStippledInTheExplodedView()
+{
+    State state(kVdp1Size);
+    se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SpritesInFront(state);
+    AddSprite(state, 0x20, 0x1000, kRed, 0, 0, kFrameWidth, kFrameHeight);
+    AddQuadPrim(state, 0x40, 0x0004, kBlue, 24, 40, 32, 32);    // solid polygon
+    AddQuadPrim(state, 0x60, 0x0004, kGreen, 100, 40, 32, 32);  // meshed polygon
+    PutBE16(state.vdp1, 0x64, 0x0040 | 0x0100);                 // CMDPMOD: SPD + mesh (bit 8)
+    PutBE16(state.vdp1, 0x80, 0x8000);
+
+    se_context* context = Open(state);
+    const se_camera3d front = Camera(0.0f, 0.0f);
+    const Image view = Render(context, &front);
+
+    const Blob solid = Find(view, 0, 0, 255);
+    const Blob mesh = Find(view, 0, 255, 0);
+    CHECK(solid.count > 500);
+    // About half of the same-sized polygon is drawn: not all of it (solid), not none of it.
+    CHECK(mesh.count * 10 > solid.count * 4);
+    CHECK(mesh.count * 10 < solid.count * 6);
+    // And the gaps show the backdrop, not nothing: red pixels inside the meshed polygon.
+    size_t gaps = 0;
+    for (int y = 44; y < 68; ++y)
+        for (int x = 104; x < 128; ++x)
+        {
+            if (IsRgb(view, x, y, 255, 0, 0)) ++gaps;
+        }
+    CHECK(gaps > 100);
+    se_destroy(context);
+}
+
+// A shadow marker is not a colour: VDP2 shows the layer under it at half brightness. The 3D view
+// painted the marker's CRAM entry instead. Two markers overlapping must still halve once -- in the
+// framebuffer a marker replaces a marker -- and the composite is the reference for the value.
+void TestShadowMarkerDarkensWhatIsUnderIt()
+{
+    State state(kVdp1Size);
+    se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SpritesInFront(state);
+    AddWhiteNbg3(state);
+    se_test::SetReg(state, 0x0E2, 0x0008);   // SDCTL: sprite shadows darken NBG3
+    // CRAM is zero, so the marker's own entry (0x7FE) would paint black: it must not.
+    // Normal shadow under sprite type 0 is dot colour 0x7FE: a palette word, MSB clear.
+    AddQuadPrim(state, 0x20, 0x0004, 0x07FE, 40, 30, 40, 40);
+    AddQuadPrim(state, 0x40, 0x0004, 0x07FE, 60, 40, 40, 40);   // overlaps the first
+    PutBE16(state.vdp1, 0x60, 0x8000);
+
+    se_context* context = Open(state);
+    const Image composite = Render(context, nullptr);
+    // Ground truth: white at half brightness (255 >> 1), not black, and not halved twice.
+    CHECK(IsRgb(composite, 70, 70, 127, 127, 127));   // in the overlap
+
+    const se_camera3d front = Camera(0.0f, 0.0f);
+    const Image view = Render(context, &front);
+    CHECK(Find(view, 127, 127, 127).count > 500);
+    CHECK(Find(view, 63, 63, 63).count == 0);   // the overlap is not darkened twice
+    // A pixel under one marker only is halved too, and is not the marker's own (black) entry.
+    CHECK(IsRgb(view, 50, 45, 127, 127, 127));
+    se_destroy(context);
+}
+
 bool IsWhiteish(const Image& image, int x, int y)
 {
     const size_t o = (static_cast<size_t>(y) * image.width + static_cast<size_t>(x)) * 4;
@@ -679,6 +752,8 @@ int main()
     TestSpecialPriorityScreenAtPriorityZeroIsAPlane();
     TestTransparentPolygonIsNotPickable();
     TestBankSpriteUsesSpriteColourOffsetInTheExplodedView();
+    TestMeshPolygonIsStippledInTheExplodedView();
+    TestShadowMarkerDarkensWhatIsUnderIt();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " check(s) failed\n";
