@@ -20486,3 +20486,55 @@ Both reproduce on master's binary (built from `06884b11` in this worktree): neit
 | printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | agrees=5196 |
 | game corpus, lent (`a7_round2/corpus.sh`) | both "all passed"; missing and said 0 (hwram007) and 4 (hwram008); "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)": unchanged (the claim grows, it lends nothing more or less) |
 | lints | `check-literal-size.py` ok; `check-vendored-tree.py lint` ok (no vendored file touched) |
+
+## Area 5, routed folded seeds 2
+
+Fixer, branch `review/5-routed-folded2`, cut at master `3fe4335b` (patches to 0094; 0095 stays free). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). **No engine patch, no host change**: both routed seeds are oracle false positives (`Sh2GeneratedTests.cpp`); no printed text is wrong (no P1). Pins: `TestA5FoldedPins2` (ctest count unchanged at 117). Scripts: `Docs/Decompiler/tools/a5_folded2/` (`sweeps.sh`, `final.sh`). Backups on `backup/review-5-routed-folded2`.
+
+| Row | P | Outcome |
+|---|---|---|
+| A5-139 | P3 | **filed and fixed, oracle**: grammar 1 seed 7600046 (`v:folded-read-after-pointer-write`) |
+| A5-140 | P3 | **filed and fixed, oracle** (product note, A5-112's class): grammar 1 seed 8105482 (`v:folded-store-after-access`, `xRam26002188._1_3_ = xRam26002188._1_3_;`) |
+| A5-141 | P3 | **filed open, routed to area 7**: the sweep's grammar 1 seed 8203175 (`v:read-after-folded-store`) |
+
+### 1. A5-139: seed 7600046
+
+Shrunk (44 evaluations by the generator): `mov.l r1,@r6` in the slot of a `bt/s` (r1 = 0x06003C10), `mov.w @r6,r3 ; mov.w r1,@r4 ; mov.b r3,@r6`, r4 the production's pointer (`SE_GENERATED_ALIAS=4:06003C10`, another address than the global 0x2600238C). Text: `uRam2600238c = 0x6003c10; if (...) { *param_1 = 0x3c10; uRam2600238c = uRam2600238c & 0xffffff; }`. The engine knows the word's second byte is 0 (the slot's store), folds the half-word read at 0x0600900A, and prints the byte store of r3's low byte, a constant 0, as the word's mask. The rule `folded-read-after-pointer-write` took that statement for the read's value read after the pointer write (it reads the global on the value side and the store's register was made by the read). It reads only the bytes the store keeps; the stored byte is the constant. Checked by hand against the aliasing case (r4 = the global): the byte stored is 0 whether or not the pointer write came first, so the text is right either way.
+
+Decision: oracle. Fix: `MaskedOwnWord` parses `G = G & 0x..;` or `G = G \| 0x..;` (the whole word, the mask one run of 00 (and) or ff (or) bytes, the rest ff or 00); a statement of that form whose token is a store of exactly those bytes is the widened constant byte store (`order.folded-read-before-pointer-write.constant-store`, counted).
+
+### 2. A5-140: seed 8105482
+
+Shrunk (250 evaluations; also by hand without the poll, mailbox and alias): `mov.l @r6,r0 ; ... ; bt L ; cmp/eq #3,r0 ; bt/s M ; L: mov.b r1,@r6 (also the slot) ; M: mov.b @r6,r0 ; mov.w @r4,r3`, three instances of the byte store. Text ends `xRam26002188._0_1_ = in_r1; xRam26002188._1_3_ = xRam26002188._1_3_;`. A temporary print in `Merge::markInternalCopies` (not kept) showed the op list: the SUBPIECE that takes the three bytes from the word read is marked non-printing, but the cover of the pieces saved its output in a temporary (`u0x1000000b:3 = r0x26002189:3`), and the copy that restores the piece from it (`r0x26002189:3 = u0x1000000b:3`) is printed, as the piece assigned from itself. It needs the word read before, the byte read after the stores and the overlapped slot (each removed alone, the statement is gone). The write puts back the bytes that are there, with nothing between the read and the write of them: no value is wrong; the same class as A5-112 (a narrow store printed with the bytes it keeps; ordinary memory).
+
+Decision: oracle for the false positive, the product's extra statement stays (P3, A5-112's class; the temporary comes from upstream's cover resolution, not changed here). Fix: a piece-store line whose right side is its own left side is counted (`order.folded-store.piece-self`), not judged.
+
+### 3. Pins and mutation
+
+`TestA5FoldedPins2`: both seeds whole (0 findings); three shrunk programs (7600046's, 8105482's, 8105482's by hand), each with 0 findings and its count, and the printed replay line pasted and replayed (words, `SE_GENERATED_ALIAS`, volatile range, poll) with the same findings and count. Mutation: with `constantStore` switched off 2 checks fail (the seed and the shrunk 7600046: `v:folded-read-after-pointer-write`); with the `piece-self` set-aside off 3 (8105482 whole, its shrunk and the hand-shrunk: `v:` and `n:folded-store-after-access`); each fix's pins only.
+
+### 4. Sweeps (`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`; `sweeps.sh`)
+
+| Run | Failing seeds | Findings |
+|---|---|---|
+| grammar 1, 10,000 from 8,200,001 | 4 | 8202449 (`map-const-join`), 8203175, 8207405 (`map-const-join`), 8209018 (`endless-call-dropped`) |
+| grammar 2, 10,000 from 8,200,001 | **0** | |
+| grammar 1 specials, 5,000 from 8,300,001 | 2 | 8302980, 8303997 (`map-way-back`) |
+
+* **8203175 (A5-141, open, area 7's token).** `tas.b @r6 ... mov.w @(0x14,r4),r0 ... mov.l r1,@r6 ; mov.b r2,@r6`: the text is in the code's order (`g = g \| 0x80000000; x = *(p + 0x14); g = CONCAT13(.., 0xf000);`), but the mapping draws the long store 0x06009016 on the `tas.b`'s line and not on the `CONCAT13` line that shows its bytes, so `read-after-folded-store` judged the read against the earlier line. Not set aside in the oracle: a store named only on another statement's line is the class the rule exists for.
+
+### 5. Runs after the last code edit
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` | **117 of 117** passed |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (canary on, every pin) | **failing seeds=0; findings=0** |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus, both images, `SE_GAME_LEND=1` | every ledger count 0; missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)": unchanged (no product change) |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint --tests-dir` ok (no vendored file touched) |
+
+### 6. Routed
+
+* **Area 7** (mapping): A5-141 (8203175); `map-const-join` seeds 8202449 (`xVar3 = 0;` drawn at `and r3,r1`, 0x06009022) and 8207405 (`iVar2 = 0;` and `iVar3 = 0;` drawn at `and r5,r0`, 0x06009014); `map-way-back` specials seeds 8302980 (0x0600901E) and 8303997 (0x06009014).
+* **Area 3**: grammar 1 seed 8209018 (`n:endless-call-dropped`: the call of 0x06009050, which writes 0x26003044, after a poll the text takes to run for ever).
