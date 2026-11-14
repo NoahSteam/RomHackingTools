@@ -1,0 +1,889 @@
+# Area 3 round 28 review: fixtures (run with run.sh / run.py: W=<SaturnExplorer> S=<scratch>). Unless said, F1 is U: not lent (it returns r3),
+# clears r8 when r3 = 0 (input mode 0's r3 is 0, the other modes' are random), so the oracle's runs need the caution when the caller reads r8.
+#
+# ---- 1. The oracle (CheckCautions): what it compares ----
+# o1: the caller keeps 5 in r8 across U and stores r8 to a work-RAM global (0x26002000), returns nothing. Runs store 5 or 0.
+name o1
+ret 0,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+mov #5,r8
+bsr F1
+nop
+mov.l =0x26002000,r1
+mov.l r8,@r1
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+mov #0,r8
+K1:
+rts
+mov r3,r0
+# o1s (control): o1 with the store through r4 (scratch)
+name o1s
+ret 0,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+mov #5,r8
+bsr F1
+nop
+mov.l r8,@r4
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+mov #0,r8
+K1:
+rts
+mov r3,r0
+# o2: r8 handed to a later unlent call in r4 (`mov r8,r4 ; bsr G`); G (returns r3) stores r4 through r5. The text prints the argument.
+name o2
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,100,0
+.word 0x4F22
+mov.l r8,@-r15
+mov #5,r8
+bsr F1
+nop
+bsr G
+mov r8,r4
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+mov #0,r8
+K1:
+rts
+mov r3,r0
+fn
+G:
+mov.l r4,@r5
+rts
+mov r3,r0
+# o2l: o2 with G lent (it returns nothing, reads r4 and r5 only)
+name o2l
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,100,0
+.word 0x4F22
+mov.l r8,@-r15
+mov #5,r8
+bsr F1
+nop
+bsr G
+mov r8,r4
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+mov #0,r8
+K1:
+rts
+mov r3,r0
+fn
+G:
+rts
+mov.l r4,@r5
+# o3: the caller returns r8 + 1 after U (r0 compared)
+name o3
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+mov #5,r8
+bsr F1
+nop
+mov r8,r0
+add #1,r0
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+mov #0,r8
+K1:
+rts
+mov r3,r0
+# o4: a branch on r8 after U decides which of two constants is stored through r4
+name o4
+ret 0,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+mov #5,r8
+bsr F1
+nop
+mov #1,r1
+tst r8,r8
+bt K0
+mov #2,r1
+K0:
+mov.l r1,@r4
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+mov #0,r8
+K1:
+rts
+mov r3,r0
+#
+# ---- 2. Callee shapes the caution grammar does not draw (the caller is vCr8's with a 16-byte frame: a local of 5 at r15, its address in r8,
+# the call, 7 stored through r8, the local returned) ----
+# lp: U steps r8 by 4 in a loop of (r3 & 3) passes
+name lp
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r3,r0
+and #3,r0
+tst r0,r0
+bt K1
+L1:
+add #4,r8
+dt r0
+bf L1
+K1:
+rts
+mov r3,r0
+# pi: U loads through r8 with post-increment when r3 = 0
+name pi
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+mov.l @r8+,r1
+K1:
+rts
+mov r3,r0
+# pie: U loads through r8 with post-increment on every path
+name pie
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l @r8+,r1
+rts
+mov r3,r0
+# tb: U dispatches on r3 & 3 through a jump table; case 0 clears r8
+name tb
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r3,r0
+and #3,r0
+mov r0,r1
+shll2 r1
+mova @(T1,pc),r0
+mov.l @(r0,r1),r1
+jmp @r1
+nop
+T1:
+.addr C0
+.addr C1
+.addr C1
+.addr C1
+C0:
+mov #0,r8
+C1:
+rts
+mov r3,r0
+# th2: two thunks in a row (F2 -> F3 -> U)
+name th2
+ret 1,0,0,0
+env SE_GENERATED_CLOBBERS=0,0,0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov.l =@F3,r1
+jmp @r1
+nop
+fn
+F3:
+mov.l =@F1,r2
+jmp @r2
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+mov #0,r8
+K1:
+rts
+mov r3,r0
+# mr2: mutual recursion F2 -> F3 -> F2 (r4 >> 1 until 0); F2 clears r8 after its call of F3 when r3 = 0; both save PR
+name mr2
+ret 1,0,0
+env SE_GENERATED_CLOBBERS=0,100,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+mov #6,r4
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+tst r4,r4
+bt K2
+bsr F3
+nop
+tst r3,r3
+bf K2
+mov #0,r8
+K2:
+.word 0x4F26
+rts
+mov r3,r0
+fn
+F3:
+.word 0x4F22
+shlr r4
+bsr F2
+nop
+.word 0x4F26
+rts
+mov r3,r0
+# mx1: U (keeps r8), then a lent L that clears r8 when r4 = 0 (never in the runs); the change is U's: here U clears r8 when r3 = 0
+name mx1
+ret 1,0,0
+env SE_GENERATED_CLOBBERS=0,100,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr L
+mov r15,r4
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+mov #0,r8
+K1:
+rts
+mov r3,r0
+fn
+L:
+tst r4,r4
+bf K2
+mov #0,r8
+K2:
+rts
+nop
+# mx2: seed 12010219's shape by hand: U clears r12 when r3 = 0; then a lent L (clears r12 when r5 = 0, never in the runs); the caller stores r12 through r4 (saved in r9)
+name mx2
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,1000,1000
+.word 0x4F22
+mov.l r9,@-r15
+mov.l r12,@-r15
+mov r4,r9
+mov #5,r12
+bsr F1
+nop
+bsr L
+nop
+mov.l r12,@r9
+mov.l @r15+,r12
+mov.l @r15+,r9
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+mov #0,r12
+K1:
+rts
+mov r3,r0
+fn
+L:
+tst r5,r5
+bf K2
+mov #0,r12
+K2:
+rts
+nop
+#
+# ---- 3. A3-210 (CalleeEntryRead, Value::stale): y1's caller (keeps r10 saved; F1 sets r10 = 8 when r3 != 0; then F2) ----
+# a210a: F2 copies r10 to r1 before its call of G (which writes 4 to r10 on every path) and stores r1 after: F1's r10 is read
+name a210a
+ret 1,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400,400
+.word 0x4F22
+mov.l r10,@-r15
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F1:
+tst r3,r3
+bt K0
+mov #8,r10
+K0:
+rts
+mov r3,r0
+fn
+F2:
+.word 0x4F22
+mov r10,r1
+bsr G
+nop
+mov.l r1,@r4
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# a210d: F2 pushes r10, calls G, pops r10 and stores it: F1's r10 is read
+name a210d
+ret 1,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,400
+.word 0x4F22
+mov.l r10,@-r15
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F1:
+tst r3,r3
+bt K0
+mov #8,r10
+K0:
+rts
+mov r3,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+mov.l r10,@r4
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# a210e: F2 calls G only when r5 = 0 (never: r5 is a pointer), then stores r10: F1's r10 is read on the path that skips G
+name a210e
+ret 1,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400,400
+.word 0x4F22
+mov.l r10,@-r15
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F1:
+tst r3,r3
+bt K0
+mov #8,r10
+K0:
+rts
+mov r3,r0
+fn
+F2:
+.word 0x4F22
+tst r5,r5
+bf K2
+bsr G
+nop
+K2:
+mov.l r10,@r4
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+#
+# ---- 4. A3-211 and A3-213 ----
+# a211t: F2 (not lent) calls a thunk T (not lent) to a lent G that clears r8 when r4 = 0 (F2 hands it r3); the caller stores 7 through r8
+name a211t
+ret 1,0,0,0
+env SE_GENERATED_CLOBBERS=0,100,100,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+mov r3,r4
+bsr T
+nop
+.word 0x4F26
+rts
+mov r3,r0
+fn
+T:
+mov.l =@G,r1
+jmp @r1
+nop
+fn
+G:
+tst r4,r4
+bf K1
+mov #0,r8
+K1:
+rts
+mov.l @r5,r0
+# a213u: F1 saves PR on the stack, calls U (not lent; writes nothing), restores PR and tail-jumps through a literal to H, which clears r8 when r3 = 0
+name a213u
+ret 1,0,0,0
+env SE_GENERATED_CLOBBERS=0,100,0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+bsr U
+nop
+.word 0x4F26
+mov.l =@H,r1
+jmp @r1
+nop
+fn
+U:
+rts
+mov r3,r0
+fn
+H:
+tst r3,r3
+bf K1
+mov #0,r8
+K1:
+rts
+mov r3,r0
+#
+# ---- 5. Frame notes, slot notes, stack-argument notes, kept reads ----
+# fa1: a local of 5, its address in r9 (pushed), U (not lent) stores 7 through r9; the local returned. Runs return 7
+name fa1
+ret 1,0
+.word 0x4F22
+mov.l r9,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r9
+bsr U
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r9
+.word 0x4F26
+rts
+nop
+fn
+U:
+mov #7,r1
+mov.l r1,@r9
+rts
+mov r3,r0
+# fa2: fa1 with U storing 7 at r9 + 4 (the second of two locals), the second returned
+name fa2
+ret 1,0
+.word 0x4F22
+mov.l r9,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@(4,r15)
+mov r15,r9
+bsr U
+nop
+mov.l @(4,r15),r0
+add #8,r15
+mov.l @r15+,r9
+.word 0x4F26
+rts
+nop
+fn
+U:
+mov #7,r1
+mov.l r1,@(4,r9)
+rts
+mov r3,r0
+# fa3 (control): the address handed in r4, U stores 7 through r4: no note, the argument shown
+name fa3
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+bsr U
+mov r15,r4
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+U:
+mov #7,r1
+mov.l r1,@r4
+rts
+mov r3,r0
+# fa4: &local (r15 + 4) in the stack argument word (r15 + 0); U loads its incoming stack word and stores 7 through it; the local returned
+name fa4
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@(4,r15)
+mov r15,r1
+add #4,r1
+mov.l r1,@r15
+bsr U
+nop
+mov.l @(4,r15),r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+U:
+mov.l @r15,r1
+mov #7,r2
+mov.l r2,@r1
+rts
+mov r3,r0
+# sl1: a local of 5 at the call's r15; U writes 9 into its incoming stack word; the local returned (runs: 9)
+name sl1
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+bsr U
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+U:
+mov #9,r1
+mov.l r1,@r15
+rts
+mov r3,r0
+# sl2 (control): sl1 returning a constant, the local not read after the call
+name sl2
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+bsr U
+nop
+mov #3,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+U:
+mov #9,r1
+mov.l r1,@r15
+rts
+mov r3,r0
+# kr1: a lent L sets r8 to 3 on every path; the caller had 5 in r8 and returns r8 after L (runs: 3)
+name kr1
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+mov #5,r8
+bsr L
+nop
+mov r8,r0
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+L:
+mov #3,r8
+rts
+nop
+# kr2: a lent L loads GBR from r4; the caller returns GBR after it (stc gbr,r0)
+name kr2
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,20000 SE_GENERATED_READS=20000,0
+.word 0x4F22
+stc gbr,r1
+mov.l r1,@-r15
+bsr L
+nop
+stc gbr,r0
+mov.l @r15+,r1
+ldc r1,gbr
+.word 0x4F26
+rts
+nop
+fn
+L:
+rts
+ldc r4,gbr
+#
+# ---- 6. A3-212's exclusion (the stale-stack test) ----
+# kn1: F0 reads an uninitialised word of its frame (`mov.l @r15,r0` after `add #-8,r15`) and stores it through r4, then calls a lent L that
+# sets r9 to 3; F0 never reads r9. Run with SE_GENERATED_MUTATE=kept (the text made to read `unaff_r9`): the kept-read check must report r9
+name kn1
+ret 0,0
+env SE_GENERATED_CLOBBERS=200,200
+.word 0x4F22
+add #-8,r15
+mov.l @r15,r0
+mov.l r0,@r4
+bsr L
+nop
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+L:
+mov #3,r9
+rts
+nop
+#
+# ---- 7. The oracle's "likewise" ----
+# lw1: two calls of U in a row; U steps r8 by 4 when r3 = 0; 7 stored through r8 (r15 at the start), the word at r15 + 4 returned. Run also with
+# SE_GENERATED_MUTATE=cautionlate (the caution moved to the second call): the first call's caution is then not said
+name lw1
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@(4,r15)
+mov r15,r8
+bsr F1
+nop
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @(4,r15),r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+add #4,r8
+K1:
+rts
+mov r3,r0
+#
+# ---- 8. A3-108's note for r2 (060622E0/008's shape) ----
+# fr2: a local of 5, its address made in r2 and copied to r4 (`mov r2,r4`, -O0 code), U (not lent) stores 7 through r4; the local returned.
+# The text shows the address as U's argument; the note says it is "in none of the arguments"
+name fr2
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r1
+mov.l r1,@r15
+mov r15,r2
+mov r2,r4
+bsr U
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+U:
+mov #7,r1
+mov.l r1,@r4
+rts
+mov r3,r0

@@ -747,6 +747,9 @@ private:
         // value (mayEntry) with a constant written on another path is the entry value or that constant: changed for certain on that path, which
         // the join's mayEntry alone hid (x2: the clear after the restore, the paths meeting at one `rts`, said nothing).
         uint32_t sureChanged = 0;
+        // (area 3, round 28, A3-222) Fuzzy, a join only: the registers of kModelKept whose entry value some alternative joined here is (EntryOf
+        // of each side): the join may be that value, and a walked function that lets it out, stores it or reads through it reads it (EntryOf)
+        uint32_t entryJoin = 0;
         // (area 3, A3-203) Fuzzy, a join only: the registers of kModelKept that every alternative joined here overwrites (SureWritten of each
         // side, an intersection): held in the register at a return, the value is another one on every path and none computed from the register's
         // own entry value. A callee that returns so (CalleeWritten) leaves nothing of what an earlier call left there.
@@ -822,7 +825,7 @@ private:
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
                                      usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
                                      baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure && sureChanged == o.sureChanged &&
-                                     sureWritten == o.sureWritten));
+                                     sureWritten == o.sureWritten && entryJoin == o.entryJoin));
         }
     };
     using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
@@ -1038,13 +1041,22 @@ private:
     // (area 3, A3-210) The register whose entry value 'v' is, as the walked function was entered with it (not overwritten by an inner call:
     // Value::stale), as a bit; 0 for any other value. Every register, not only kModelKept's: a copy of r9 in r1 read by an inner callee that
     // reads r1 is a read of r9 (Call maps the inner callee's record through the values it is handed).
+    // (area 3, round 28, A3-219) ...and a value that may still be one (Value::mayEntry: a saved word an inner call's model wrote over, popped
+    // back): the engine's text of the walked function reads it as the entry value (`*extraout_r4 = unaff_r10;`), and the runs read what the
+    // caller had there (a210d: F2 pushes r10, calls G, pops r10 and stores it).
     static uint32_t EntryOf(const Value& v)
     {
         int r = -1;
         if (v.kind == Value::Reg) r = static_cast<int>(v.v);
         else if (v.kind == Value::Fuzzy && v.part >= 0) r = v.part;
-        if (r < 0 || r >= kTracked || ((v.stale >> r) & 1u)) return 0;
-        return 1u << r;
+        uint32_t may = v.mayEntry & kModelKept & ~v.stale;
+        // (area 3, round 28, A3-222) ...and a join one side of which is a register of r8-r14, GBR or VBR as it came in (Value::entryJoin): it
+        // may be that value (grammar 2 seed 12018998: `stc gbr,r2` on one path, a load on the other, then `mov.b r2,@r5`). Not every join with the
+        // register among its origins: a value loaded through it or computed from it is no entry value (its op read the register, and is counted
+        // there), and taking those added cautions at 06027170/007's calls, whose r10 and r11 nothing reads before 060272DC overwrites them
+        if (v.kind == Value::Fuzzy && v.def == Value::kJoin) may |= v.entryJoin & kModelKept & ~v.stale;
+        if (r < 0 || r >= kTracked || ((v.stale >> r) & 1u)) return may;
+        return (1u << r) | may;
     }
     // ...of the values in 'regs' and the words from the call's r15 up: what a callee reads of them (an inner call, a tail jump)
     uint32_t EntryOfRegs(const State& s, uint32_t regs) const
@@ -1226,6 +1238,7 @@ private:
         m.mayEntry = a.mayEntry | b.mayEntry;
         m.innerChanged = a.innerChanged | b.innerChanged;   // (A3-207) on either path
         m.sureChanged = SureChanged(a) | SureChanged(b);   // (A3-199) on either path
+        m.entryJoin = (EntryOf(a) | EntryOf(b)) & kModelKept;   // (round 28, A3-222) on either path
         m.sureWritten = SureWritten(a) & SureWritten(b);   // (A3-203) on both
         // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
         // that steps a pointer down from r15, `mov.l r0,@-r1`, A3-16) as often as a choice of two addresses, and is not followed.
@@ -1460,6 +1473,16 @@ private:
                     if (r != 2 && (r < 4 || r > 7) && x.Frame()) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
                     if (r != 2 && (r < 4 || r > 7) && x.Sure()) mHandSure[at] |= 1u << r;     // (A3-120) ...with "is" only of a fact
                 }
+                // (area 3, round 28, A3-222) ...and a register of r8-r14, GBR or VBR whose entry value the callee reads in any way (CalleeEntryRead:
+                // an address it loads through too, not only one it stores through or lets out): the callee's own text reads it as its entry
+                // value (`*(xunknown2 *)(unaff_gbr + 10)`, withheld "it reads gbr on entry"), which is what an earlier call may have changed
+                // (grammar 2 seeds 12018998, 12020079, 12025721, 12027491: function 2 sets GBR on one path and loads through it)
+                if (keepKept && mUnkeptSeen && haveTarget)
+                {
+                    const uint32_t read = CalleeEntryRead(target) & kModelKept;
+                    for (int r = 0; r < kTracked; ++r)
+                        if ((read >> r) & 1u) UseUnkept(Get(s, mReg[r]));
+                }
             }
         }
         else
@@ -1551,7 +1574,24 @@ private:
         if (keepKept)
             for (int r = 0; r < kTracked; ++r)
                 if (r != kR15) keptClass[r] = KeptClass(s, Get(s, mReg[r]));
+        // (area 3, round 28, A3-215) A lent callee whose signature does not keep a register of kUnkeptRegs gets a new value there (Apply), the
+        // call's output (`extraout_r12`), and the mark of an earlier unlent call that may have changed it was lost with the old one. Where the
+        // lent callee does not overwrite it on every path (CalleeWritten, A3-203's reading of an unlent callee), what it returns there may be
+        // what the earlier call left: the marks go on with the new value, and a read of the output cautions the earlier call (mx2, grammar 2
+        // seed 12010219: U clears r12 when r3 = 0, the lent L clears it when r5 = 0, the caller stores r12; the runs store U's 0).
+        std::vector<std::pair<int, std::vector<uint64_t>>> carried;
+        if (keepKept && mUnkeptSeen && signatureLent && haveTarget)
+        {
+            const uint32_t through = kUnkeptRegs & ~e.preserved & ~CalleeWritten(target);
+            for (int r = 0; r < kTracked; ++r)
+                if (((through >> r) & 1u) && !Get(s, mReg[r]).unkept.empty()) carried.emplace_back(r, Get(s, mReg[r]).unkept);
+        }
         Apply(s, e, targetIsR0);
+        for (const auto& c : carried)
+        {
+            auto f = s.vars.find(KeyOf(mReg[c.first]));
+            if (f != s.vars.end()) Value::JoinUnkept(f->second.unkept, c.second);
+        }
         // (area 3, A3-207) In a walk of a callee's code, a call of an unlent callee is the convention's (above: it keeps r8-r14, GBR, VBR and
         // r15), and what the walk records of this function's frame is made with that model. What the inner callee's own walk shows it returning
         // with changed (InnerChanged) is put beside the values as a mark (Value::innerChanged), which no frame rule reads: held in the register
