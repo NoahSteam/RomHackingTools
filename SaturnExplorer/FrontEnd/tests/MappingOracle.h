@@ -2011,19 +2011,40 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 // (char)in_r3 + (char)param_2;` at `mov.b r3,@r6` -- which is the store's statement: this line's operand
                                 // drawn there, `cRam06001008 = (char)param_2;` with the piece `(char)param_2` the engine made at the first
                                 // store, is a copy materialised there (A7-116's mark); grammar 1 seed 7102553 (specials))
-                                // (A7-166: not for the line's own name drawn at the store, `xRam2600208c = 0x3e003e;` with its name at the slot's word store: the
-                                // store's statement as a line that merges it with the store after it, though another line, of the same store on another
-                                // path, draws the name there too -- a slot's store both paths run; grammar 1 seeds 8901149 and 8909710. Not for a name the
-                                // product marks materialised (the copy), nor when the other line's name there is that copy: this one is its other half)
-                                const bool nameHere = !A7RuleOff(166) && !t.materialised && t.begin == nb && t.end == assign;
                                 for (size_t lj = 0; lj < r.lines.size() && ownStoreHere && !A7RuleOff(129); ++lj)
                                 {
                                     if (lj == li) continue;
                                     const std::string& ot = r.lines[lj].text;
                                     const size_t ob = ot.find_first_not_of(' '), oa = ot.find(" = ");
                                     if (ob == std::string::npos || oa == std::string::npos || oa <= ob || ot.compare(ob, oa - ob, name) != 0) continue;
+                                    // (A7-166: not a line that is the same statement as this one, or one on another path. The slot's store both
+                                    // paths of a branch run is drawn once for each, `xRam260021a0 = 0x2000ffe2;` three times with its name at the
+                                    // store in each (grammar 1 seed 8909710), or as `xRam2600208c = 0x3e003e;` in the taken path's block, which
+                                    // returns, and `xRam2600208c = 0x3e;` after it (grammar 1 seed 8901149): each is that store's statement on its
+                                    // path, none a copy of another's. A copy the product marks (A7-25) has its own text.)
+                                    if (!A7RuleOff(166))
+                                    {
+                                        if (ot.compare(ob, std::string::npos, r.lines[li].text, nb, std::string::npos) == 0) continue;
+                                        const size_t a = std::min(li, lj), z = std::max(li, lj);
+                                        bool returned = false, leaves = false;
+                                        int depth = 0;
+                                        for (size_t lk = a + 1; lk < z && !returned && !leaves; ++lk)
+                                        {
+                                            const std::string& xt = r.lines[lk].text;
+                                            const size_t xb = xt.find_first_not_of(' ');
+                                            if (xb == std::string::npos) continue;
+                                            if (xt.find("LAB_") != std::string::npos || xt.find("goto") != std::string::npos) { leaves = true; break; }
+                                            if (depth == 0 && xt.compare(xb, 6, "return") == 0) { returned = true; break; }
+                                            for (size_t k = xb; k < xt.size() && !leaves; ++k)
+                                            {
+                                                if (xt[k] == '{') ++depth;
+                                                if (xt[k] == '}' && --depth < 0) leaves = true;
+                                            }
+                                        }
+                                        if (returned) continue;
+                                    }
                                     for (const Token& u : r.lines[lj].tokens)
-                                        if (u.addr == t.addr && u.begin == ob && u.end == oa && (!nameHere || u.materialised)) ownStoreHere = false;
+                                        if (u.addr == t.addr && u.begin == ob && u.end == oa) ownStoreHere = false;
                                 }
                             }
                         }
@@ -2378,6 +2399,35 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             for (const Token& t : r.lines[li].tokens)
                 if (t.addr && dead.count(t.addr) && !ownName.count(t.addr))
                 {
+                    // (A7-169: the operand of a conversion the line prints, `(int2)param_1` with `param_1` at `mov.w r1,@(r0,r6)`, is the work of the
+                    // store that narrows the value, not the statement of that store: the conversion is made at the first store of the word, which
+                    // the second writes over; grammar 1 seed 9406270)
+                    // (A7-168: a line whose value is made by the instructions that make the register the dead store stores, `uRam0600210c =
+                    // (int4)cRam26002300;` with the load of r0 at 0x06009006 and the store of r0 at 0x0600900C, is that store's own statement the engine
+                    // kept (a write through a pointer between the stores): the later store writes the global over, and the line still shows what this
+                    // one wrote; grammar 1 seed 9401568. Not the value of another store's register: `xRam26001018 = 0;` with the 0 at `mov #0,r2`
+                    // and its name at the `mov.b r1,@r7` before)
+                    if (!A7RuleOff(168) && foldedStores.count(t.addr) && t.begin >= nb && t.end <= lt.size() && !valued.empty())
+                    {
+                        uint16_t sw = 0;
+                        int ssize = 0;
+                        const int reg = word(t.addr, sw) ? StoredRegister(sw, ssize) : -1;
+                        std::set<uint32_t> makers;
+                        if (reg >= 0 && RegisterMakers(r, word, into, t.addr, reg, makers))
+                        {
+                            bool all = true;
+                            for (uint32_t x : valued) all = all && makers.count(x) != 0;
+                            if (all) continue;
+                        }
+                    }
+                    if (!A7RuleOff(169) && t.begin >= nb && t.begin >= eq + 3 && t.begin >= 3 && lt[t.begin - 1] == ')')
+                    {
+                        size_t open = lt.rfind('(', t.begin - 1);
+                        bool cast = open != std::string::npos && open + 1 < t.begin - 1;
+                        for (size_t k = open == std::string::npos ? 0 : open + 1; cast && k + 1 < t.begin; ++k)
+                            cast = std::isalnum(static_cast<unsigned char>(lt[k])) || lt[k] == '_' || lt[k] == ' ' || lt[k] == '*';
+                        if (cast) continue;
+                    }
                     ++a.storeDead;
                     problem("store-dead", "line " + std::to_string(li) + " '" + r.lines[li].text + "' names the store at " + MappingHex(t.addr) +
                                               ", whose bytes a later store writes over before anything reads them (A7-158)");

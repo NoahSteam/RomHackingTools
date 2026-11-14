@@ -299,10 +299,9 @@ static bool PieceOfAssignedGlobal(const std::string& text, size_t from, size_t a
 // (A5-139) A statement `G = G & 0xffffff;` or `G = G | 0xff000000;` (G the whole word, `uRam26002188`): the engine's form of a byte or half store of the
 // constant 0 or 0xff, which it has widened to the word; the bytes it keeps are read, and the stored bytes are the mask's 00 (and) or ff (or) bytes.
 // `base` is the global's address, `lo` and `hi` the byte range the mask writes (big-endian: the first byte is the word's address).
-static bool MaskedOwnWord(const std::string& text, uint32_t& base, uint32_t& lo, uint32_t& hi)
+static bool MaskedOwnWordAt(const std::string& text, size_t b, const char* tail, uint32_t& base, uint32_t& lo, uint32_t& hi)
 {
-    const size_t b = text.find_first_not_of(' ');
-    if (b == std::string::npos) return false;
+    if (b == std::string::npos || b >= text.size()) return false;
     size_t e = b;
     while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_' || text[e] == '.')) ++e;
     const std::string name = text.substr(b, e - b);
@@ -320,7 +319,7 @@ static bool MaskedOwnWord(const std::string& text, uint32_t& base, uint32_t& lo,
     int used = 0;
     if (text.compare(k, 2, "0x") != 0 || std::sscanf(text.c_str() + k + 2, "%x%n", &mask, &used) != 1 || used <= 0) return false;
     k += 2 + static_cast<size_t>(used);
-    if (text.compare(k, std::string::npos, ";") != 0) return false;
+    if (text.compare(k, std::strlen(tail), tail) != 0 || (tail[0] == ';' && k + 1 != text.size())) return false;
     const unsigned keep = op == '&' ? 0xffu : 0x00u;
     lo = 4;
     hi = 0;
@@ -337,6 +336,16 @@ static bool MaskedOwnWord(const std::string& text, uint32_t& base, uint32_t& lo,
         if (((mask >> (8 * (3 - i))) & 0xffu) == keep) return false;
     base = v;
     return true;
+}
+// (A5-147: ...also as the first operand of a comma expression in a condition, `(uRam26002084 = uRam26002084 & 0xffffff, in_r0 != 2)`: a slot's byte
+// store of the constant, which the engine puts into the condition of the branch it is the slot of; grammar 1 seed 9408552)
+static bool MaskedOwnWord(const std::string& text, uint32_t& base, uint32_t& lo, uint32_t& hi)
+{
+    if (MaskedOwnWordAt(text, text.find_first_not_of(' '), ";", base, lo, hi)) return true;
+    if (dts::A7RuleOff(5147)) return false;
+    for (size_t at = text.find('('); at != std::string::npos; at = text.find('(', at + 1))
+        if (MaskedOwnWordAt(text, at + 1, ",", base, lo, hi)) return true;
+    return false;
 }
 // A read whose value is used only by an expression the engine folds to a constant (x ^ x, x - x,
 // x == x, x & 0, a test of bits a shift cleared) is dropped (ledger A5-1), and that one class fills
@@ -17688,8 +17697,8 @@ void TestA5FoldedPins4(Sh2Decompiler& d)
 
 // Area 7 round 22: the routed seeds and the sweep from 9,400,001. Whole seeds, then each shrunk program evaluated and replayed from the replay line
 // the report prints (alias, volatile range, poll and the module's functions, returns, clobbers and reads included). A7-165 (grammar 1 specials seed
-// 9302668), A7-166 (grammar 1 seeds 8901149 and 8909710), A7-167 (grammar 2 seed 8900054), and A5-146 (grammar 1 seed 8902817, which the oracle
-// fix of A5-144 had already set right: pin only). No finding of any kind.
+// 9302668), A7-166 (grammar 1 seeds 8901149 and 8909710), A7-167 (grammar 2 seed 8900054), A5-146 (grammar 1 seed 8902817, which the oracle
+// fix of A5-144 had already set right: pin only), and the sweep from 9,400,001: A7-168 (9401568), A7-169 (9406270), A5-147 (9408552). No finding of any kind.
 void TestArea7Round22Pins(Sh2Decompiler& d)
 {
     const bool savedSpecials = gSpecialReads;
@@ -17699,7 +17708,8 @@ void TestArea7Round22Pins(Sh2Decompiler& d)
         long seed;
         bool specials;
     };
-    for (const Whole& w : { Whole{ 1, 9302668, true }, Whole{ 1, 8901149, false }, Whole{ 1, 8909710, false }, Whole{ 2, 8900054, false }, Whole{ 1, 8902817, false } })
+    for (const Whole& w : { Whole{ 1, 9302668, true }, Whole{ 1, 8901149, false }, Whole{ 1, 8909710, false }, Whole{ 2, 8900054, false }, Whole{ 1, 8902817, false },
+                           Whole{ 1, 9401568, false }, Whole{ 1, 9406270, false }, Whole{ 1, 9408552, false } })
     {
         gSpecialReads = w.specials;
         const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
@@ -17726,6 +17736,12 @@ void TestArea7Round22Pins(Sh2Decompiler& d)
         // A7-166, 8909710: the same with a comma expression in the condition
         { "A7-166 grammar 1 seed 8909710 shrunk", "D609 D70A D10A 271B E0E2 2258 8B01 3230 8F07 1716 816F 4215 8900 816F 451B 000B 0009 000B 0009 0009 2600 2184 2600 2188 2000 0000",
           nullptr, nullptr, nullptr },
+        // A7-168, 9401568: a write through a pointer between a store and the store that writes over it
+        { "A7-168 grammar 1 seed 9401568 shrunk", "D605 D706 2521 6070 C801 8BFB 2602 E010 0506 2612 000B 0009 0600 210C 2600 2300", nullptr, nullptr, "26002300" },
+        // A7-169, 9406270: a conversion's operand at the first of two stores of a word
+        { "A7-169 grammar 1 seed 9406270 shrunk", "D604 8446 3148 E000 0615 8160 E00E 0715 000B 0009 0400 0004", nullptr, nullptr, nullptr },
+        // A5-147, 9408552: the widened byte store of 0 in a condition's comma expression
+        { "A5-147 grammar 1 seed 9408552 shrunk", "D606 6360 441B 2458 8B06 8802 8D01 2630 2622 2640 000B 0009 AFF9 0009 2600 2084", nullptr, nullptr, nullptr },
     };
     const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
     for (const Shrunk& p : kShrunk)
