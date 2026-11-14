@@ -132,6 +132,10 @@ struct MappingAudit
     int constAtJoin = 0;       // ...drawn at a join's first instruction (a target of the function's own branches) that makes no number, or another
                                // one, or makes it into another register than every path into the join sets it in: the engine's collapsed
                                // MULTIEQUAL, at its block's start (A7-22, A7-26, a violation)
+    // Area 7 review round 20: a line naming a store another store writes over before anything reads it (A7-158, a violation); a folded
+    // store of a global, not written over so in the straight code after it and not said missing, on no line (A7-159's store; counted: a
+    // store the engine drops past reads it can tell from the global's, or with a poll's loop it takes to run for ever, is on none either)
+    int storeDead = 0, storeUnnamed = 0;
     std::vector<std::string> problems;   // the first few of each kind, "kind: where: what"
 
     void Add(const MappingAudit& o)
@@ -153,6 +157,7 @@ struct MappingAudit
         storeValueOther += o.storeValueOther; copyOtherValue += o.copyOtherValue; constLines += o.constLines; constAtJoin += o.constAtJoin;
         copyMergeAtBranch += o.copyMergeAtBranch; copyRegisterMade += o.copyRegisterMade; copyNoAddress += o.copyNoAddress; copyNumberMade += o.copyNumberMade; copyInputMerged += o.copyInputMerged;
         numberStoreOther += o.numberStoreOther; caseOtherEntry += o.caseOtherEntry; caseJudged += o.caseJudged; storeAfterUse += o.storeAfterUse;
+        storeDead += o.storeDead; storeUnnamed += o.storeUnnamed;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -168,7 +173,7 @@ struct MappingAudit
     {
         return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip +
                accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther + storeValueOther + constAtJoin +
-               copyMergeAtBranch + numberStoreOther + caseOtherEntry + storeAfterUse + noInstruction;
+               copyMergeAtBranch + numberStoreOther + caseOtherEntry + storeAfterUse + noInstruction + storeDead;
     }
 };
 
@@ -2012,7 +2017,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     // `iRam2600103a` at the `mov.w @(r0,r6),r3` that loads it, naming the store of r3 -- is that load's own statement;
                     // grammar 1 seed 3300988)
                     bool readHere = false;
-                    if (plain && t.end <= r.lines[li].text.size())
+                    // (A7-160: an operand the line reads, after its `=`: the name it assigns, `uRamc0000024 = in_r1;` drawn at the `mov.l @r6,r2`
+                    // that reads the word back, is the store's statement materialised at the load, not the load's; grammar 1 seed 9000706)
+                    if (plain && t.end <= r.lines[li].text.size() && (A7RuleOff(160) || (assign != std::string::npos && t.begin > assign)))
                     {
                         const std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
                         if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
@@ -2268,6 +2275,104 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 ++a.frameStoreMissing;
                 problem("frame-store", "line " + std::to_string(li) + " '" + text + "' assigns a frame local at a load or a call and names none of the " + std::to_string(candidates.size()) +
                                            " store(s) the engine folded into it (first " + MappingHex(*candidates.begin()) + ")");
+            }
+    }
+    // A7-158 and A7-159 (area 7 review round 20): the folded stores of memory and the lines that name them. A store another folded store
+    // writes over in the straight code after it, before any instruction that may read memory, wrote a value nothing reads: a line that names
+    // it, or is drawn at it, names a store that does not make what it shows (A7-158: `L: mov.b r1,@r7 ; mov.b r2,@r7`, `xRam26001018 = 0;`
+    // drawn at the first). A store of a global that is not written over so is the value the global holds after it, which some line should
+    // name: counted only (A7-159's join `mov.b r2,@r7`, whose value on the path round an `if` the engine printed before the `if`, was on no
+    // line; but a store the engine drops past reads it can tell from the global's, or with a poll's loop it takes to run for ever and does
+    // not say so at the store, is on none either: 46 of 1,000 grammar 1 seeds from 9,000,001).
+    {
+        std::map<uint32_t, std::vector<uint32_t>> into;
+        bool haveInto = false;
+        const auto overwritten = [&](const AccessFate& f) {
+            if (!haveInto)
+            {
+                into = BranchSources(r, word);
+                haveInto = true;
+            }
+            uint16_t w = 0, sw = 0;
+            // (a delay slot's store: the flow goes on at its branch's target)
+            if (r.InBody(f.insn - 2) && word(f.insn - 2, w) && sfe::Sh2Decode(f.insn - 2, w).HasDelaySlot) return false;
+            // (an instruction that reads the memory too, `tas.b @r7`, draws its read: a line's tokens there are that read's)
+            if (!word(f.insn, sw) || (sw & 0xF0FF) == 0x401B || ((sw >> 8) >= 0xCC && (sw >> 8) <= 0xCF)) return false;
+            int storedSize = 0;
+            const int stored = StoredRegister(sw, storedSize);
+            (void)storedSize;
+            bool storedKept = stored >= 0;   // (the register it stores, not written since: a later store of it writes the same value)
+            const auto covers = [&f](const AccessFate& g) {
+                const auto delta = [&f](uint32_t a, uint32_t b) { return f.frame ? a - b : GlobalDelta(a, b); };
+                return g.fate == AccessFate::FoldedOrdinary && g.write && g.frame == f.frame && (f.frame || g.constantAddress) &&
+                       delta(f.address, g.address) < g.size && delta(f.address + f.size - 1u, g.address) < g.size;
+            };
+            for (uint32_t p = f.insn + 2, n = 0; n < 8; p += 2, ++n)
+            {
+                if (!r.InBody(p) || !word(p, w) || into.count(p)) return false;
+                const sfe::DisassembledInstruction d = sfe::Sh2Decode(p, w);
+                if (!d.IsValid || d.IsBranch || d.IsCall || d.HasDelaySlot) return false;
+                const MemoryShape m = ShapeOf(d);
+                // (a read-modify-write reads: `tas.b @Rn`, `and.b #imm,@(r0,gbr)` and its kin)
+                if (m.load || (w & 0xF0FF) == 0x401B || ((w >> 8) >= 0xCC && (w >> 8) <= 0xCF)) return false;
+                if (m.store)
+                    for (const AccessFate& g : r.accessFates)
+                        if (g.insn == p && covers(g))
+                        {
+                            // (the same register stored again: the store wrote (a piece of) the value the later one writes, and the engine
+                            // may draw that value at either -- `mov.b r1,@r15 ; mov.b r1,@r5 ; mov.b r1,@r15`, grammar 2 seed 9000950;
+                            // `mov.w r0,@(0,r14) ; mov.w r0,@r5 ; ... ; mov.l r0,@(0,r14)`, 9007284)
+                            int laterSize = 0;
+                            if (storedKept && StoredRegister(w, laterSize) == stored) return false;
+                            return true;
+                        }
+                if (stored >= 0 && WrittenRegisters(d).count(stored)) storedKept = false;
+            }
+            return false;
+        };
+        std::map<uint32_t, const AccessFate*> foldedStores;
+        for (const AccessFate& f : r.accessFates)
+            if (f.fate == AccessFate::FoldedOrdinary && f.write && f.size > 0 && (f.frame || f.constantAddress)) foldedStores[f.insn] = &f;
+        std::set<uint32_t> dead;
+        for (const auto& kv : foldedStores)
+            if (!A7RuleOff(158) && overwritten(*kv.second)) dead.insert(kv.first);
+        for (size_t li = 0; li < r.lines.size() && !dead.empty(); ++li)
+        {
+            // (a statement: a case label's token at its first instruction says where the case begins, not a value)
+            if (r.lines[li].text.find(" = ") == std::string::npos) continue;
+            // (the store's own statement, which the engine kept -- the name the line assigns and its value drawn at it, `uRam06001028 =
+            // (int2)xVar3;` at `mov.w r2,@r6` before a store through a parameter it cannot tell from the global -- is the store's. Not a
+            // line whose value is drawn elsewhere: `xRam26001018 = 0;` with its name at the store of in_r1 and the 0 at `mov #0,r2`)
+            const std::string& lt = r.lines[li].text;
+            const size_t nb = lt.find_first_not_of(' '), eq = lt.find(" = ");
+            std::set<uint32_t> named, valued, ownName;
+            for (const Token& t : r.lines[li].tokens)
+                if (t.addr && nb != std::string::npos && eq != std::string::npos && t.end > t.begin)
+                {
+                    if (t.begin == nb && t.end <= eq) named.insert(t.addr);
+                    if (t.begin >= eq + 3) valued.insert(t.addr);
+                }
+            for (uint32_t x : named)
+                if (valued.count(x)) ownName.insert(x);
+            for (const Token& t : r.lines[li].tokens)
+                if (t.addr && dead.count(t.addr) && !ownName.count(t.addr))
+                {
+                    ++a.storeDead;
+                    problem("store-dead", "line " + std::to_string(li) + " '" + r.lines[li].text + "' names the store at " + MappingHex(t.addr) +
+                                              ", whose bytes a later store writes over before anything reads them (A7-158)");
+                    break;
+                }
+        }
+        for (const auto& kv : foldedStores)
+            {
+                const AccessFate& f = *kv.second;
+                if (f.frame || dead.count(f.insn) || mapped.count(f.insn) || !r.InBody(f.insn)) continue;
+                // (a store the notes say is missing: the analysis dropped it, and says so)
+                bool said = false;
+                for (const sfe::decomp::HardwareNote& n : r.hardwareNotes)
+                    said = said || (n.address == f.insn && n.text.find("here is missing") != std::string::npos);
+                if (said) continue;
+                ++a.storeUnnamed;   // (counted, not a violation)
             }
     }
     // A7-19 (area 7 round 3), counted: a bare value assigned to a frame local or a global, at an instruction that does not write it.
@@ -4296,6 +4401,9 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 label, a.numberStoreOther, a.caseOtherEntry, a.caseJudged);
     std::printf("  mapping (%s): area 7 round 7: %d copies drawn at a call or a return name a store that cannot run before it (A7-32, a violation)\n",
                 label, a.storeAfterUse);
+    std::printf("  mapping (%s): area 7 review round 20: %d lines name a store a later store writes over before anything reads it (A7-158, a violation); %d folded stores "
+                "of a global not written over so are on no line (A7-159, counted)\n",
+                label, a.storeDead, a.storeUnnamed);
     std::printf("  mapping (%s): area 7 round 8 (A7-52): %d of the lines with no instruction are statements the product says so of (counted); %d statements with none that do not say so, or say so with one (a violation)\n",
                 label, a.noOriginLines, a.noInstruction);
     std::printf("  mapping (%s): area 7 round 8 (A7-55): %d copies of the function's input drawn only at the moves that put it in a register, or "

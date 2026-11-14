@@ -20910,3 +20910,77 @@ Pins: `TestA3RoutedPins`, the A3-192 block (the nine modules: no finding, a lent
 ### Routed
 
 Nothing.
+
+## Area 7, review round 20
+
+Reviewer, branch `review/7-review20` from master `47d5f39b` (area 7's round 19 merged). An adversarial round on the product changes and the oracle set-asides of rounds 16 to 19 (A7-130 to A7-157). No engine change: patch 0091 stays free. Six rows are filed, **A7-158 to A7-163**: **three P2** (A7-158, A7-159, A7-161; all three fixed here), two P3 fixed (A7-160 oracle, A7-163 product) and one P3 open (A7-162, oracle, routed). **The round is not clean** by the program's definition (a P2 was found), so area 7's count of consecutive clean review rounds is 0. The generator's productions are untouched; no seed's program changes.
+
+### What was attacked
+
+**1. The product changes of rounds 16 to 19.** Hand-written words (`SE_GENERATED_WORDS`, with a new `SE_GENERATED_TOKENS=3` that prints, after each function's text, the line a click on each body instruction goes to first) varied each fix's shape: the extension that makes a conversion (A7-133), the twin extension (A7-135), the zero bytes of a zero extension (A7-136, A7-147), the join store of a path's copy (A7-141), the merge copy of a `movt` (A7-144), the joined stores' copy (A7-145), the CAST of the instruction's own op (A7-148), the shared piece (A7-149), two reads joined (A7-150), the bytes of a wider store (A7-154), a number a computation gives (A7-155). Each was also run on a build of master `eb8ede0d` (before round 16) to tell new from old.
+
+* **A7-141's shape** gave the three P2 rows. A dead store before the join's store (A7-158): `L: mov.b r1,@r7 ; mov.b r2,@r7`. The engine's copy of r2's 0 on the path round the `add` was drawn at the store of in_r1, which the next instruction writes over; the store that wrote the 0 was on no line. In A7-141's own fixture with that store added, A7-141's rule fell back to the poll's store of 2. A store of the byte before the statement in its block, read before it (A7-159): the copy `cRam26001018 = '\0';` before the `if` was drawn at that earlier store of the same number; the join's store was on no line, and its way back answered `return;`. Both are older than round 16 (the same on `eb8ede0d`). The corpus diff (below) found the third: A7-141 itself named, in hwram007 0x0601FA28, the loop's slot store of a call's result for `iStack_c = 0;`, the value the variable has going into the loop (A7-161, a regression of round 17).
+* **A7-136 and A7-155** rest on the value walk's "may": a number the flow compares anything with (A7-41's `ties`, which every `bf`'s `T == 0` meets) and, since A7-155, a number a computation gives that the statement shows anywhere (a comparison's 0 included). Neither made a wrong token in the shapes tried once A7-158 passes the dead store; the weakness of `ties` is what A7-158's first fixture rode on, and is left as it is (tightening it is wider than this round).
+* **A7-163** came out of A7-158's oracle rule on a pin (`TestArea7Round17Pins`, 8004782): the `tas.b` line named a store after it of another value, for the byte the statement keeps.
+* No wrong token was built for A7-133, A7-135, A7-144, A7-145, A7-147 to A7-150 or A7-154 in the variants tried (an extension at a join, of another register, at the block start; `movt` blocks entered by a `bt/s` whose slot sets T; a copy line naming no store beside the piece; a delay-slot read joined with a later one).
+
+**2. The oracle's set-asides of rounds 16 to 19.** Each was read for the case it lets through, and the products' wrong tokens of this round were checked against them. None hid one: A7-158's, A7-159's and A7-161's tokens passed the oracle through no set-aside of these rounds but through its general reading of a store whose register it cannot place, or whose number matches ("may", as the product's walk). Of the rules, the ones that judge a number at an instruction by what the instruction computes (A7-130, A7-131, A7-137, A7-139, A7-140, A7-143, A7-151 to A7-153) accept an instruction that makes the number into any register it writes, not only the line's, as the older const-join rules do; a wrong token behind them needs the engine to draw a merge copy at a join head that makes the same number by coincidence, and none was built. A7-134 judges nothing the words' own T makes unreachable; A7-142 and A7-146 widen a parameter's values by the text's own assignments; A7-156 and A7-157 move a token between "own" and "copy", which only reorders the way back's demand. The round's fresh sweep found one oracle false positive in an older rule (A7-160, A7-78's read taken for the name a line assigns) and one in the const-join reading of a push and pop (A7-162, open).
+
+**3. The game corpus.** Both images, alone and lent, with the token dump (`tools/a7_round2/corpus.sh`), on master `eb8ede0d` (before round 16), master `47d5f39b` and this branch; `tools/a7_review20/token_diff.py` lists every line whose tokens differ.
+
+| Dump | `eb8ede0d` to `47d5f39b` | `47d5f39b` to this branch |
+|---|---|---|
+| hwram007 alone | 15 lines' materialised marks, 1 line's addresses | 1 line's addresses (0x0601FA28, A7-161) |
+| hwram007 lent | 21 marks, 2 addresses | 2 addresses (0x0601FA28 and its prologue entry 0x0601FA20) |
+| hwram008 alone | 21 marks, 6 addresses | 1 address (0x0605EF04, A7-161's shape) |
+| hwram008 lent | 35 marks, 12 addresses | 2 addresses (0x0605EF04 and 0x0605EEFC) |
+
+Read: the materialised marks are A7-133's (a conversion at the `exts`/`extu` that makes it is its own statement; e.g. hwram007 0x0600FD2C `iStack_c = param_4;` at `exts.w r7,r7`), each of the hwram007 alone ones and a sample of the others read against its instruction (the extension, or the `movt`, makes the line's value and the store after it stores it). The address changes are A7-141's: hwram008 0x06046C06 (`iStack_24 = 0x2b8;` etc. in each case of a switch, the register merged under the frame word's name, now named at the store after the switch that adds it: kept), and hwram007 0x0601FA28 and hwram008 0x0605EF04 (`iStack_c = 0;` before a loop, named at the loop's store of a call's result: A7-161, wrong, fixed). This branch changes no other line of either image: each line it changes is one of those two loops' (with their prologue entries 0x0601FA20 and 0x0605EEFC in the lent runs), back to the tokens of `eb8ede0d`.
+
+### Rows
+
+| Row | Sev | Whose | Shape | Fix |
+|---|---|---|---|---|
+| A7-158 | P2 | product and oracle | a store written over before any read named (or drawn) for a line it did not make; the store that made the value on no line | `AddFrameStoreTokens`: such a store shows no statement (every search passes it); oracle `store-dead` (`map-store-dead`, `SE_A7_RULE_OFF=158`) |
+| A7-159 | P2 | product | the join store's copy before an `if`, drawn at an earlier store of the same number read before it; the join store on no line, its way back `return;` | A7-141's join store taken before the store before the statement, when nothing after the statement in its block reads the byte, and from a block that branches round a block that touches the byte nowhere; the oracle's count `storeUnnamed` (counted only) |
+| A7-160 | P3 | oracle | A7-78's read at a load took the name a line assigns | the operand after the `=` only (`SE_A7_RULE_OFF=160`) |
+| A7-161 | P2 | product (A7-141's regression) | `iStack_c = 0;` before a loop named at the loop's store of a call's result (hwram007 0x0601FA28, hwram008 0x0605EF04) | A7-141's join store only when the register it stores is not made in the join by a call, a load or a number |
+| A7-162 | P3 | oracle | `or r0,r1` at a bt's target makes 0xf from a popped r1 and an `and`; the oracle finds no number | open, routed to the next area 7 fixer |
+| A7-163 | P3 | product | the `tas.b` line named a store after it for the byte it keeps | kept bytes of an OR or AND of the variable with a number |
+
+### Fixtures, pins, mutation
+
+`TestArea7Review20` (`Sh2DecompilerTests`): A7-158 twice (the bare shape, and A7-141's fixture with the dead store), A7-159, A7-160, A7-161 (the words of hwram007 0x0601FA28 to 0x0601FC00, `kA7161Words`, as A7-23's fixture holds hwram008's), A7-163 (the whole seed 8004782). Each checks the tokens and the way back; the damaged controls are master's tokens (A7-158 and A7-163: counted by `storeDead`, and A7-158's passes with `SE_A7_RULE_OFF=158`; A7-159: counted by `storeUnnamed`). `TestArea7Round17Pins` keeps seed 8004782 with no `map-*` finding: on master's product the new rule finds A7-163's name there.
+
+* Product mutation, one change at a time switched off (`false &&` or `if (true) return false;`), the whole suite each time: A7-158's `overwritten` 7 failures (both A7-158 fixtures), A7-159's two-way-out block 4, A7-161's `passes` 2, A7-163's kept bytes 2; no other check failed. Restored before the runs.
+* Oracle mutation, `tools/a7_review20/mutation.sh`: A7-158's words on master's product (with this round's oracle) 1 finding with the rule on, 0 with `SE_A7_RULE_OFF=158`, 0 on this branch; grammar 1 seed 9000706 fails with `SE_A7_RULE_OFF=160` (1 failing seed) and passes with it on.
+
+### Fresh sweeps
+
+`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0` (`tools/a7_review20/sweep.sh`), grammar 1 and 2 with 10,000 seeds each from 9,000,001 and grammar 1 specials with 5,000 from 9,100,001:
+
+| Run | Master `47d5f39b`'s binary | This branch's binary (the last code edit) |
+|---|---|---|
+| grammar 1 from 9,000,001 | 1 failing: 9000706 (`n:map-way-back`, A7-160) | **failing seeds=0; findings=0** |
+| grammar 2 from 9,000,001 | 2 failing: 9002796 (`n:map-const-join`, A7-162), 9006019 (area 5's) | 2 failing, the same two (A7-162 open; 9006019 routed) |
+| grammar 1 specials from 9,100,001 | none | **failing seeds=0; findings=0** |
+
+The new `store-dead` rule found nothing on these ranges on master's product once it spared a read-modify-write and the same register stored again (its first form flagged seven seeds of grammar 2 and the specials, each a read-modify-write, the same register stored again or a case label at a store); it finds A7-158's fixtures and seed 8004782 (A7-163) there. A7-158's and A7-159's shapes are hand-written; the generator's grammars did not make them in these 25,000 seeds.
+
+### Runs
+
+After the last code edit (commit `3baff194`; only documents and scripts changed after it), on its build:
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` with Live | **117 of 117** passed |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (canary on, every pin) | **failing seeds=0; findings=0** (the canary: 240 programs, 0 failing) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, narrow-c 130, void-return 227, void-return-lent 24 |
+| game corpus, both images, `SE_GAME_LEND=1` (`tools/a7_round2/corpus.sh`, with the token dump) | "all passed", every ledger count and mapping violation 0 (`store-dead` 0 in both images, alone and lent; `storeUnnamed`, counted, 683 and 572 in hwram008); missing and said 0 (hwram007) and 4 (hwram008); "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)" |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint --tests-dir` ok (no vendored file touched) |
+
+### Routed
+
+* **Area 7** (A7-162, open): grammar 2 seed 9002796, `n:map-const-join` (replay line in the row).
+* **Area 5**: grammar 2 seed 9006019, `n:folded-read-after-pointer-write` (the read at 0x06009076 the engine folded from 0x26002109 is named on no line, and line 55 reads the global after the write through a pointer at 0x06009080), on master's product as on this branch.
