@@ -20482,7 +20482,7 @@ Both reproduce on master's binary (built from `06884b11` in this worktree): neit
 |---|---|
 | ctest `-j2` with Live | 116 of 117: only `SaturnExplorerSh2GeneratedTests`, the known 7102142 pins of `TestA5FoldedPins` (A11-23; 3 CHECKs, area 7's to fix); the A3-190 pins pass |
 | fault suite | fault matrix: 0 of 94 job(s) failed |
-| 20,000-seed matrix | TWENTYK |
+| 20,000-seed matrix (one run, canary on) | `failing seeds=0; findings=0` (exit 1 only for the known 7102142 pins, the same 3 CHECKs as ctest) |
 | printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | agrees=5196 |
 | game corpus, lent (`a7_round2/corpus.sh`) | both "all passed"; missing and said 0 (hwram007) and 4 (hwram008); "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)": unchanged (the claim grows, it lends nothing more or less) |
 | lints | `check-literal-size.py` ok; `check-vendored-tree.py lint` ok (no vendored file touched) |
