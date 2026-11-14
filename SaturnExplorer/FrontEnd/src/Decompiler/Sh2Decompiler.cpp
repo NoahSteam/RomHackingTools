@@ -747,6 +747,9 @@ private:
         // value (mayEntry) with a constant written on another path is the entry value or that constant: changed for certain on that path, which
         // the join's mayEntry alone hid (x2: the clear after the restore, the paths meeting at one `rts`, said nothing).
         uint32_t sureChanged = 0;
+        // (area 3, round 28, A3-222) Fuzzy, a join only: the registers of kModelKept whose entry value some alternative joined here is (EntryOf
+        // of each side): the join may be that value, and a walked function that lets it out, stores it or reads through it reads it (EntryOf)
+        uint32_t entryJoin = 0;
         // (area 3, A3-203) Fuzzy, a join only: the registers of kModelKept that every alternative joined here overwrites (SureWritten of each
         // side, an intersection): held in the register at a return, the value is another one on every path and none computed from the register's
         // own entry value. A callee that returns so (CalleeWritten) leaves nothing of what an earlier call left there.
@@ -822,7 +825,7 @@ private:
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
                                      usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
                                      baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure && sureChanged == o.sureChanged &&
-                                     sureWritten == o.sureWritten));
+                                     sureWritten == o.sureWritten && entryJoin == o.entryJoin));
         }
     };
     using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
@@ -1047,9 +1050,11 @@ private:
         if (v.kind == Value::Reg) r = static_cast<int>(v.v);
         else if (v.kind == Value::Fuzzy && v.part >= 0) r = v.part;
         uint32_t may = v.mayEntry & kModelKept & ~v.stale;
-        // (area 3, round 28, A3-222) ...and a join one side of which is (or is made from) a register of r8-r14, GBR or VBR as it came in: it
-        // may be that value (grammar 2 seed 12018998: `stc gbr,r2` on one path, a load on the other, then `mov.b r2,@r5`)
-        if (v.kind == Value::Fuzzy && v.def == Value::kJoin) may |= v.Origins() & kModelKept & ~v.stale;
+        // (area 3, round 28, A3-222) ...and a join one side of which is a register of r8-r14, GBR or VBR as it came in (Value::entryJoin): it
+        // may be that value (grammar 2 seed 12018998: `stc gbr,r2` on one path, a load on the other, then `mov.b r2,@r5`). Not every join with the
+        // register among its origins: a value loaded through it or computed from it is no entry value (its op read the register, and is counted
+        // there), and taking those added cautions at 06027170/007's calls, whose r10 and r11 nothing reads before 060272DC overwrites them
+        if (v.kind == Value::Fuzzy && v.def == Value::kJoin) may |= v.entryJoin & kModelKept & ~v.stale;
         if (r < 0 || r >= kTracked || ((v.stale >> r) & 1u)) return may;
         return (1u << r) | may;
     }
@@ -1233,6 +1238,7 @@ private:
         m.mayEntry = a.mayEntry | b.mayEntry;
         m.innerChanged = a.innerChanged | b.innerChanged;   // (A3-207) on either path
         m.sureChanged = SureChanged(a) | SureChanged(b);   // (A3-199) on either path
+        m.entryJoin = (EntryOf(a) | EntryOf(b)) & kModelKept;   // (round 28, A3-222) on either path
         m.sureWritten = SureWritten(a) & SureWritten(b);   // (A3-203) on both
         // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
         // that steps a pointer down from r15, `mov.l r0,@-r1`, A3-16) as often as a choice of two addresses, and is not followed.
