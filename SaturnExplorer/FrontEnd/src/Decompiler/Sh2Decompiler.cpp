@@ -9190,6 +9190,15 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
     for (const auto& kv : printed) ordered.push_back(kv.first);
     std::sort(ordered.begin(), ordered.end(), [](const ghidra::PcodeOp* a, const ghidra::PcodeOp* b) { return a->getTime() < b->getTime(); });
     const std::set<std::pair<size_t, uint32_t>> shared = SharedInstructionLines(printed, ordered);
+    // (the lines a branch's own op is printed on, `if ((bool)uVar1) {` with the CBRANCH and its condition's cast at one `bt/s`: those tokens are the branch's)
+    std::set<std::pair<size_t, uint32_t>> control;
+    for (const ghidra::PcodeOp* p : ordered)
+        if (p->code() == ghidra::CPUI_CBRANCH || p->code() == ghidra::CPUI_BRANCH || p->code() == ghidra::CPUI_BRANCHIND || p->code() == ghidra::CPUI_RETURN)
+        {
+            uint32_t insn = InstructionOf(p), canonical = 0;
+            if (CanonicalAddress(insn, canonical)) insn = canonical;
+            for (size_t line : printed.at(p).first) control.insert(std::make_pair(line, insn));
+        }
     const ghidra::AddrSpace* data = fd.getArch()->getDefaultDataSpace();
     const auto inMemory = [data](const ghidra::AddrSpace* s) { return s && (s->getType() == ghidra::IPTR_SPACEBASE || s == data); };
     // (the instruction's last op, as A7-171's test: a delayed branch's own ops are split by its slot's, `bf/s` negates T, runs the slot, branches)
@@ -9278,8 +9287,9 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
         for (size_t line : printed.at(o).first)
         {
             // (another op of the instruction on the line: at a branch, the engine's copy of the conversion's value, `pxStack_24 = (xunknown4 *)
-            // extraout_r3;` with the frame's copy and the cast both at the `bf`, which makes neither; grammar 2 specials seed 10000825)
-            if (line >= lines.size() || (!branch && shared.count(std::make_pair(line, from)))) continue;
+            // extraout_r3;` with the frame's copy and the cast both at the `bf`, which makes neither (grammar 2 specials seed 10000825), or its
+            // shift; never the branch's own line)
+            if (line >= lines.size() || control.count(std::make_pair(line, from)) || (!branch && shared.count(std::make_pair(line, from)))) continue;
             Line& l = lines[line];
             bool any = false;
             for (Token& t : l.tokens)

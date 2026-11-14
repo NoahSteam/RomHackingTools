@@ -2564,8 +2564,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 const sfe::DisassembledInstruction d = sfe::Sh2Decode(t.addr, w);
                 if (!d.IsValid || !d.IsBranch || d.IsCall || d.Mnemonic == "rts" || d.Mnemonic == "rte") continue;
                 // (the statement is the conversion: its name, `=`, the cast and its one operand, and every drawn token at the branch)
+                // (not a piece of memory the engine copies at the branch, `xVar2 = (xunknown1)uRam06001024;` a merge copy of the byte the `bt/s`'s
+                // slot loads, printed with its piece's cast: a copy at the end of its block, A7-178's, counted with the rest; grammar 1 seed 10815)
+                const std::string operand = lt.substr(t.begin, t.end - t.begin);
                 bool whole = lt.compare(lt.size() - 1, 1, ";") == 0 && t.end + 1 == lt.size() && lt.compare(eq, 4, " = (") == 0 && open == eq + 3 &&
-                             lt.find_first_of(" ,()", nb) == eq;
+                             lt.find_first_of(" ,()", nb) == eq && operand.find("Ram") == std::string::npos && operand.find("Stack") == std::string::npos;
                 for (const Token& u : r.lines[li].tokens) whole = whole && (!u.addr || u.begin == u.end || (u.addr == t.addr && !u.materialised));
                 if (!whole)
                 {
