@@ -992,13 +992,14 @@ private:
     {
         return v.kind == Value::Reg && ((v.v >= 8 && v.v <= 14) || v.v == 17 || v.v == 18 || v.v == kPr);
     }
+    static int TmpRevert() { static const int r = std::getenv("SE_A3_REVERT") ? std::atoi(std::getenv("SE_A3_REVERT")) : 0; return r; }   // TEMPORARY A11-33
     // (area 3, A3-197, A3-199, A3-200) The registers of kModelKept that 'v', held in that register at a return, shows changed for certain: not
     // the entry value itself (nor the entry value stepped and stepped back, `add #4,r8 ; ... ; add #-4,r8`: x1), not a word that saved it and
     // that a store may have written over (Value::mayEntry), not a value read from memory the walk cannot place with the register among its
     // origins. A join: what either side shows (Value::sureChanged).
     static uint32_t SureChanged(const Value& v)
     {
-        if (v.kind == Value::Fuzzy && v.def == Value::kJoin) return v.sureChanged;
+        if (v.kind == Value::Fuzzy && v.def == Value::kJoin && TmpRevert() != 199) return v.sureChanged;
         uint32_t m = 0;
         for (int r = 0; r < kTracked; ++r)
         {
@@ -1013,7 +1014,8 @@ private:
         // (area 3 round 27, A3-206) ...and r15, which the model keeps too (extrapop 0): a stack address a known distance from the entry r15 (a
         // pop of the caller's word, `add #4,r15 ; rts`), or a constant (another stack). Never overwritten (SureWritten, kModelKept): a moved r15 is
         // computed from the old one.
-        if ((v.kind == Value::Sp && v.v != 0) || v.kind == Value::Imm) m |= 1u << kR15;
+        if (TmpRevert() != 206 && ((v.kind == Value::Sp && v.v != 0) || v.kind == Value::Imm)) m |= 1u << kR15;
+        if (TmpRevert() == 200) m &= ~((1u << 17) | (1u << 18));
         return m;
     }
     // (area 3, A3-203) Of SureChanged, the registers 'v', held in that register at a return, overwrites: not computed from the register's own
@@ -1520,7 +1522,7 @@ private:
         // with changed (InnerChanged) is put beside the values as a mark (Value::innerChanged), which no frame rule reads: held in the register
         // at a return, it is this function's change too (ChangedAtReturn). Without it a callee whose only change of r11 is its own callee's
         // (w6's F1 calling G) showed none.
-        if (mNested && !signatureLent && haveTarget)
+        if (TmpRevert() != 207 && mNested && !signatureLent && haveTarget)
         {
             const uint32_t changed = InnerChanged(target) & kUnkeptRegs;
             for (int r = 0; r < kTracked; ++r)
@@ -2316,7 +2318,7 @@ private:
             // (mChangedAt) takes it; the path stays lost, so nothing is claimed overwritten on every path (mWrittenAt), and nothing the frame
             // rules read (preserved, outOrigins, the hand-outs, r15's delta) changes. w6: F1 saves PR and calls an unlent G that clears r11 on
             // one path; no return of F1 was proven, so it showed nothing changed.
-            if (mNested && ((t.mayEntry >> kPr) & 1u))
+            if (TmpRevert() != 207 && mNested && ((t.mayEntry >> kPr) & 1u))
                 for (int r = 0; r < kTracked; ++r)
                     if ((kUnkeptRegs >> r) & 1u) mChangedAt |= ChangedAtReturn(Get(s, mReg[r]), r);
             return false;
@@ -2818,7 +2820,7 @@ private:
                         // epilogue, which restores r8 and r14). (The code after this block is the round 11 fix's, said above it.)
                         {
                             const Value pr = Get(s, mReg[kPr]), sp = Get(s, mReg[kR15]);
-                            if (pr.kind == Value::Reg && pr.v == kPr && sp.kind == Value::Sp && sp.v == 0)
+                            if (TmpRevert() != 205 && pr.kind == Value::Reg && pr.v == kPr && sp.kind == Value::Sp && sp.v == 0)
                             {
                                 uint32_t here = 0;
                                 for (int r = 0; r < kTracked; ++r)

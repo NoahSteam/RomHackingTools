@@ -214,6 +214,8 @@
 //   SE_GENERATED_FIRST=<k>   the first seed (default 1): a nightly run moves it
 //   SE_GENERATED_CANARY=<n>  the canary family (TestCanary, A3-34): n programs, default 240, 0 off; SE_GENERATED_CANARY_ONLY=<k> prints variant k
 //   SE_GENERATED_SEED=<k>    one seed, with everything printed
+//   SE_GENERATED_PINS=0      the seeds only, no pin (a sweep of a range)
+//   SE_GENERATED_CAUTION=0   A11-33's check of A3-197's caution against the runs (CheckCautions) off
 //   SE_GENERATED_GRAMMAR=1|2 only that grammar (default: the odd seeds are version 1, the even ones version 2)
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
@@ -580,6 +582,7 @@ struct Func
     uint32_t clobbers = 0;         // registers this function changes for good (never saved)
     uint32_t effClobbers = 0;      // ...and what its callees, a function it jumps to or runs on into leave changed too
     uint32_t reads = 0;            // registers whose entry value it reads on purpose (r1-r3, r8-r14, gbr, vbr, mach, macl)
+    std::vector<Item> afterExit;   // (A11-33) after the epilogue's pops, before `rts` (Rts only): a saved register changed on one path
 };
 
 struct Program
@@ -650,6 +653,14 @@ struct Gen
     bool modPollOn = false;
     Rng ptrAliasRng;            // ...and one for A5-122 (a global read, a store through r4 or r5 that the run points at it, the value read used), from kPtrAliasFirst on only
     bool ptrAliasOn = false;
+    // (A11-33) ...and one for the shapes of A3-197's caution (a callee that changes r8-r14, GBR, VBR or r15 on some path, a thunk to it, the callers
+    // that read the register after the call), version 2, from kCautionFirst on only (Generate2): no seed below it changes. Per module:
+    Rng cautionRng;
+    bool cautionOn = false;
+    bool cautionModule = false;   // this module has them
+    uint32_t cautionKept = 0;     // the registers its changers change (bits as Func::clobbers: r8-r14, 17 gbr, 18 vbr)
+    int cautionSpFn = -1;         // the function that leaves r15 moved on some path (the last; every other function has a frame pointer), -1 none
+    bool cautionThunk = false;    // function 1 is a thunk (`mov.l @(lit),rN ; jmp @rN`) to function 2, a changer, and function 0 calls it
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -671,7 +682,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull), postJoinRng(seed ^ 0x706F73744A6F696Eull), modPollRng(seed ^ 0x6D6F64506F6C6C21ull), ptrAliasRng(seed ^ 0x707472416C696173ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull), postJoinRng(seed ^ 0x706F73744A6F696Eull), modPollRng(seed ^ 0x6D6F64506F6C6C21ull), ptrAliasRng(seed ^ 0x707472416C696173ull), cautionRng(seed ^ 0x6361757469306E21ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -1630,7 +1641,8 @@ struct Gen
         it.type = Item::Alu;
         it.shape = "frame.walk";
         const int steps = std::min(frame / 4, 3);
-        it.words = { 0x62F3,                                  // mov r15,r2
+        // (A11-33: in a module whose callee may leave r15 moved, from the frame pointer, which every function there has)
+        it.words = { uint16_t(cautionSpFn >= 0 ? 0x62E3 : 0x62F3),   // mov r15,r2 (mov r14,r2)
                      uint16_t(0x7200 | frame),                // add #frame,r2: the top of the locals
                      uint16_t(0xE100 | steps),                // mov #steps,r1
                      0x2216,                                  // L: mov.l r1,@-r2
@@ -1814,11 +1826,37 @@ struct Gen
             it.after.push_back(ReadRegisterInto(b, observed));
             it.observes = true;
         }
+        // (A11-33) A caller that reads, after the call, a register its callee changes on some path (A3-197's caution): the register copied to a
+        // scratch register and stored through r4 or r5 restored from its callee-saved copy (a value stored: the text's own read), or only copied.
+        int cautionRead = 0;
+        if (cautionModule && !it.observes)
+        {
+            const uint32_t eff = fns[callee].effClobbers & (cautionKept | (1u << 15));
+            if (eff && cautionRng.Chance(65))
+            {
+                std::vector<int> bits;
+                for (int b = 0; b < 32; ++b)
+                    if ((eff >> b) & 1u) bits.push_back(b);
+                const int b = bits[cautionRng.Below(static_cast<uint32_t>(bits.size()))];
+                cautionRead = 1 + static_cast<int>(cautionRng.Below(3));
+                it.after.push_back(ReadRegisterInto(b, cautionRead));
+                int ptr[2], np = 0;
+                for (const std::pair<int, int>& sv : saves)
+                    if (sv.first == 4 || sv.first == 5) ptr[np++] = sv.first;
+                if (np && cautionRng.Chance(80))
+                {
+                    const int rp = ptr[cautionRng.Below(static_cast<uint32_t>(np))];
+                    it.after.push_back(uint16_t(0x1000 | rp << 8 | cautionRead << 4 | cautionRng.Below(4)));   // mov.l Rs,@(disp,Rp)
+                }
+                it.shape = "caution.call.read";
+            }
+        }
         // After the call only what was restored, and r0 if the callee returns, holds a value.
         defined &= ~0xFFu;
         for (const std::pair<int, int>& s : saves) defined |= 1u << s.first;
         if (fns[callee].returns) defined |= 1u;
         if (observed) defined |= 1u << observed;
+        if (cautionRead) defined |= 1u << cautionRead;
         return it;
     }
 
@@ -1883,6 +1921,63 @@ struct Gen
 
     std::vector<std::pair<int, int>> saves;   // (argument register, callee-saved copy) of the function being made
 
+    // (A11-33) A3-197's changer: a register the default model keeps across an unlent call (the module's cautionKept), changed on one path only,
+    // `tst Rt,Rt ; bt/bf L ; <change> ; L:`. Rt is r3 (the caller's leftover, which no signature passes: the function is not lent, as A3-197's
+    // fixtures) three times in four, else a parameter. Put first among the items when the function does not save the register; after its
+    // epilogue (Func::afterExit, before `rts`) when it does (A3-199: a register restored and then changed on one path). The function that leaves
+    // r15 moved (cautionSpFn) does it last among its items: `add #4,r15` (a pop of its caller's word), `add #-4,r15` or `mov.l r3,@-r15`.
+    void AddCautionChange(Func& f, int idx, size_t at)
+    {
+        const bool sp = idx == cautionSpFn;
+        if (!sp && !(cautionThunk && idx == 2) && !cautionRng.Chance(55)) return;
+        std::vector<int> pool;
+        for (int b = 0; b < 32; ++b)
+            if ((cautionKept >> b) & 1u) pool.push_back(b);
+        if (pool.empty() && !sp) return;
+        Item sk;
+        sk.type = Item::Skip;
+        const int t = cautionRng.Chance(75) ? 3 : 4 + static_cast<int>(cautionRng.Below(4));
+        sk.cond = uint16_t(0x2008 | t << 8 | t << 4);   // tst Rt,Rt
+        sk.onTrue = cautionRng.Chance(50);
+        if (t == 3) f.reads |= 1u << 3;
+        Item c;
+        c.type = Item::Alu;
+        if (sp)
+        {
+            static const uint16_t kMoves[] = { 0x7F04, 0x7FFC, 0x2F36 };   // add #4,r15 / add #-4,r15 / mov.l r3,@-r15
+            c.words = { kMoves[cautionRng.Below(3)] };
+            c.shape = "caution.change.r15";
+            sk.shape = "caution.skip.r15";
+            sk.kids.push_back(c);
+            f.items.push_back(sk);
+            f.clobbers |= 1u << 15;
+            if (c.words[0] == 0x2F36) f.reads |= 1u << 3;
+            return;
+        }
+        const int b = pool[cautionRng.Below(static_cast<uint32_t>(pool.size()))];
+        if (b == 17 || b == 18)
+        {
+            const int src = 4 + static_cast<int>(cautionRng.Below(4));
+            c.words = { uint16_t((b == 17 ? 0x401E : 0x402E) | src << 8) };   // ldc Rm,gbr / ldc Rm,vbr (a parameter: scratch memory)
+        }
+        else c.words = { uint16_t(0xE000 | b << 8 | (4 * cautionRng.Below(32))) };   // mov #imm,Rn (a multiple of 4: no address error through it)
+        c.shape = "caution.change";
+        sk.kids.push_back(c);
+        f.clobbers |= 1u << b;
+        const bool saved = std::find(f.pushed.begin(), f.pushed.end(), b) != f.pushed.end();
+        if (saved)
+        {
+            if (f.end != Func::Rts) return;
+            sk.shape = "caution.skip.after-exit";
+            f.afterExit.push_back(sk);
+        }
+        else
+        {
+            sk.shape = "caution.skip";
+            f.items.insert(f.items.begin() + static_cast<std::ptrdiff_t>(std::min(at, f.items.size())), sk);
+        }
+    }
+
     // One function. 'ends' says how every function of the module ends; later functions exist already.
     Func MakeFunc(int idx, int nFn, const std::vector<int>& ends, const std::vector<Func>& fns)
     {
@@ -1890,6 +1985,21 @@ struct Gen
         f.v2 = true;
         wideClobbers = wideReads = 0;
         f.end = static_cast<Func::End>(ends[idx]);
+        // (A11-33) A thunk (A3-205's shape): nothing but the load of the target's address and the jump.
+        if (cautionThunk && idx == 1)
+        {
+            f.tailTo = 2;
+            f.returns = fns[2].returns;
+            f.noR0 = !f.returns;
+            f.tailReg = 1 + static_cast<int>(cautionRng.Below(3));
+            Lit l;
+            l.kind = LitKind::Fn;
+            l.fn = 2;
+            f.tailLit = static_cast<int>(p.lits.size());
+            p.lits.push_back(l);
+            f.effClobbers = fns[2].effClobbers;
+            return f;
+        }
         const bool falls = f.end == Func::Fall;
         if (f.end == Func::TailJump) f.tailTo = idx + 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(nFn - idx - 1)));
         if (falls) f.returns = fns[idx + 1].returns;
@@ -1899,11 +2009,17 @@ struct Gen
         const bool table = !f.noR0 && rng.Chance(25);   // mova writes r0
         int nCalls = 0;
         if (!falls && idx < nFn - 1 && rng.Chance(65)) nCalls = 1 + static_cast<int>(rng.Below(2));
+        if (cautionModule && idx == 0 && nFn > 1 && !falls && nCalls == 0) nCalls = 1;   // (A11-33) the caller of the module's changers
         f.savePr = !falls && (nCalls > 0 || (f.end == Func::TailJump && rng.Chance(50)));
         if (f.savePr && rng.Chance(30))
         {
             f.savePr = false;
             f.prReg = convModule && clobberReg == 12 ? 13 : 12;   // never the register this module's functions change
+            if (cautionModule && ((cautionKept >> f.prReg) & 1u))   // (A11-33) ...nor one the caution's changers do
+            {
+                f.prReg = -1;
+                f.savePr = true;
+            }
         }
         int nsave = nCalls > 0 ? 2 + static_cast<int>(rng.Below(3)) : 0;
         if (table)
@@ -1923,10 +2039,21 @@ struct Gen
         {
             static const int kFrames[] = { 4, 8, 12, 16, 24, 32, 48, 64 };
             f.frame = kFrames[rng.Below(8)];
-            f.fp = rng.Chance(30) && !(convModule && clobberReg == 14);
+            f.fp = rng.Chance(30) && !(convModule && clobberReg == 14) && !(cautionModule && ((cautionKept >> 14) & 1u));
             if (f.fp) f.pushed.push_back(14);
         }
         if (!falls && rng.Chance(15) && !(convModule && clobberReg == 13)) f.pushed.push_back(13);
+        // (A11-33) A module with a function that leaves r15 moved: that one has no stack of its own, and every other function a frame pointer,
+        // whose epilogue (`mov r14,r15`) takes the stack back after the call.
+        if (cautionSpFn >= 0)
+        {
+            if (idx == cautionSpFn) f.frame = 0, f.fp = false, f.pushed.clear();
+            else
+            {
+                if (!f.frame) f.frame = 8;
+                if (!f.fp) f.fp = true, f.pushed.push_back(14);
+            }
+        }
         std::sort(f.pushed.begin(), f.pushed.end());
         f.pushed.erase(std::unique(f.pushed.begin(), f.pushed.end()), f.pushed.end());
         f.shared = !falls && rng.Chance(22);
@@ -2034,7 +2161,9 @@ struct Gen
             case 'F': f.items.push_back(MakeFrameWalk()); break;
             default:
             {
-                const int callee = idx + 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(nFn - idx - 1)));
+                int callee = idx + 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(nFn - idx - 1)));
+                if (cautionThunk && idx == 0) callee = 1;   // (A11-33) the thunk
+                else if (cautionSpFn > idx && cautionRng.Chance(50)) callee = cautionSpFn;
                 if (rng.Chance(25))
                 {
                     // A conditional call: the skipped part of a branch.
@@ -2088,6 +2217,7 @@ struct Gen
         AddConfirmShapes(f.items, f.sel, convDefined | leftScratch);
         AddModulePoll(f, idx);
         if (hasConvRead) f.items.insert(f.items.begin(), convRead);   // first: before anything can write what it reads
+        if (cautionModule) AddCautionChange(f, idx, hasConvRead ? 1 : 0);
         // A return chosen by an input (A3-64), from a stream of its own and after every other draw, so no program a seed made before it changes but
         // for this item: in a function that returns, makes no call (a callee may leave anything in r0), and has no table (mova writes r0) and no
         // shared exit. Last, as the return value (no retWord follows it).
@@ -2221,6 +2351,32 @@ struct Gen
         {
             const uint32_t e = rng.Below(100);
             ends[i] = e < 12 ? Func::Fall : e < 32 ? Func::TailJump : Func::Rts;
+        }
+        // (A11-33) A3-197's shapes, from a stream of their own and for the seeds from kCautionFirst on only: one or two registers the
+        // module's changers change on one path; one module in four of two functions or more has the last leave r15 moved (every function
+        // then returns by rts); one in three of three functions makes function 1 a thunk to function 2.
+        if (cautionOn && cautionRng.Chance(70))
+        {
+            cautionModule = true;
+            const bool sp = nFn >= 2 && cautionRng.Chance(25) && !(convModule && clobberReg == 14);
+            static const int kPool[] = { 8, 9, 10, 11, 12, 13, 14, 17, 18 };
+            const int n = 1 + static_cast<int>(cautionRng.Below(2));
+            for (int i = 0; i < n; ++i)
+            {
+                const int b = kPool[cautionRng.Below(9)];
+                if (!(sp && b == 14)) cautionKept |= 1u << b;
+            }
+            if (sp)
+            {
+                cautionSpFn = nFn - 1;
+                for (int& e : ends) e = Func::Rts;
+            }
+            else if (nFn == 3 && cautionRng.Chance(35))
+            {
+                cautionThunk = true;
+                ends[0] = Func::Rts;
+                ends[1] = Func::TailJump;
+            }
         }
         std::vector<Func> fns(nFn);
         for (int i = nFn - 1; i >= 0; --i) fns[i] = MakeFunc(i, nFn, ends, fns);
@@ -2818,6 +2974,8 @@ constexpr uint64_t kModPollFirst = 5800001;
 // ...and A5-122's (version 1: a global read, a store through r4 or r5, which every run points at that global, and the value read used after it),
 // likewise: no seed below keeps anything but its program.
 constexpr uint64_t kPtrAliasFirst = 6400001;
+// ...and A11-33's (version 2: A3-197's shapes, Gen::AddCautionChange and the caution's reads after a call), likewise: the fresh range from 12,000,001.
+constexpr uint64_t kCautionFirst = 12000001;
 
 Program Generate(uint64_t seed)
 {
@@ -2836,6 +2994,7 @@ Program Generate2(uint64_t seed, int attempt)
 {
     Gen g(seed ^ (static_cast<uint64_t>(attempt) << 40));
     g.modPollOn = seed >= kModPollFirst;
+    g.cautionOn = seed >= kCautionFirst;
     return g.Module();
 }
 
@@ -3006,9 +3165,10 @@ struct Emitter
         if (f.end == Func::TailJump) PutLitLoad(f.tailReg, f.tailLit);
         if (f.returns && f.end == Func::Rts && !f.retInSlot && !f.retIsCall && f.choiceBy < 0) Put(f.retWord);
         const ExitOps e = ExitSequence(f);
-        const bool slotOp = f.slotPop && e.lastMovable && !f.retInSlot;
+        const bool slotOp = f.slotPop && e.lastMovable && !f.retInSlot && f.afterExit.empty();
         for (size_t i = 0; i < e.ops.size(); ++i)
             if (!(slotOp && i + 1 == e.ops.size())) Put(e.ops[i]);
+        if (f.end == Func::Rts) EmitList(f.afterExit);   // (A11-33)
         const uint16_t slot = f.retInSlot ? f.retWord : slotOp ? e.ops.back() : uint16_t(0x0009);
         if (f.end == Func::Rts)
         {
@@ -3680,6 +3840,21 @@ private:
     RegUse mUse;
 };
 
+// (A11-33) The registers the default model keeps across a call whose signature is not lent (r8-r14, GBR, VBR: kKeptByCall; r15: extrapop
+// 0), which A3-197's caution names when a callee's walk shows one not restored: r8-r15 as indices 0-7, GBR 8, VBR 9.
+constexpr int kKeptN = 10;
+const char* const kKeptNames[kKeptN] = { "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "gbr", "vbr" };
+// ...and a call the function itself made (depth 0) in a run: the callee's entry, and those registers at the entry (after the delay slot)
+// and where the run came back to the function (the first instruction it ran at depth 0 after the call).
+struct CallRet
+{
+    size_t callStep = 0, retStep = 0;
+    uint32_t callPc = 0;     // the call instruction
+    uint32_t target = 0;     // the callee's entry, canonical
+    bool returned = false;
+    uint32_t before[kKeptN] = {}, after[kKeptN] = {};
+};
+
 // One run: where it started, where each instruction was, what it touched, where the registers ended.
 struct RunOut
 {
@@ -3698,6 +3873,7 @@ struct RunOut
     int perturbed = -1;                // register whose start value was changed (-1: none)
     bool addressError = false;         // the run made a misaligned word or longword access: an address error on the SH-2 (A2-8 (a))
     TraceRec addressErrorAt;           // ...the first, for the report
+    std::vector<CallRet> calls;        // (A11-33) the calls the function itself made, in order
 };
 
 // A word or longword access at an address that is not a multiple of its size. The emulator makes it; the SH-2 raises an address
@@ -3747,6 +3923,18 @@ public:
     // (A3-111) Not 0: every stack word the stack pointer rises past during the next run is refilled with this pattern (no trace), as an
     // interrupt may write anything below r15. A function that reads such a word reads what an earlier push or call left: a stale word.
     void SetScrub(uint32_t pattern) { mScrub = pattern; }
+    // (A11-33) Not -1: where the run comes back from its call number 'call' (depth 0, counted from 0), kept register 'kept' (kKeptNames) is
+    // set to 'value' before the next instruction: the call taken to keep it, as the text takes an unlent call.
+    void SetFix(int call, int kept, uint32_t value)
+    {
+        mFixCall = call;
+        mFixKept = kept;
+        mFixValue = value;
+    }
+    void KeptRegisters(uint32_t* into) const
+    {
+        for (int k = 0; k < kKeptN; ++k) into[k] = Get(kKeptNames[k]);
+    }
 
     // From the entry until the return address (or the step limit). False if it did not return.
     // Fills 'out' with the pcs, the register use and the final registers; the memory trace is the Env's.
@@ -3755,12 +3943,22 @@ public:
         mEmu->ResetUse();
         bool done = false;
         int depth = 0;
+        int openCall = -1;   // (A11-33) the depth-0 call the run is in, an index of out.calls
+        auto cameBack = [&](size_t step) {
+            CallRet& c = out.calls[static_cast<size_t>(openCall)];
+            KeptRegisters(c.after);
+            c.returned = true;
+            c.retStep = step;
+            if (openCall == mFixCall && mFixKept >= 0 && mFixKept < kKeptN) mState->setValue(kKeptNames[mFixKept], mFixValue);
+            openCall = -1;
+        };
         try
         {
             mEmu->setExecuteAddress(ghidra::Address(mRam, start));
             mEmu->setHalt(false);
             for (int i = 0; i < limit && !done; ++i)
             {
+                if (openCall >= 0 && depth == 0) cameBack(static_cast<size_t>(i));
                 const uint32_t pc = static_cast<uint32_t>(mEmu->getExecuteAddress().getOffset());
                 uint16_t op = 0;
                 mSnap->ReadU16(pc, op);
@@ -3770,10 +3968,21 @@ public:
                 out.pcs.push_back(Env::Canon(pc));   // a callee reached through the cache-through mirror is the function at the canonical address (A4-6)
                 out.depths.push_back(depth);
                 // The delay slot runs with the branch, at the depth it was called from.
+                const bool call0 = ins.IsCall && depth == 0;
                 if (ins.IsCall) ++depth;
                 else if (ins.IsReturn) --depth;
                 const uint32_t spBefore = mScrub != 0 ? Get("r15") : 0;
                 mEmu->executeInstruction();
+                if (call0)
+                {
+                    CallRet c;
+                    c.callStep = static_cast<size_t>(i);
+                    c.callPc = Env::Canon(pc);
+                    c.target = Env::Canon(static_cast<uint32_t>(mEmu->getExecuteAddress().getOffset()));
+                    KeptRegisters(c.before);
+                    out.calls.push_back(c);
+                    openCall = static_cast<int>(out.calls.size()) - 1;
+                }
                 if (mScrub != 0)
                 {
                     const uint32_t spAfter = Get("r15");
@@ -3787,6 +3996,7 @@ public:
         {
             out.error = e.explain;
         }
+        if (openCall >= 0 && depth == 0 && out.error.empty()) cameBack(out.pcs.size());
         out.use = mEmu->Use();
         for (int r = 0; r < 16; ++r) out.fin[r] = Get(("r" + std::to_string(r)).c_str());
         out.finPr = Get("pr");
@@ -3809,6 +4019,8 @@ private:
     std::unique_ptr<TracingEmulate> mEmu;
     uint32_t mScrub = 0;
     Env* mEnv = nullptr;
+    int mFixCall = -1, mFixKept = -1;
+    uint32_t mFixValue = 0;
 };
 
 // ---- The ledger's ordering invariants, copied from Sh2DecompilerTests.cpp ---------------------
@@ -5025,6 +5237,9 @@ struct RunSpec
     uint32_t perturbValue = 0;
     bool volatileRun = false;  // the other processor answers what the second request marks
     bool answerAll = false;    // (A3-198) ...and every poll of the program, marked or not (PostPollUnmade only)
+    int fixCall = -1;          // (A11-33) the run's call (depth 0, from 0) after which kept register fixKept (kKeptNames) is set back to fixValue
+    int fixKept = -1;
+    uint32_t fixValue = 0;
     uint32_t stackFill = 0;    // (A3-111) not 0: the 512 bytes below the entry r15 are refilled with this pattern before the run, and every
                                // word the stack pointer rises past during it (Machine::SetScrub)
 };
@@ -5101,8 +5316,10 @@ public:
         if (rs.stackFill != 0)
             for (uint32_t a = kStackTop - 512u; a < kStackTop; a += 4) mM->Poke(a, rs.stackFill ^ a);
         mM->SetScrub(rs.stackFill);
+        mM->SetFix(rs.fixCall, rs.fixKept, rs.fixValue);
         mM->Run(f.layout.entry, kSentinel, kStepLimit, out, env);
         mM->SetScrub(0);
+        mM->SetFix(-1, -1, 0);
         out.trace = std::move(env.trace);
         for (const TraceRec& t : out.trace)
             if (IsMisaligned(t))
@@ -5424,6 +5641,220 @@ bool CallsUnlentChanger(const Subject& subject, const std::map<uint32_t, Prototy
         if (l == lent.end() || !l->second.known) return true;
     }
     return false;
+}
+
+// ---- (A11-33) A3-197's caution against the runs ----------------------------------------------------------------------------------
+// The engine's default model keeps r8-r14, GBR, VBR and r15 across a call whose callee was lent no signature, and the text is printed with it;
+// a hand-written callee may not keep them, and A3-197 (A3-199, A3-200, A3-205, A3-206, A3-207) says so at the call: "this call may change rN,
+// read after it ...". Checked here by what the runs do, not by what the walk of the callee finds:
+//   * a call the function itself makes (depth 0, an instruction of its own layout) to a callee that was not lent a known signature, after which a
+//     run comes back with one of those registers other than it was at the callee's entry, is run again from the same inputs with that register
+//     set back where the run comes back (the call taken to keep it, as the text takes it: Machine::SetFix). When the two runs do not do the same
+//     to the world (SameBehaviour: hardware, marked memory, the parameter arenas; r0 when the function returns it; whether it finishes), the
+//     register's change is read after the call and matters, and the text must say so: a caution naming it at that call (the next line the
+//     text prints after the comment holds the call's token), or one naming it with "likewise" (said once for the calls in a row, A3-108's rule).
+//     A miss is `caution-unsaid` when the runs part at an instruction of the function itself (the read is the text's own: an operand, a branch,
+//     a return), and counted `caution.unsaid.deep` when they part first inside a later callee (the read is that callee's, which A3-197 reads
+//     from its walk) -- said in the report, not failed; `caution-elsewhere` when a caution names it at another call only, with no "likewise".
+//   * a caution that names a register no run changes at its call is counted (`caution.unchanged`): the walk may see a path no run takes.
+// SE_GENERATED_CAUTION=0 switches the check off (the mutation check of the record: the reverted fixes of A3-199 to A3-207 against the sweep).
+struct CautionNote
+{
+    uint32_t regs = 0;     // bit k: kKeptNames[k]
+    bool likewise = false;
+    std::set<uint32_t> at;   // the token addresses of the next line the text prints
+    std::string text;
+};
+std::vector<CautionNote> CautionNotes(const DecompileResult& r)
+{
+    std::vector<CautionNote> out;
+    for (size_t i = 0; i < r.lines.size(); ++i)
+    {
+        const std::string& t = r.lines[i].text;
+        const size_t at = t.find("/* this call may change ");
+        if (at == std::string::npos) continue;
+        std::string joined = t.substr(at);
+        size_t j = i;
+        while (joined.find("*/") == std::string::npos && j + 1 < r.lines.size()) joined += " " + r.lines[++j].text;
+        std::string flat;
+        for (char ch : joined)
+            if (!(ch == ' ' && !flat.empty() && flat.back() == ' ')) flat += ch == '\t' ? ' ' : ch;
+        CautionNote c;
+        c.text = flat;
+        c.likewise = flat.find("likewise at") != std::string::npos;
+        const size_t b = flat.find("change ") + 7, e = flat.find(", read after it");
+        const std::string names = e != std::string::npos && e > b ? flat.substr(b, e - b) : std::string();
+        static const std::regex reg("\\b(r[0-9]+|gbr|vbr)\\b");
+        for (std::sregex_iterator m(names.begin(), names.end(), reg), end; m != end; ++m)
+            for (int k = 0; k < kKeptN; ++k)
+                if ((*m)[1].str() == kKeptNames[k]) c.regs |= 1u << k;
+        for (size_t n = j + 1; n < r.lines.size(); ++n)
+            if (!r.lines[n].tokens.empty())
+            {
+                for (const Token& tk : r.lines[n].tokens)
+                    if (tk.addr != 0) c.at.insert(tk.addr);
+                break;
+            }
+        out.push_back(c);
+        i = j;
+    }
+    return out;
+}
+// The first step at which two runs of one function part (an instruction or an access that differs), and whether the function itself made it
+// (depth 0, inside its layout): a branch decided differently is the step before the first instruction that differs.
+bool PartOwn(const RunOut& a, const RunOut& b, const FnInfo& fn, size_t& step)
+{
+    size_t s = std::min(a.pcs.size(), b.pcs.size());
+    for (size_t i = 0; i < s; ++i)
+        if (a.pcs[i] != b.pcs[i])
+        {
+            s = i > 0 ? i - 1 : 0;
+            break;
+        }
+    for (size_t i = 0; i < a.trace.size() && i < b.trace.size(); ++i)
+        if (a.trace[i] != b.trace[i] || a.trace[i].value != b.trace[i].value)
+        {
+            s = std::min(s, static_cast<size_t>(std::max(0, std::min(a.trace[i].step, b.trace[i].step))));
+            break;
+        }
+    if (s >= a.pcs.size()) s = a.pcs.empty() ? 0 : a.pcs.size() - 1;
+    step = s;
+    if (a.pcs.empty()) return false;
+    const uint32_t pc = a.pcs[s];
+    return a.depths[s] == 0 && pc >= fn.layout.start && pc < fn.layout.end;
+}
+void CheckCautions(const Subject& subject, int fi, const std::map<uint32_t, Prototype>& lent, const std::vector<RunOut>& runs, Runner& runner,
+                   const DecompileResult& r, const std::function<void(const std::string&, const std::string&)>& add,
+                   const std::function<void(const std::string&, int)>& count)
+{
+    static const std::string mode = [] { const char* e = std::getenv("SE_GENERATED_CAUTION"); return std::string(e ? e : ""); }();
+    if (mode == "0") return;
+    const FnInfo& fn = subject.fns[fi];
+    const std::vector<CautionNote> notes = CautionNotes(r);
+    count("caution.notes", static_cast<int>(notes.size()));
+    struct Need
+    {
+        bool matters = false, own = false;
+        int run = -1;
+        size_t step = 0;
+        uint32_t target = 0, from = 0, to = 0;
+        RunOut kept;
+    };
+    std::map<std::pair<uint32_t, int>, Need> needs;
+    std::set<std::pair<uint32_t, int>> changed;
+    std::set<uint32_t> callsRun;
+    const bool compareR0 = fn.returns || fn.partial || fn.choiceBy >= 0;
+    int reruns = 0;
+    const int kMaxReruns = 24;
+    for (size_t ri = 0; ri < runs.size(); ++ri)
+    {
+        const RunOut& run = runs[ri];
+        if (run.perturbed >= 0) continue;
+        for (size_t ci = 0; ci < run.calls.size(); ++ci)
+        {
+            const CallRet& c = run.calls[ci];
+            if (c.callPc < fn.layout.start || c.callPc >= fn.layout.end)
+            {
+                count("caution.call.outside", 1);
+                continue;
+            }
+            callsRun.insert(c.callPc);
+            if (!c.returned) continue;
+            const auto l = lent.find(c.target);
+            if (l != lent.end() && l->second.known) continue;
+            for (int k = 0; k < kKeptN; ++k)
+            {
+                if (c.before[k] == c.after[k]) continue;
+                const std::pair<uint32_t, int> key(c.callPc, k);
+                changed.insert(key);
+                Need& n = needs[key];
+                if (n.matters) continue;
+                if (reruns >= kMaxReruns)
+                {
+                    count("caution.rerun.capped", 1);
+                    continue;
+                }
+                RunSpec rs;
+                rs.mode = run.mode;
+                if (run.selValue != RunOut::kNoSel && fn.sel >= 4)
+                {
+                    rs.selReg = fn.sel;
+                    rs.selValue = static_cast<uint32_t>(run.selValue);
+                }
+                rs.fixCall = static_cast<int>(ci);
+                rs.fixKept = k;
+                rs.fixValue = c.before[k];
+                const RunOut kept = runner.One(fn, rs);
+                ++reruns;
+                count("caution.reruns", 1);
+                if (SameBehaviour(run, kept, compareR0, std::vector<HardwareRange>()) && run.finished == kept.finished) continue;
+                n.matters = true;
+                n.run = static_cast<int>(ri);
+                n.own = PartOwn(run, kept, fn, n.step);
+                n.target = c.target;
+                n.from = c.before[k];
+                n.to = c.after[k];
+                n.kept = kept;
+            }
+        }
+    }
+    for (const auto& kv : needs)
+    {
+        const Need& n = kv.second;
+        if (!n.matters) continue;
+        const uint32_t pc = kv.first.first;
+        const int k = kv.first.second;
+        count("caution.required", 1);
+        bool here = false, likewise = false, elsewhere = false;
+        for (const CautionNote& c : notes)
+        {
+            if (!((c.regs >> k) & 1u)) continue;
+            if (c.at.count(pc)) here = true;
+            else if (c.likewise) likewise = true;
+            else elsewhere = true;
+        }
+        if (here || likewise)
+        {
+            count(here ? "caution.said" : "caution.said.likewise", 1);
+            continue;
+        }
+        const RunOut& run = runs[static_cast<size_t>(n.run)];
+        const std::string what = "the call at " + Hex(pc) + " (of " + Hex(n.target) + ", no signature lent) comes back with " + kKeptNames[k] +
+                                 " changed in the run of input mode " + std::to_string(run.mode) + " (" + Hex(n.from) + " at the callee's entry, " +
+                                 Hex(n.to) + " after), and set back there the run does otherwise (they part at " +
+                                 (n.step < run.pcs.size() ? Hex(run.pcs[n.step]) : std::string("the end")) + ")";
+        if (elsewhere) add("caution-elsewhere", what + "; the text names " + kKeptNames[k] + " in a caution at another call only, with no \"likewise\"");
+        else if (n.own) add("caution-unsaid", what + "; the text says no caution naming " + kKeptNames[k]);
+        else
+        {
+            // (the function's own accesses and its return compared alone: a later callee's read reaching what the function itself does)
+            auto own = [&](const RunOut& x) {
+                std::vector<TraceRec> v;
+                for (const TraceRec& t : x.trace)
+                    if (t.depth == 0 && t.insn >= fn.layout.start && t.insn < fn.layout.end) v.push_back(t);
+                return v;
+            };
+            const std::vector<TraceRec> a = own(run), b = own(n.kept);
+            bool same = a.size() == b.size() && (!compareR0 || run.fin[0] == n.kept.fin[0]);
+            for (size_t q = 0; same && q < a.size(); ++q) same = a[q] == b[q] && a[q].value == b[q].value;
+            count(same ? "caution.unsaid.deep" : "caution.unsaid.deep.own-effect", 1);
+            if (mode == "deep") add("caution-unsaid-deep", what + ", in a later callee" + (same ? "" : " (and the function's own accesses or return then differ)") +
+                                                           "; the text says no caution naming " + kKeptNames[k]);
+        }
+    }
+    for (const CautionNote& c : notes)
+    {
+        uint32_t call = 0;
+        for (uint32_t a : c.at)
+            if (callsRun.count(a)) call = a;
+        if (call == 0)
+        {
+            count("caution.call-unrun", 1);
+            continue;
+        }
+        for (int k = 0; k < kKeptN; ++k)
+            if (((c.regs >> k) & 1u) && !changed.count(std::make_pair(call, k))) count("caution.unchanged", 1);
+    }
 }
 
 // One decompilation of function 'fi', checked against its runs. 'lent' holds the prototypes of the
@@ -8385,6 +8816,9 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                                                 ", and the text reads " + k.name + " as the value it had on entry");
             }
         }
+
+        // (A11-33) A3-197's caution against the runs (CheckCautions), in the default request
+        if (!volatileRun) CheckCautions(subject, fi, lent, runs, runner, r, add, count);
 
         // The generator's own contract: a version 2 function returns, restores what it saved, and ends
         // at the return address. A run that does not is the generator's fault, said so it is fixed.
@@ -19487,7 +19921,8 @@ void TestGenerated()
         return;
     }
     const long single = EnvNumber("SE_GENERATED_SEED", 0);
-    if (!single && !gMutate)
+    // (A11-33) SE_GENERATED_PINS=0: the seeds alone (a sweep of a range; the pins run in every other run)
+    if (!single && !gMutate && EnvNumber("SE_GENERATED_PINS", 1) != 0)
     {
         RUN(TestDomainPins(d));
         RUN(TestCalleeClobberPins(d));
