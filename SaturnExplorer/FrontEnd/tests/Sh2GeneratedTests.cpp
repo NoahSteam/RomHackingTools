@@ -7846,6 +7846,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             flag("map-store-dead", audit.storeDead);
             flag("map-case-entry", audit.caseOtherEntry);
             flag("map-store-after", audit.storeAfterUse);
+            flag("map-conversion-branch", audit.conversionAtBranch);   // (A7-175, area 7 review round 24)
             // A7-52: a statement line with no instruction that does not say so. Until then the audit counted the lines with none
             // (nonCodeLines) and judged only the shapes above, so a statement named by no check passed with a click that did nothing.
             flag("map-no-instruction", audit.noInstruction);
@@ -18011,6 +18012,30 @@ void TestArea7Round22Pins(Sh2Decompiler& d)
 // oracle: `tas.b` is a store), A5-149 (grammar 1 seed 9603811, the oracle: a name the function's own other access owns), A10-18 (grammar 1 seed 9606511,
 // a product change: an access that straddles the edge of an aliased range is volatile whole), A7-173 (grammar 1 seeds 9600475, 9606064 and 9602179,
 // 9607450, which A7-168 and A7-169 had set right: pins only). No finding of any kind.
+// Area 7 review round 24 (A7-175): seeds of the fresh sweeps from 9,900,001 and 10,000,001 (specials) whose conversion the engine drew at a
+// branch, the statement the conversion alone (`xVar4 = (xunknown2)iVar3;` at the `bf` of a later block; `pxStack_24 = (xunknown4 *)extraout_r3;`
+// with the frame's copy and the cast both at the branch), each now drawn at the instructions that made the value. With the product's pass off,
+// the oracle's `conversion-branch` finds each (tools/a7_review24/mutation.sh).
+void TestArea7Review24Pins(Sh2Decompiler& d)
+{
+    const bool savedSpecials = gSpecialReads;
+    struct Whole
+    {
+        int grammar;
+        long seed;
+        bool specials;
+    };
+    for (const Whole& w : { Whole{ 1, 9900754, false }, Whole{ 2, 10000825, true } })
+    {
+        gSpecialReads = w.specials;
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 review round 24: grammar %d seed %ld%s': %zu finding(s)\n", w.grammar, w.seed, w.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    gSpecialReads = savedSpecials;
+}
+
 void TestArea7Round23Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -19378,6 +19403,7 @@ void TestGenerated()
         RUN(TestA5FoldedPins4(d));
         RUN(TestArea7Round22Pins(d));
         RUN(TestArea7Round23Pins(d));
+        RUN(TestArea7Review24Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

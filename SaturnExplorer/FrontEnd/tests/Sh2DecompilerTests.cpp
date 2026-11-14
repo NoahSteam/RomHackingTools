@@ -2219,6 +2219,8 @@ void TestArea7Round9()
         // (patch 0090: the byte of r5 is a variable of its own, `cVar1 = (char)param_2;` at the `bt`, no longer merged with the global, which
         // it wrote before the store through r5; the product offers it first, as the line beginning with the `bt`)
         CHECK(LineWith(r, "cVar1 = (char)param_2;") != nullptr && LineWith(r, "cRam0600102f = cVar1;") != nullptr);
+        // (A7-175: the narrowing of the input, hoisted with the address of the `bt`, names nothing: no instruction makes param_2)
+        CHECK(LineWith(r, "cVar1 = (char)param_2;") != nullptr && LineWith(r, "cVar1 = (char)param_2;")->firstAddr == 0 && LineWith(r, "cVar1 = (char)param_2;")->noOrigin);
         // (the damaged controls, rebuilt on that line: marked a copy materialised at the `bt`, it is offered after the `if (in_r3 < 1)` that
         // draws the `bt` and begins at the `cmp/pl` before it, which A7-64 accepts for a plain copy; with an operation of its own, `+ 1`,
         // the line is the branch's statement too, and offering the `if` first is wrong)
@@ -2228,8 +2230,16 @@ void TestArea7Round9()
             {
                 if (l.text.find("cVar1 = (char)param_2;") == std::string::npos) continue;
                 l.text.replace(l.text.find(";"), 1, to);
+                // (A7-175: the product names nothing for the line now -- the narrowing of the input the engine hoisted and drew at the `bt`
+                // -- so the controls put its drawn tokens back at the `bt`, as master drew them)
                 for (Token& t : l.tokens)
-                    if (t.addr == 0x0600900Cu && t.begin < t.end) t.materialised = true;
+                    if (t.begin < t.end)
+                    {
+                        t.addr = 0x0600900Cu;
+                        t.materialised = true;
+                    }
+                l.firstAddr = 0x0600900Cu;
+                l.noOrigin = false;
                 ++n;
             }
             return x;
@@ -5116,6 +5126,118 @@ void TestArea7Round23()
         for (const std::string& n : r.warnings) said = said || n.find("a misaligned 4-byte write at 0x2600100A") != std::string::npos;
         CHECK(said);
         CHECK(dts::AuditMapping(r, word, "a10_18").Violations() == 0);
+    }
+}
+
+// Area 7 review round 24 (A7-175): A7-171's class outside a store's line. The engine merges two identical narrowings of r3 and puts the one it
+// keeps where it reaches both uses, with the address it was made at: the `bf` of a later block, or the store of another value it was split
+// from. The statement's drawn tokens go to the instructions that made the value (the load; through a join, one on each path); with the
+// function's input on a path, the line names nothing. Words: tools/a7_review24/fixtures24.s.
+void TestArea7Review24()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto snapOf = [&](const std::vector<uint16_t>& w) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * static_cast<uint32_t>(i), w[i]);
+        return MakeSnapshot(hw);
+    };
+    const auto marked = [](bool v) {
+        DecompileRequest q = Request(0x06009000u);
+        if (v) q.volatileMemory.emplace_back(0x26001000u, 0x2600100Fu);
+        return q;
+    };
+    const auto tokenAt = [](const Line* l, uint32_t a, bool drawn) {
+        bool any = false;
+        if (l)
+            for (const Token& t : l->tokens) any = any || (t.addr == a && (!drawn || t.begin < t.end));
+        return any;
+    };
+    const auto firstLine = [](const DecompileResult& r, uint32_t a) {
+        const LineLookup back = LineForInstruction(r, a);
+        return back.kind == LineLookup::Exact && !back.lines.empty() && back.lines[0] < r.lines.size() ? r.lines[back.lines[0]].text : std::string();
+    };
+    // A7-171's fixture, the request that marks the global volatile (no store is folded): `cVar2 = (char)iVar1;` was drawn at the `bf` (0x06009014) of
+    // the later `if`, and the way back from the `bf` answered it before that `if`
+    const std::vector<uint16_t> base = { 0xD609, 0x6341, 0x3238, 0x2508, 0x8901, 0x3310, 0x8F01, 0x2630, 0x2400, 0x2418, 0x8B05, 0x3030, 0x8D01, 0x2620,
+                                         0x6241, 0x000B, 0x0009, 0xAFFA, 0x0009, 0x0009, 0x2600, 0x1008 };
+    {
+        const DecompileResult r = d.Decompile(snapOf(base), marked(true));
+        Print("A7-175 a hoisted narrowing in a register variable, at a bf", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* l = LineWith(r, "cVar2 = (char)iVar1;");
+        CHECK(l != nullptr && !tokenAt(l, 0x06009014u, false) && tokenAt(l, 0x06009002u, true) && l->firstAddr == 0x06009002u);
+        CHECK(firstLine(r, 0x06009014u).find("if ((in_r1 & (uint4)param_1) == 0)") != std::string::npos);
+        CHECK(dts::AuditMapping(r, word, "a7_175").Violations() == 0);
+        // damaged: the line's tokens back at the `bf`, as master drew them (the oracle's conversion-branch)
+        DecompileResult bad = r;
+        for (Line& x : bad.lines)
+            if (x.text.find("cVar2 = (char)iVar1;") != std::string::npos)
+            {
+                for (Token& t : x.tokens)
+                    if (t.addr) t.addr = 0x06009014u;
+                x.firstAddr = 0x06009014u;
+            }
+        const dts::MappingAudit a = dts::AuditMapping(bad, word, "a7_175 damaged");
+        CHECK(a.conversionAtBranch >= 1 && a.Violations() >= 1);
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", "175");
+#else
+        setenv("SE_A7_RULE_OFF", "175", 1);
+#endif
+        CHECK(dts::AuditMapping(bad, word, "a7_175 damaged, rule off").Violations() == 0);   // (the rule is what sees it)
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", "");
+#else
+        unsetenv("SE_A7_RULE_OFF");
+#endif
+    }
+    // ...the same with r3 the function's input: the line names nothing (no instruction makes in_r3), and says so
+    {
+        std::vector<uint16_t> w = base;
+        w[1] = 0x0009;
+        const DecompileResult r = d.Decompile(snapOf(w), marked(true));
+        Print("A7-175 a hoisted narrowing of the input", r);
+        const Line* l = LineWith(r, "cVar2 = (char)in_r3;");
+        CHECK(l != nullptr && l->firstAddr == 0 && l->noOrigin && !tokenAt(l, 0x06009014u, false));
+        CHECK(dts::AuditMapping(r, word, "a7_175 input").Violations() == 0);
+    }
+    // ...r3 from two loads joined, the default request: the global's line was drawn at the `bf` (0x0600901E), now at the two loads
+    {
+        const std::vector<uint16_t> w = { 0xD60B, 0x2708, 0x8902, 0x6341, 0xA001, 0x0009, 0x6350, 0x3238, 0x2508, 0x8901, 0x3310, 0x8F01, 0x2630,
+                                          0x2400, 0x2418, 0x8B05, 0x3030, 0x8D01, 0x2620, 0x6241, 0x000B, 0x0009, 0xAFFA, 0x0009, 0x2600, 0x1008 };
+        const DecompileResult r = d.Decompile(snapOf(w), marked(false));
+        Print("A7-175 a hoisted narrowing of a join", r);
+        const Line* l = LineWith(r, "cRam26001008 = (char)uVar3;");
+        CHECK(l != nullptr && !tokenAt(l, 0x0600901Eu, false) && tokenAt(l, 0x06009006u, true) && tokenAt(l, 0x0600900Cu, false) && l->firstAddr == 0x06009006u);
+        CHECK(dts::AuditMapping(r, word, "a7_175 join").Violations() == 0);
+    }
+    // ...no `bra`: the narrowing kept the address of the store it was split from, `mov.b r2,@r6` of `in_r2 - r3` (0x06009016), whose own line
+    // is `cRam26001008 = in_r2 - cVar2;`: the way back from that store answered `cVar2 = (char)iVar1;` first
+    {
+        const std::vector<uint16_t> w = { 0xD607, 0x6341, 0x3238, 0x2508, 0x8901, 0x3310, 0x8F01, 0x2630, 0x2400, 0x2418, 0x8B01, 0x2620, 0x6241,
+                                          0x000B, 0x0009, 0x0009, 0x2600, 0x1008 };
+        const DecompileResult r = d.Decompile(snapOf(w), marked(false));
+        Print("A7-175 a hoisted narrowing at the store of another value", r);
+        const Line* l = LineWith(r, "cVar2 = (char)iVar1;");
+        CHECK(l != nullptr && !tokenAt(l, 0x06009016u, false) && l->firstAddr == 0x06009002u);
+        CHECK(firstLine(r, 0x06009016u).find("cRam26001008 = in_r2 - cVar2;") != std::string::npos);
+        CHECK(dts::AuditMapping(r, word, "a7_175 store").Violations() == 0);
+    }
+    // ...in a loop, the request that marks the global: `Ram26001008 = (char)in_r2;` drew `in_r2` at the `bf` (0x06009016) before the store's block
+    {
+        const std::vector<uint16_t> w = { 0xD60A, 0xE703, 0x6341, 0x3238, 0x2508, 0x8901, 0x3310, 0x8F01, 0x2630, 0x2400, 0x2418, 0x8B06, 0x3030,
+                                          0x8D02, 0x2620, 0x4710, 0x8BF0, 0x000B, 0x0009, 0xAFF9, 0x0009, 0x0009, 0x2600, 0x1008 };
+        const DecompileResult r = d.Decompile(snapOf(w), marked(true));
+        Print("A7-175 a narrowing inside a store's statement, at a bf", r);
+        const Line* l = LineWith(r, "Ram26001008 = (char)in_r2;");
+        CHECK(l != nullptr && !tokenAt(l, 0x06009016u, false) && tokenAt(l, 0x0600901Cu, true));
+        CHECK(dts::AuditMapping(r, word, "a7_175 loop").Violations() == 0);
     }
 }
 
@@ -20111,6 +20233,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round21());
         RUN(TestArea7Round22());
         RUN(TestArea7Round23());
+        RUN(TestArea7Review24());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());

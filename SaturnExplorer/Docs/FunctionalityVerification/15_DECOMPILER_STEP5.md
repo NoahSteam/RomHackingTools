@@ -21671,3 +21671,72 @@ No generator change: no seed's program changes.
 
 * **Area 7:** grammar 1 seed 10105433 (`v:map-const-join`, `iVar1 = 6;` drawn at 0600901E, `swap.b r1,r0`, the first instruction of a join that does not make the number) and grammar 2 seed 10107462 (`n:` and `v:map-const-join`, function 0, `iVar2 = 0;` drawn at 0600903C, `extu.w r0,r2`). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`. Not shrunk.
 * **Area 11:** A11-33 (no oracle holds A3-197's caution against a run; the grammar makes no thunk to a changer and no callee that moves r15).
+
+## Area 7, review round 24
+
+Reviewer, branch `review/7-review24` from master `8eee4120` (area 7's round 23 merged). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). An adversarial round on the fixes of rounds 21 to 23 (A7-147, A7-165 to A7-174, A5-146 to A5-149), A7-171's "a conversion gets the maker of the register it narrows" first. One host change (`Sh2Decompiler.cpp`: `RetargetHoistedConversions`, A7-175), one oracle rule (`MappingOracle.h`: `conversion-branch`, `SE_A7_RULE_OFF=175`; flagged by the generator as `map-conversion-branch`), fixtures and pins. **No engine patch: 0091 and 0095 stay free.** Scripts: `Docs/Decompiler/tools/a7_review24/` (`asm24.py` and `fixtures24.s`, the hand fixtures through round 5's assembler; `run24.sh`, each fixture through the generator's checks with the tokens; `sweep.sh`; `relaxed.sh`, the relaxation-width run; `census.py`, statements drawn only at a branch in a token dump; `spot.py`, the corpus spot check; `mutation.sh`; `final.sh`). Backups on `backup/review-7-review24`.
+
+**The round is not clean**: three P2 rows (A7-175, fixed here; A7-176 and A7-177, open). Area 7's count of consecutive clean review rounds stays 0.
+
+| Row | P | Outcome |
+|---|---|---|
+| A7-175 | P2 | **filed and fixed, host and oracle**: A7-171's class outside a store's line (hand fixtures; sweep seeds 9900754, specials 10000825; matrix seed 10815 set the oracle's limit) |
+| A7-176 | P2 | **filed open**, routed to the next area 7 fixer: a hoisted store's line drawn at an earlier store of another value (A7-171's shape in a loop) |
+| A7-177 | P2 | **filed open**, routed to the next area 7 fixer: grammar 1 seed 9905215 (`n:map-copy-store`), a copy at a `bsr` naming no store; the slot store on no line |
+| A7-178 | P3 | **filed open**: a register merge copy at the branch ending its block, a number its slot makes included (corpus spot check, hwram008 0x0604BCE8) |
+| A7-179 | P3 | **filed open** (counted): a conversion's operand at a branch inside a larger statement, which A7-175's pass does not reach |
+| A5-150 | P3 | **filed open, routed to area 5**: grammar 1 seed 9902422 (`v:folded-store-after-access`), a write of three bytes the code never writes |
+
+### 1. A7-171 attacked: "a conversion gets the maker of the register it narrows"
+
+A7-171's fixture varied by hand (`fixtures24.s`, `a7_171_*`), each run through the generator's checks in both requests (`run24.sh`, `SE_GENERATED_TOKENS=3`). Where the rule applies, its maker is right: the load (`base`, `bt`, `word`), the `add r7,r3` after the load (`add`), the delay slot's load (`slot`), and for `mov.w @r4,r1 ; mov r1,r3` the load into r1 (the move is folded; `move`). The rule's reach is the gap: it lives in `AddFrameStoreTokens`, so it sees only a line that a folded store's value is the statement of, and only an input that a flow op wrote.
+
+* **The request that marks the global volatile** (no store folded, `AddFrameStoreTokens` returns at once): every variant printed `cVar2 = (char)iVar1;` (or `(int2)`, `(char)in_r3`, `(char)param_4`) before the first `if`, drawn only at the `bf` 0x06009014 of the later `if`; the way back from that `bf` answered the conversion before its own `if`. A7-171's P2, in the other request. **No oracle rule saw it**: `copy-merge` judges a memory variable's line naming no store.
+* **r3 joined from two loads** (`phi`), the default request: `cRam26001008 = (char)uVar3;` drawn (marked materialised) at the `bf` 0x0600901E and naming, by an empty token, the later store of another value; the store of r3 (0x06009018) on no line. A7-171 takes a flow op's output only.
+* **No `bra`** (`nobra`): the narrowing kept the address of the store it was split from, `mov.b r2,@r6` of `in_r2 - r3` (0x06009016), in both requests: `cVar2 = (char)iVar1;` drawn there, and the way back from the store answered it before the store's own `cRam26001008 = in_r2 - cVar2;`.
+* **In a loop** (`loop`): marked volatile, `Ram26001008 = (char)in_r2;` drew `in_r2` at the `bf` before the store's block, the line's first address; and in the default request the store run on every path after the join, hoisted before the `if` as `xRam26001008 = (xunknown1)in_r2;`, is drawn at 0x06009010, the store of r3, its own store 0x0600901C on no line (A7-176, below; area 5's `folded-store-after-access` reports it, no area 7 rule does).
+
+**A7-175, the fix.** `RetargetHoistedConversions` (after `RetargetTwinExtensions`): a conversion the engine made (SEXT, ZEXT, SUBPIECE, CAST; not a slot's) at a branch, on any line but the branch's own (`if ((bool)uVar1) {` keeps its tokens), inside another statement too; or at another instruction outside its basic block, a register variable's own statement. Its drawn tokens go to the instructions that made the value: a flow op's output; the instruction the engine drew its own computation of it at; through joins and copies, one per path (the lowest drawn, empty tokens at the others, as A7-21's register merge); a number on a path is passed when another path has a maker. With the function's input on a path the line names nothing and says so (A7-23 (b)). "A branch" is the instruction's last flow op (a `bf/s` negates T, runs its slot, then branches: its first op is no branch), and an instruction with an access of its own is none (`mac.w` ends in its saturation's branch; grammar 1 seed 1862210's pin lost its load's token until this). **The oracle** (`conversion-branch`): a statement that is a conversion alone, `V = (type)W;`, every drawn token at one branch and not marked materialised, is a violation; a conversion's operand at a branch inside a larger statement, or a memory piece's cast (`xVar2 = (xunknown1)uRam06001024;`, a merge copy of the byte a `bt/s`'s slot loads, matrix seed 10815: A7-178's class), is counted (`conversionAtBranchInside`, A7-179). The first form judged every operand at a branch: on the pass's first form it failed 27 of 3,000 grammar 1 seeds, 14 of grammar 2 and 13 of the specials (`relaxed.sh`), which drove the delayed-branch, number and shared-line cases above; the whole-statement cases among them are gone on the final pass.
+
+### 2. The relaxations of rounds 21 to 23
+
+`relaxed.sh` ran 3,000 seeds of each sweep configuration (grammar 1 and 2 from 9,900,001, grammar 2 specials from 10,000,001) with every relaxation of rounds 21 to 23 off at once (`SE_A7_RULE_OFF=162,164,165,166,167,168,169,170,172,174,5142,5143,5144,5145,5147,5148,5149`). Apart from the pins (which fail on their own rules, as `mutation.sh` of each round records) and `conversion-branch` (above), **no fresh seed failed on any of them**: in 9,000 fresh programs none of these set-asides excused a token. A hand probe of A7-174's width: A7-157's fixture with every materialised mark cleared gives no violation with A7-174's rule on or off (the blind spot, if any, is A7-157's own reading, round 19, not A7-174's 16 bytes). No relaxation was found wider than its justification; A7-147 and A5-146 to A5-149 hold on their pins (the 20,000-seed matrix).
+
+### 3. The sweeps (`sweep.sh`, `SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`)
+
+| Run | Master `8eee4120`'s binary | Final binary |
+|---|---|---|
+| grammar 1, 10,000 from 9,900,001 | 2 failing: 9902422 (A5-150), 9905215 (A7-177) | 2 failing, the same two (open) |
+| grammar 2, 10,000 from 9,900,001 | `failing seeds=0; findings=0` | `failing seeds=0; findings=0` |
+| grammar 2 specials, 5,000 from 10,000,001 | `failing seeds=0; findings=0` | `failing seeds=0; findings=0` |
+
+* **A7-177 (9905215).** Shrunk: `mov #0x4c,r3 ; neg r3,r2 ; shar r2 ; ... ; tst #4,r0 ; bf L ; shll8 r2 ; L: cmp/pl r1 ; bt/s M ; mov.w r2,@r6 (both paths) ; M: ... ; bsr F`, r6 = 0x26001010: `xRam26001010 = xVar1;` is drawn at the `bsr` and names no store; the slot store that writes it is on no line (its way back answers the next statement); the two number lines (`xVar1 = 0xffda;`, `= 0xda00;`) name nothing. The oracle's copy-store rule (A7-11) sees it. Left open: A7-59's and A7-11's search for the store of a copy at a call does not reach a `bt/s` slot both paths run before the join.
+* **A5-150 (9902422)**, routed: `xRam26002384._1_3_ = Var2;`, the three bytes read at entry written back after the byte stores, a write the code does not make (the emulator's final state agrees).
+
+### 4. The corpus
+
+**Spot check** (`spot.py`, master's lent dumps; each statement's drawn and empty tokens read against the disassembly): hwram007 0x06003C06, 0x0601C0E0, 0x0601CA70, 0x0600D6B4, 0x06017730, 0x0601ED40, 0x06024B18, 0x0602D7B4; hwram008 0x06003C06, 0x06008234, 0x0600C3C0, 0x06029F3C, 0x0601F0B4, 0x0604BCE8, 0x0605DDFE, 0x060661B4 (16, 15 functions). Loads, stores, calls, conditions and returns are drawn at their instructions; a post-increment's index names the increment that made it (0x06024B18, `unaff_r8[4]` first at the `mov.w @r8+` before, by design); the copies at calls are A7-11's (0x0601CA70); merge copies of registers at a branch ending their block (0x0601C0E0 `iVar2 = iStack_1c;` at a `bt/s`, 0x06008234 `puVar1 = puVar2;` at a `bf/s`) are A7-18's counted residue; one, hwram008 0x0604BCE8 `xVar3 = 5;` at `bra 0x0604BD5A` whose slot `mov #5,r1` makes the number, is filed (A7-178, P3). `census.py` on master's hwram007 alone dump: 3 conversions and 123 other plain statements drawn only at a branch.
+
+**This branch against master** (`tools/a7_review20/token_diff.py`, the four token dumps of the final product against master's): 8, 22, 17 and 39 lines differ (hwram007 alone and lent, hwram008 alone and lent; of 92,936, 197,741, 262,625 and 438,804 dump lines), every one an operand or a whole statement that was drawn at a branch. Each was read: the hoisted narrowings of 0x06006426/007 and 0x06006482/008 (`iVar9 = (int2)uVar8;` and two more at their `bf/s`, now at the `mov #1,r7`, the `mov.w @(r0,r14),r4` and the `jsr` that make the value, with the other paths' makers as empty tokens); operands at a `bf`, `bf/s`, `bt`, `bt/s` or `jmp` now at the call, load, extension or arithmetic that made them (0x060126DA, 0x06031F86, 0x06032FF0/8 of hwram007; 0x0603F5C2, 0x06041256, 0x06044BD6, 0x06046C06, 0x06052386, 0x060557AA, 0x06057314 of hwram008); an input's narrowing at a branch now names nothing (`(uint2)param_4` of 0x0602DDE8/007 and 0x0606E95C/008, `uVar1 = (int4)param_1 >> 1;` of the switch at 0x06032A48/007, the shift the engine merged from three cases and hoisted to the `jmp`). Two are only partly better: 0x06047E2A/008's `iVar8` names two stores of the value it was carried through (the engine's own computation drawn there) and 0x06057314/008's whole `iVar5 = (int4)uVar3 >> 1;` moves to the `and` that made uVar3. No text changes, no other line's tokens move; `if ((bool)uVar1) {` lines keep their branch (the pass's first form moved them, and was corrected).
+
+### 5. Fixtures, pins, mutation
+
+`TestArea7Review24` (`Sh2DecompilerTests.cpp`): A7-171's words marked volatile (the line at the load, the way back from the `bf` its `if`; damaged, the line put back at the `bf`: `conversionAtBranch` 1, and 0 with `SE_A7_RULE_OFF=175`), the same with r3 an input (names nothing), the join of two loads, the store of another value (the way back from it its own line), the loop marked volatile. `TestArea7Round9`'s A7-66 fixture now checks the input's hoisted narrowing names nothing, its damaged controls rebuilt at the `bt`. `TestArea7Review24Pins` (`Sh2GeneratedTests.cpp`): grammar 1 9900754, grammar 2 specials 10000825, whole. Mutation (`mutation.sh`, with a temporary switch of the product pass in the mutation build of commit `bdfc65f6`, removed from the final tree; the two refinements after it, a branch's own line and `mac.w`, only narrow the pass): the decompiler suite fails 13 CHECKs with the pass off, none with it on; the default generator run's pins fail 6 CHECKs with it off (the two new pins among them), none with the pass and the rule both off, none as built; seeds 9900754 and 10000825 fail with the pass off, pass with it on, and pass with the pass and the rule off; every hand fixture of `fixtures24.s` but `nobra` (a store, which the rule does not judge) gives `v:map-conversion-branch` with the pass off and nothing with it on.
+
+### 6. Runs after the last code edit
+
+After commit `adf34f42` (the last code edit; only documents changed after it), on its build:
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` | **117 of 117** passed |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (canary on, every pin) | **failing seeds=0; findings=0** (the canary: 240 programs, 0 failing) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, narrow-c 130, void-return 227, void-return-lent 24 |
+| game corpus, both images, `SE_GAME_LEND=1` | "all passed", every ledger count and mapping violation 0 (`conversion-branch` 0 in both images, alone and lent; `conversionAtBranchInside`, counted, 2 and 2 in hwram007, 2 and 7 in hwram008); missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**": unchanged |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint --tests-dir` ok (no vendored file touched) |
+
+### 7. Routed
+
+* **Area 7 (next fixer):** A7-176, A7-177 (P2, open); A7-178, A7-179 (P3, open).
+* **Area 5:** A5-150 (P3, open; grammar 1 seed 9902422).
