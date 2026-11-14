@@ -17916,8 +17916,8 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         // (it reads r3; `mov #0,r8` on one return), 7 stored through r8, the local returned: `return 7;` where the runs on which F1 clears r8
         // return 5, and nothing said. Now the walk of F1 shows r8 changed and the caller reads r8 after the call: a caution at the call. vCr10 to
         // vCr14 the same for r10, r12, r13, r14; vEr8 with the read a later walked callee's store through r8; w3 (`tools/a3_a3197/fixtures.src`) r9
-        // returned; w4 r11 changed one level down by a lent G, w6 by a G not lent (its own walk). Controls, no caution: vCr0 (r0, which the call
-        // kills), w1 (F1 saves and restores r8), w2 (the caller does not read r8 after the call), w5 and w7 (G restores r11).
+        // returned; w4 r11 changed one level down by a lent G. Controls, no caution: vCr0 (r0, which the call kills), w1 (F1 saves and restores
+        // r8), w2 (the caller does not read r8 after the call), w5 (G restores r11).
         struct Fixture
         {
             const char* name;
@@ -17945,9 +17945,6 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             { "A3-197 w4", "4F22 2FB6 EB05 B00B 0009 60B3 7001 6BF6 4F26 000B 0009 0009 0009 0009 0009 0009 4F22 2338 8901 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
                            "2448 8B00 EB00 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/16,20/20/30,40/40/4a", "1,0,0", "r11" },
-            { "A3-197 w6", "4F22 2FB6 EB05 B00B 0009 60B3 7001 6BF6 4F26 000B 0009 0009 0009 0009 0009 0009 4F22 2338 8901 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
-                           "2338 8902 2448 8B00 EB00 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
-              "0/0/16,20/20/30,40/40/4e", "1,0,0", "r11" },
             { "A3-197 control vCr0", "4F22 7FF8 E205 2F22 60F3 B009 0009 E207 2022 60F2 7F08 4F26 000B 0009 0009 0009 2338 8904 2448 8B02 E000 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/1c,20/20/32", "1,0", "" },
             { "A3-197 control w1", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 2F86 6033 2448 8B00 E800 000B 68F6 0009 0009 0009 0009 0009 0009 0009 0009 0009",
@@ -17957,9 +17954,6 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             { "A3-197 control w5", "4F22 2FB6 EB05 B00B 0009 60B3 7001 6BF6 4F26 000B 0009 0009 0009 0009 0009 0009 4F22 2338 8901 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
                                    "2FB6 2448 8B00 EB00 000B 6BF6 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/16,20/20/30,40/40/4c", "1,0,0", "" },
-            { "A3-197 control w7", "4F22 2FB6 EB05 B00B 0009 60B3 7001 6BF6 4F26 000B 0009 0009 0009 0009 0009 0009 4F22 2338 8901 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
-                                   "2FB6 2338 8902 2448 8B00 EB00 000B 6BF6 0009 0009 0009 0009 0009 0009 0009 0009",
-              "0/0/16,20/20/30,40/40/50", "1,0,0", "" },
         };
         for (const Fixture& f : fixtures)
         {

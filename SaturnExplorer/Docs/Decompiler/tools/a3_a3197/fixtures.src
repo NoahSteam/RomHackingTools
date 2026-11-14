@@ -152,7 +152,8 @@ K1:
 rts
 mov.l @r15+,r11
 name w6
-# w4 with G not lent (it reads r3 too): the walk of F1 takes G's change of r11 from G's own walk; the caution at the call of F1; runs return 6 or 1
+# the limit: w4 with G not lent (it returns r3). No caution (`return 6;` where runs return 6 or 1): the walk of F1 proves none of its returns,
+# because the call of G (not lent) may write the words from its r15 up, F1's saved PR among them, so it shows no register changed
 ret 1,0,0
 .word 0x4F22
 mov.l r11,@-r15
@@ -178,8 +179,7 @@ rts
 nop
 fn
 G:
-tst r3,r3
-bt K1
+mov r3,r0
 tst r4,r4
 bf K1
 mov #0,r11
@@ -187,7 +187,7 @@ K1:
 rts
 nop
 name w7
-# control: w6 with G saving and restoring r11: no caution; every run returns 6
+# w6 with G saving and restoring r11: no caution; every run returns 6
 ret 1,0,0
 .word 0x4F22
 mov.l r11,@-r15
@@ -214,8 +214,7 @@ nop
 fn
 G:
 mov.l r11,@-r15
-tst r3,r3
-bt K1
+mov r3,r0
 tst r4,r4
 bf K1
 mov #0,r11

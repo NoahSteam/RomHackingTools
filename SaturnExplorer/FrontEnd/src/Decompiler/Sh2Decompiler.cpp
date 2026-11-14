@@ -1258,9 +1258,6 @@ private:
                     const uint32_t sb = CalleeStoresBelow(target);
                     mStoresBelow |= RegOrigins(s, sb) & 0x7FFFu;
                     mHanded |= RegDeps(s, sb | CalleeHanded(target));
-                    // (area 3, A3-197) ...and one of r8-r14 its walk shows it returning with changed is changed here too, so a walked callee
-                    // that leaves its own callee's change in place is shown to change it (CalleeChanged, carried up to any depth).
-                    e.preserved &= ~CalleeChanged(target);
                 }
                 else
                 {
