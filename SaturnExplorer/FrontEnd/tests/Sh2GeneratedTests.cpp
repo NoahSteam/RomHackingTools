@@ -299,10 +299,9 @@ static bool PieceOfAssignedGlobal(const std::string& text, size_t from, size_t a
 // (A5-139) A statement `G = G & 0xffffff;` or `G = G | 0xff000000;` (G the whole word, `uRam26002188`): the engine's form of a byte or half store of the
 // constant 0 or 0xff, which it has widened to the word; the bytes it keeps are read, and the stored bytes are the mask's 00 (and) or ff (or) bytes.
 // `base` is the global's address, `lo` and `hi` the byte range the mask writes (big-endian: the first byte is the word's address).
-static bool MaskedOwnWord(const std::string& text, uint32_t& base, uint32_t& lo, uint32_t& hi)
+static bool MaskedOwnWordAt(const std::string& text, size_t b, const char* tail, uint32_t& base, uint32_t& lo, uint32_t& hi)
 {
-    const size_t b = text.find_first_not_of(' ');
-    if (b == std::string::npos) return false;
+    if (b == std::string::npos || b >= text.size()) return false;
     size_t e = b;
     while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_' || text[e] == '.')) ++e;
     const std::string name = text.substr(b, e - b);
@@ -320,7 +319,7 @@ static bool MaskedOwnWord(const std::string& text, uint32_t& base, uint32_t& lo,
     int used = 0;
     if (text.compare(k, 2, "0x") != 0 || std::sscanf(text.c_str() + k + 2, "%x%n", &mask, &used) != 1 || used <= 0) return false;
     k += 2 + static_cast<size_t>(used);
-    if (text.compare(k, std::string::npos, ";") != 0) return false;
+    if (text.compare(k, std::strlen(tail), tail) != 0 || (tail[0] == ';' && k + 1 != text.size())) return false;
     const unsigned keep = op == '&' ? 0xffu : 0x00u;
     lo = 4;
     hi = 0;
@@ -337,6 +336,16 @@ static bool MaskedOwnWord(const std::string& text, uint32_t& base, uint32_t& lo,
         if (((mask >> (8 * (3 - i))) & 0xffu) == keep) return false;
     base = v;
     return true;
+}
+// (A5-147: ...also as the first operand of a comma expression in a condition, `(uRam26002084 = uRam26002084 & 0xffffff, in_r0 != 2)`: a slot's byte
+// store of the constant, which the engine puts into the condition of the branch it is the slot of; grammar 1 seed 9408552)
+static bool MaskedOwnWord(const std::string& text, uint32_t& base, uint32_t& lo, uint32_t& hi)
+{
+    if (MaskedOwnWordAt(text, text.find_first_not_of(' '), ";", base, lo, hi)) return true;
+    if (dts::A7RuleOff(5147)) return false;
+    for (size_t at = text.find('('); at != std::string::npos; at = text.find('(', at + 1))
+        if (MaskedOwnWordAt(text, at + 1, ",", base, lo, hi)) return true;
+    return false;
 }
 // A read whose value is used only by an expression the engine folds to a constant (x ^ x, x - x,
 // x == x, x & 0, a test of bits a shift cleared) is dropped (ledger A5-1), and that one class fills
@@ -4295,8 +4304,91 @@ bool OrsIntoOnChip(const std::string& text)
             if (c == '&') return n != '&';
             return c == '^' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '<' || c == '>';
         };
-        if (b > 0 && text[b - 1] == '|' && (b < 2 || text[b - 2] != '|') && !tighterAfter()) return true;
-        if (e < text.size() && text[e] == '|' && (e + 1 >= text.size() || text[e + 1] != '|') && !tighterBefore()) return true;
+        // (A5-148) ...and the OR's parenthesised value is not ANDed with another: `(param_2 | 0xffffffc0) & uRam06009058` has the mask's value to clear the top
+        // bits again (the code ANDs with 0x1c); the partition is no longer the OR's. Sweep seed 9404677.
+        auto andedAround = [&]() {
+            if (dts::A7RuleOff(5148)) return false;
+            int depth = 0;
+            size_t open = std::string::npos, close = std::string::npos;
+            for (size_t k = b; k > 0; --k)
+            {
+                if (text[k - 1] == ')') ++depth;
+                else if (text[k - 1] == '(' && depth-- == 0)
+                {
+                    open = k - 1;
+                    break;
+                }
+            }
+            depth = 0;
+            for (size_t k = e; k < text.size(); ++k)
+            {
+                if (text[k] == '(') ++depth;
+                else if (text[k] == ')' && depth-- == 0)
+                {
+                    close = k;
+                    break;
+                }
+            }
+            if (open == std::string::npos || close == std::string::npos) return false;
+            size_t after = close + 1, before = open;
+            while (after < text.size() && text[after] == ' ') ++after;
+            while (before > 0 && text[before - 1] == ' ') --before;
+            auto numberAt = [&](size_t q) {
+                while (q < text.size() && (text[q] == ' ' || text[q] == '(')) ++q;
+                return q < text.size() && std::isdigit(static_cast<unsigned char>(text[q]));
+            };
+            const bool andAfter = after < text.size() && text[after] == '&' && (after + 1 >= text.size() || text[after + 1] != '&') && !numberAt(after + 1);
+            bool andBefore = before > 0 && text[before - 1] == '&' && (before < 2 || text[before - 2] != '&');
+            if (andBefore)
+            {
+                size_t q = before - 1;
+                while (q > 0 && (text[q - 1] == ' ' || text[q - 1] == ')')) --q;
+                size_t t0 = q;
+                while (t0 > 0 && (std::isalnum(static_cast<unsigned char>(text[t0 - 1])) || text[t0 - 1] == '_')) --t0;
+                andBefore = !(t0 < q && std::isdigit(static_cast<unsigned char>(text[t0])));
+            }
+            return andAfter || andBefore;
+        };
+        if (b > 0 && text[b - 1] == '|' && (b < 2 || text[b - 2] != '|') && !tighterAfter() && !andedAround()) return true;
+        if (e < text.size() && text[e] == '|' && (e + 1 >= text.size() || text[e + 1] != '|') && !tighterBefore() && !andedAround()) return true;
+    }
+    return false;
+}
+
+// (A5-148) Whether `id` is an operand of an AND in `text` (`(uint4)pxVar1 & uRam06009064`), the other operand not a constant that keeps the top three bits:
+// the value is then masked again, and what ORed the top bits into it no longer says where the pointer is.
+bool AndedWith(const std::string& text, const std::string& id)
+{
+    for (size_t at = text.find(id); at != std::string::npos; at = text.find(id, at + 1))
+    {
+        const size_t end = at + id.size();
+        if ((at > 0 && (std::isalnum(static_cast<unsigned char>(text[at - 1])) || text[at - 1] == '_')) ||
+            (end < text.size() && (std::isalnum(static_cast<unsigned char>(text[end])) || text[end] == '_')))
+            continue;
+        size_t r = end;
+        while (r < text.size() && (text[r] == ' ' || text[r] == ')')) ++r;
+        auto numeric = [&](size_t q) {   // (the operand at q is a number: ANDed with a constant the engine reads the range, A5-135's `& 0x1c`)
+            while (q < text.size() && (text[q] == ' ' || text[q] == '(')) ++q;
+            return q < text.size() && std::isdigit(static_cast<unsigned char>(text[q]));
+        };
+        if (r < text.size() && text[r] == '&' && (r + 1 >= text.size() || text[r + 1] != '&') && !numeric(r + 1)) return true;
+        size_t l = at;
+        while (l > 0 && text[l - 1] == ' ') --l;
+        if (l > 0 && text[l - 1] == ')')   // (a cast: `(uint4)id`)
+        {
+            size_t k = l - 1;
+            while (k > 0 && text[k - 1] != '(') --k;
+            l = k > 0 ? k - 1 : 0;
+            while (l > 0 && text[l - 1] == ' ') --l;
+        }
+        if (l > 0 && text[l - 1] == '&' && (l < 2 || text[l - 2] != '&'))
+        {
+            size_t q = l - 1;
+            while (q > 0 && (text[q - 1] == ' ' || text[q - 1] == ')')) --q;
+            size_t t0 = q;
+            while (t0 > 0 && (std::isalnum(static_cast<unsigned char>(text[t0 - 1])) || text[t0 - 1] == '_')) --t0;
+            if (!(t0 < q && std::isdigit(static_cast<unsigned char>(text[t0])))) return true;
+        }
     }
     return false;
 }
@@ -4368,6 +4460,11 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
         while (!rhs.empty() && (rhs.back() == ';' || rhs.back() == ' ')) rhs.pop_back();
         assigns.push_back(Assign{ l.text.substr(b, e - b), rhs, li });
     }
+    // (A5-148: the names the output ANDs with another value somewhere)
+    std::set<std::string> anded;
+    for (const Line& l : r.lines)
+        for (const std::string& id : Identifiers(l.text))
+            if (!IsFreeValue(id) && AndedWith(l.text, id)) anded.insert(id);
     const std::vector<std::pair<size_t, size_t>> spans = BackEdgeSpans(r.lines);
     auto reaches = [&](size_t assignLine, size_t useLine) {
         if (assignLine <= useLine) return true;
@@ -4464,7 +4561,7 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
                 if (rhs != a.rhs || !DerefOperands(rhs).empty()) openSource = true;
                 // (A5-96) what is loaded through an address is not the address: a mask in it bounds the address, not the value loaded
                 const std::string value = LoadsBlanked(rhs);
-                if (!loaded) maskSeen |= OrsIntoOnChip(value);
+                if (!loaded && !(!dts::A7RuleOff(5148) && anded.count(name))) maskSeen |= OrsIntoOnChip(value);
                 if (NamesHardwareBase(rhs, reached, tooFar)) found = true;
                 const std::vector<std::string> direct = Identifiers(value);
                 selfSeen |= std::find(direct.begin(), direct.end(), name) != direct.end();
@@ -17702,6 +17799,154 @@ void TestA5FoldedPins4(Sh2Decompiler& d)
     CHECK(rr.findings.size() == r143.findings.size() && count(rr, "order.folded-store.frame-pointer") == count(r143, "order.folded-store.frame-pointer"));
 }
 
+// Area 7 round 22: the routed seeds and the sweep from 9,400,001. Whole seeds, then each shrunk program evaluated and replayed from the replay line
+// the report prints (alias, volatile range, poll and the module's functions, returns, clobbers and reads included). A7-165 (grammar 1 specials seed
+// 9302668), A7-166 (grammar 1 seeds 8901149 and 8909710), A7-167 (grammar 2 seed 8900054), A5-146 (grammar 1 seed 8902817, which the oracle
+// fix of A5-144 had already set right: pin only), and the sweep from 9,400,001: A7-168 (9401568), A7-169 (9406270), A5-147 (9408552). No finding of any kind.
+void TestArea7Round22Pins(Sh2Decompiler& d)
+{
+    const bool savedSpecials = gSpecialReads;
+    struct Whole
+    {
+        int grammar;
+        long seed;
+        bool specials;
+    };
+    for (const Whole& w : { Whole{ 1, 9302668, true }, Whole{ 1, 8901149, false }, Whole{ 1, 8909710, false }, Whole{ 2, 8900054, false }, Whole{ 1, 8902817, false },
+                           Whole{ 1, 9401568, false }, Whole{ 1, 9406270, false }, Whole{ 1, 9408552, false }, Whole{ 2, 9404185, false },
+                           Whole{ 2, 9404677, false } })
+    {
+        gSpecialReads = w.specials;
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 22: grammar %d seed %ld%s': %zu finding(s)\n", w.grammar, w.seed, w.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    gSpecialReads = savedSpecials;
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* volatileRange;
+        const char* poll;
+    };
+    const Shrunk kShrunk[] = {
+        // A7-165, specials 9302668: `xRam26001030 = Ram26001028;` for a marked-volatile read and the store of it
+        { "A7-165 grammar 1 specials seed 9302668 shrunk", "D706 6071 C801 89FC E186 6071 8174 4115 8901 6041 535C 000B 0009 0009 2600 1028", nullptr,
+          "26001020-2600102f", "26001028:until-set" },
+        // A7-166, 8901149: a slot's word store both paths run, its line `xRam2600208c = 0x3e003e;` and the line after the block
+        { "A7-166 grammar 1 seed 8901149 shrunk", "E33E D607 2528 8901 3550 8D06 2632 D705 6071 C801 8BFC 000B 2631 000B 2631 0009 2600 208C 2600 1034", "4:26003C0C",
+          "26001030-2600103f", "26001034" },
+        // A7-166, 8909710: the same with a comma expression in the condition
+        { "A7-166 grammar 1 seed 8909710 shrunk", "D609 D70A D10A 271B E0E2 2258 8B01 3230 8F07 1716 816F 4215 8900 816F 451B 000B 0009 000B 0009 0009 2600 2184 2600 2188 2000 0000",
+          nullptr, nullptr, nullptr },
+        // A7-168, 9401568: a write through a pointer between a store and the store that writes over it
+        { "A7-168 grammar 1 seed 9401568 shrunk", "D605 D706 2521 6070 C801 8BFB 2602 E010 0506 2612 000B 0009 0600 210C 2600 2300", nullptr, nullptr, "26002300" },
+        // A7-169, 9406270: a conversion's operand at the first of two stores of a word
+        { "A7-169 grammar 1 seed 9406270 shrunk", "D604 8446 3148 E000 0615 8160 E00E 0715 000B 0009 0400 0004", nullptr, nullptr, nullptr },
+        // A5-147, 9408552: the widened byte store of 0 in a condition's comma expression
+        { "A5-147 grammar 1 seed 9408552 shrunk", "D606 6360 441B 2458 8B06 8802 8D01 2630 2622 2640 000B 0009 AFF9 0009 2600 2084", nullptr, nullptr, nullptr },
+    };
+    const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
+    for (const Shrunk& p : kShrunk)
+    {
+        const char* values[3] = { p.volatileRange, p.poll, p.alias };
+        std::string saved[3];
+        bool had[3];
+        for (int i = 0; i < 3; ++i)
+        {
+            const char* old = std::getenv(names[i]);
+            had[i] = old != nullptr;
+            if (old) saved[i] = old;
+            SetOrClear(names[i], values[i]);
+        }
+        const Subject subject = RawSubject(p.words);
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        const size_t at = rep.text.find("  replay: SE_GENERATED_WORDS=\"");
+        CHECK(at != std::string::npos);
+        if (at == std::string::npos) continue;
+        const std::string line = rep.text.substr(at, rep.text.find('\n', at) - at);
+        auto value = [&](const char* name, bool quoted) {
+            const size_t k = line.find(std::string(name) + "=" + (quoted ? "\"" : ""));
+            if (k == std::string::npos) return std::string();
+            const size_t from = k + std::strlen(name) + 1 + (quoted ? 1 : 0);
+            return line.substr(from, line.find(quoted ? '"' : ' ', from) - from);
+        };
+        const std::string words = value("SE_GENERATED_WORDS", true), vol = value("SE_GENERATED_VOLATILE", false), poll = value("SE_GENERATED_POLL", false),
+                          alias = value("SE_GENERATED_ALIAS", false);
+        CHECK(vol.empty() == (p.volatileRange == nullptr));
+        CHECK(poll.empty() == (p.poll == nullptr));
+        CHECK(alias.empty() == (p.alias == nullptr));
+        const std::string got[3] = { vol, poll, alias };
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], got[i].empty() ? nullptr : got[i].c_str());
+        const Subject again = RawSubject(words.c_str());
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], nullptr);
+        const Report rr = EvaluateSubject(d, again, true);
+        std::printf("  replay line '%s': %zu finding(s)\n", line.c_str(), rr.findings.size());
+        CHECK(rr.findings.size() == rep.findings.size());
+    }
+    // A7-167, grammar 2 seed 8900054 shrunk twice: function 0 calls function 1 (a `bsr`, then a `jsr` through the pool's literal) and runs into it by
+    // a tail jump; the push of r12 in the callee is the store `xStack_10 = unaff_r12;` drawn at the call names
+    static const ModulePin kBsr = { "A7-167 grammar 2 seed 8900054 shrunk (bsr)",
+                                    "2F86 2F96 4F22 6843 6953 63C3 2F36 63F6 B00A 0009 6483 6593 D302 4F26 69F6 68F6 432B 0009 0600 9028 2F86 2F96 2FA6 2FC6 2FD6 0C2A 7FE8 "
+                                    "6843 6953 6A63 62F3 7218 E103 2216 4110 8BFC E200 E05E 7F18 4C2A 6DF6 6CF6 6AF6 69F6 68F6 000B 0009",
+                                    "0/0/24,28/28/5e", nullptr, "1,1", "184000,184000", "1000,100000" };
+    static const ModulePin kJsr = { "A7-167 grammar 2 seed 8900054 shrunk (jsr)",
+                                    "2F86 2F96 4F22 6843 6953 63C3 2F36 63F6 D305 430B 0009 6483 6593 D304 4F26 69F6 68F6 432B 0009 0009 0600 9030 0600 9030 2F86 2F96 2FA6 "
+                                    "2FC6 2FD6 0C2A 7FE8 6843 6953 6A63 62F3 7218 E103 2216 4110 8BFC E200 E05E 7F18 4C2A 6DF6 6CF6 6AF6 69F6 68F6 000B 0009",
+                                    "0/0/26,30/30/66", nullptr, "1,1", "184000,184000", "1000,100000" };
+    // A7-170, grammar 2 seed 9404185 shrunk three times: `and #1` of a value and a `shal` of another, `and r2,r1` at a join is 0 (a never-taken branch
+    // between; a push and a pop of r2 between)
+    static const ModulePin kAnd = { "A7-170 grammar 2 seed 9404185 shrunk (and, shal)",
+                                    "7FE8 6073 7F18 000B 0009 7FFC E001 0514 2109 4220 2718 8B01 A003 0009 2129 A000 0009 6043 7F04 000B 0009", "0/0/a,a/a/2a", nullptr, "1,1",
+                                    nullptr, nullptr };
+    static const ModulePin kAndNever = { "A7-170 grammar 2 seed 9404185 shrunk (a branch never taken)",
+                                         "7FE8 6073 7F18 000B 0009 7FFC E000 017E 8801 8903 E001 0514 2109 4220 2718 8B01 A003 0009 2129 A000 0009 6043 7F04 000B 0009",
+                                         "0/0/a,a/a/32", nullptr, "1,1", nullptr, nullptr };
+    static const ModulePin kAndPop = { "A7-170 grammar 2 seed 9404185 shrunk (a push and a pop)",
+                                       "7FE8 6073 7F18 000B 0009 7FFC E001 0514 2109 4220 2F26 62F6 2718 8B01 A003 0009 2129 A000 0009 6043 7F04 000B 0009", "0/0/a,a/a/2e",
+                                       nullptr, "1,1", nullptr, nullptr };
+    // A5-148, grammar 2 seed 9404677 shrunk twice: the pointer `(param_2 | 0xffffffc0) & uRam06009058` (and `pxVar1 & uRam06009064`, the OR in a variable),
+    // ANDed with a value that clears the top bits again; the write at FFFFFFFE is the pre-decrement of 0, no on-chip pointer made by the OR
+    static const ModulePin kOnChip = { "A5-148 grammar 2 seed 9404677 shrunk (the OR in the expression)",
+                                       "D103 251B 3350 89FF D102 412B 0009 0009 FFFF FFC0 0600 9018 2F86 2F96 2FA6 2FB6 2FD6 4F22 6843 6953 6A63 6B73 D204 4F26 6DF6 6BF6 6AF6 "
+                                       "69F6 68F6 422B 0009 0009 0600 9044 7FF0 D204 2529 6151 2515 6053 7F10 000B 0009 0009 0000 001C",
+                                       "0/0/e,18/18/3e,44/44/56", nullptr, "1,1,1", "101000,101000,0", "100000,4000,0" };
+    static const ModulePin kOnChipVar = { "A5-148 grammar 2 seed 9404677 shrunk (the OR in a variable)",
+                                          "D103 251B 3350 89FF D102 412B 0009 0009 FFFF FFC0 0600 9018 2F86 2F96 2FA6 2FB6 2FD6 4F22 6843 6953 6A63 6B73 B010 0009 6483 6593 66A3 "
+                                          "67B3 2530 D204 4F26 6DF6 6BF6 6AF6 69F6 68F6 422B 0009 0600 9050 7FF0 D204 2529 6151 2515 6053 7F10 000B 0009 0009 0000 001C",
+                                          "0/0/e,18/18/4c,50/50/62", nullptr, "1,1,1", "101000,101000,0", "100000,4000,0" };
+    for (const ModulePin* m : { &kBsr, &kJsr, &kAnd, &kAndNever, &kAndPop, &kOnChip, &kOnChipVar })
+    {
+        const Report rep = EvaluateSubject(d, ModuleSubject(*m), true);
+        std::printf("pin '%s': %zu finding(s)\n", m->name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        const size_t at = rep.text.find("  replay: SE_GENERATED_WORDS=\"");
+        CHECK(at != std::string::npos);
+        if (at == std::string::npos) continue;
+        const std::string line = rep.text.substr(at, rep.text.find('\n', at) - at);
+        auto value = [&](const char* name) {
+            const size_t k = line.find(std::string(name) + "=\"");
+            if (k == std::string::npos) return std::string();
+            const size_t from = k + std::strlen(name) + 2;
+            return line.substr(from, line.find('"', from) - from);
+        };
+        const std::string w = value("SE_GENERATED_WORDS"), f = value("SE_GENERATED_FUNCS"), r = value("SE_GENERATED_RETURNS"), c = value("SE_GENERATED_CLOBBERS"),
+                          rd = value("SE_GENERATED_READS");
+        CHECK(!w.empty() && !f.empty() && !r.empty() && c.empty() == (m->clobbers == nullptr) && rd.empty() == (m->reads == nullptr));
+        const ModulePin again = { "replay", w.c_str(), f.c_str(), nullptr, r.c_str(), c.empty() ? nullptr : c.c_str(), rd.empty() ? nullptr : rd.c_str() };
+        const Report rr = EvaluateSubject(d, ModuleSubject(again), true);
+        std::printf("  replay line '%s': %zu finding(s)\n", line.c_str(), rr.findings.size());
+        CHECK(rr.findings.size() == rep.findings.size());
+    }
+}
+
 void TestA3RoutedPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -18756,6 +19001,7 @@ void TestGenerated()
         RUN(TestA5FoldedPins2(d));
         RUN(TestA5FoldedPins3(d));
         RUN(TestA5FoldedPins4(d));
+        RUN(TestArea7Round22Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

@@ -4896,6 +4896,134 @@ void TestArea7Round21()
     }
 }
 
+// Area 7 round 22: the oracle's four fixes of the routed seeds and the specials seed. Each fixture's audit passes with every rule on, and finds a
+// violation with SE_A7_RULE_OFF=<row>. A7-165 (a marked-volatile read is no fate, but the line it is in is its statement), A7-166 (a line's own name
+// at the store's word, though another line of the same store on the other path draws the name there too), A7-167 (a store in the code a call runs).
+void TestArea7Round22()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto ruleOff = [](const char* rows) {
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", rows ? rows : "");
+#else
+        if (rows) setenv("SE_A7_RULE_OFF", rows, 1);
+        else unsetenv("SE_A7_RULE_OFF");
+#endif
+    };
+    const auto snapOf = [&](const std::vector<uint16_t>& w) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * static_cast<uint32_t>(i), w[i]);
+        return MakeSnapshot(hw);
+    };
+    const auto mutated = [&](const DecompileResult& r, const char* rows, const char* what) {
+        ruleOff(rows);
+        const int n = dts::AuditMapping(r, word, what).Violations();
+        ruleOff(nullptr);
+        return n;
+    };
+    // A7-165 `lp: mov.w @r7,r0 ; tst #1,r0 ; bt lp ; mov #-0x7a,r1 ; mov.w @r7,r0 ; mov.w r0,@(8,r7) ; cmp/pl r1 ; ...` with r7 the marked mailbox
+    // 0x26001028: `xRam26001030 = Ram26001028;` is the statement of the re-read at 0x0600900A and of the store (grammar 1 specials seed 9302668, shrunk)
+    {
+        const std::vector<uint16_t> w = { 0xD706, 0x6071, 0xC801, 0x89FC, 0xE186, 0x6071, 0x8174, 0x4115, 0x8901, 0x6041, 0x535C, 0x000B, 0x0009, 0x0009, 0x2600, 0x1028 };
+        DecompileRequest q = Request(0x06009000u);
+        q.volatileMemory.emplace_back(0x26001020u, 0x2600102Fu);
+        const DecompileResult r = d.Decompile(snapOf(w), q);
+        Print("A7-165 a marked-volatile read and its store (grammar 1 specials seed 9302668)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam26001030 = Ram26001028;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_165").Violations() == 0);
+        CHECK(mutated(r, "165", "a7_165 mutated") >= 1);
+    }
+    // A7-166 `bt/s L ; mov.l r3,@r6 (the slot) ; ... L: mov.w r3,@r6`: the store's statement is drawn in the taken path's block as `xRam2600208c =
+    // 0x3e003e;` and again after it as `xRam2600208c = 0x3e;`; both are its own (grammar 1 seed 8901149, shrunk; the poll word marked volatile)
+    {
+        const std::vector<uint16_t> w = { 0xE33E, 0xD607, 0x2528, 0x8901, 0x3550, 0x8D06, 0x2632, 0xD705, 0x6071, 0xC801, 0x8BFC, 0x000B, 0x2631, 0x000B,
+                                          0x2631, 0x0009, 0x2600, 0x208C, 0x2600, 0x1034 };
+        DecompileRequest q = Request(0x06009000u);
+        q.volatileMemory.emplace_back(0x26001030u, 0x2600103Fu);
+        const DecompileResult r = d.Decompile(snapOf(w), q);
+        Print("A7-166 a slot's store both paths run (grammar 1 seed 8901149)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam2600208c = 0x3e003e;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_166_8901149").Violations() == 0);
+        CHECK(mutated(r, "166", "a7_166_8901149 mutated") >= 1);
+    }
+    // A7-166, grammar 1 seed 8909710 (shrunk): the same with the first store in a comma expression of the condition
+    {
+        const std::vector<uint16_t> w = { 0xD609, 0xD70A, 0xD10A, 0x271B, 0xE0E2, 0x2258, 0x8B01, 0x3230, 0x8F07, 0x1716, 0x816F, 0x4215, 0x8900, 0x816F, 0x451B,
+                                          0x000B, 0x0009, 0x000B, 0x0009, 0x0009, 0x2600, 0x2184, 0x2600, 0x2188, 0x2000, 0x0000 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x06009000u));
+        Print("A7-166 a slot's store, a comma expression (grammar 1 seed 8909710)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(dts::AuditMapping(r, word, "a7_166_8909710").Violations() == 0);
+        CHECK(mutated(r, "166", "a7_166_8909710 mutated") >= 1);
+    }
+    // A7-167 `bsr F` (and `jsr @r3` with r3 the literal F) in a function that tail-jumps to F: `xStack_10 = unaff_r12;` is drawn at the call and names
+    // the push of r12 in F, which runs when the call is made (grammar 2 seed 8900054, shrunk twice)
+    {
+        const std::vector<uint16_t> bsr = { 0x2F86, 0x2F96, 0x4F22, 0x6843, 0x6953, 0x63C3, 0x2F36, 0x63F6, 0xB00A, 0x0009, 0x6483, 0x6593, 0xD302, 0x4F26,
+                                            0x69F6, 0x68F6, 0x432B, 0x0009, 0x0600, 0x9028, 0x2F86, 0x2F96, 0x2FA6, 0x2FC6, 0x2FD6, 0x0C2A, 0x7FE8, 0x6843,
+                                            0x6953, 0x6A63, 0x62F3, 0x7218, 0xE103, 0x2216, 0x4110, 0x8BFC, 0xE200, 0xE05E, 0x7F18, 0x4C2A, 0x6DF6, 0x6CF6,
+                                            0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009 };
+        const std::vector<uint16_t> jsr = { 0x2F86, 0x2F96, 0x4F22, 0x6843, 0x6953, 0x63C3, 0x2F36, 0x63F6, 0xD305, 0x430B, 0x0009, 0x6483, 0x6593, 0xD304,
+                                            0x4F26, 0x69F6, 0x68F6, 0x432B, 0x0009, 0x0009, 0x0600, 0x9030, 0x0600, 0x9030, 0x2F86, 0x2F96, 0x2FA6, 0x2FC6,
+                                            0x2FD6, 0x0C2A, 0x7FE8, 0x6843, 0x6953, 0x6A63, 0x62F3, 0x7218, 0xE103, 0x2216, 0x4110, 0x8BFC, 0xE200, 0xE05E,
+                                            0x7F18, 0x4C2A, 0x6DF6, 0x6CF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009 };
+        const DecompileResult rb = d.Decompile(snapOf(bsr), Request(0x06009000u));
+        Print("A7-167 a store in the code a bsr calls (grammar 2 seed 8900054)", rb);
+        CHECK(rb.status == DecompileStatus::Ok);
+        CHECK(LineWith(rb, "xStack_10 = unaff_r12;") != nullptr);
+        CHECK(dts::AuditMapping(rb, word, "a7_167_bsr").Violations() == 0);
+        CHECK(mutated(rb, "167", "a7_167_bsr mutated") >= 1);
+        const DecompileResult rj = d.Decompile(snapOf(jsr), Request(0x06009000u));
+        Print("A7-167 a store in the code a jsr calls (grammar 2 seed 8900054)", rj);
+        CHECK(rj.status == DecompileStatus::Ok);
+        CHECK(LineWith(rj, "xStack_10 = unaff_r12;") != nullptr);
+        CHECK(dts::AuditMapping(rj, word, "a7_167_jsr").Violations() == 0);
+        CHECK(mutated(rj, "167", "a7_167_jsr mutated") >= 1);
+    }
+    // A7-168 `mov.b @r7,r0 ; ... ; mov.l r0,@r6 ; mov #0x10,r0 ; mov.l r0,@(r0,r5) ; mov.l r1,@r6`: the first store is kept (a write through a pointer
+    // is between), `uRam0600210c = (int4)cRam26002300;` names it, and the store after writes over it (grammar 1 seed 9401568, shrunk)
+    {
+        const std::vector<uint16_t> w = { 0xD605, 0xD706, 0x2521, 0x6070, 0xC801, 0x8BFB, 0x2602, 0xE010, 0x0506, 0x2612, 0x000B, 0x0009, 0x0600, 0x210C, 0x2600, 0x2300 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x06009000u));
+        Print("A7-168 a kept store before a write through a pointer (grammar 1 seed 9401568)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uRam0600210c = (int4)cRam26002300;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_168").Violations() == 0);
+        CHECK(mutated(r, "168", "a7_168 mutated") >= 1);
+    }
+    // A7-169 `sub r4,r1 ; mov #0,r0 ; mov.w r1,@(r0,r6) ; mov.w r0,@(0,r6) ; ... ; mov.w r1,@(r0,r7)`: `(int2)param_1` of the second line's value is drawn
+    // at the first store (dead, the second writes over it), the narrowing it does (grammar 1 seed 9406270, shrunk)
+    {
+        const std::vector<uint16_t> w = { 0xD604, 0x8446, 0x3148, 0xE000, 0x0615, 0x8160, 0xE00E, 0x0715, 0x000B, 0x0009, 0x0400, 0x0004 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x06009000u));
+        Print("A7-169 a conversion's operand at a dead store (grammar 1 seed 9406270)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "in_r1 - (int2)param_1;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_169").Violations() == 0);
+        CHECK(mutated(r, "169", "a7_169 mutated") >= 1);
+    }
+    // A7-170 `mov #1,r0 ; mov.b r1,@(r0,r5) ; and r0,r1 ; shal r2 ; tst r1,r7 ; bf L ; ... ; L: and r2,r1`: r1 holds only bit 0, r2 any but bit 0, so `and r2,r1` makes
+    // the 0 of `uVar1 = 0;` (grammar 2 seed 9404185, shrunk; the function at 0x0600900A)
+    {
+        const std::vector<uint16_t> w = { 0x7FE8, 0x6073, 0x7F18, 0x000B, 0x0009, 0x7FFC, 0xE001, 0x0514, 0x2109, 0x4220, 0x2718, 0x8B01, 0xA003, 0x0009, 0x2129,
+                                          0xA000, 0x0009, 0x6043, 0x7F04, 0x000B, 0x0009 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x0600900Au));
+        Print("A7-170 an AND of values with no bit in common (grammar 2 seed 9404185)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uVar1 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_170").Violations() == 0);
+        CHECK(mutated(r, "170", "a7_170 mutated") >= 1);
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -19886,6 +20014,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round19());
         RUN(TestArea7Review20());
         RUN(TestArea7Round21());
+        RUN(TestArea7Round22());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());
