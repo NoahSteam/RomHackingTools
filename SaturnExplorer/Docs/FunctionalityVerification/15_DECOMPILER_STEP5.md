@@ -21616,7 +21616,7 @@ Every fixture of A3-197 (`a3_a3197/run.sh`: vC and vE, w1 to w9), round 26 (`a3_
 
 ### 3. Corpus spot-check
 
-The lent dumps of master (both images, `a7_round2/corpus.sh`), the notes listed with `notes.py` (007: 808 notes, 16 cautions in 15 functions; 008: 1,629 notes, 15 cautions), read against the disassembly (`a3_a3197/dis.py`). Fifteen functions, each note at the call it is said at:
+The lent dumps of master (both images, `a7_round2/corpus.sh`), the notes listed with `notes.py` (007: 808 notes, 16 of them cautions in 14 functions; 008: 1,629, 15 cautions in 13 functions), read against the disassembly (`a3_a3197/dis.py`). Fifteen functions, each note at the call it is said at:
 
 | Function | Note | Read |
 |---|---|---|
@@ -21653,7 +21653,17 @@ No area 3 finding. Routed below.
 
 ### 6. Runs (after the last code edit)
 
-RUNS_RESULT
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117** (111 and the 6 Live tests), 362 s |
+| fault suite | fault matrix: **0 of 94** job(s) failed (106 s) |
+| 20,000-seed matrix (canary on, every pin) | 20,000 seeds (10,000 of each grammar), `failing seeds=0; findings=0`, all passed (29.4 ms per seed) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, all passed |
+| game corpus, lent (`a3_round25/corpus.sh`, both images, the final binary, against master's dumps made here) | both all passed, every ledger count 0; missing and said **0** and **4**; lent **474 (645)** and **724 (975)**; every function text, alone and lent, master's (section 4) |
+| fixture scripts (final binary) | `a3_round27/run.sh` as section 1; `a3_a3203/run.sh`, `a3_a3202/run.sh`, `a3_round26/run.sh`, `a3_a3197/run.sh` as their fixers recorded |
+| sweep (final binary) | section 5 |
+| binaries | a comment-only edit (one line's words, no line added) came after the runs above; the rebuilt `SaturnExplorerSh2GeneratedTests`, `SaturnExplorerSh2DecompilerTests` and `SaturnExplorerDecompilerFaultTests` are byte-identical (md5) to the ones run |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: not needed (no vendored file or patch touched) |
 
 No generator change: no seed's program changes.
 
