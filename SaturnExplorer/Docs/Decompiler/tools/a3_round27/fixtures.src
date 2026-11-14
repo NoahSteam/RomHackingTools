@@ -810,3 +810,53 @@ dt r1
 bf L1
 rts
 mov r3,r0
+name lc
+# A3-202/A3-203 in a loop: the caller's loop (3 times) calls F2 (overwrites r8 on every path: `mov #0,r8` or `mov #4,r8`) then F1 (vCr8's); r8 read after the loop: F1 may keep what F2 wrote, so both calls are marked. Right: the caution at F2's call, "likewise" for F1's
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+mov.l r9,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+mov #3,r9
+L0:
+bsr F2
+nop
+bsr F1
+nop
+dt r9
+bf L0
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r9
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+tst r3,r3
+bt K2
+mov #0,r8
+rts
+nop
+K2:
+mov #4,r8
+rts
+nop

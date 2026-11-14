@@ -21585,6 +21585,7 @@ Unless said, a fixture is round 25's vCr8 caller (a local of 5, its address in r
 | lp, lp2 | A3-201 | F1 steps r8 by 4 and back inside a loop (lp: 3 times; lp2: a count from r5) | no caution | the same |
 | en | A3-197 | the caller never writes r8 and returns it after F1 | the caution | the same |
 | n1 | A3-202, A3-203 | F1, then a lent F2 that keeps everything | the caution at F1's call | the same |
+| lc | A3-202, A3-203 | a loop (3 times) calling F2 (overwrites r8 on every path) then F1; r8 read after the loop | the caution at F2's call, "likewise" (F1's) | the same |
 | t1 | A3-203 | F1, then F2 `mov #0,r8 ; bra F3` (a tail branch; F2 overwrites r8) | the caution at F2's call | the same |
 | tb | A3-203 | F2 returns or `bra F3`, F3 `mov #0,r8 ; rts` | the caution | the same |
 | tj1, tj2 | **A3-205** | F2 a thunk (`mov.l @(lit),r1 ; jmp @r1`) to F1 (tj1); or F2 returns or jumps through a literal to F3 `mov #0,r8 ; rts` (tj2) | **no caution** | the caution (r8) |
@@ -21637,13 +21638,18 @@ The lent dumps of master (both images, `a7_round2/corpus.sh`), the notes listed 
 
 ### 4. Corpus with this branch
 
-`a3_round25/corpus.sh`, both images alone and lent, against master's dumps made here (`a7_round2/corpus.sh` with `25ff769b`'s `Sh2Decompiler.cpp`): CORPUS_RESULT
+`a3_round25/corpus.sh`, both images alone and lent, against master's dumps made here (`a7_round2/corpus.sh` with `25ff769b`'s `Sh2Decompiler.cpp`). Both runs all passed, every ledger count 0; missing and said **0** (007) and **4** (008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**", as master. **Every function text, alone and lent, of both images is master's** (0, 0, 0 and 0 differ): no unlent callee of either image is shown leaving r15 moved with a caller reading r15 after it, and no thunk's target changes a register a caller reads. The first form of A3-205 (no r15 condition) differed in one text, 0601A384/008 alone (section 1); it is not in the branch.
 
 ### 5. Sweep
 
 `sweep.sh`: 10,000 seeds of each grammar from 10,100,001, canary and shrink off, this branch's final binary.
 
-SWEEP_RESULT
+| Run | Failing | Classes |
+|---|---|---|
+| grammar 1 | 1: 10105433 | `v:map-const-join` (area 7): "line 18 `iVar1 = 6;` is drawn at 0600901E (swap.b r1,r0), the first instruction of a join, which does not make the number". `endless-after-store` checked 644, said 644; `endless-call` 610, said 610; `endless-join` 1,253, said 1,253; `endless-read` 621, withheld 621; no `unmade` (A3-198's fallback not taken in this range) |
+| grammar 2 | 1: 10107462 | `n:` and `v:map-const-join` (area 7): function 0, "line 16 `iVar2 = 0;` is drawn at 0600903C (extu.w r0,r2), the first instruction of a join" |
+
+No area 3 finding. Routed below.
 
 ### 6. Runs (after the last code edit)
 
@@ -21653,4 +21659,5 @@ No generator change: no seed's program changes.
 
 ### 7. Routed
 
-ROUTED_RESULT
+* **Area 7:** grammar 1 seed 10105433 (`v:map-const-join`, `iVar1 = 6;` drawn at 0600901E, `swap.b r1,r0`, the first instruction of a join that does not make the number) and grammar 2 seed 10107462 (`n:` and `v:map-const-join`, function 0, `iVar2 = 0;` drawn at 0600903C, `extu.w r0,r2`). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`. Not shrunk.
+* **Area 11:** A11-33 (no oracle holds A3-197's caution against a run; the grammar makes no thunk to a changer and no callee that moves r15).
