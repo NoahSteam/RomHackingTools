@@ -1,0 +1,291 @@
+# Area 3, A3-197: fixtures for run197.py (the syntax of round 25's fixtures.src). round 25's vCr8 to vCr14 and vEr8 to vEr14 are run from
+# a3_round25 (run.sh here runs both). Each caller saves the register it uses, as compiled code does; F1 is not lent (it reads r3 on entry).
+name w1
+# control: vCr8 with F1 saving and restoring r8 round its `mov #0,r8` (and not lent: it returns r3): F1 keeps r8, no caution; every run returns 7
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r8,@-r15
+mov r3,r0
+tst r4,r4
+bf K1
+mov #0,r8
+K1:
+rts
+mov.l @r15+,r8
+name w2
+# control: vCr8's F1 (clears r8 on one return), but the caller does not read r8 after the call (it restores its own): no caution; returns 5
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+name w3
+# r9 = 5 before the call, F1 clears r9 on one return, the caller returns r9 (a copy into r0): the caution; runs return 5 or 0
+ret 1,0
+.word 0x4F22
+mov.l r9,@-r15
+mov #5,r9
+bsr F1
+nop
+mov r9,r0
+mov.l @r15+,r9
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r9
+rts
+nop
+K1:
+rts
+nop
+name w4
+# r11, one level down: F1 (not lent: reads r3) calls G (lent), which clears r11 on one return; F1 does not restore it. The caller adds r11 to 1
+# after the call: the caution at the call of F1; runs return 6 or 1
+ret 1,0,0
+.word 0x4F22
+mov.l r11,@-r15
+mov #5,r11
+bsr F1
+nop
+mov r11,r0
+add #1,r0
+mov.l @r15+,r11
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+tst r3,r3
+bt K0
+bsr G
+nop
+K0:
+.word 0x4F26
+rts
+nop
+fn
+G:
+tst r4,r4
+bf K1
+mov #0,r11
+K1:
+rts
+nop
+name w5
+# control: w4 with G saving and restoring r11: no caution; every run returns 6
+ret 1,0,0
+.word 0x4F22
+mov.l r11,@-r15
+mov #5,r11
+bsr F1
+nop
+mov r11,r0
+add #1,r0
+mov.l @r15+,r11
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+tst r3,r3
+bt K0
+bsr G
+nop
+K0:
+.word 0x4F26
+rts
+nop
+fn
+G:
+mov.l r11,@-r15
+tst r4,r4
+bf K1
+mov #0,r11
+K1:
+rts
+mov.l @r15+,r11
+name w6
+# the limit: w4 with G not lent (it returns r3). No caution (`return 6;` where runs return 6 or 1): the walk of F1 proves none of its returns,
+# because the call of G (not lent) may write the words from its r15 up, F1's saved PR among them, so it shows no register changed
+ret 1,0,0
+.word 0x4F22
+mov.l r11,@-r15
+mov #5,r11
+bsr F1
+nop
+mov r11,r0
+add #1,r0
+mov.l @r15+,r11
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+tst r3,r3
+bt K0
+bsr G
+nop
+K0:
+.word 0x4F26
+rts
+nop
+fn
+G:
+mov r3,r0
+tst r4,r4
+bf K1
+mov #0,r11
+K1:
+rts
+nop
+name w7
+# w6 with G saving and restoring r11: no caution; every run returns 6
+ret 1,0,0
+.word 0x4F22
+mov.l r11,@-r15
+mov #5,r11
+bsr F1
+nop
+mov r11,r0
+add #1,r0
+mov.l @r15+,r11
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+tst r3,r3
+bt K0
+bsr G
+nop
+K0:
+.word 0x4F26
+rts
+nop
+fn
+G:
+mov.l r11,@-r15
+mov r3,r0
+tst r4,r4
+bf K1
+mov #0,r11
+K1:
+rts
+mov.l @r15+,r11
+name w8
+# two registers and three calls (0600DC56/007's shape): F1 (not lent: returns r3) moves r9 to r10 and adds 1 to r9 on one path (r3 != 0,
+# r4 == 0); the caller sets r9 = 1, r10 = 2, calls F1 three times and returns r9 + r10 (`return 3;`): a caution at the first call naming r9
+# (read by the next call's F1) with "likewise at the calls below" (the second), and one at the third naming r9 and r10 (read by the add)
+ret 1,0
+.word 0x4F22
+mov.l r9,@-r15
+mov.l r10,@-r15
+mov #1,r9
+mov #2,r10
+bsr F1
+nop
+bsr F1
+nop
+bsr F1
+nop
+mov r9,r0
+add r10,r0
+mov.l @r15+,r10
+mov.l @r15+,r9
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r3,r0
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov r9,r10
+add #1,r9
+K1:
+rts
+nop
+name w9
+# control: vCr8's caller; F1 (not lent: returns r3) saves r8, clears it, stores it through an index the walk cannot bound (`mov.l r8,@(r0,r15)`,
+# r0 = r4 & 4: a local on every run), and restores r8. The store may have hit the saved word as the walk sees it, so the restored r8 may be
+# its entry value (Value::mayEntry): no caution; every run returns 7
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r8,@-r15
+add #-8,r15
+mov #0,r8
+mov r4,r0
+and #4,r0
+mov.l r8,@(r0,r15)
+add #8,r15
+mov.l @r15+,r8
+rts
+mov r3,r0

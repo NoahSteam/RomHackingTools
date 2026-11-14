@@ -21116,3 +21116,73 @@ Pins: `TestArea7Round21Pins` (A7-162), `TestA5FoldedPins3` (A5-142), `TestA5Fold
 
 * **Area 7**: A7-165 (open, 9302668).
 * **Area 3**: A3-198 (open, 9200735).
+## Area 3, A3-197
+
+Fixer, branch `review/3-a3197`, cut at `c46c23b3` (the area 3 round 25 review's head, itself cut from master `f8433e85`). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). One host change (`Sh2Decompiler.cpp`, the probe and the note at the call; the note's text in `Sh2Decompiler.h`) and the pins (`Sh2GeneratedTests.cpp`, `TestA3RoutedPins`); **no engine patch: 0089 stays free.** Scripts: `Docs/Decompiler/tools/a3_a3197/` (`fixtures.src` and `run197.py`, round 25's runner reading this directory's fixtures; `run.sh`, round 25's vC and vE register sweep and w1-w9; `cmp.py`, two corpus token dumps compared function by function, saying whether a text differs only in this row's caution; `dis.py`, a small SH-2 listing of an image, to read the callees).
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-197 | P2 | **fixed** (host): a caution at a call whose callee is not lent and, as the probe's walk of it shows, returns with one of r8-r14 changed, when the caller reads the register after the call |
+
+### The hazard, and what is said
+
+The engine's default model, and the probe with it, keeps r8-r14 across every call whose signature is not lent (`kKeptByCall`), as the SH convention has a callee restore them. A hand-written callee may not: round 25's vCr8 (a local of 5, its address in r8, `bsr F1`, F1 not lent and `mov #0,r8` on one return, 7 stored through r8, the local returned) prints `return 7;` where the runs on which F1 clears r8 return 5, and the caller is withheld only as "it calls ..., whose signature is not known". The engine's model of such a call is not changed here (the row's direction: a lent callee's proved changes already reach the engine, A3-3; an unlent one has no proof the engine could take, and the default model is what every caller of an unknown function is printed with). The text now says, at the call:
+
+    /* this call may change r8, read after it: its callee does not restore it on
+       every path, and the text takes the call to keep it */
+
+### How it is found, narrowly
+
+* **The callee changes the register, for certain.** The probe already walks a captured callee that is not lent (`CalleeFrameWrites`, for the words of the frame it writes and the registers it lets out, A3-70, A3-90). The walk now also records the registers of r8-r14 that some return it reaches holds another value in (`mChangedAt`; shared like the walk's other results, `CalleeChanged`). Not a value restored from a word that saved the register and that a store may have written over: such a word holds what it held or what was stored (`Clobber`), and the restored register may be its entry value after all (`Value::mayEntry`, set there and carried by copies and joins); nor a value read from memory the walk cannot place with the register among its origins. A callee the walk cannot follow shows nothing. So a callee that saves r8-r14, writes its frame through an index the walk cannot bound and restores them (06041AA0/008, A3-192's callee) is not said to change them: a first form, which took `preserved` (a register the walk could not prove kept), said it, and moved two frame notes of 06021ADE/008.
+* **The caller reads it after the call.** At a call to such a callee the probe marks the registers it changes (`Value::unkeptAt`: the call and the register; a copy carries the mark, a join keeps either side's, and a join of a value with itself marked is that value marked, not a join of two). The first read after the call puts the caution at that call (`UseUnkept`): an operand of any op but a copy (an address, a value stored, a computation, a branch), a register handed to a later call in r2 or r4-r7, a register a walked callee reads for what it lets out or stores through (A3-194's loop), and r0 at `rts` (the text's return value). A register the caller restores from its own save, or never reads, says nothing. Round 25's broad "may be in rX" note at every call (34 to 123 corpus texts, no code changed) is the thing this avoids.
+* **Said once.** One caution per call names every such register ("r9 and r10", "them"), and a set of registers is said once per function, at the first call, with "; likewise at the calls below" when it holds at others (A3-108's rule for the frame notes): 0600DC56/007 calls its filter helper 28 times in a row.
+
+Limit (w6): a callee that saves PR and calls a function that is not lent proves none of its returns in the walk, because that call may write the words from its r15 up, its saved PR among them; it shows no register changed, and a change two levels down is not said. Tried and taken back: carrying a walked callee's own callee's changes up (`e.preserved &= ~CalleeChanged`), which changes nothing while those returns are unproved.
+
+### Fixtures and pins
+
+Round 25's vC and vE forms (`tools/a3_round25/fixtures.src`) and this row's (`tools/a3_a3197/fixtures.src`), through `run.sh`:
+
+| Fixture | Shape | Text |
+|---|---|---|
+| vCr8, vCr10, vCr12, vCr13, vCr14 | the row's: F1 not lent clears R on one return, 7 stored through R | `return 7;` with the caution naming R |
+| vEr8 to vEr14 | the same F1, then F2 (not lent) stores 7 through R | `return xStack_10;` with the caution |
+| vCr0 to vCr3, vEr0 to vEr3 | r0-r3, which the call kills | as before (`return xStack_c;`), no caution |
+| w1 | control: F1 saves and restores r8 round its `mov #0,r8` | `return 7;`, no caution |
+| w2 | control: F1 clears r8 on one return, the caller does not read r8 after the call | `return 5;`, no caution |
+| w3 | r9 = 5, F1 clears r9 on one return, the caller returns r9 | `return 5;` with the caution (runs return 5 or 0) |
+| w4, w5 | r11 cleared one level down by a lent G (w5: G restores it), the caller returns r11 + 1 | `return 6;`, with the caution (w4) and without (w5) |
+| w6, w7 | w4 and w5 with G not lent | no caution: the limit above (w6), right (w7) |
+| w8 | F1 moves r9 to r10 and adds 1 to r9 on one path; three calls, r9 + r10 returned | `return 3;`, "r9 ...; likewise at the calls below" at the first call and "r9 and r10" at the third |
+| w9 | control: F1 restores r8 from a word its store through `@(r0,r15)` (r0 = r4 & 4) may have hit | `return 7;`, no caution |
+
+Pins: `TestA3RoutedPins`, the A3-197 block: vCr8, vCr10, vCr12, vCr13, vCr14, vEr8, w3, w4 (no finding, the caution naming the register), w8 (two cautions, the two sets, "likewise"), and the controls vCr0, w1, w2, w5, w9 (no caution). Mutation: with the mark switched off the nine pins that need a caution fail (9 CHECKs) and the controls pass; with `mayEntry` not read (every return that is not the entry value taken for a change), w9 fails (1 CHECK).
+
+### Corpus
+
+`a3_round25/corpus.sh` with this branch's final binary, both images alone and lent, the texts compared with round 25's final dumps (which equal the A3-192 fixer's of master's product) by `cmp.py`. Lent counts unchanged: hwram007 "[after] real entries 999: signatures lent 474 (645 parameters)", hwram008 "1543: 724 (975)"; missing and said 0 and 4; both "all passed". Texts that differ: hwram007 10 alone and 14 lent, hwram008 9 alone and 13 lent; **every one differs only in this row's caution** (no line of code and no other comment changes). The 14 functions of 007 are 0600DC56, the code of 06024720 to 06024ACC, 060256E8 and 060256EE, and of 06026AD4 to 06026F6A; 008's 13 are the same code at + 0x3FCA0 (060643C0 to 0606476C, 06065388, 0606538E, 06066774 to 06066C0A). Each was read with `dis.py`, and each caution is right: the callee changes the registers, and the caller reads them after it.
+
+* **0600DC56 (007): r9 and r10, likewise.** It calls 0600DC08 28 times. 0600DC08 is a hand-written filter step that keeps its state in r9 and r10 (`muls.w r9,r5 ; ... muls.w r10,r4 ; ... mov r9,r10 ; ... mov r8,r9` or `mov r0,r9`, then `rts`): every return leaves r10 the old r9 and r9 the new output, and the next call reads both. The text printed `func_0x0600dc08(...); func_0x0600dc08(); ...` as calls that keep them.
+* **06024720, 060247B0, 060247E2, 0602481C, 06024A72, 06024ACC (and 008's copies): r8-r13.** Their callees return values in r8-r13 by a register convention of their own: 060254C8 and 06025604 load r8-r13 (`mov.l @(0,r14),r9`, `mov.l @(28,r14),r10`, `mov.l @r4+,r8`, ...); 06024B18 and 06024B34 load r10-r13 from a list through r8 and step r8. The callers read them right after (`bsr 06024B34 ; ... mov.l @(4,r10),r0` at 06024ACC, the next helper's `mov.l @(4,r10)` ... `@(4,r13)`). The text shows those reads as `unaff_` values of the caller.
+* **060256E8, 060256EE: r8.** Its loop calls 06024B4C, which steps r8 through a list (`mov.w @r8+,r1`), and the loop's next call of it reads r8 where the last one left it.
+* **06026AD4 to 06026F6A: r9-r13.** 06027018 rotates r10-r13 and swaps the bytes of r9 on three of its four returns (`swap.b r9,r9 ; ... mov r10,r0 ; mov r11,r1 ; ... mov r1,r10 ; mov r0,r11 ; ...`), and the caller stores r9 (`mov r9,r0 ; mov.l r0,@(41,gbr)`) and passes r10-r13 on.
+
+A first form of the fix (before `mayEntry`, the joins of a marked value, and the one caution per set) said one caution per register per call (0600DC56: 54) and also changed 06021ADE, 0604080A and 06041256 of 008 alone, the last two at a call to 06041AA0, which restores what it saved: the walk could not prove it, and the join of a marked and an unmarked frame pointer lost r14's exactness (two frame notes of 06021ADE moved). Both are gone in the final form.
+
+### Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117** (111 and the 6 Live tests) |
+| fault suite | fault matrix: **0 of 94** job(s) failed |
+| 20,000-seed matrix (canary on) | `failing seeds=0; findings=0` |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus, lent (`a3_round25/corpus.sh`, both images, this branch's final binary) | both "all passed", every ledger count 0; missing and said **0** and **4**; "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**"; texts against round 25's dumps: 007 10 alone and 14 lent, 008 9 and 13, each only the caution, each right (above) |
+| binaries | a comment-only edit (`27` to `28` calls) came after the runs above began; the rebuilt `SaturnExplorerSh2GeneratedTests`, `SaturnExplorerDecompilerFaultTests` and `SaturnExplorerSh2DecompilerTests` are byte-identical (md5) to the ones run |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: ok (no vendored file touched) |
+
+No generator change: no seed's program changes.
+
+### Routed
+
+Nothing.

@@ -354,11 +354,12 @@ public:
     // the lent signatures, which no pass of a request changes, and each of the request's probes (two a printing pass, one more pass when a host
     // alias is declared) walked the same callees again, with a budget of its own. Each probe keeps its own budget; a result is reused as found.
     void ShareWalks(std::map<uint32_t, uint32_t>* walks, std::map<uint32_t, uint32_t>* below = nullptr,
-                    std::map<uint32_t, uint32_t>* handed = nullptr)
+                    std::map<uint32_t, uint32_t>* handed = nullptr, std::map<uint32_t, uint32_t>* changed = nullptr)
     {
         mOwnCtx.shared = walks;
         mOwnCtx.sharedBelow = below;
         mOwnCtx.sharedHanded = handed;
+        mOwnCtx.sharedChanged = changed;
     }
 
     // The calls (by the instruction that makes them) a frame address escapes at in a register the call is shown without, and which (bit 2: r2, bit 7: r7).
@@ -368,6 +369,9 @@ public:
     const std::map<uint32_t, uint32_t>& HandSites() const { return mHandSites; }
     const std::map<uint32_t, uint32_t>& EscapeSure() const { return mEscapeSure; }   // (A3-120)
     const std::map<uint32_t, uint32_t>& HandSure() const { return mHandSure; }
+    // (area 3, A3-197) The calls (bit r: rN of r8-r14) whose callee is not lent and, as the walk of its code shows, returns on some path with
+    // that register not restored, where this function reads the register after the call (UseUnkept).
+    const std::map<uint32_t, uint32_t>& UnkeptSites() const { return mUnkeptSites; }
     // ...and the stack words, by their offset from r15 on entry, whose frame address the stack-argument note of a call is for (A3-108).
     const std::map<uint32_t, std::set<int64_t>>& EscapeWords() const { return mEscapeWords; }
     // After Run(): whether r2 held the address of a local at a call whose signature is not lent (A3-4),
@@ -446,11 +450,14 @@ public:
         mSrWritten.clear();
         mOut = 0;
         mKeptAt = 0;
+        mChangedAt = 0;
         mLeaks = 0;
         mFrameValues = 0;
         mLowestSp = 0;
         mFrameOut = false;
         mKeptSeen = false;
+        mUnkeptSeen = false;
+        mUnkeptSites.clear();
         mHanded = 0;
         std::map<uint32_t, State> in;
         std::map<uint32_t, int> changes;   // how often the state at an address grew
@@ -704,6 +711,15 @@ private:
         // address of this function (a register it keeps, or keeps on some path), so the engine sees an output of the call (`extraout_r1`) and
         // not the address. What going out makes of that address (kOut*), which a read of the value lets out (UseKept): see Call.
         uint8_t kept = 0;
+        // (area 3, A3-197) Any kind: the value is in one of r8-r14 (unkeptReg) after a call (unkeptAt) whose callee is not lent and, as the walk
+        // of its code shows, does not restore that register on every path; the probe and the engine take the call to keep it. A read of it
+        // (UseUnkept) puts a caution at the call.
+        uint32_t unkeptAt = 0;
+        int8_t unkeptReg = -1;
+        // (area 3, A3-197) Any kind: the registers (bits 8-14) whose entry value this may still be: a word that held one, saved by a prologue,
+        // and that a store may have written over (Clobber), or a copy of it. Restored from such a word, the register may be its entry value
+        // after all, so a return that holds it is no proof that the function changed the register (mChangedAt).
+        uint32_t mayEntry = 0;
         static Value From(uint32_t o) { Value x; x.from = o; x.dep = Deps::All(o); return x; }
         static Value From(uint32_t o, uint32_t direct) { Value x; x.from = o; x.dep = Deps::All(direct); return x; }
         static Value From(uint32_t o, const Deps& d) { Value x; x.from = o; x.dep = d; return x; }
@@ -757,7 +773,7 @@ private:
         bool operator==(const Value& o) const
         {
             return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget && read == o.read &&
-                   exposedAt == o.exposedAt && kept == o.kept &&
+                   exposedAt == o.exposedAt && kept == o.kept && unkeptAt == o.unkeptAt && unkeptReg == o.unkeptReg && mayEntry == o.mayEntry &&
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
                                      usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
                                      baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure));
@@ -838,6 +854,9 @@ private:
                 p.frame = v.second.Frame();
                 p.sure = v.second.Sure();
                 p.kept = v.second.kept;   // (A3-192) a part of it is read as the whole is
+                p.unkeptAt = v.second.unkeptAt;   // (A3-197) likewise
+                p.unkeptReg = v.second.unkeptReg;
+                p.mayEntry = v.second.mayEntry;
                 return p;
             }
             const uint64_t whole = std::get<2>(v.first), below = whole - (vn.offset - std::get<1>(v.first)) - vn.size;
@@ -1020,6 +1039,8 @@ private:
                 }
                 slot.second.hole = hole;
                 slot.second.exposedAt = exposedAt;
+                // (A3-197) a saved register's word written over may still hold the register's entry value
+                slot.second.mayEntry = was.mayEntry | (SavedRegister(was) && was.v >= 8 && was.v <= 14 ? 1u << was.v : 0u);
             }
     }
 
@@ -1054,6 +1075,19 @@ private:
     static bool Merge(Value& a, const Value& b, uint8_t out = 0)
     {
         if (a == b) return false;
+        // (area 3, A3-197) the same value with and without the caution's mark is that value, marked: not a join of two
+        {
+            Value bm = b;
+            bm.unkeptAt = a.unkeptAt;
+            bm.unkeptReg = a.unkeptReg;
+            if (a == bm)
+            {
+                if (a.unkeptAt != 0) return false;
+                a.unkeptAt = b.unkeptAt;
+                a.unkeptReg = b.unkeptReg;
+                return true;
+            }
+        }
         Deps dep = a.DepsOf();
         dep |= b.DepsOf();
         Value m = Value::From(a.Origins() | b.Origins(), dep);
@@ -1071,6 +1105,9 @@ private:
         m.frame = a.Frame() || b.Frame();
         m.sure = a.Sure() && b.Sure();   // (A3-120) a frame address on both paths
         m.kept = a.kept | b.kept;        // (A3-192) on either path
+        m.unkeptAt = a.unkeptAt != 0 ? a.unkeptAt : b.unkeptAt;   // (A3-197) on either path
+        m.unkeptReg = a.unkeptAt != 0 ? a.unkeptReg : b.unkeptReg;
+        m.mayEntry = a.mayEntry | b.mayEntry;
         // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
         // that steps a pointer down from r15, `mov.l r0,@-r1`, A3-16) as often as a choice of two addresses, and is not followed.
         m.callerHigh = (a.kind == Value::Fuzzy && a.callerHigh) || (b.kind == Value::Fuzzy && b.callerHigh) ||
@@ -1179,6 +1216,10 @@ private:
         if (keepKept && mKeptSeen)
             for (int r = 2; r < 8; ++r)
                 if (((kConvention >> r) & 1u)) UseKept(s, Get(s, mReg[r]));
+        // (area 3, A3-197) ...and likewise a register an earlier unlent callee may have changed (Value::unkeptAt)
+        if (keepKept && mUnkeptSeen)
+            for (int r = 2; r < 8; ++r)
+                if (((kConvention >> r) & 1u)) UseUnkept(Get(s, mReg[r]));
         if (!signatureLent)
         {
             NoteFrameEscape(s, 2, true, at);
@@ -1291,6 +1332,7 @@ private:
                     // call before it gave `return 5;` where runs return 7. No note, as for any value that only may be a frame address (the
                     // note is said of x.Frame()): with one, 298 corpus texts gained a caution and no line of code.
                     if (keepKept) UseKept(s, x);
+                    if (keepKept) UseUnkept(x);   // (A3-197)
                     if (!MayBeFrame(s, x)) continue;
                     HandOut(s, x);
                     if (r != 2 && (r < 4 || r > 7) && x.Frame()) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
@@ -1400,6 +1442,25 @@ private:
                 f->second.kept |= keptClass[r];
                 mKeptSeen = true;
             }
+        // (area 3, A3-197) A callee that is not lent is taken, by the engine's default model and by the probe above, to keep r8-r14 (kKeptByCall),
+        // as the SH convention has it. A hand-written one may not: the walk of a captured callee shows the registers it returns with changed on
+        // some path (CalleeChanged), and the text, which takes the call to keep them, may be wrong after it (`return 7;` where runs on which the
+        // callee clears r8 return 5). The engine's model of the call is not changed; the register is marked here, and a read of it after the
+        // call (UseUnkept) puts a caution at the call. Not every call to such a callee: a register the function does not read after it (it
+        // restores its own saved copy, or never uses it) loses nothing in the text.
+        if (keepKept && !signatureLent && haveTarget)
+        {
+            const uint32_t changed = CalleeChanged(target) & kCalleeSaved & e.preserved;
+            for (int r = 8; r < 15; ++r)
+            {
+                if (!((changed >> r) & 1u)) continue;
+                auto f = s.vars.find(KeyOf(mReg[r]));
+                if (f == s.vars.end()) continue;
+                f->second.unkeptAt = at;
+                f->second.unkeptReg = static_cast<int8_t>(r);
+                mUnkeptSeen = true;
+            }
+        }
     }
     // (area 3, A3-192) What going out would make of 'x' (HandOut's State::out bits), with a mark it already carries, without letting it out.
     uint8_t KeptClass(const State& s, const Value& x) const
@@ -1417,6 +1478,11 @@ private:
         s.out |= x.kept;
         mFrameOut = true;
     }
+    // (area 3, A3-197) A read of a register an unlent callee may have changed (Value::unkeptAt): the caution at that call.
+    void UseUnkept(const Value& x)
+    {
+        if (x.unkeptAt != 0 && x.unkeptReg >= 0) mUnkeptSites[x.unkeptAt] |= 1u << x.unkeptReg;
+    }
 
     // (area 3 round 12 fix) The registers of the calling convention a callee the probe cannot read is taken to be handed: r4-r7, and r2, the
     // address of a returned structure (SH_STRUCT_VALUE_REGNUM). Not r0, r1, r3 (scratch), r8-r14, GBR (kept by the model, which no callee
@@ -1426,6 +1492,7 @@ private:
     static constexpr uint32_t kHandedRegs = origin::kRegisters & ~(1u << 15);
     // ...and those a lent callee can be (r4-r7; see the hand-out in Call).
     static constexpr uint32_t kLentHanded = 0xF0u;
+    static constexpr uint32_t kCalleeSaved = 0x7F00u;   // (A3-197) r8-r14, which the convention has a callee restore
     // The registers (as origins: their entry values) the values in 'regs' at this point were made from.
     uint32_t RegOrigins(const State& s, uint32_t regs) const
     {
@@ -1588,6 +1655,11 @@ private:
         // (area 3 round 12 fix, A3-90) ...and the registers whose values it lets out or writes through (CalleeHanded), every one when the walk
         // could not follow it.
         ctx->Handed()[target] = !why.empty() ? kHandedRegs : callee.mEntryUndecodable ? kConvention : callee.mHanded;
+        // (area 3, A3-197) ...and the registers of r8-r14 the walk shows it returning with changed on some path (a return that holds something
+        // other than the entry value, and not what a word that saved it may still hold): only what a return the walk reached shows, nothing for
+        // a callee it could not follow. A callee that saves r8-r14, writes its frame through an index the walk cannot bound, and restores them
+        // is not shown to change them (06041AA0/008).
+        ctx->Changed()[target] = !why.empty() || callee.mEntryUndecodable ? 0u : callee.mChangedAt & kCalleeSaved;
         return words;
     }
     // (area 3 round 12 fix, A3-90) The registers (bit r: rN, GBR, MACH, ...) whose entry values a captured, unlent callee lets out (stores to
@@ -1603,6 +1675,19 @@ private:
             f = ctx->Handed().find(target);
         }
         return f != ctx->Handed().end() ? f->second : kHandedRegs;
+    }
+    // (area 3, A3-197) The registers of r8-r14 a captured, unlent callee returns with changed on some path, as its walk shows; 0 when it
+    // could not be walked (nothing is shown).
+    uint32_t CalleeChanged(uint32_t target)
+    {
+        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
+        auto f = ctx->Changed().find(target);
+        if (f == ctx->Changed().end())
+        {
+            CalleeFrameWrites(target);
+            f = ctx->Changed().find(target);
+        }
+        return f != ctx->Changed().end() ? f->second : 0u;
     }
     // A3-86 a: the registers a captured, unlent callee may store below the pointer it was handed, from the frame-words walk's
     // record (or that walk, run now). 0x7FFF (every register) when the callee could not be walked: fail closed; kConvention for one whose code
@@ -2055,6 +2140,10 @@ private:
                 continue;
             }
             mPreserved &= ~(1u << r);
+            // (A3-197) ...changed for certain on this path: not a word a store may have left holding its entry value, nor a value read from
+            // memory the walk cannot place (free stack, an unbounded pointer: what a register saved there held among its origins)
+            const bool fromMemory = (v.Origins() & (origin::kMemory | origin::kStack)) != 0 && ((v.Origins() >> r) & 1u);
+            if (!((v.mayEntry >> r) & 1u) && !fromMemory) mChangedAt |= 1u << r;
             mOut |= v.Origins();
             // (area 3 round 12 fix) handed back in a register (CalleeHanded): what the value was computed from, not the register's own entry
             // value (a saved register restored from a slot its callee may have written over is that register, not a value moved elsewhere)
@@ -2246,6 +2335,16 @@ private:
                         if (v.second.kept != 0 && std::get<0>(v.first) == vn.space && std::get<1>(v.first) < vn.offset + vn.size &&
                             vn.offset < std::get<1>(v.first) + std::get<2>(v.first))
                             UseKept(s, v.second);
+                }
+            // (area 3, A3-197) ...and a register an unlent callee may have changed, read by this op (a copy carries the mark)
+            if (mUnkeptSeen && op.code != ghidra::CPUI_COPY)
+                for (const ghidra::VarnodeData& vn : op.in)
+                {
+                    if (vn.space->getType() == ghidra::IPTR_CONSTANT) continue;
+                    for (const auto& v : s.vars)
+                        if (v.second.unkeptAt != 0 && std::get<0>(v.first) == vn.space && std::get<1>(v.first) < vn.offset + vn.size &&
+                            vn.offset < std::get<1>(v.first) + std::get<2>(v.first))
+                            UseUnkept(v.second);
                 }
             bool falls = true;
             switch (op.code)
@@ -2530,6 +2629,9 @@ private:
                 break;
             }
             case ghidra::CPUI_RETURN:
+                // (area 3, A3-197) r0 at `rts`, the text's return value, is read; whether or not PR is proven the caller's (the probe's call to a
+                // callee that is not lent leaves a PR saved in the frame unknown)
+                if (mUnkeptSeen) UseUnkept(Get(s, mReg[0]));
                 if (!Return(s, op.in[0]) && !mTolerant) return "a return not to its caller";
                 falls = false;
                 break;
@@ -2632,6 +2734,7 @@ private:
     const MemorySnapshot* mLiteralMemory = nullptr;
     uint32_t mPreserved = 0, mStoresThrough = 0, mStoresBelow = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
     uint32_t mKeptAt = 0;   // (A3-190) the registers some return leaves as they began
+    uint32_t mChangedAt = 0;   // (A3-197) ...and the ones some return holds another value in, for certain (Value::mayEntry)
     std::atomic<bool>* mCancel = nullptr;   // A3-74: checked in Run
     std::set<uint64_t> mSrWritten;          // the ops whose value `ldc Rm,sr` wrote back (Inputs: the interrupt-mask idiom)
     bool mSpSeen = false, mSpKnown = true;   // r15 at the returns reached: one constant offset from its entry value, or not
@@ -2657,11 +2760,14 @@ private:
         std::map<uint32_t, uint32_t>* sharedBelow = nullptr;
         std::map<uint32_t, uint32_t> handedOwn;   // (area 3 round 12 fix) ...and the registers it lets out or writes through (CalleeHanded)
         std::map<uint32_t, uint32_t>* sharedHanded = nullptr;
+        std::map<uint32_t, uint32_t> changedOwn;   // (area 3, A3-197) ...and the registers of r8-r14 it returns with changed on some path
+        std::map<uint32_t, uint32_t>* sharedChanged = nullptr;
         size_t budget = 0;
         bool started = false;
         std::map<uint32_t, uint32_t>& Cache() { return shared != nullptr ? *shared : cache; }
         std::map<uint32_t, uint32_t>& Below() { return sharedBelow != nullptr ? *sharedBelow : belowOwn; }
         std::map<uint32_t, uint32_t>& Handed() { return sharedHanded != nullptr ? *sharedHanded : handedOwn; }
+        std::map<uint32_t, uint32_t>& Changed() { return sharedChanged != nullptr ? *sharedChanged : changedOwn; }
     };
     NestedContext mOwnCtx;
     NestedContext* mNestedCtx = nullptr;
@@ -2681,6 +2787,8 @@ private:
     int64_t mLowestSp = 0;      // the lowest stack offset any register or slot held
     bool mFrameOut = false;     // (area 3 round 12 fix) a possible frame address went out to code that may keep it (HandOut)
     bool mKeptSeen = false;     // (area 3, A3-192) a call marked a register Value::kept in this run
+    bool mUnkeptSeen = false;   // (area 3, A3-197) ...and one of r8-r14 Value::unkeptAt
+    std::map<uint32_t, uint32_t> mUnkeptSites;   // (A3-197) UnkeptSites
     uint32_t mHanded = 0;       // ...and, of a walked callee, the registers it lets out or writes through (CalleeHanded)
 
 };
@@ -10972,6 +11080,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     std::map<uint32_t, uint32_t> calleeWalks;   // CalleeFrameWrites' results, for every probe of this request's passes (ShareWalks, A3-81)
     std::map<uint32_t, uint32_t> calleeBelow;   // ...and each walked callee's storesBelow (A3-86 a), shared the same way
     std::map<uint32_t, uint32_t> calleeHanded;  // ...and the registers each lets out or writes through (area 3 round 12 fix, A3-90)
+    std::map<uint32_t, uint32_t> calleeChanged; // ...and the registers of r8-r14 each returns with changed on some path (area 3, A3-197)
     auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
@@ -11139,13 +11248,14 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         std::map<uint32_t, uint32_t> handSites;     // ...and the calls a frame address went out at in another register (HandSites)
         std::map<uint32_t, uint32_t> escapeSure, handSure;   // (A3-120) ...and of those, the registers and words a frame address is in as a fact
         std::map<uint32_t, std::set<int64_t>> escapeWords;   // ...and the stack words of the stack-argument notes (EscapeWords, A3-108)
+        std::map<uint32_t, uint32_t> unkeptSites;   // (area 3, A3-197) the calls a register of r8-r14 the callee may change is read after (UnkeptSites)
         if (print && fd->numCalls() > 0)
         {
             ReturnCheck probe(*fd, exec, prototypes, flowTables);
             probe.SetTolerant();
             probe.SetLiterals(scan.literalWords, *snapshot);
             probe.SetCancel(cancel);   // the callee walk can be long for an adversarial callee (A3-74)
-            probe.ShareWalks(&calleeWalks, &calleeBelow, &calleeHanded);
+            probe.ShareWalks(&calleeWalks, &calleeBelow, &calleeHanded, &calleeChanged);
             CallEffects unused;
             probe.Run(unused);
             // (area 3 round 12 fix) An address of the frame went out by a way the engine may not see (a callee that keeps it or hands it back
@@ -11156,6 +11266,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             handSites = probe.HandSites();
             escapeSure = probe.EscapeSure();
             handSure = probe.HandSure();
+            unkeptSites = probe.UnkeptSites();
             // ...and the text says where: the address is in no argument of the call, so a reader of `f(); return xStack_8;` would take the
             // local for one the callee cannot reach (A3-28). A comment at the call, of a type the function's own flow warnings do not collect;
             // put below, after the actions, when a `jsr @rN` through a literal is known for what it calls.
@@ -11276,6 +11387,33 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 if (skipped.count(sn.first)) continue;
                 arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, sn.first),
                                             likewise.count(sn.first) ? sn.second + kFrameEscapeNoteLikewise : sn.second);
+            }
+        }
+        // (area 3, A3-197) A call whose unlent callee returns with one of r8-r14 changed on some path, read after the call: the text takes the call
+        // to keep it (the default model), and says so at the call. One caution names every such register of the call, and a set of registers is
+        // said once, at the first call, with "likewise at the calls below" when it holds at others (as A3-108's frame notes): a hand-written helper
+        // that keeps its state in r9 and r10 is called 28 times in a row (0600DC56/007).
+        {
+            std::map<uint32_t, uint32_t> firstOf;   // the registers -> the first call they are said at
+            std::set<uint32_t> likewise;
+            for (const auto& u : unkeptSites)
+            {
+                if (u.second == 0) continue;
+                const auto f = firstOf.find(u.second);
+                if (f == firstOf.end()) firstOf[u.second] = u.first;
+                else likewise.insert(f->second);
+            }
+            for (const auto& fs : firstOf)
+            {
+                std::vector<int> regs;
+                for (int reg = 8; reg < 15; ++reg)
+                    if ((fs.first >> reg) & 1u) regs.push_back(reg);
+                std::string names;
+                for (size_t k = 0; k < regs.size(); ++k)
+                    names += (k == 0 ? "" : k + 1 == regs.size() ? " and " : ", ") + std::string("r") + std::to_string(regs[k]);
+                std::string note = std::string(kUnkeptNoteA) + names + (regs.size() > 1 ? kUnkeptNoteBMany : kUnkeptNoteB);
+                if (likewise.count(fs.second)) note += kFrameEscapeNoteLikewise;
+                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, fs.second), note);
             }
         }
 
