@@ -8474,6 +8474,18 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 chosen = kept;
             }
         }
+        // (a conversion at a branch: the instruction makes nothing, see the statement's block end below)
+        bool atBranchInsn = false;
+        if (conversion)
+        {
+            const auto ib = flow.insnBlock.find(at);
+            if (ib != flow.insnBlock.end() && ib->second.first >= 0 && static_cast<size_t>(ib->second.first) < flow.blockOps.size() &&
+                ib->second.second < flow.blockOps[static_cast<size_t>(ib->second.first)].size())
+            {
+                const ghidra::OpCode last = flow.blockOps[static_cast<size_t>(ib->second.first)][ib->second.second].code;
+                atBranchInsn = last == ghidra::CPUI_BRANCH || last == ghidra::CPUI_CBRANCH;
+            }
+        }
         if (chosen.empty())
         {
             // No store shows the value. A copy the engine put at the end of its block (a branch, or any instruction) is then the line of
@@ -8500,6 +8512,12 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             if (maker)
                 ;
             else if (atEnd && in->isWritten() && in->getDef()->getTime() < flow.opsEnd)
+                maker = InstructionOf(in->getDef());
+            // (A7-171: a conversion the engine drew at a branch outside its block's end -- `cRam26001008 = (char)iVar1;` at the `bf`
+            // of a later block, the narrowing of r3 the engine hoisted into the entry block, which kept its branch's address -- is the
+            // instruction's that made the register it narrows, a flow op's output; the branch computes nothing. Grammar 1 seed 9608430)
+            else if (conversion && atBranchInsn && !o->isFromDelaySlot() && !in->isConstant() && o->getAddr() != home->getStop() && in->isWritten() &&
+                     in->getDef()->getTime() < flow.opsEnd)
                 maker = InstructionOf(in->getDef());
             // (A7-34's triage: a number the engine put at a store of another value, the store's COPY moved to where the register it stores
             // took the number -- a loop's counter merged under a global's name: the one instruction that makes the number into that
@@ -8706,17 +8724,6 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         // constant, whose `mov #imm` may be that instruction)
         // (A7-34's triage: a conversion the engine put at the branch ending its block, `iRam26001024 = (int2)uVar1;` at a `bt` for the
         // store in a later branch's slot, likewise: the branch computes nothing)
-        bool atBranchInsn = false;
-        if (conversion)
-        {
-            const auto ib = flow.insnBlock.find(at);
-            if (ib != flow.insnBlock.end() && ib->second.first >= 0 && static_cast<size_t>(ib->second.first) < flow.blockOps.size() &&
-                ib->second.second < flow.blockOps[static_cast<size_t>(ib->second.first)].size())
-            {
-                const ghidra::OpCode last = flow.blockOps[static_cast<size_t>(ib->second.first)][ib->second.second].code;
-                atBranchInsn = last == ghidra::CPUI_BRANCH || last == ghidra::CPUI_CBRANCH;
-            }
-        }
         const bool blockEnd = (code == ghidra::CPUI_COPY || (conversion && atBranchInsn)) && !atLoadOrCall && o->getAddr() == home->getStop() &&
                               !o->isFromDelaySlot() && !o->getIn(0)->isConstant();
         // (A7-22: a number put at an instruction that does not make it -- a load of the variable, a pop, a branch -- is the store's line too;
@@ -10982,6 +10989,41 @@ std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen
     return out;
 }
 
+// (A10-18) The ordinary accesses among 'seen' that straddle the edge of a volatile range, part of their
+// bytes inside it and part out: a misaligned 4-byte store at 0x2600100A against the aliased longword 0x2600100C-0x2600100F. The engine
+// splits the store into the pieces its other accesses name, and the piece inside the range is a written volatile variable with a use:
+// "Volatile memory was propagated" (status 3, no text) for code that raises an address error. The range returned for each is the access's own
+// bytes, outward to whole longwords, so the whole access is volatile; the aligned accesses every other function makes lie inside a longword and
+// never straddle.
+std::vector<HardwareRange> StraddlingRanges(const std::vector<ConstAccess>& seen, const std::vector<HardwareRange>& ranges)
+{
+    std::vector<HardwareRange> out;
+    std::vector<HardwareRange> all = ranges;
+    for (bool grew = true; grew;)
+    {
+        grew = false;
+        for (const ConstAccess& c : seen)
+        {
+            if (c.size == 0 || c.remaps || c.busSize) continue;
+            const uint32_t lo = c.address, hi = c.address + c.size - 1;
+            if (hi < lo) continue;
+            bool touches = false, inside = false;
+            for (const HardwareRange& v : all)
+            {
+                if (hi < v.first || v.last < lo) continue;
+                touches = true;
+                inside = inside || (v.first <= lo && hi <= v.last);
+            }
+            if (!touches || inside) continue;
+            const HardwareRange h{ lo & ~3u, hi | 3u };
+            out.push_back(h);
+            all.push_back(h);
+            grew = true;
+        }
+    }
+    return out;
+}
+
 }  // namespace
 
 void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& snapshot,
@@ -11485,9 +11527,17 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
 
         if (!request.allMemoryVolatile)
         {
-            const std::vector<HardwareRange> fresh = NewAliasedRanges(ConstantAccesses(*fd, ram), aliasKnown);
+            const std::vector<ConstAccess> seenAccesses = ConstantAccesses(*fd, ram);
+            std::vector<HardwareRange> fresh = NewAliasedRanges(seenAccesses, aliasKnown);
             for (const HardwareRange& h : fresh)
             {
+                aliasRanges.push_back(h);
+                userVolatile.push_back(h);
+            }
+            // (A10-18: an access that straddles the edge of a volatile range, the user's or one just found, is volatile whole)
+            for (const HardwareRange& h : StraddlingRanges(seenAccesses, userVolatile))
+            {
+                fresh.push_back(h);
                 aliasRanges.push_back(h);
                 userVolatile.push_back(h);
             }

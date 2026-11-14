@@ -5024,6 +5024,101 @@ void TestArea7Round22()
     }
 }
 
+// Area 7 round 23. A7-171 (product: the token of a conversion the engine hoisted out of its block), A7-172 (oracle: `tas.b` is a store), A10-18
+// (product: an access that straddles the edge of an aliased range is volatile whole, no status 3).
+void TestArea7Round23()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto ruleOff = [](const char* rows) {
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", rows ? rows : "");
+#else
+        if (rows) setenv("SE_A7_RULE_OFF", rows, 1);
+        else unsetenv("SE_A7_RULE_OFF");
+#endif
+    };
+    const auto snapOf = [&](const std::vector<uint16_t>& w) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * static_cast<uint32_t>(i), w[i]);
+        return MakeSnapshot(hw);
+    };
+    const auto mutated = [&](const DecompileResult& r, const char* rows, const char* what) {
+        ruleOff(rows);
+        const int n = dts::AuditMapping(r, word, what).Violations();
+        ruleOff(nullptr);
+        return n;
+    };
+    // A7-171 `mov.w @r4,r3 ; sub r3,r2 ; ... ; mov.b r3,@r6 (a slot, both paths) ; ... ; tst r1,r4 ; bf L`: the first line the engine prints is the
+    // narrowing of r3 it hoisted before the first `if`, `cRam26001008 = (char)iVar1;`, with the address of the `bf` of a later block (grammar 1
+    // seed 9608430, shrunk). The line is the load's now, the instruction that made the value the narrowing takes; no token of it is at the `bf` (0x06009014).
+    {
+        const std::vector<uint16_t> w = { 0xD609, 0x6341, 0x3238, 0x2508, 0x8901, 0x3310, 0x8F01, 0x2630, 0x2400, 0x2418, 0x8B05, 0x3030, 0x8D01, 0x2620,
+                                          0x6241, 0x000B, 0x0009, 0xAFFA, 0x0009, 0x0009, 0x2600, 0x1008 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x06009000u));
+        Print("A7-171 a conversion at the branch of another block (grammar 1 seed 9608430)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* l = LineWith(r, "cRam26001008 = (char)iVar1;");
+        CHECK(l != nullptr);
+        if (l)
+        {
+            bool atBranch = false, atLoad = false;
+            for (const Token& t : l->tokens)
+            {
+                atBranch = atBranch || t.addr == 0x06009014u;
+                atLoad = atLoad || (t.addr == 0x06009002u && t.begin < t.end);
+            }
+            CHECK(!atBranch && atLoad);
+        }
+        CHECK(dts::AuditMapping(r, word, "a7_171").Violations() == 0);
+    }
+    // A7-172 function 1 of grammar 2 seed 9606539, shrunk (the function at 0x06009022): `movt r1 ; mov.w @r7,r3 ; cmp/eq r4,r6 ; bf/s L ; mov.w r1,@r6 ; tas.b @r6`.
+    // The word store of 1 and the byte's 0x80: `uRam26001008 = 0x8001;` is drawn at the slot store, a copy materialised there, and the click goes to the store's own line
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x4F22, 0x6843, 0x6953, 0x6A63, 0x6B73, 0x6052, 0x4F26, 0x6BF6, 0x6AF6, 0x69F6,
+                                          0x68F6, 0x000B, 0x0009, 0xD605, 0x4415, 0x8BFF, 0x0129, 0x3640, 0x8F01, 0x2611, 0x461B, 0x000B, 0x0009, 0x0009,
+                                          0x2600, 0x1008 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x06009022u));
+        Print("A7-172 a word store and a tas.b of its first byte (grammar 2 seed 9606539)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uRam26001008 = 0x8001;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_172").Violations() == 0);
+        CHECK(mutated(r, "172", "a7_172 mutated") >= 1);
+    }
+    // A7-174 `lp: mov.b r1,@r6 ; mov.w @r7,r0 ; tst #1,r0 ; bf lp ; ...` with r6 and r7 loaded from pool words of 0x26001004: the first line of the text
+    // is a store in the loop whose operand `xRam26001004` is drawn at the pool load of its address, `mov.l @(0x600901c,pc),r6`: the way back from it
+    // is that line (grammar 1 seed 9703317, shrunk)
+    {
+        const std::vector<uint16_t> w = { 0xD606, 0x615D, 0xD706, 0x2610, 0x6071, 0xC801, 0x8BFB, 0x4215, 0x8900, 0x2611, 0x2650, 0x000B, 0x0009, 0x0009,
+                                          0x2600, 0x1004, 0x2600, 0x1004 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x06009000u));
+        Print("A7-174 a global's name at the literal load of its address (grammar 1 seed 9703317)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(dts::AuditMapping(r, word, "a7_174").Violations() == 0);
+        CHECK(mutated(r, "174", "a7_174 mutated") >= 1);
+    }
+    // A10-18 `mov.l r0,@r6 ; mov.l @(r0,r6),r0 (0x2600100C) ; mac.w @r5+,@r6+ ; mov.l r1,@r6` and a word store to 0x0600100E: the aliased longword
+    // 0x2600100C-0x2600100F, and the 4-byte store at 0x2600100A (r6 after the `mac.w`'s increment, an address error the caution says) straddling
+    // its edge. The engine split the store, and the piece in the range was a written volatile variable with a use: "Volatile memory was propagated",
+    // status 3 and no text. Now the whole access is volatile; the text is made, with the caution (grammar 1 seed 9606511, shrunk)
+    {
+        const std::vector<uint16_t> w = { 0xD604, 0xD705, 0x8177, 0x2602, 0xE004, 0x006E, 0x465F, 0x2612, 0x000B, 0x0009, 0x2600, 0x1008, 0x0600, 0x1000 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x06009000u));
+        Print("A10-18 an access that straddles the edge of an aliased range (grammar 1 seed 9606511)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), "Ram2600100a = in_r1;"));
+        bool said = false;
+        for (const std::string& n : r.warnings) said = said || n.find("a misaligned 4-byte write at 0x2600100A") != std::string::npos;
+        CHECK(said);
+        CHECK(dts::AuditMapping(r, word, "a10_18").Violations() == 0);
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -20015,6 +20110,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Review20());
         RUN(TestArea7Round21());
         RUN(TestArea7Round22());
+        RUN(TestArea7Round23());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());
