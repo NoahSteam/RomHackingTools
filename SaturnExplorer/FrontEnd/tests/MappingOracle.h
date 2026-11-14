@@ -417,6 +417,12 @@ inline bool A7RuleOff(int row)
     const std::string list = std::string(",") + v + ",";
     return list.find("," + std::to_string(row) + ",") != std::string::npos;
 }
+// (A7-164: the nesting of the value walks. Three conditions in a chain, `tst #8,r0 ; bt` and two `cmp/eq #imm,r0 ; bf` of r0 = 7, need eight levels
+// to say which blocks are never run; six levels gave the first number only. The mutation switches it back to six.)
+inline int OracleDepth()
+{
+    return A7RuleOff(164) ? 6 : 8;
+}
 // The register an instruction stores, and how many bytes; -1 when it is no store of a register.
 inline int StoredRegister(uint16_t w, int& size)
 {
@@ -612,7 +618,7 @@ inline bool AccessAddress(const sfe::decomp::DecompileResult& r, const std::func
 inline bool EdgeImpossible(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                            const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, uint32_t a, int depth)
 {
-    if (depth >= 6) return false;
+    if (depth >= OracleDepth()) return false;
     if (p + 2 == a && NeverRun(r, word, into, p, depth + 1)) return true;
     uint16_t w = 0, bw = 0;
     if (!r.InBody(p) || !word(p, w)) return false;
@@ -653,7 +659,7 @@ inline bool FoldedAccess(const sfe::decomp::DecompileResult& r, uint32_t insn, b
 inline WordValue MemoryBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                               const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, uint32_t addr, int size, int depth)
 {
-    if (depth > 6) return WordValue();
+    if (depth > OracleDepth()) return WordValue();
     const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
         uint16_t w = 0;
         if (!r.InBody(p) || !word(p, w)) return false;
@@ -762,7 +768,7 @@ inline bool BasedAccess(uint16_t w, bool store, int& base, int64_t& offset, int&
 inline WordValue SlotBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                             const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int base, int64_t offset, int size, int depth)
 {
-    if (depth > 6) return WordValue();
+    if (depth > OracleDepth()) return WordValue();
     const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
         uint16_t w = 0;
         if (!r.InBody(p) || !word(p, w)) return false;
@@ -905,13 +911,13 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
             word(p, w);
             // A7-34 (the area 7 fixer): an edge never taken, by a T the words give (`cmp/eq r1,r2` of two numbers), or an instruction
             // never run after one: no path
-            if (p + 2 == a && depth < 6 && NeverRun(r, word, into, p, depth + 1)) continue;
+            if (p + 2 == a && depth < OracleDepth() && NeverRun(r, word, into, p, depth + 1)) continue;
             // A7-69: the edge of a delayed `bt/s` or `bf/s` (reached from its slot) that T says is never taken, or the fall-through of one
             // that always branches; grammar 2 seed 2702788, grammar 1 seed 3214852
             {
                 uint16_t bw = 0;
                 sfe::DisassembledInstruction br;
-                if (depth < 6 && r.InBody(p - 2) && word(p - 2, bw) && ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F) && decode(p - 2, br) &&
+                if (depth < OracleDepth() && r.InBody(p - 2) && word(p - 2, bw) && ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F) && decode(p - 2, br) &&
                     br.BranchTarget != p + 2 && (p + 2 == a || br.BranchTarget == a) &&
                     // (A7-118: not the fall-through past a slot a branch of its own enters too)
                     !(!A7RuleOff(118) && p + 2 == a && into.find(p) != into.end() && !into.find(p)->second.empty()))
@@ -921,7 +927,7 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
                     if (t >= 0 && taken != (((bw >> 8) == 0x8D) == (t == 1))) continue;
                 }
             }
-            if (((w >> 8) == 0x89 || (w >> 8) == 0x8B) && depth < 6 && d.BranchTarget != p + 2)
+            if (((w >> 8) == 0x89 || (w >> 8) == 0x8B) && depth < OracleDepth() && d.BranchTarget != p + 2)
             {
                 const bool taken = p + 2 != a;
                 const int t = TBefore(r, word, into, p, depth + 1);
@@ -949,7 +955,7 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
                     }
                     // (A7-91: `cmp/eq Rm,Rn ; bf L` falls through, and `bt L` branches, with Rm equal to Rn: a register the words give a number
                     // for is that number in the other too -- `mov #0,r2 ; cmp/eq r2,r0 ; bf L ; add r0,r2` adds 0 and 0; grammar 2 seed 4103690)
-                    if ((cw & 0xF00F) == 0x3000 && into.find(p) == into.end() && depth < 6)
+                    if ((cw & 0xF00F) == 0x3000 && into.find(p) == into.end() && depth < OracleDepth())
                     {
                         const int cm = (cw >> 4) & 0xF;
                         const int other = cn == rg ? cm : cm == rg ? cn : -1;
@@ -1035,7 +1041,7 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
                 // (A7-64: the writer a loop's extension asks the value before, for the entries into the loop: its own result is the
                 // extension of what it extended, itself)
                 if (p == ignoreWriter && rg == st.second && ignoreWriter != 0) continue;
-                if (!give(depth < 6 ? WrittenValue(r, word, into, p, rg, depth + 1) : WordValue())) return WordValue();
+                if (!give(depth < OracleDepth() ? WrittenValue(r, word, into, p, rg, depth + 1) : WordValue())) return WordValue();
                 continue;
             }
             todo.emplace_back(p, rg);
@@ -1097,7 +1103,7 @@ inline int TSetBy(const sfe::decomp::DecompileResult& r, const std::function<boo
 inline bool NeverRun(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                      const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int depth)
 {
-    if (depth > 6) return false;
+    if (depth > OracleDepth()) return false;
     for (uint32_t x = p, steps = 0; steps < 32; x -= 2, ++steps)
     {
         const auto in = into.find(x);
@@ -1184,7 +1190,7 @@ inline bool SetsT(uint16_t w)
 inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                    const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int depth)
 {
-    if (depth > 6) return -1;
+    if (depth > OracleDepth()) return -1;
     if (EdgeT().t >= 0 && at == EdgeT().at) return EdgeT().t;
     const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
         uint16_t w = 0;
@@ -1225,7 +1231,7 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
             uint16_t w = 0;
             // (A7-115: an edge that is never taken, the fall-through of a `bf` that T says always branches, gives T nothing: `cmp/pl r3 ;
             // bf L ; cmp/hi r2,r1 ; L: rotcl r3` with r3 negative is run with T 0 only; grammar 1 seed 6201923)
-            if (!A7RuleOff(115) && depth < 6 && EdgeImpossible(r, word, into, p, a, depth + 1)) continue;
+            if (!A7RuleOff(115) && depth < OracleDepth() && EdgeImpossible(r, word, into, p, a, depth + 1)) continue;
             if (!decode(p, d) || !word(p, w) || d.IsCall || d.Mnemonic == "rte") return -1;
             if ((w >> 8) == 0x89 || (w >> 8) == 0x8B)
             {
@@ -1278,7 +1284,7 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
                               const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int reg, int depth)
 {
     uint16_t w = 0;
-    if (depth > 6 || !word(p, w)) return WordValue();
+    if (depth > OracleDepth() || !word(p, w)) return WordValue();
     const int hi = w >> 12, n = (w >> 8) & 0xF, m = (w >> 4) & 0xF, lo = w & 0xF;
     const auto before = [&](int x) { return RegisterBefore(r, word, into, p, x, depth); };
     const auto number = [](const WordValue& v, uint32_t& x) {
@@ -1394,7 +1400,7 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
             // (A7-127: an extension needs only the low bytes: when the paths into it give other numbers that agree there -- `extu.w r3,r1`
             // of the literal 0xA0000000 on one path and of `rotcr r3`'s 0xD0000000 on the other, both 0 -- the number each instruction
             // that made Rm writes, extended, is the same; grammar 1 seed 7001742)
-            if (lo >= 0xC && !A7RuleOff(127) && depth < 6)
+            if (lo >= 0xC && !A7RuleOff(127) && depth < OracleDepth())
             {
                 std::set<uint32_t> makers;
                 bool agree = RegisterMakers(r, word, into, p, m, makers, false, nullptr) && !makers.empty() && !makers.count(0) && !makers.count(p);
@@ -1507,7 +1513,7 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
             // (A7-128: a store through a register that holds a parameter or a number -- `mov.l r1,@r6` of param_3 between `mov.l r2,@-r15`
             // and `mov.l @r15+,r2` -- does not write the word just pushed: no caller's pointer reaches below its own stack, as the engine
             // takes the frame; grammar 2 seed 7006020)
-            if (store && !A7RuleOff(128) && depth < 6 && ((ih == 0x2 && (il <= 2 || (il >= 4 && il <= 6))) || ih == 0x1 || (iw >> 8) == 0x80 || (iw >> 8) == 0x81))
+            if (store && !A7RuleOff(128) && depth < OracleDepth() && ((ih == 0x2 && (il <= 2 || (il >= 4 && il <= 6))) || ih == 0x1 || (iw >> 8) == 0x80 || (iw >> 8) == 0x81))
             {
                 const int base = (iw >> 8) == 0x80 || (iw >> 8) == 0x81 ? im : in;
                 std::set<uint32_t> makers;
@@ -3775,7 +3781,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     std::set<std::pair<uint32_t, int>> active;
                     std::function<bool(uint32_t, int, int)> zeroKept = [&](uint32_t before, int reg, int depth) -> bool {
                         std::set<uint32_t> makers;
-                        if (depth > 6 || !RegisterMakers(r, word, sources, before, reg, makers) || makers.empty() || makers.count(0)) return false;
+                        if (depth > OracleDepth() || !RegisterMakers(r, word, sources, before, reg, makers) || makers.empty() || makers.count(0)) return false;
                         if (!active.insert(std::make_pair(before, reg)).second) return true;
                         bool all = true;
                         for (uint32_t m : makers)
