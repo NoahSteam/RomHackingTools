@@ -7749,6 +7749,26 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 start += size;
             }
         }
+        // A7-147: the same for a zero extension of the variable's own low bytes -- `uRam2600210c = (uint4)uRam2600210c._1_3_;`, the byte
+        // store of 0 over the high byte (the instance of a delay slot's `mov.b r2,@r6` on the path where r2 is 0, A7-136's zero bytes):
+        // the bytes it keeps are the memory's, no later store's value (it named the `mov.l r1,@r6` after the paths join, which made the
+        // line a copy drawn at the slot's store; grammar 1 specials seed 7102142, area 5's A5-137 (c))
+        if (code == ghidra::CPUI_INT_ZEXT && o->numInput() == 1 && space->isBigEndian())
+        {
+            const ghidra::Varnode* part = o->getIn(0);
+            const ghidra::int4 size = part->getSize();
+            for (int hop = 0; hop < 4 && part->isWritten() && part->getDef()->code() == ghidra::CPUI_COPY; ++hop) part = part->getDef()->getIn(0);
+            const ghidra::int4 start = out->getSize() - size;   // (big-endian: the low bytes are the last)
+            bool self = start > 0 && part->getSpace() == space && part->getOffset() == ((base + static_cast<ghidra::uintb>(start)) & space->getHighest()) &&
+                        part->getSize() == size;
+            if (!self && start > 0 && part->isWritten() && part->getDef()->code() == ghidra::CPUI_SUBPIECE)
+            {
+                const ghidra::Varnode* whole = part->getDef()->getIn(0);
+                self = whole->getSpace() == space && whole->getOffset() == base && whole->getSize() == out->getSize() && part->getDef()->getIn(1)->getOffset() == 0;
+            }
+            if (self)
+                for (ghidra::int4 b = start; b < out->getSize(); ++b) kept[static_cast<size_t>(b)] = true;
+        }
         for (ghidra::int4 b = 0; b < out->getSize(); ++b)
         {
             const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(b)) & space->getHighest();

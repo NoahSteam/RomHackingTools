@@ -4299,6 +4299,37 @@ void TestArea7Round17()
         const DecompileResult before2 = unmarked(r2, "xRam06001020 = 0x30009;", 0x06009010u, n);
         CHECK(n >= 1 && dts::AuditMapping(before2, word, "a7_145_8004782 before").Violations() >= 1);
     }
+    // A7-147 (product) the instance of a delay slot's `mov.b r2,@r6` on the path where r2 is 0, `uRam26002100 = (uint4)uRam26002100._1_3_;`
+    // (the zero extension of the global's own low bytes), is that store's statement alone: the bytes it keeps are the memory's, not the
+    // later `mov.l r3,@r6`'s (0x0600901A), which it named and so read as a copy drawn at the slot's store (grammar 1 specials seed 7102142,
+    // area 5's A5-137 (c); the request that marks the mailbox)
+    {
+        const std::vector<uint16_t> w = { 0xD609, 0x2228, 0x8B0E, 0xC840, 0x8F0A, 0x2620, 0x2448, 0x8904, 0xE362, 0xD706, 0x6071, 0xC801, 0x8BFC, 0x2632, 0x000B, 0x6342,
+                                          0x000B, 0x6342, 0xAFF1, 0x0009, 0x2600, 0x2100, 0x2600, 0x1008 };
+        DecompileRequest q = Request(0x06009000u);
+        q.volatileMemory.emplace_back(0x26001000u, 0x2600100Fu);
+        const DecompileResult r = d.Decompile(snapOf(w), q);
+        Print("A7-147 a slot store's zero instance keeps the memory's bytes (grammar 1 seed 7102142)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* zero = "uRam26002100 = (uint4)uRam26002100._1_3_;";
+        CHECK(LineWith(r, zero) != nullptr && tokenAt(r, zero, 0x0600900Au) && !tokenAt(r, zero, 0x0600901Au));
+        CHECK(backFirst(r, 0x0600900Au, "uRam26002100 = "));
+        CHECK(dts::AuditMapping(r, word, "a7_147_7102142").Violations() == 0);
+        // (damaged: the later store named too, as master named it)
+        DecompileResult before = r;
+        int n = 0;
+        for (Line& l : before.lines)
+            if (l.text.find(zero) != std::string::npos)
+            {
+                Token t;
+                t.begin = t.end = static_cast<uint16_t>(l.text.size());
+                t.kind = TokenKind::Plain;
+                t.addr = 0x0600901Au;
+                l.tokens.push_back(t);
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_147_7102142 before").Violations() >= 1);
+    }
     // A7-146 (oracle) a parameter the text assigns is a variable: `param_2 = param_2 + 2;` (`mac.w @r5+,@r5+`), then `param_2 =
     // (xunknown2 *)0x5f;` on one path, and `pxRam26003070 = param_2;` stores the variable, not r5 of entry (grammar 1 seed 8002899,
     // specials; the request that marks the polled word volatile)
