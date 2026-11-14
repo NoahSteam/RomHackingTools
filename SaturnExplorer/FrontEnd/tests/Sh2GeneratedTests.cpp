@@ -18302,8 +18302,10 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
             CHECK(w.findings.empty() && (*f.reg != '\0' ? named : !any));
         }
-        // ...and w8: a register set said once, at the first call, "likewise at the calls below"; another set at another call (r9 at the first two
-        // calls, read by the next call's F1; r9 and r10 at the third, read by the add)
+        // ...and w8: a register set said once, at the first call, "likewise at the calls below". (A3-203) F1 changes r9 (`add #1,r9`) and r10
+        // (`mov r9,r10`) on one path only, so what the add reads after the third call may be what any of the three left: r9 and r10 at each
+        // call, said once (before A3-203 the third call's mark replaced the others': r9 at the first two, read by the next call's F1, and r9 and
+        // r10 at the third)
         {
             const ModulePin m = { "A3-197 w8", "4F22 2F96 2FA6 E901 EA02 B019 0009 B017 0009 B015 0009 6093 30AC 6AF6 69F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 "
                                                 "0009 0009 0009 0009 0009 0009 0009 0009 6033 2338 8903 2448 8B01 6A93 7901 000B 0009 0009 0009 0009 0009 0009 0009 0009",
@@ -18316,7 +18318,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             const bool likewise = w.text.find("; likewise") != std::string::npos;
             std::printf("pin 'A3-197 w8': %zu finding(s), %zu caution(s), r9 %d, r9 and r10 %d, likewise %d\n", w.findings.size(), cautions, int(one), int(two),
                         int(likewise));
-            CHECK(w.findings.empty() && cautions == 2 && one && two && likewise);
+            CHECK(w.findings.empty() && cautions == 1 && !one && two && likewise);
         }
         // A3-202 (`tools/a3_a3202/fixtures.src`): the mark was one call per value, and a join kept the first side's. x4 (round 26's): two calls of
         // vCr8's F1 on the two arms of `tst r6,r6 ; bt`, joined, then 7 stored through r8: the caution at one call only, and with an address-order
@@ -18356,6 +18358,78 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                 std::printf("pin '%s': %zu finding(s), cautions at [%s], likewise %d\n", f.name, w.findings.size(), calls.c_str(), int(likewise));
                 for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
                 CHECK(w.findings.empty() && calls == f.calls && likewise == f.likewise && w.text.find("return 7;") != std::string::npos);
+            }
+        }
+        // A3-203 and A3-204 (`tools/a3_a3203/fixtures.src`; each note given as what it says, the call printed after it, "+" for "likewise at the
+        // calls below"). A3-203: a call's mark replaced an earlier call's, so of two calls in a row only the second was cautioned (x4s, the A3-202
+        // fixer's: vCr8's F1 twice); adding to the marks instead named r10-r13 at 0602481C/007's `bsr 06025604`, whose values 06024B18 and
+        // 06024B34 overwrite at entry. Now a call replaces the marks only when its callee overwrites the register on every path (CalleeWritten):
+        // x4s, x4p (F2 clears r8 on one path, joined), x4a (F2 steps r8: computed from what F1 left) and x4t (F2's other path tail-jumps to F3,
+        // which keeps r8: a path the walk does not read to a return) mark both calls, one caution at F1's, "likewise"; controls x4w (F2 writes a constant on both returns) and x4j (both paths joined at one `rts`, Value::sureWritten): the
+        // caution at F2's call only. A3-204: A3-108's frame notes are placed as A3-202's cautions (BlockDominates): f1 (r3, A3-194's k4e) and f2
+        // (a stack argument word) on the two arms of an `if` say the note at each call; the controls f1r and f2r (in a row) one, "likewise".
+        {
+            struct Placement
+            {
+                const char* name;
+                const char* words;
+                const char* funcs;
+                const char* returns;
+                const char* ret;     // a return line the text prints
+                const char* notes;   // each caution ("r8") or frame note ("frame") with its call, in the text's order
+            };
+            const char* const kX = "4F22 2F86 7FF8 E205 2F22 68F3 B018 0009 B026 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                   "2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 ";
+            const std::string x4w = std::string(kX) + "2338 8902 E800 000B 0009 E804 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009";
+            const std::string x4j = std::string(kX) + "2338 8901 A001 E800 E804 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009";
+            const std::string x4p = std::string(kX) + "2338 8900 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009";
+            const std::string x4a = std::string(kX) + "7804 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009";
+            const std::string x4t = std::string(kX) + "2338 8902 E800 000B 0009 D10D 412B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                                      "000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0600 9080";
+            const Placement placements[] = {
+                { "A3-203 x4s", "4F22 2F86 7FF8 E205 2F22 68F3 B018 0009 B016 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                "2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/24,40/40/52", "1,0", "return 7;", "r8@func_0x06009040+" },
+                { "A3-203 x4p", x4p.c_str(), "0/0/24,40/40/52,60/60/6a", "1,0,0", "return 7;", "r8@func_0x06009040+" },
+                { "A3-203 x4a", x4a.c_str(), "0/0/24,40/40/52,60/60/66", "1,0,0", "return 7;", "r8@func_0x06009040+" },
+                { "A3-203 x4t", x4t.c_str(), "0/0/24,40/40/52,60/60/70,80/80/84", "1,0,0,0", "return 7;", "r8@func_0x06009040+" },
+                { "A3-203 control x4w", x4w.c_str(), "0/0/24,40/40/52,60/60/70", "1,0,0", "return 7;", "r8@func_0x06009060" },
+                { "A3-203 control x4j", x4j.c_str(), "0/0/24,40/40/52,60/60/6e", "1,0,0", "return 7;", "r8@func_0x06009060" },
+                { "A3-204 f1", "4F22 7FF8 E205 2F22 63F3 2668 8903 B017 0009 A002 0009 B013 0009 60F2 7F08 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                               "E207 000B 2322 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/24,40/40/46", "1,0", "return xStack_c;", "frame@func_0x06009040 frame@func_0x06009040" },
+                { "A3-204 f2", "4F22 7FF0 E005 1F01 61F3 7104 2F12 2668 8903 B015 0009 A002 0009 B011 0009 50F1 7F10 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                               "000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/28,40/40/44", "1,0", "return axStack_10[0];", "frame@func_0x06009040 frame@func_0x06009040" },
+                { "A3-204 control f1r", "4F22 7FF8 E205 2F22 63F3 B009 0009 63F3 B006 0009 60F2 7F08 4F26 000B 0009 0009 E207 000B 2322 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/1e,20/20/26", "1,0", "return xStack_c;", "frame@func_0x06009020+" },
+                { "A3-204 control f2r", "4F22 7FF0 E005 1F01 61F3 7104 2F12 B007 0009 B005 0009 50F1 7F10 4F26 000B 0009 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/20,20/20/24", "1,0", "return axStack_10[0];", "frame@func_0x06009020+" },
+            };
+            for (const Placement& f : placements)
+            {
+                // (F2 changes r8 on purpose: SE_GENERATED_CLOBBERS says so, or the generator's own check of its contract reports it)
+                const ModulePin m = { f.name, f.words, f.funcs, nullptr, f.returns, std::strlen(f.returns) > 3 ? "0,0,100" : nullptr, nullptr };
+                const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+                std::string notes;
+                for (size_t at = w.text.find("/*"); at != std::string::npos; at = w.text.find("/*", at + 2))
+                {
+                    const size_t end = w.text.find("*/", at);
+                    if (end == std::string::npos) break;
+                    std::string c;   // the comment, its line breaks and indentation taken as one space
+                    for (size_t k = at + 2; k < end; ++k)
+                        if (!std::isspace(static_cast<unsigned char>(w.text[k])) || (!c.empty() && c.back() != ' ')) c += std::isspace(static_cast<unsigned char>(w.text[k])) ? ' ' : w.text[k];
+                    std::string kind;
+                    if (c.find("this call may change r8, read after it") == 0) kind = "r8";
+                    else if (c.find("a frame address is in ") == 0) kind = "frame";
+                    else continue;
+                    const size_t call = w.text.find("func_0x", end);
+                    notes += (notes.empty() ? "" : " ") + kind + "@" + (call != std::string::npos ? w.text.substr(call, 15) : std::string("?")) +
+                             (c.find("likewise at the calls below") != std::string::npos ? "+" : "");
+                }
+                std::printf("pin '%s': %zu finding(s), notes [%s]\n", f.name, w.findings.size(), notes.c_str());
+                for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+                CHECK(w.findings.empty() && notes == f.notes && w.text.find(f.ret) != std::string::npos);
             }
         }
     }

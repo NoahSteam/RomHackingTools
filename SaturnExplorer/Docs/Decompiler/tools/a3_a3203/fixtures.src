@@ -1,0 +1,353 @@
+# Area 3, A3-203 and A3-204. Run with W=<SaturnExplorer> S=<scratch> run.sh (or run.py <name>). Each x fixture is vCr8's caller (a local of 5, its address in r8,
+# two calls in a row, 7 stored through r8, the local returned) with F1 vCr8's (clears r8 when r3 != 0 and r4 = 0) and F2 as said.
+name x4s
+# A3-203 (A3-202's x4s): F2 is F1 (the same callee called twice): r8 is as either call left it (the second may keep what the first cleared): both marked, the caution at the first call, "likewise"
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+name x4w
+# A3-203 control: F2 overwrites r8 on every path (two returns: `mov #0,r8` or `mov #4,r8`): nothing of F1's r8 is read; the caution at F2's call only
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+tst r3,r3
+bt K2
+mov #0,r8
+rts
+nop
+K2:
+mov #4,r8
+rts
+nop
+name x4j
+# A3-203 control: x4w with F2's two paths meeting at one `rts ; mov r3,r0` (not lent: it returns r3; a join of two overwrites, Value::sureWritten): the caution at F2's call only
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+tst r3,r3
+bt K2
+bra J2
+mov #0,r8
+K2:
+mov #4,r8
+J2:
+rts
+mov r3,r0
+name x4p
+# A3-203: F2 overwrites r8 on one path only, the paths joined at one `rts ; mov r3,r0` (`mov #0,r8` or nothing; not lent): F1's r8 may be read; both marked, one caution at F1's call, "likewise"
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+tst r3,r3
+bt J2
+mov #0,r8
+J2:
+rts
+mov r3,r0
+name x4a
+# A3-203: F2 steps r8 on every path (`add #4,r8`; not lent: it returns r3): changed, but computed from what F1 left: both marked, one caution at F1's call, "likewise"
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+add #4,r8
+rts
+mov r3,r0
+name x4t
+# A3-203: F2 clears r8 on one path and on the other tail-jumps to F3 (`mov.l =F3,r1 ; jmp @r1`), which keeps r8: the walk of F2 reads one return only (the jump ends its path, mPathLost), so F2 is not taken to overwrite r8: both marked, one caution at F1's call, "likewise"
+ret 1,0,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+tst r3,r3
+bt K2
+mov #0,r8
+rts
+nop
+K2:
+mov.l =@F3,r1
+jmp @r1
+nop
+fn
+F3:
+rts
+nop
+name f1
+# A3-204 (A3-202's f1): a frame address in r3 at two calls on the two arms of `tst r6,r6 ; bt` (A3-194's k4e caller and callee): the note at each call, no "likewise"
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+tst r6,r6
+bt A1
+bsr F1
+nop
+bra J1
+nop
+A1:
+bsr F1
+nop
+J1:
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov #7,r2
+rts
+mov.l r2,@r3
+name f1r
+# A3-204 control: the two calls in a row (the second after the first on every path; r3 set again before it): one note, at the first, "likewise at the calls below"
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+bsr F1
+nop
+mov r15,r3
+bsr F1
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov #7,r2
+rts
+mov.l r2,@r3
+name f2
+# A3-204: A3-108's stack note: the address of a local in the stack argument word at two calls on the two arms (F1 not lent: it returns r3): the note at each call, no "likewise"
+ret 1,0
+.word 0x4F22
+add #-16,r15
+mov #5,r0
+mov.l r0,@(4,r15)
+mov r15,r1
+add #4,r1
+mov.l r1,@r15
+tst r6,r6
+bt A1
+bsr F1
+nop
+bra J1
+nop
+A1:
+bsr F1
+nop
+J1:
+mov.l @(4,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+mov r3,r0
+name f2r
+# A3-204 control: f2's calls in a row: one note, at the first, "likewise"
+ret 1,0
+.word 0x4F22
+add #-16,r15
+mov #5,r0
+mov.l r0,@(4,r15)
+mov r15,r1
+add #4,r1
+mov.l r1,@r15
+bsr F1
+nop
+bsr F1
+nop
+mov.l @(4,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+mov r3,r0
