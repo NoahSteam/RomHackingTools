@@ -20910,3 +20910,78 @@ Pins: `TestA3RoutedPins`, the A3-192 block (the nine modules: no finding, a lent
 ### Routed
 
 Nothing.
+
+## Area 3, round 25 review
+
+Reviewer, branch `review/3-round25`, cut at master `f8433e85`. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). Two host changes (`Sh2Decompiler.cpp`: the probe's `Call`, A3-194; `StoresBeforeEndlessLoop`, A3-195), one oracle change and the pins (`Sh2GeneratedTests.cpp`: `R0IndexAfterLastWrite`, A3-196; `TestA3RoutedPins`). **No engine patch: 0089 stays free.** Scripts and fixtures: `Docs/Decompiler/tools/a3_round25/` (`fixtures.src`; `run25.py`, round 24's runner; `regs.py`, which printed the register sweep into `fixtures.src`; `run.sh`, the A3-192 attacks and the sweep; `sweep.sh`, this round's first seed; `corpus.sh`, both images with one binary, the texts compared with a baseline's token dumps).
+
+**Verdict, area 3: not clean.** Two P1 rows, both filed and fixed here (A3-194, A3-195), one P3 fixed (A3-196), and one P2 open (A3-197). The clean count stays 0.
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-194 | P1 | **filed and fixed** (host): A3-192's mark was let out at a later call only in r2 and r4-r7; a walked callee that is not lent and stores through r0, r1, r3 or r8-r14 kept by the call before got `return 5;` where runs return 7 |
+| A3-195 | P1 | **filed and fixed** (host): A3-191's "the final block holds the instruction" read as its first to last address; a block merged from two halves spans the code after a poll, and that code was lent with nothing said |
+| A3-196 | P3 | **filed and fixed** (oracle): A3-193's excuse does not see a delay slot (the trace has no entry for one): a false `return-dropped` for an index in rts's slot |
+| A3-197 | P2 | **open** (host): a callee that is not lent and changes r8-r14 on one path is taken to keep them (the default model); `return 7;` where some runs return 5 |
+
+### 1. A3-192's mark attacked
+
+Each fixture: a local of 5, its address in a register, a call that may leave it there, then 7 stored through the register (or a read), the local returned (`fixtures.src`, `run.sh`). The forms of the read and of the call (lent F1 that keeps the register, unless said):
+
+| Fixture | Shape | Text (this branch) |
+|---|---|---|
+| k0 | the read a copy chain (`mov r1,r3`, the store through r3) | `return xStack_c;` |
+| k1 | the store in a `bra`'s delay slot | `return xStack_c;` |
+| k1r | the read of the local in `rts`'s slot (every run returns 5) | `return *extraout_r1;`, the store of 5 kept |
+| k2 | the store on one path (r5 != 0) | `return xStack_c;` |
+| k3, k3b | two calls (k3b: r3, F1 sets it on one return, F2 keeps it, so the engine does not kill it at F2) | `return xStack_c;` |
+| k4 | handed to a lent F2 in r4 (`mov r1,r4` in the `bsr`'s slot), F2 stores 7 through r4 | `return xStack_c;` |
+| k4b, k4h | handed to F2 not lent (it reads r1 / r0) that stores 7 through it; F1 keeps r1 / r0 | `return xStack_c;` |
+| **k4d, k4f, k4g** | the same with r3, r1, r9, which F1 sets on one return (outOrigins names it) | **`return 5;`** (A3-194) |
+| k4e | control: F2 alone (r3) | `return xStack_c;` |
+| k5, k5b | a loop round the call: `*r1 += 1` after it (k5) or before it (k5b), three times (8) | `return xStack_10;`, `return aiStack_10[0];` |
+| k6, k6b | r14 the frame pointer, F1 sets r14 on one return; the store after (k6), or a store before and the read through r14 after (k6b, 7) | `return xStack_10;`; `return *extraout_r14;` with the store kept |
+| k9 | control: r1 rewritten (a global's address) before the store: every run returns 5 | `return 5;` (right; no over-reach) |
+| k11, k12, k13 | one level down: C hands &local in r1 / r3 / r9 to G (not lent), G calls F1 and stores 7 through it | `return xStack_c;` / `xStack_c` / `xStack_10`, the note "is in" |
+
+And the register sweep (`regs.py`: R in r0-r3, r8, r10, r12-r14; vA lent F1 sets R on one return, vB lent F1 never touches R, vC F1 not lent sets R on one return, vD vA's F1 then F2 not lent stores 7 through R, vE vC's F1 then the same F2). Master's texts (this round's first run, the binary of `f8433e85`'s product) were right in vA, vB and vC for r0-r3, and in vE for r8-r14; **wrong (`return 5;`) in vD for every register but r2 and in vE for r0, r1 and r3** (A3-194); and `return 7;` in vC for r8-r14 (A3-197).
+
+**A3-194.** At a call, `Call` lets a marked value out when the call is handed it in r2 or r4-r7 (the convention). A callee that is not lent is not lent because it reads something no signature passes, often exactly that register, and the probe walks a captured one (`CalleeStoresBelow`, `CalleeHanded`: the registers it stores below, lets out or writes through) and hands out a possible frame address in those (`MayBeFrame`); a marked value is not one (it is the earlier call's output, as the engine sees it). So the address went out nowhere: `func_0x06009020(param_1); func_0x06009040(); return 5;`. Fix: in that loop a marked value goes out (`UseKept`): `return xStack_c;`. No note at the call: the note ("a frame address is in r3 here, in none of the arguments") is said of a value that is a frame address (`Value::Frame`), not of one that only may be. A first form noted the marked register with "may" (`mHandSites`); against the A3-192 fixer's corpus dumps (`a3_a3192/corpus.sh`, master's product) it added that caution to 34 and 40 texts of hwram007 (alone, lent) and 123 and 101 of hwram008, and changed no line of code in any of them (the comments stripped, every text equal): there the frame had gone out already. So it was taken back out. After the fix every fixture above is right but vCr8 to vCr14 (A3-197). Pins: `TestA3RoutedPins`, the A3-194 block (k4d, k4f, k4g, vDr0, vEr1, vDr13; controls k4e, k4h with their notes). Mutation: with the new line switched off, the six pins fail (6 CHECKs); the controls pass.
+
+**A3-197 (open).** vC for r8-r14: F1, not lent (it reads r3), clears r8 on one return. The engine's default model keeps r8-r14 at a call whose signature is not lent, and the probe sets those bits of `preserved` for every such call, whatever its walk of a captured callee says. So the store after the call is the local's and the text says `return 7;`; on the runs where F1 clears r8 the store goes to address 0 and the function returns 5. The callee breaks the SH convention (compiled code keeps r8-r14); the caller is withheld ("it calls ..., whose signature is not known"), but nothing says the text took the call to keep r8. A3-3, the lent counterpart, was P2. Not a reviewer's small fix (the engine's model of such a call is not the probe's to change; a caution at the call needs a walk of the callee's returns): open, with the direction in the row.
+
+### 2. A3-191 and A3-193 attacked
+
+**A3-195.** A3-191's condition is the final block's first to last address. A final block merged from two keeps both address ranges (`BlockBasic::cover`), and `getStart()` and `getStop()` are the first range's start and the last range's end. t1 (`fixtures.src`) is round 24's s0j with the loop's body split by a `bra` to its `dt r3 ; bf L` and the code after the poll between the halves: the engine merges the halves (one predecessor, one successor), the SUBPIECE of r2 for `mov.b r2,@r7` sits in the merged block as in seed 8209018, and its span covers the code after the poll. The function was lent `void (xunknown1 *)`, `xRam06001030 = 1; do { } while( true );`, nothing said; t0 (s0j as it was) said the store and the call. Fix: the block holds the instruction when one of its ranges covers it (`BlockBasic::contains`). After it t1 says the store at 0x0600900E and the call at 0x06009012 and is withheld ("a write after a loop the analysis takes to run for ever is missing"). Pin: the A3-191 block of `TestA3RoutedPins` (A3-195 t1); with the old reading it fails (1 CHECK), A3-191's pins pass either way. A3-182's pass (`JoinedAfterEndlessLoop`) reads the final graph's ops by instruction, not by range: t2 (A3-182's join, the value at the join made after the poll by `extu.b r2,r5` from A3-191's loop) and t3 (with t1's split layout) both say "the value of r5 here is missing on one path" and are withheld.
+
+**A3-196.** `R0IndexAfterLastWrite` reads the run's instructions from its trace. The emulator executes a branch and its delay slot as one instruction, so the trace has no entry for the slot (the oracle's other walks add pc + 2 themselves). u2: a caller of `mov r4,r0 ; rts ; mov.b @(r0,r5),r1`; the product lends the callee `void` (A3-41's reading, as when the index comes before the `rts`), and the excuse did not see the index: `n:return-dropped`. The other way, a write of r0 in a slot after the index (u4 `mov r5,r0`, u5 `add #1,r0`) would have been excused; the product returns there (`returns`), so nothing was hidden. Fix: after an instruction with a delay slot, the slot is read at the branch's depth. Pin: the A3-193 block (the two readings, u2 with no finding and the count). Mutation: with the slot not read, 1 CHECK fails.
+
+Also tried, held: u1 (C passes 3 in r4 to such a callee and returns its r0 untouched: C lent `void`, A3-153's reading of a void callee's r0 passed on), u3 (C stores the callee's r0: withheld, "it uses r0 after calling ..."), u6 (the last write before the index: excused, right). An indexed load into r0 (`mov.l @(r0,r4),r0`) is the last write itself and no index after it.
+
+### 3. Sweep
+
+`sweep.sh`: 10,000 seeds of each grammar from 8,900,001, canary and shrink off, with this branch's binary after A3-194's first form (A3-195, A3-196 and the note's removal came later). Each failing seed was replayed with the final binary and with master's product (`Sh2Decompiler.cpp` of `f8433e85` built into this branch's test binary): the same finding each time.
+
+| Run | Failing | Classes |
+|---|---|---|
+| grammar 1 | 3: 8901149, 8902817, 8909710 | `v:map-way-back` 8901149 and `n:map-way-back` 8909710 (area 7, A7-25); `v:folded-read-after-pointer-write` 8902817 (area 5, A5-139's oracle). `endless-call` checked 650, said 650; `endless-join` 1,237 and 1,237; `endless-read` 598 withheld; `endless-store` checked 124,196, said 10,693; polls 6,596 |
+| grammar 2 | 1: 8900054 | `n:map-store-after` (area 7, A7-32). `endless-read` 219 withheld; `endless-after-store` 247 and 247; polls 1,564 |
+
+No area 3 finding. Routed below.
+
+### 4. Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117** (111 and the 6 Live tests) |
+| fault suite | fault matrix: **0 of 94** job(s) failed |
+| 20,000-seed matrix (canary on) | `failing seeds=0; findings=0` |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus, lent (`a3_round25/corpus.sh`, both images) | both "all passed"; missing and said **0** and **4**; "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**"; every function text, alone and lent, identical to the A3-192 fixer's dumps of master's product (0, 0, 0 and 0 differ) |
+| replays (final binary) | grammar 1 seeds 8901149, 8902817, 8909710 and grammar 2 seed 8900054: each the finding routed below, as with master's product |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: ok (no vendored file touched) |
+
+### 5. Routed
+
+* **Area 7:** grammar 1 seed 8901149 (`v:map-way-back`, "the instruction 06009030 is answered with a copy materialised there before its own statement (A7-25)"), grammar 1 seed 8909710 (`n:map-way-back`, at 0600901C), grammar 2 seed 8900054 (`n:map-store-after`, "line 25 `xStack_10 = unaff_r12;` is drawn at 06009034 (a call or a return) and names the store at 0600906E, which cannot run before it (A7-32)"). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`. Not shrunk.
+* **Area 5:** grammar 1 seed 8902817 (`v:folded-read-after-pointer-write`, A5-139's oracle: "the read at 06009018 the engine folded from 26002180 is named on no line, and line 31 reads the global after the write through a pointer at 06009022"). Not shrunk.
