@@ -5491,14 +5491,9 @@ bool R0IndexAfterLastWrite(const Subject& subject, const std::vector<RunOut>& ru
         if (!run.finished) continue;
         size_t lastWrite = run.pcs.size();
         bool indexAfter = false, calleeAfter = false;
-        for (size_t k = 0; k < run.pcs.size(); ++k)
-        {
-            if (k < run.depths.size() && run.depths[k] != 0)
-            {
-                calleeAfter = true;
-                continue;
-            }
-            const sfe::DisassembledInstruction d = sfe::Sh2Decode(run.pcs[k], subject.WordAt(run.pcs[k]));
+        // One instruction of the function's own; false when it cannot be read.
+        auto see = [&](uint32_t pc, size_t k) {
+            const sfe::DisassembledInstruction d = sfe::Sh2Decode(pc, subject.WordAt(pc));
             if (!d.IsValid) return false;
             std::vector<std::string> ops;
             int depth = 0;
@@ -5524,6 +5519,20 @@ bool R0IndexAfterLastWrite(const Subject& subject, const std::vector<RunOut>& ru
                 lastWrite = k;
                 indexAfter = calleeAfter = false;
             }
+            return true;
+        };
+        for (size_t k = 0; k < run.pcs.size(); ++k)
+        {
+            if (k < run.depths.size() && run.depths[k] != 0)
+            {
+                calleeAfter = true;
+                continue;
+            }
+            if (!see(run.pcs[k], k)) return false;
+            // (area 3 round 25, A3-196) A delay slot runs with its branch, and the trace has no entry of its own for it (the emulator executes
+            // the two as one): read it after the branch, at the branch's depth -- `rts ; mov.b @(r0,r5),r1` is the index after the last write,
+            // and `rts ; add #1,r0` a write after the index.
+            if (sfe::Sh2Decode(run.pcs[k], subject.WordAt(run.pcs[k])).HasDelaySlot && !see(run.pcs[k] + 2, k)) return false;
         }
         if (lastWrite == run.pcs.size() || !indexAfter || calleeAfter) return false;
         any = true;
@@ -17816,6 +17825,19 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         const bool withheld = w.text.find("prototype: withheld: a write after a loop the analysis takes to run for ever is missing") != std::string::npos;
         std::printf("pin '%s': call said %d, store said %d, withheld %d\n", m.name, int(callSaid), int(storeSaid), int(withheld));
         CHECK(callSaid && storeSaid && withheld);
+        // A3-195 (area 3, round 25): A3-191's "holds" read as the final block's first to last address. The hand-shrunk shape with the loop's body
+        // split by a `bra` to its `dt ; bf` and the code after the poll placed between the halves (`tools/a3_round25/fixtures.src` t1): the engine
+        // merges the halves into one block, whose first and last addresses span the removed code, and the SUBPIECE of the store there sits in it.
+        // It was lent `void (xunknown1 *)` with nothing said; now the block's ranges decide, and the store and the call are said.
+        const ModulePin m2 = { "A3-195 t1", "032A 2F36 E301 623C 2430 A008 0009 2720 D113 410B 0009 63F6 432A 000B 0009 4310 8BF1 D710 E001 2701 6071 C801 8BFC "
+                               "AFEE 0009 0009 0009 0009 0009 0009 0009 0009 D109 E27B 2122 000B E07B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                               "0600 9040 0600 1030 2600 3044", "0/0/32,40/40/4a", nullptr, "0,0", nullptr, nullptr };
+        const Report w2 = EvaluateSubject(d, ModuleSubject(m2), true);
+        const bool callSaid2 = w2.text.find("note 06009012 (caution): the call here is missing") != std::string::npos;
+        const bool storeSaid2 = w2.text.find("note 0600900E (caution): the 1-byte write of 0x06001030 here is missing") != std::string::npos;
+        const bool withheld2 = w2.text.find("prototype: withheld: a write after a loop the analysis takes to run for ever is missing") != std::string::npos;
+        std::printf("pin '%s': call said %d, store said %d, withheld %d\n", m2.name, int(callSaid2), int(storeSaid2), int(withheld2));
+        CHECK(callSaid2 && storeSaid2 && withheld2);
     }
     {
         // A3-192 (area 3): a caller holds the address of a local (5) in a register the engine takes a call to kill, the callee may leave it there,
@@ -17857,6 +17879,52 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         }
     }
     {
+        // A3-194 (area 3, round 25): A3-192's mark read by a later call to a callee that is not lent. The caller holds the address of a local (5)
+        // in a register, calls F1 (which may leave it there; the engine kills it), then calls F2, a walked callee (not lent: it reads the
+        // register on entry) that stores 7 through the register, and returns the local (`tools/a3_round25/fixtures.src`). The mark was let out
+        // at a later call only for r2 and r4-r7: `return 5;`, where every run with r4 != 0 returns 7. Now it goes out for the registers the
+        // walked callee lets out or stores through (no note: the note is said of a value that is a frame address, not of one that may be). k4d: r3 (F1 lent, sets r3 on one return); k4f: r1; k4g: r9 (saved
+        // by the caller); vDr0: r0; vEr1: r1, F1 not lent; vDr13: r13. Controls (right before): k4e (no F1), k4h (F1 keeps r0).
+        struct Fixture
+        {
+            const char* name;
+            const char* words;
+            const char* funcs;
+            const char* returns;
+            const char* local;
+            const char* note;
+        };
+        const Fixture fixtures[] = {
+            { "A3-194 k4d", "4F22 7FF8 E205 2F22 63F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E300 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2322",
+              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "" },
+            { "A3-194 k4f", "4F22 7FF8 E205 2F22 61F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E100 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2122",
+              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "" },
+            { "A3-194 k4g", "4F22 2F96 7FF8 E205 2F22 69F3 B008 0009 B016 0009 60F2 7F08 69F6 4F26 000B 0009 2448 8B02 E900 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2922",
+              "0/0/20,20/20/2e,40/40/46", "1,0,0", "return xStack_10;", "" },
+            { "A3-194 vDr0", "4F22 7FF8 E205 2F22 60F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E000 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2022",
+              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "" },
+            { "A3-194 vEr1", "4F22 7FF8 E205 2F22 61F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2338 8904 2448 8B02 E100 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2122",
+              "0/0/1c,20/20/32,40/40/46", "1,0,0", "return xStack_c;", "" },
+            { "A3-194 vDr13", "4F22 2FD6 7FF8 E205 2F22 6DF3 B008 0009 B016 0009 60F2 7F08 6DF6 4F26 000B 0009 2448 8B02 ED00 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2D22",
+              "0/0/20,20/20/2e,40/40/46", "1,0,0", "return xStack_10;", "" },
+            { "A3-194 control k4e", "4F22 7FF8 E205 2F22 63F3 B009 0009 60F2 7F08 4F26 000B 0009 0009 0009 0009 0009 E207 000B 2322", "0/0/18,20/20/26", "1,0",
+              "return xStack_c;", "a frame address is in r3 here" },
+            { "A3-194 control k4h", "4F22 7FF8 E205 2F22 60F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2022",
+              "0/0/1c,20/20/24,40/40/46", "1,0,0", "return xStack_c;", "" },
+        };
+        for (const Fixture& f : fixtures)
+        {
+            const ModulePin m = { f.name, f.words, f.funcs, nullptr, f.returns, nullptr, nullptr };
+            const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+            const bool five = w.text.find("return 5;") != std::string::npos, local = w.text.find(f.local) != std::string::npos;
+            const bool note = w.text.find(f.note) != std::string::npos;
+            std::printf("pin '%s': %zu finding(s), `return 5;` %s, `%s` %s, note %d\n", f.name, w.findings.size(), five ? "printed" : "not printed", f.local,
+                        local ? "printed" : "not printed", int(note));
+            for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(w.findings.empty() && !five && local && note);
+        }
+    }
+    {
         // A3-193 (area 3, oracle): grammar 2 seed 8602477, `n:return-dropped`. Each arm of `tst r4,r4 ; bf` ends with `mov #7,r0 ; mov.b @(r0,r4),r1`
         // or `mov #2,r0 ; mov.b @(r0,r5),r3`: r0 is an index the function used after its last write of it, scratch by A3-41's reading. Counted
         // (`excluded.r0-index.return-dropped`), no finding.
@@ -17885,6 +17953,19 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         const bool no3 = R0IndexAfterLastWrite(sub, { unwritten }), no4 = R0IndexAfterLastWrite(sub, { indexed, plain });
         std::printf("pin 'A3-193 reading': indexed %d, rewritten %d, callee after %d, unwritten %d, one run plain %d\n", int(yes), int(no1), int(no2), int(no3), int(no4));
         CHECK(yes && !no1 && !no2 && !no3 && !no4);
+        // A3-196 (area 3, round 25): the trace has no entry for a delay slot (it runs with its branch). `mov #7,r0 ; rts ; mov.b @(r0,r4),r1`:
+        // the index in the slot is after the last write (yes; it was not seen); `mov #7,r0 ; mov.b @(r0,r4),r1 ; rts ; add #1,r0`: the slot
+        // writes r0 after the index, a result (no; it was excused). And u2 (`tools/a3_round25/fixtures.src`): a caller of `mov r4,r0 ; rts ;
+        // mov.b @(r0,r5),r1` gave `n:return-dropped`; now no finding, counted as excluded.
+        const bool slotIndex = R0IndexAfterLastWrite(RawSubject("E007 000B 014C"), { runOf({ 0x06009000, 0x06009002 }, { 0, 0 }) });
+        const bool slotWrite = R0IndexAfterLastWrite(RawSubject("E007 014C 000B 7001"), { runOf({ 0x06009000, 0x06009002, 0x06009004 }, { 0, 0, 0 }) });
+        const ModulePin m = { "A3-196 u2", "4F22 B00D E403 7001 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 6043 000B 015C", "0/0/e,20/20/26", nullptr,
+                              "1,1", nullptr, nullptr };
+        const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin 'A3-196 reading': index in the slot %d, write in the slot %d; u2: %zu finding(s), r0-index %d\n", int(slotIndex), int(slotWrite),
+                    w.findings.size(), count(w, "excluded.r0-index.return-dropped"));
+        for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(slotIndex && !slotWrite && w.findings.empty() && count(w, "excluded.r0-index.return-dropped") > 0);
     }
 }
 

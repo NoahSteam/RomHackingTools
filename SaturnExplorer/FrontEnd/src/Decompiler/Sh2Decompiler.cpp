@@ -1285,6 +1285,12 @@ private:
                 {
                     if (r == kR15 || !((regs >> r) & 1u)) continue;
                     const Value x = Get(s, mReg[r]);
+                    // (area 3, A3-194) ...and a value kept across an earlier call (Value::kept) in a register this callee reads for what it lets
+                    // out or stores through: the engine sees the earlier call's output there, so the address goes out now (UseKept). Only r2
+                    // and r4-r7 were let out at a later call (above), and a walked callee that stores 7 through r3, r1, r0 or r9 kept by the
+                    // call before it gave `return 5;` where runs return 7. No note, as for any value that only may be a frame address (the
+                    // note is said of x.Frame()): with one, 298 corpus texts gained a caution and no line of code.
+                    if (keepKept) UseKept(s, x);
                     if (!MayBeFrame(s, x)) continue;
                     HandOut(s, x);
                     if (r != 2 && (r < 4 || r > 7) && x.Frame()) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
@@ -10257,7 +10263,10 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
             // the call there went unsaid, and the hand-shrunk form of the seed was lent.)
             const ghidra::BlockBasic* home = static_cast<const ghidra::BlockBasic*>(o->getParent());
             const uint32_t insn = InstructionOf(o);
-            const bool inHome = home != nullptr && !home->getStart().isInvalid() && home->getStart().getOffset() <= insn && insn <= home->getStop().getOffset();
+            // (A3-195: "holds" by the block's ranges, not from its first address to its last: a block the engine merged from two (a loop's body
+            // split by a `bra` to its `dt ; bf`, the code after a poll placed between them) spans the removed code, and the SUBPIECE of the store
+            // there, put in the merged block, kept it: lent, nothing said.)
+            const bool inHome = home != nullptr && !home->getStart().isInvalid() && home->contains(ghidra::Address(home->getStart().getSpace(), insn));
             const std::vector<int>& inst = instancesOf(insn);
             const int fb = inst.size() == 1 ? inst[0] : instanceOf(o).first;
             if (inHome && fb >= 0 && static_cast<size_t>(fb) < nf) keptBlock[static_cast<size_t>(fb)] = 1;
