@@ -215,7 +215,7 @@
 //   SE_GENERATED_CANARY=<n>  the canary family (TestCanary, A3-34): n programs, default 240, 0 off; SE_GENERATED_CANARY_ONLY=<k> prints variant k
 //   SE_GENERATED_SEED=<k>    one seed, with everything printed
 //   SE_GENERATED_PINS=0      the seeds only, no pin (a sweep of a range)
-//   SE_GENERATED_CAUTION=0   A11-33's check of A3-197's caution against the runs (CheckCautions) off
+//   SE_GENERATED_CAUTION=0|deep  A11-33's check of A3-197's caution against the runs (CheckCautions) off, or its later-callee misses failed too
 //   SE_GENERATED_GRAMMAR=1|2 only that grammar (default: the odd seeds are version 1, the even ones version 2)
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
@@ -1816,11 +1816,13 @@ struct Gen
         // a scratch register, which later items may use or return. A caller that took the register to be
         // kept would print the value it had before the call (ledger A3-3).
         int observed = 0;
-        if (convModule && fns[callee].effClobbers && convRng.Chance(75))
+        // (A11-33: not r15, which only A11-33's grammar changes, from kCautionFirst on: a copy of the stack pointer later items took for a pointer
+        // stored into the caller's saved registers, seed 12005835; the seeds below never have bit 15, so their draws are as they were)
+        if (convModule && (fns[callee].effClobbers & ~(1u << 15)) && convRng.Chance(75))
         {
             std::vector<int> bits;
             for (int b = 0; b < 32; ++b)
-                if ((fns[callee].effClobbers >> b) & 1u) bits.push_back(b);
+                if (b != 15 && ((fns[callee].effClobbers >> b) & 1u)) bits.push_back(b);
             const int b = bits[convRng.Below(static_cast<uint32_t>(bits.size()))];
             observed = 1 + static_cast<int>(convRng.Below(3));
             it.after.push_back(ReadRegisterInto(b, observed));
@@ -1829,6 +1831,8 @@ struct Gen
         // (A11-33) A caller that reads, after the call, a register its callee changes on some path (A3-197's caution): the register copied to a
         // scratch register and stored through r4 or r5 restored from its callee-saved copy (a value stored: the text's own read), or only copied.
         int cautionRead = 0;
+        bool cautionStack = false;   // ...of r15: the copy is a stack address, which no later item may take for a pointer (a store through it
+                                     // writes the caller's saved registers: seed 12005835, before this)
         if (cautionModule && !it.observes)
         {
             const uint32_t eff = fns[callee].effClobbers & (cautionKept | (1u << 15));
@@ -1839,6 +1843,7 @@ struct Gen
                     if ((eff >> b) & 1u) bits.push_back(b);
                 const int b = bits[cautionRng.Below(static_cast<uint32_t>(bits.size()))];
                 cautionRead = 1 + static_cast<int>(cautionRng.Below(3));
+                cautionStack = b == 15;
                 it.after.push_back(ReadRegisterInto(b, cautionRead));
                 int ptr[2], np = 0;
                 for (const std::pair<int, int>& sv : saves)
@@ -1856,7 +1861,7 @@ struct Gen
         for (const std::pair<int, int>& s : saves) defined |= 1u << s.first;
         if (fns[callee].returns) defined |= 1u;
         if (observed) defined |= 1u << observed;
-        if (cautionRead) defined |= 1u << cautionRead;
+        if (cautionRead && !cautionStack) defined |= 1u << cautionRead;
         return it;
     }
 
@@ -5672,7 +5677,13 @@ bool CallsUnlentChanger(const Subject& subject, const std::map<uint32_t, Prototy
 //     a return), and counted `caution.unsaid.deep` when they part first inside a later callee (the read is that callee's, which A3-197 reads
 //     from its walk) -- said in the report, not failed; `caution-elsewhere` when a caution names it at another call only, with no "likewise".
 //   * a caution that names a register no run changes at its call is counted (`caution.unchanged`): the walk may see a path no run takes.
-// SE_GENERATED_CAUTION=0 switches the check off (the mutation check of the record: the reverted fixes of A3-199 to A3-207 against the sweep).
+// SE_GENERATED_CAUTION=0 switches the check off; =deep makes `caution.unsaid.deep` a finding too (`caution-unsaid-deep`, to list the seeds). A
+// later callee's read is the text's only when the walk records it (A3-194, A3-210): one it does not (a GBR-relative load whose value the
+// caller then gets as the unknown result of an unlent call) leaves no printed value wrong, so it is counted, not failed. Checked in the
+// default request only, on the ordinary runs (not the perturbed ones), with at most 24 runs again per function.
+// The grammar's shapes for it (Gen::AddCautionChange, the reads after a call in MakeCall) are drawn for grammar 2 seeds from kCautionFirst
+// (12,000,001) on; the record (15_DECOMPILER_STEP5.md, "Area 3, caution oracle (A11-33) and A3-210") has the reverted fixes of A3-199 to
+// A3-207 each found by it in that range.
 struct CautionNote
 {
     uint32_t regs = 0;     // bit k: kKeptNames[k]
@@ -8827,8 +8838,36 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (!changed) continue;
                 count("lent.changed.checked");
                 if (WholeWord(SavesBeforeCallsDropped(text, k.name, &changers), std::string("unaff_") + k.name) || WholeWord(text, std::string("in_") + k.name))
+                {
+                    // (area 3, A3-212) ...unless a run reads a stack word nothing in it wrote first (A3-111's test: the runs again with the stack
+                    // below the entry r15 refilled): a function that pops a saved register and runs on into one that reads its frame before
+                    // writing it reads the word that held the register's entry value, which the text rightly names `unaff_r8` (grammar 2 seeds
+                    // 12003477 and 12006529, from A11-33's grammar: the lent callee that changes the register is another function)
+                    bool stale = false;
+                    for (const RunOut& base : runs)
+                        for (uint32_t fill : { 0x5AA5C33Cu, 0xA55A3CC3u })
+                        {
+                            if (!base.finished || stale || base.perturbed >= 0) continue;
+                            RunSpec rs;
+                            rs.mode = base.mode;
+                            rs.volatileRun = volatileRun;
+                            if (base.selValue != RunOut::kNoSel && fn.sel >= 4)
+                            {
+                                rs.selReg = fn.sel;
+                                rs.selValue = static_cast<uint32_t>(base.selValue);
+                            }
+                            rs.stackFill = fill;
+                            const RunOut other = runner.One(fn, rs);
+                            if (!other.addressError && !SameBehaviour(base, other, true, marked)) stale = true;
+                        }
+                    if (stale)
+                    {
+                        count("excluded.stale-stack-read.kept-read");
+                        continue;
+                    }
                     add(std::string("kept-read:") + k.name, std::string("a function it calls was lent a signature that changes ") + k.name +
                                                                 ", and the text reads " + k.name + " as the value it had on entry");
+                }
             }
         }
 
@@ -19638,6 +19677,30 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                         count(w, "caution.required"), count(w, "caution.said"));
             for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
             CHECK(w.findings.empty() && atF1 == f.caution);
+        }
+    }
+    // Area 3, A3-212 and A3-213, found by A11-33's sweep of grammar 2 from 12,000,001. A3-213 (seeds 12007469, 12005467): F1 saves PR, calls a lent
+    // G (whose model writes over the saved PR's word: Value::mayEntry) and tail-jumps to G after its epilogue; A3-205's carry at a tail jump asked
+    // for PR exactly the caller's, so what F1 and G change (r9 and r10; GBR) was not recorded and the caller's text, which reads them after
+    // the call, said no caution. Now PR that may be the caller's (as A3-207's return) carries it: the caution said, no finding. A3-212 (seeds
+    // 12003477, 12006529): A3-3's kept-read check (a lent callee changes r8, the text reads `unaff_r8`) where the text's `unaff_r8` is a stack
+    // word nothing in the run wrote first, the word a function that tail-jumped here had saved r8 in: the value is right; excused by A3-111's
+    // stack-refill test and counted (`excluded.stale-stack-read.kept-read`).
+    {
+        struct Seed
+        {
+            uint64_t seed;
+            const char* count;
+        };
+        const Seed seeds[] = { { 12007469, "caution.said" }, { 12005467, "caution.said" }, { 12003477, "excluded.stale-stack-read.kept-read" },
+                               { 12006529, "excluded.stale-stack-read.kept-read" } };
+        for (const Seed& sd : seeds)
+        {
+            const Report rep = Evaluate(d, MakeV2(sd.seed), false);
+            std::printf("pin 'A3-212/A3-213 grammar 2 seed %llu': %zu finding(s), %s %d\n", static_cast<unsigned long long>(sd.seed), rep.findings.size(), sd.count,
+                        count(rep, sd.count));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(rep.findings.empty() && count(rep, sd.count) > 0);
         }
     }
     // Area 11, A11-33: A3-197's caution held against the runs (CheckCautions). (a) The check checked: with every caution taken out of the text
