@@ -445,6 +445,7 @@ public:
         mStoresBelow = 0;
         mSrWritten.clear();
         mOut = 0;
+        mKeptAt = 0;
         mLeaks = 0;
         mFrameValues = 0;
         mLowestSp = 0;
@@ -491,7 +492,14 @@ public:
         effects.preserved = mPreserved;
         effects.storesThrough = mStoresThrough;
         effects.storesBelow = mStoresBelow;
-        effects.outOrigins = mOut;
+        // (A3-190) A register some return leaves as it began and another changes is not preserved, and at the first its value is its own entry
+        // value (r15: a stack address): an origin outOrigins names too. A caller takes every register a lent callee does not preserve for
+        // Value::Returned(outOrigins), so without it a frame address the caller held there was lost at the call (grammar 1 seed 7004216: r7
+        // loaded from a literal on a path the engine removes, kept on the other, and outOrigins named no register).
+        uint32_t out = mOut;
+        for (int r = 0; r < kTracked; ++r)
+            if (((mKeptAt >> r) & 1u) && !((mPreserved >> r) & 1u)) out |= r == kR15 ? origin::kStack : 1u << r;
+        effects.outOrigins = out;
         effects.leaks = mLeaks;
         effects.frameValues = mFrameValues;
         effects.frameWords = mFrameWords;
@@ -1980,7 +1988,11 @@ private:
             const Value v = Get(s, mReg[r]);
             if (r == 0) ReturnValue(s, v);
             const bool same = r == kR15 ? v.kind == Value::Sp && v.v == 0 : v.kind == Value::Reg && v.v == r;
-            if (same) continue;
+            if (same)
+            {
+                mKeptAt |= 1u << r;   // (A3-190) an origin of the register if another return changes it
+                continue;
+            }
             mPreserved &= ~(1u << r);
             mOut |= v.Origins();
             // (area 3 round 12 fix) handed back in a register (CalleeHanded): what the value was computed from, not the register's own entry
@@ -2547,6 +2559,7 @@ private:
     const std::set<uint32_t>* mLiterals = nullptr;   // the probe's literal-pool words, and where to read them (SetLiterals)
     const MemorySnapshot* mLiteralMemory = nullptr;
     uint32_t mPreserved = 0, mStoresThrough = 0, mStoresBelow = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
+    uint32_t mKeptAt = 0;   // (A3-190) the registers some return leaves as they began
     std::atomic<bool>* mCancel = nullptr;   // A3-74: checked in Run
     std::set<uint64_t> mSrWritten;          // the ops whose value `ldc Rm,sr` wrote back (Inputs: the interrupt-mask idiom)
     bool mSpSeen = false, mSpKnown = true;   // r15 at the returns reached: one constant offset from its entry value, or not

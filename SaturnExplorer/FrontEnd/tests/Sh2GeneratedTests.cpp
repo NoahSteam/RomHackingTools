@@ -17448,6 +17448,37 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         // a call to a function that keeps r13 is no call for this: the argument of the later one that changes it is read before it
         CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009060(1);\n  func_0x06009030(unaff_r13);\n  return 0;\n}\n", "r13", &changers), "unaff_r13"));
     }
+    {
+        // A3-190: grammar 1 seed 7004216, `claim-wrong:outOrigins` (r7 ends as its own start, a pointer from r7, and the lent outOrigins named
+        // no register). The function loads r7 from a literal before one return (0x0600901A) and leaves it alone before the other (0x0600901E);
+        // ReturnCheck took r7 for not preserved and added the origins of what the first return holds (a constant: none), but not r7's own entry
+        // value, which the second holds. A caller takes every register a lent callee does not preserve for what outOrigins names, so a frame
+        // address it held in r7 was lost at the call. Now a register some return leaves alone adds its own origin when it is not preserved.
+        const Report seed = Evaluate(d, Generate(7004216), true);
+        std::printf("pin 'A3-190 grammar 1 seed 7004216': %zu finding(s), claims checked %d\n", seed.findings.size(), count(seed, "claims.checked"));
+        for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(seed.findings.empty() && count(seed, "claims.checked") > 0);
+        // the seed shrunk, and the fixture: `mov.l r4,@r7 ; tst r4,r4 ; bf R2 ; mov #0,r7 ; rts ; nop ; R2: rts ; nop` (the join at one return
+        // was always right: the control, one `rts` after both paths)
+        for (const char* words : { "D108 251B 605C 7170 E301 1738 4310 8BFC 621D 4215 8D03 4124 D703 000B 0009 000B 0009 0009 4000 0000 0600 1018",
+                                   "2742 2448 8B02 E700 000B 0009 000B 0009", "2742 2448 8B01 E700 0009 000B 0009" })
+        {
+            const Report w = EvaluateSubject(d, RawSubject(words), true);
+            std::printf("pin 'A3-190 %s': %zu finding(s), lent %d, claims checked %d\n", words, w.findings.size(), count(w, "proto.lent"), count(w, "claims.checked"));
+            for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(w.findings.empty() && count(w, "proto.lent") > 0 && count(w, "claims.checked") > 0);
+        }
+        // ...and the caller the lost origin misled (P1): function 0 keeps a local of 5, puts its address in r7, calls function 1 (the fixture,
+        // lent; it keeps r7 when r4 is not 0) and then function 2 (withheld: it reads r3), which stores through r7 into the local. The text was
+        // `return 5;`, every run returns what function 2 stored; now it reads the local after the calls.
+        const ModulePin m = { "A3-190 caller", "4F22 7FF8 E105 2F12 67F3 B007 0009 B00C 0009 60F2 7F08 4F26 000B 0009 2448 8B02 E700 000B 0009 000B 0009 E207 323C 2722 000B 0009",
+                              "0/0/1c,1c/1c/2a,2a/2a/34", nullptr, "1,0,0", nullptr, nullptr };
+        const Report caller = EvaluateSubject(d, ModuleSubject(m), true);
+        const bool five = caller.text.find("return 5;") != std::string::npos;
+        std::printf("pin '%s': %zu finding(s), lent %d, `return 5;` %s\n", m.name, caller.findings.size(), count(caller, "proto.lent"), five ? "printed" : "not printed");
+        for (const Finding& f : caller.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(caller.findings.empty() && count(caller, "proto.lent") > 0 && !five && caller.text.find("return xStack_c;") != std::string::npos);
+    }
 }
 
 void TestA365Pins(Sh2Decompiler& d)
