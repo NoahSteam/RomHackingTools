@@ -1115,12 +1115,28 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
             Project(s.corners[2], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(s.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
         // The exploded view separates sprites along Z by draw order, so a pixel's VDP2 priority
-        // plays no part in it and the framebuffer word is dropped here.
-        auto lineSink = [&outRgba](size_t idx, uint8_t cr, uint8_t cg, uint8_t cb, const DrawFx&,
-                                   uint16_t)
+        // plays no part in it. The colour does: a framebuffer word is a CRAM code that VDP2 reads
+        // through the sprite type (which bits are dot colour) and CRAOFB's sprite colour offset,
+        // not the raw bank+texel value DecodeTexelWord indexed CRAM with. Where the two differ
+        // (Virtua Fighter 2: type C, offset 0x300) the raw lookup lands on another palette
+        // entirely, so resolve the word the way the composite does. A word that is a colour
+        // (MSB set in mixed mode) comes back as that colour, Gouraud-shaded already; a palette
+        // code is never shaded, as in the composite. A solid run repeats one word, so the last
+        // lookup is kept.
+        uint16_t lastWord = 0;
+        Rgba lastColor{};
+        bool haveLast = false;
+        auto lineSink = [&](size_t idx, uint8_t, uint8_t, uint8_t, const DrawFx&, uint16_t word)
         {
+            if (!haveLast || word != lastWord)
+            {
+                lastColor = prios.Resolve(word, cram, cramMode).color;
+                lastWord = word;
+                haveLast = true;
+            }
             const size_t o = idx * 4;
-            outRgba[o + 0] = cr; outRgba[o + 1] = cg; outRgba[o + 2] = cb; outRgba[o + 3] = 255;
+            outRgba[o + 0] = lastColor.r; outRgba[o + 1] = lastColor.g;
+            outRgba[o + 2] = lastColor.b; outRgba[o + 3] = 255;
         };
         // A solid primitive is a framebuffer word, not an RGB colour: the sprite type and CRAM say
         // what VDP2 shows for it, and a word it reads as transparent shows nothing.

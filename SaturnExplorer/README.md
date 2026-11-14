@@ -17,10 +17,14 @@ Built for **fan translators, ROM hackers, and curious developers**, it helps ans
 | You want to… | Saturn Explorer helps you… |
 | --- | --- |
 | **Find artwork** | Select an object in the reconstructed screen and inspect its texture, colors, and drawing command. Search game data for matching texture or palette bytes. |
+| **Export textures** | Save any texture you are inspecting as an image (BMP). When it uses a palette, the file keeps the game’s own palette, so you can recolor it later. Whole background layers and tile sheets can be exported too. |
 | **Understand a scene** | Toggle background layers, inspect sprites, or explore the scene geometry in an exploded 3D view. |
+| **Rewind and resume** | Scrub back through recent frames, then continue playing from any of them: the emulator is restored to that exact moment. Retry a fight, or see what a change did. Turn on **Rewind** in Settings; it needs a patched Mednafen. |
 | **Find changing values** | Inspect memory and watch addresses while the game runs, helping investigate dialogue, game logic, and other changing data. |
-| **Follow the code** | Pause, set breakpoints, and step through the Saturn’s SH-2 processor instructions. Desktop builds also include C-like pseudocode to help read functions. |
+| **Follow the code** | Pause, set breakpoints, and step through the Saturn’s SH-2 processor instructions. |
+| **Read code as C** | The built-in decompiler turns an SH-2 function into C-like pseudocode next to the assembly. It runs inside the app, so there is nothing else to install. Desktop builds. |
 | **Log without pausing** | Set tracepoints to record register or memory values whenever an instruction runs, while the game keeps playing. |
+| **Listen to sounds and export them** | Play the sample behind any sound voice, or hear what a frame is playing, and save a voice as a `.wav`. The audio tools help trace a sound back to its data on the disc. Desktop builds. |
 
 ## From a game screen to an explanation
 
