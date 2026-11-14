@@ -20579,3 +20579,73 @@ The coordinator's matrices:
 ### Routed
 
 * **Area 5** (`folded-store-after-access`, not triaged; on the base binary only, it passes on the branch with area 5's folded round merged): grammar 1 seed 7909187 `n:`. The store at 0x06009018, folded into 0xC0000025, is printed nowhere, and the write through a pointer at 0x06009020 is made without it. Shrunk: `SE_GENERATED_WORDS="D603 6261 E001 0624 2412 000B 0009 0009 C000 0024" SE_GENERATED_ALIAS=5:06003C04`.
+
+## Area 7, round 18
+
+Fixer, branch `review/7-round18` from master `3fe4335b` (area 7's round 17 and area 3's outOrigins round merged). No engine change: patch 0091 stays free. The round first wrote round 17's lost record section (above). Seven rows are filed and fixed, **A7-148 to A7-154**, all P3: four product (`Sh2Decompiler.cpp`) and three oracle (`MappingOracle.h`, each read by `SE_A7_RULE_OFF=<row>`). The generator's productions are untouched; no seed's program changes.
+
+* `AddFrameStoreTokens` (A7-25's mark): A7-148.
+* `MarkMaterialisedReads` (A7-116's piece): A7-149.
+* `FlowValueMayBe` (a read the walk passes): A7-150.
+* `StoreShowsValue` (the bytes of a wider store): A7-154.
+
+### The routed seeds, replayed on master `3fe4335b`
+
+`SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0` (the grammar 1 seeds also with `SE_GENERATED_ALPHABET=specials`: the same findings):
+
+| Seed | On master | Whose | Row |
+|---|---|---|---|
+| 7801133 (grammar 1, `map-way-back`) | fails: the `rotcr` (0x06009038; 0x06009008 shrunk) answered with the statement's second line | product | A7-148 |
+| 7807800 (grammar 1, `map-way-back`) | fails: 0x06009022 (0x0600900C shrunk) answered with the copy of the later store first | product | A7-149 |
+| 7803022 (grammar 1, `map-copy-merge`) | fails: `iRam26001000 = (int2)cVar1;` names no store | product | A7-150 |
+| 8103971 (grammar 1, `n:map-store-value`, `uRam26002280 = 0xf;` at 0x0600900A) | passes, with and without specials, and its shrunk words too; it fails on round 17's base binary (`97c05fb9`): area 3's sweep ran on a branch without round 17 | | pinned only |
+| 7800677 (grammar 2, `map-const-join`) | fails: `uVar6 = 0;` at `and r5,r1` | oracle | A7-151 |
+| 7807706 (grammar 2, `map-const-join`) | fails: `uVar5 = 0x80000000;` at `rotcr r3` | oracle | A7-152 |
+
+### Rows
+
+| Row | Whose | Cause | Fix |
+|---|---|---|---|
+| A7-148 | product | the pointer CAST the engine made at the `rotcr` that computes the value was marked a copy materialised there (A7-25), so the way back skipped the statement's first line | a CAST of a value an op of the same instruction computes is that op's statement (A7-91's reading) |
+| A7-149 | product | A7-116 marks a shared piece a copy only when the store's own statement is not a plain copy; here both lines are copies drawn at a `bsr` | a plain copy that names no other store is the store's own statement too |
+| A7-150 | product | the engine joins two reads of one byte (no store between); the walk from the store's register went through the second read and back past the first | following memory back from a read, an earlier read of the same memory the statement's value is made at ends the walk at the statement's value |
+| A7-151 | oracle | A7-130's walk took no `xor r1,r1` for a zero | `xor Rn,Rn` and `sub Rn,Rn` make 0 |
+| A7-152 | oracle | A7-131's edge T on `rotcr r3` with r3 a `movt`'s, no number | `rotcr` of a `movt` register is the edge's T in bit 31 |
+| A7-153 | oracle | the text reads the variable only through `& 0x20000000` and ORs into itself; A7-130 kept the low half | the masks the text reads are the kept bits |
+| A7-154 | product | `uRam26002108._1_3_ = (unkbyte3)param_1;` (low three bytes of a word store, an `or` of 0x40000000 before it): the walk of the whole register found another value | when the whole walk says another value, a statement of no number walks only the bytes it shows of the stored register |
+
+### Fixtures, pins, mutation
+
+`TestArea7Round18` (`Sh2DecompilerTests`) has one fixture per row, each the shrunk program of its seed (A7-148 with the request that marks the mailbox; A7-151 and A7-152 the second function of their module; A7-154 with function 1's entry known). In each the audit passes and a damaged control puts the finding back: the tokens as master drew them (A7-148: marked; A7-149: the mark cleared; A7-150: the name at no instruction and the store named nowhere; A7-154: the store not named) or another number (the oracle rows). For each oracle row the audit with `SE_A7_RULE_OFF=<row>` finds the violation again. `TestArea7Round18Pins` (`Sh2GeneratedTests.cpp`) pins the eight whole seeds (8500725 with the specials) to no `map-*` finding.
+
+* Oracle mutation, `tools/a7_round18/mutation.sh` (each rule off on its whole seed): 7800677 (A7-151), 7807706 (A7-152) and 8500725 (A7-153, specials) each fail again with the rule off (1 failing seed each) and pass with it on.
+* Product mutation: in one build, A7-148's, A7-149's, A7-150's and A7-154's changes were switched off (`false &&`, A7-149's by taking every plain copy as naming another store). The fixtures failed 13 times (three checks each for A7-148, A7-149 and A7-154, four for A7-150), and no other check failed. Restored before the runs.
+
+No other area's pin or count changed: the generator's own run (every pin, `TestA5FoldedPins` and the order counts included) passes unchanged on this branch.
+
+### Fresh sweeps
+
+`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0` (`tools/a7_round18/sweep.sh`), grammar 1 and 2 with 10,000 seeds each from 8,400,001, and grammar 1 specials with 5,000 from 8,500,001:
+
+| Run | Failing on master `3fe4335b`'s binary | Row | Left on the last binary |
+|---|---|---|---|
+| grammar 1 from 8,400,001 | none | | none |
+| grammar 2 from 8,400,001 | 8405964 (`n:map-copy-store`) | A7-154 | none |
+| specials from 8,500,001 | 8500725 (`n:map-const-join`) | A7-153 | none |
+
+### Runs
+
+The sweeps above (the last binary's column), and these, after the last code edit (commit `b21528d8`; only documents and scripts changed after it), on its build:
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` with Live | **117 of 117** passed (the six Live tests among them) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (canary on, every pin including `TestArea7Round18Pins`) | **failing seeds=0; findings=0** (the canary: 240 programs, 0 failing) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, narrow-c 130, void-return 227, void-return-lent 24 |
+| game corpus, both images, `SE_GAME_LEND=1` | "all passed", every ledger count 0; missing and said 0 (hwram007) and 4 (hwram008); "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)" |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint --tests-dir` ok (no vendored file touched) |
+
+### Routed
+
+None: every finding of the routed seeds and of the sweeps was area 7's, and all are fixed. Grammar 1 seed 8103971 (routed from area 3's outOrigins sweep) failed only on a binary without round 17.
