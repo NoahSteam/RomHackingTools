@@ -372,7 +372,7 @@ public:
     const std::map<uint32_t, uint32_t>& HandSites() const { return mHandSites; }
     const std::map<uint32_t, uint32_t>& EscapeSure() const { return mEscapeSure; }   // (A3-120)
     const std::map<uint32_t, uint32_t>& HandSure() const { return mHandSure; }
-    // (area 3, A3-197) The calls (bit r: rN of r8-r14) whose callee is not lent and, as the walk of its code shows, returns on some path with
+    // (area 3, A3-197) The calls (bit r: rN of r8-r14, 17 GBR, 18 VBR (A3-200), 15 r15 (A3-206)) whose callee is not lent and, as the walk of its code shows, returns on some path with
     // that register not restored, where this function reads the register after the call (UseUnkept).
     const std::map<uint32_t, uint32_t>& UnkeptSites() const { return mUnkeptSites; }
     // ...and the stack words, by their offset from r15 on entry, whose frame address the stack-argument note of a call is for (A3-108).
@@ -1000,6 +1000,10 @@ private:
             if ((o & (origin::kMemory | origin::kStack)) != 0 && ((o >> r) & 1u)) continue;
             m |= 1u << r;
         }
+        // (area 3 round 27, A3-206) ...and r15, which the model keeps too (extrapop 0): a stack address a known distance from the entry r15 (a
+        // pop of the caller's word, `add #4,r15 ; rts`), or a constant (another stack). Never overwritten (SureWritten, kModelKept): a moved r15 is
+        // computed from the old one.
+        if ((v.kind == Value::Sp && v.v != 0) || v.kind == Value::Imm) m |= 1u << kR15;
         return m;
     }
     // (area 3, A3-203) Of SureChanged, the registers 'v', held in that register at a return, overwrites: not computed from the register's own
@@ -1503,7 +1507,7 @@ private:
         // restores its own saved copy, or never uses it) loses nothing in the text.
         if (keepKept && !signatureLent && haveTarget)
         {
-            const uint32_t changed = CalleeChanged(target) & kModelKept & e.preserved;
+            const uint32_t changed = CalleeChanged(target) & kUnkeptRegs & e.preserved;   // (A3-206: r15 too)
             const uint32_t written = CalleeWritten(target);
             for (int r = 0; r < kTracked; ++r)
             {
@@ -1552,6 +1556,8 @@ private:
     static constexpr uint32_t kLentHanded = 0xF0u;
     // (A3-197, A3-200) r8-r14, GBR and VBR, which the convention has a callee restore and the default model keeps across every call (kKeptByCall)
     static constexpr uint32_t kModelKept = 0x7F00u | (1u << 17) | (1u << 18);
+    // (area 3 round 27, A3-206) ...and r15, which the model keeps across such a call too (extrapop 0): the registers the caution names
+    static constexpr uint32_t kUnkeptRegs = kModelKept | (1u << 15);
     // The registers (as origins: their entry values) the values in 'regs' at this point were made from.
     uint32_t RegOrigins(const State& s, uint32_t regs) const
     {
@@ -1718,7 +1724,7 @@ private:
         // other than the entry value, and not what a word that saved it may still hold): only what a return the walk reached shows, nothing for
         // a callee it could not follow. A callee that saves r8-r14, writes its frame through an index the walk cannot bound, and restores them
         // is not shown to change them (06041AA0/008).
-        ctx->Changed()[target] = !why.empty() || callee.mEntryUndecodable ? 0u : callee.mChangedAt & kModelKept;
+        ctx->Changed()[target] = !why.empty() || callee.mEntryUndecodable ? 0u : callee.mChangedAt & kUnkeptRegs;
         // (area 3, A3-203) ...and the ones it overwrites on every path: only when every path the walk followed ended in a return it read
         // (no path lost) and some return was reached
         ctx->Written()[target] = !why.empty() || callee.mEntryUndecodable || callee.mPathLost || !callee.mSpSeen ? 0u
@@ -2677,6 +2683,22 @@ private:
                         // (area 3 round 11 fix) ...and a tail jump to a lent callee that stores below the pointer it is handed carries that
                         // storesBelow transitively, so a walked thunk (CalleeStoresBelow) reports it: the thunk stores below whatever it
                         // passed in that register (A3-82, through a tail jump). A lent callee's exact storesBelow is in its signature.
+                        // (area 3 round 27, A3-205) ...and what the target returns this function's caller with: its rts goes there (PR is
+                        // still the caller's), so a register of kUnkeptRegs it changes for certain on some path (CalleeChanged) is changed by
+                        // this function on that path, as one this path changed for certain is where the target does not overwrite it on every
+                        // path (CalleeWritten). The path itself stays lost (mPathLost): what every path overwrites is not claimed through it.
+                        // A thunk `mov.l @(lit),r1 ; jmp @r1` (A3-70's wrapper) to a callee that clears r8 on one path changed nothing (tj1).
+                        {
+                            const Value pr = Get(s, mReg[kPr]);
+                            if (pr.kind == Value::Reg && pr.v == kPr)
+                            {
+                                uint32_t here = 0;
+                                for (int r = 0; r < kTracked; ++r)
+                                    if (((kUnkeptRegs >> r) & 1u) && ((SureChanged(Get(s, mReg[r])) >> r) & 1u)) here |= 1u << r;
+                                const uint32_t target = static_cast<uint32_t>(to.v);
+                                mChangedAt |= (CalleeChanged(target) | (here & ~CalleeWritten(target))) & kUnkeptRegs;
+                            }
+                        }
                         auto p = mLent.find(static_cast<uint32_t>(to.v));
                         if (p != mLent.end() && p->second.known)
                         {
@@ -11602,7 +11624,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 const std::pair<uint32_t, uint32_t> fs(sd.second, sd.first);   // (registers, call), as the map's entries were
                 std::vector<int> regs;
                 for (int reg = 8; reg < 19; ++reg)
-                    if (reg != 15 && reg != 16 && ((fs.first >> reg) & 1u)) regs.push_back(reg);   // r8-r14, gbr, vbr (A3-200)
+                    if (reg != 16 && ((fs.first >> reg) & 1u)) regs.push_back(reg);   // r8-r14, gbr, vbr (A3-200), r15 (A3-206)
                 std::string names;
                 for (size_t k = 0; k < regs.size(); ++k)
                     names += (k == 0 ? "" : k + 1 == regs.size() ? " and " : ", ") +
