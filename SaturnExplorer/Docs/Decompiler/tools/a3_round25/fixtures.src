@@ -2062,3 +2062,24 @@ tst #1,r0
 bf P
 bra A
 nop
+name u4
+# A3-193's excuse attacked: r0 used as an index after a write, then written again in rts's delay slot (mov r5,r0): F returns r5
+ret 1
+mov #7,r0
+mov.b @(r0,r4),r1
+rts
+mov r5,r0
+name u5
+# u4 with add #1,r0 in the slot: F returns 8
+ret 1
+mov #7,r0
+mov.b @(r0,r4),r1
+rts
+add #1,r0
+name u6
+# u4 with the slot's write made before the index (the control: the last write is followed by the index): r0 scratch by A3-41
+ret 1
+mov r5,r0
+mov.b @(r0,r4),r1
+rts
+nop

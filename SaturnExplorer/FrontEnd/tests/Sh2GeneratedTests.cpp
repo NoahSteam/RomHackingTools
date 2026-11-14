@@ -5491,14 +5491,9 @@ bool R0IndexAfterLastWrite(const Subject& subject, const std::vector<RunOut>& ru
         if (!run.finished) continue;
         size_t lastWrite = run.pcs.size();
         bool indexAfter = false, calleeAfter = false;
-        for (size_t k = 0; k < run.pcs.size(); ++k)
-        {
-            if (k < run.depths.size() && run.depths[k] != 0)
-            {
-                calleeAfter = true;
-                continue;
-            }
-            const sfe::DisassembledInstruction d = sfe::Sh2Decode(run.pcs[k], subject.WordAt(run.pcs[k]));
+        // One instruction of the function's own; false when it cannot be read.
+        auto see = [&](uint32_t pc, size_t k) {
+            const sfe::DisassembledInstruction d = sfe::Sh2Decode(pc, subject.WordAt(pc));
             if (!d.IsValid) return false;
             std::vector<std::string> ops;
             int depth = 0;
@@ -5524,6 +5519,20 @@ bool R0IndexAfterLastWrite(const Subject& subject, const std::vector<RunOut>& ru
                 lastWrite = k;
                 indexAfter = calleeAfter = false;
             }
+            return true;
+        };
+        for (size_t k = 0; k < run.pcs.size(); ++k)
+        {
+            if (k < run.depths.size() && run.depths[k] != 0)
+            {
+                calleeAfter = true;
+                continue;
+            }
+            if (!see(run.pcs[k], k)) return false;
+            // (area 3 round 25, A3-196) A delay slot runs with its branch, and the trace has no entry of its own for it (the emulator executes
+            // the two as one): read it after the branch, at the branch's depth -- `rts ; mov.b @(r0,r5),r1` is the index after the last write,
+            // and `rts ; add #1,r0` a write after the index.
+            if (sfe::Sh2Decode(run.pcs[k], subject.WordAt(run.pcs[k])).HasDelaySlot && !see(run.pcs[k] + 2, k)) return false;
         }
         if (lastWrite == run.pcs.size() || !indexAfter || calleeAfter) return false;
         any = true;
@@ -17930,6 +17939,19 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         const bool no3 = R0IndexAfterLastWrite(sub, { unwritten }), no4 = R0IndexAfterLastWrite(sub, { indexed, plain });
         std::printf("pin 'A3-193 reading': indexed %d, rewritten %d, callee after %d, unwritten %d, one run plain %d\n", int(yes), int(no1), int(no2), int(no3), int(no4));
         CHECK(yes && !no1 && !no2 && !no3 && !no4);
+        // A3-196 (area 3, round 25): the trace has no entry for a delay slot (it runs with its branch). `mov #7,r0 ; rts ; mov.b @(r0,r4),r1`:
+        // the index in the slot is after the last write (yes; it was not seen); `mov #7,r0 ; mov.b @(r0,r4),r1 ; rts ; add #1,r0`: the slot
+        // writes r0 after the index, a result (no; it was excused). And u2 (`tools/a3_round25/fixtures.src`): a caller of `mov r4,r0 ; rts ;
+        // mov.b @(r0,r5),r1` gave `n:return-dropped`; now no finding, counted as excluded.
+        const bool slotIndex = R0IndexAfterLastWrite(RawSubject("E007 000B 014C"), { runOf({ 0x06009000, 0x06009002 }, { 0, 0 }) });
+        const bool slotWrite = R0IndexAfterLastWrite(RawSubject("E007 014C 000B 7001"), { runOf({ 0x06009000, 0x06009002, 0x06009004 }, { 0, 0, 0 }) });
+        const ModulePin m = { "A3-196 u2", "4F22 B00D E403 7001 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 6043 000B 015C", "0/0/e,20/20/26", nullptr,
+                              "1,1", nullptr, nullptr };
+        const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin 'A3-196 reading': index in the slot %d, write in the slot %d; u2: %zu finding(s), r0-index %d\n", int(slotIndex), int(slotWrite),
+                    w.findings.size(), count(w, "excluded.r0-index.return-dropped"));
+        for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(slotIndex && !slotWrite && w.findings.empty() && count(w, "excluded.r0-index.return-dropped") > 0);
     }
 }
 
