@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <new>
 #include <set>
@@ -711,11 +712,24 @@ private:
         // address of this function (a register it keeps, or keeps on some path), so the engine sees an output of the call (`extraout_r1`) and
         // not the address. What going out makes of that address (kOut*), which a read of the value lets out (UseKept): see Call.
         uint8_t kept = 0;
-        // (area 3, A3-197) Any kind: the value is in one of r8-r14, GBR or VBR (A3-200; unkeptReg) after a call (unkeptAt) whose callee is not lent and, as the walk
+        // (area 3, A3-197) Any kind: the value is in one of r8-r14, GBR or VBR (A3-200) after a call whose callee is not lent and, as the walk
         // of its code shows, does not restore that register on every path; the probe and the engine take the call to keep it. A read of it
-        // (UseUnkept) puts a caution at the call.
-        uint32_t unkeptAt = 0;
-        int8_t unkeptReg = -1;
+        // (UseUnkept) puts a caution at the call. (area 3, A3-202) Each mark is the call and the register (UnkeptMark: at << 8 | register),
+        // sorted and unique: a join keeps the marks of both sides (JoinUnkept), so two calls on two paths that both change r8, joined, each
+        // get the caution (one mark per value, the first side's, put it at one of them only). Empty, no allocation: the common case.
+        std::vector<uint64_t> unkept;
+        static uint64_t UnkeptMark(uint32_t at, int r) { return (static_cast<uint64_t>(at) << 8) | static_cast<uint8_t>(r); }
+        // The marks of 'b' added to 'a'; true when 'a' changed.
+        static bool JoinUnkept(std::vector<uint64_t>& a, const std::vector<uint64_t>& b)
+        {
+            if (b.empty() || a == b) return false;
+            std::vector<uint64_t> u;
+            u.reserve(a.size() + b.size());
+            std::set_union(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(u));
+            if (u.size() == a.size()) return false;
+            a.swap(u);
+            return true;
+        }
         // (area 3, A3-197) Any kind: the registers (bits 8-14, 17, 18: kModelKept) whose entry value this may still be: a word that held one, saved by a prologue,
         // and that a store may have written over (Clobber), or a copy of it. Restored from such a word, the register may be its entry value
         // after all, so a return that holds it is no proof that the function changed the register (mChangedAt).
@@ -778,7 +792,7 @@ private:
         bool operator==(const Value& o) const
         {
             return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget && read == o.read &&
-                   exposedAt == o.exposedAt && kept == o.kept && unkeptAt == o.unkeptAt && unkeptReg == o.unkeptReg && mayEntry == o.mayEntry &&
+                   exposedAt == o.exposedAt && kept == o.kept && unkept == o.unkept && mayEntry == o.mayEntry &&
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
                                      usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
                                      baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure && sureChanged == o.sureChanged));
@@ -859,8 +873,7 @@ private:
                 p.frame = v.second.Frame();
                 p.sure = v.second.Sure();
                 p.kept = v.second.kept;   // (A3-192) a part of it is read as the whole is
-                p.unkeptAt = v.second.unkeptAt;   // (A3-197) likewise
-                p.unkeptReg = v.second.unkeptReg;
+                p.unkept = v.second.unkept;   // (A3-197) likewise
                 p.mayEntry = v.second.mayEntry;
                 return p;
             }
@@ -1100,18 +1113,13 @@ private:
     static bool Merge(Value& a, const Value& b, uint8_t out = 0)
     {
         if (a == b) return false;
-        // (area 3, A3-197) the same value with and without the caution's mark is that value, marked: not a join of two
+        // (area 3, A3-197) the same value with and without the caution's mark is that value, marked: not a join of two. (A3-202) With the
+        // marks of both sides.
+        if (!b.unkept.empty() || !a.unkept.empty())
         {
             Value bm = b;
-            bm.unkeptAt = a.unkeptAt;
-            bm.unkeptReg = a.unkeptReg;
-            if (a == bm)
-            {
-                if (a.unkeptAt != 0) return false;
-                a.unkeptAt = b.unkeptAt;
-                a.unkeptReg = b.unkeptReg;
-                return true;
-            }
+            bm.unkept = a.unkept;
+            if (a == bm) return Value::JoinUnkept(a.unkept, b.unkept);
         }
         Deps dep = a.DepsOf();
         dep |= b.DepsOf();
@@ -1130,8 +1138,8 @@ private:
         m.frame = a.Frame() || b.Frame();
         m.sure = a.Sure() && b.Sure();   // (A3-120) a frame address on both paths
         m.kept = a.kept | b.kept;        // (A3-192) on either path
-        m.unkeptAt = a.unkeptAt != 0 ? a.unkeptAt : b.unkeptAt;   // (A3-197) on either path
-        m.unkeptReg = a.unkeptAt != 0 ? a.unkeptReg : b.unkeptReg;
+        m.unkept = a.unkept;   // (A3-197) on either path; (A3-202) the calls of both
+        Value::JoinUnkept(m.unkept, b.unkept);
         m.mayEntry = a.mayEntry | b.mayEntry;
         m.sureChanged = SureChanged(a) | SureChanged(b);   // (A3-199) on either path
         // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
@@ -1242,7 +1250,7 @@ private:
         if (keepKept && mKeptSeen)
             for (int r = 2; r < 8; ++r)
                 if (((kConvention >> r) & 1u)) UseKept(s, Get(s, mReg[r]));
-        // (area 3, A3-197) ...and likewise a register an earlier unlent callee may have changed (Value::unkeptAt)
+        // (area 3, A3-197) ...and likewise a register an earlier unlent callee may have changed (Value::unkept)
         if (keepKept && mUnkeptSeen)
             for (int r = 2; r < 8; ++r)
                 if (((kConvention >> r) & 1u)) UseUnkept(Get(s, mReg[r]));
@@ -1482,8 +1490,9 @@ private:
                 if (!((changed >> r) & 1u)) continue;
                 auto f = s.vars.find(KeyOf(mReg[r]));
                 if (f == s.vars.end()) continue;
-                f->second.unkeptAt = at;
-                f->second.unkeptReg = static_cast<int8_t>(r);
+                // (A3-202) this call's mark replaces an earlier call's: the walk does not say whether the callee writes the register on every
+                // path, and a later callee that does (0602481C/007: 06024B18 loads r10-r13 at entry) leaves nothing of an earlier one's (A3-203)
+                f->second.unkept.assign(1, Value::UnkeptMark(at, r));
                 mUnkeptSeen = true;
             }
         }
@@ -1504,10 +1513,10 @@ private:
         s.out |= x.kept;
         mFrameOut = true;
     }
-    // (area 3, A3-197) A read of a register an unlent callee may have changed (Value::unkeptAt): the caution at that call.
+    // (area 3, A3-197) A read of a register an unlent callee may have changed (Value::unkept): the caution at that call.
     void UseUnkept(const Value& x)
     {
-        if (x.unkeptAt != 0 && x.unkeptReg >= 0) mUnkeptSites[x.unkeptAt] |= 1u << x.unkeptReg;
+        for (const uint64_t u : x.unkept) mUnkeptSites[static_cast<uint32_t>(u >> 8)] |= 1u << (u & 0xFFu);   // (A3-202) every call marked
     }
 
     // (area 3 round 12 fix) The registers of the calling convention a callee the probe cannot read is taken to be handed: r4-r7, and r2, the
@@ -2367,7 +2376,7 @@ private:
                 {
                     if (vn.space->getType() == ghidra::IPTR_CONSTANT) continue;
                     for (const auto& v : s.vars)
-                        if (v.second.unkeptAt != 0 && std::get<0>(v.first) == vn.space && std::get<1>(v.first) < vn.offset + vn.size &&
+                        if (!v.second.unkept.empty() && std::get<0>(v.first) == vn.space && std::get<1>(v.first) < vn.offset + vn.size &&
                             vn.offset < std::get<1>(v.first) + std::get<2>(v.first))
                             UseUnkept(v.second);
                 }
@@ -2812,7 +2821,7 @@ private:
     int64_t mLowestSp = 0;      // the lowest stack offset any register or slot held
     bool mFrameOut = false;     // (area 3 round 12 fix) a possible frame address went out to code that may keep it (HandOut)
     bool mKeptSeen = false;     // (area 3, A3-192) a call marked a register Value::kept in this run
-    bool mUnkeptSeen = false;   // (area 3, A3-197) ...and one of r8-r14 Value::unkeptAt
+    bool mUnkeptSeen = false;   // (area 3, A3-197) ...and one of r8-r14 Value::unkept
     std::map<uint32_t, uint32_t> mUnkeptSites;   // (A3-197) UnkeptSites
     uint32_t mHanded = 0;       // ...and, of a walked callee, the registers it lets out or writes through (CalleeHanded)
 
@@ -10182,6 +10191,29 @@ std::vector<char> KeptFlowBlocks(const ghidra::Funcdata& fd, const FlowRecord& f
     return kept;
 }
 
+// (area 3, A3-202) Whether every path of the final blocks from the function's entry to 'to' passes 'from': 'to' is not reached from the entry
+// with 'from' taken out. A block the text prints after 'from' when it is so (the structure follows the flow), whatever the addresses.
+bool BlockDominates(const ghidra::BlockGraph& g, const ghidra::FlowBlock* from, const ghidra::FlowBlock* to)
+{
+    if (from == to) return true;
+    if (g.getSize() == 0 || from == nullptr || to == nullptr) return false;
+    const ghidra::FlowBlock* entry = g.getBlock(0);
+    if (entry == from) return true;
+    std::set<const ghidra::FlowBlock*> seen;
+    std::vector<const ghidra::FlowBlock*> work(1, entry);
+    seen.insert(entry);
+    seen.insert(from);
+    while (!work.empty())
+    {
+        const ghidra::FlowBlock* b = work.back();
+        work.pop_back();
+        if (b == to) return false;
+        for (ghidra::int4 k = 0; k < b->sizeOut(); ++k)
+            if (seen.insert(b->getOut(k)).second) work.push_back(b->getOut(k));
+    }
+    return true;
+}
+
 // A3-164, A3-167 to A3-169: the stores of ordinary memory at a constant address that the code makes, that the final p-code no longer
 // writes, and that a loop the analysis takes to run for ever can be the last word on. The engine keeps a global's write from which a
 // path never reaches a RETURN (patch 0087), but not one it saw no reader of before it took the loop for endless: a write the code
@@ -11417,19 +11449,37 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // (area 3, A3-197) A call whose unlent callee returns with one of r8-r14 changed on some path, read after the call: the text takes the call
         // to keep it (the default model), and says so at the call. One caution names every such register of the call, and a set of registers is
         // said once, at the first call, with "likewise at the calls below" when it holds at others (as A3-108's frame notes): a hand-written helper
-        // that keeps its state in r9 and r10 is called 28 times in a row (0600DC56/007).
+        // that keeps its state in r9 and r10 is called 28 times in a row (0600DC56/007). (area 3, A3-202) "Below" is the text's order, not the
+        // addresses': a call is left to an earlier one's "likewise" only when every path to it passes that call (BlockDominates), so the text
+        // prints it after; a call on another path (x4: the two arms of an `if`, the later address printed first) has its own caution.
         {
-            std::map<uint32_t, uint32_t> firstOf;   // the registers -> the first call they are said at
+            std::vector<std::pair<uint32_t, uint32_t>> said;   // (call, registers) a caution is said at, in address order
             std::set<uint32_t> likewise;
+            std::map<uint32_t, const ghidra::FlowBlock*> blockOf;   // the call's final block
+            if (unkeptSites.size() > 1)
+                for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it)
+                    if (((*it)->code() == ghidra::CPUI_CALL || (*it)->code() == ghidra::CPUI_CALLIND) && (*it)->getParent() != nullptr &&
+                        unkeptSites.count(static_cast<uint32_t>((*it)->getAddr().getOffset())))
+                        blockOf[static_cast<uint32_t>((*it)->getAddr().getOffset())] = (*it)->getParent();
             for (const auto& u : unkeptSites)
             {
                 if (u.second == 0) continue;
-                const auto f = firstOf.find(u.second);
-                if (f == firstOf.end()) firstOf[u.second] = u.first;
-                else likewise.insert(f->second);
+                const auto b = blockOf.find(u.first);
+                bool covered = false;
+                for (const auto& sd : said)
+                {
+                    if (sd.second != u.second) continue;
+                    const auto a = blockOf.find(sd.first);
+                    if (a == blockOf.end() || b == blockOf.end() || !BlockDominates(fd->getBasicBlocks(), a->second, b->second)) continue;
+                    likewise.insert(sd.first);
+                    covered = true;
+                    break;
+                }
+                if (!covered) said.push_back(std::make_pair(u.first, u.second));
             }
-            for (const auto& fs : firstOf)
+            for (const auto& sd : said)
             {
+                const std::pair<uint32_t, uint32_t> fs(sd.second, sd.first);   // (registers, call), as the map's entries were
                 std::vector<int> regs;
                 for (int reg = 8; reg < 19; ++reg)
                     if (reg != 15 && reg != 16 && ((fs.first >> reg) & 1u)) regs.push_back(reg);   // r8-r14, gbr, vbr (A3-200)

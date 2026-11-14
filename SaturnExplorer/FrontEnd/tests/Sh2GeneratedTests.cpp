@@ -8627,8 +8627,46 @@ struct Shrinker
     // at the skip's end (Gen::AddPostPollJoin), and `endless-join-dropped` asks for that store. Take the store or the skip out, or the item
     // that sets the stored register, and the check asks for a store the program no longer makes: the shrunk words of grammar 1 seed 6906675
     // were reported with an `endless-join-dropped` their replay does not give.
+    // (area 11, A11-32) And so are the other post-poll productions' (Gen::AddPostPollRead, AddPostPollStore, AddPostPollCall, AddModulePoll):
+    // `postPollRead`, `postPollStore` and `postPollCall` (with `postPollCallStore`) name the item the program ends with after its poll, and
+    // the oracle asks for it (`endless-read-dropped`, `endless-after-store-dropped`, `endless-call-dropped`) by the declaration, not by the
+    // items. Take the items out and keep the declaration, and the shrunk program is checked for a store or a call it no longer makes: the
+    // fixture of grammar 1 seed 9200735 (shrunk from `endless-after-store-dropped`, before A3-198) was 10 words with no store at 0x26003000,
+    // reported with "the program stores 4 byte(s) at 26003000 ...". A declaration's items stay, or the step is not taken.
+    static bool HasShape(const Func& f, const char* shape)
+    {
+        bool found = false;
+        ForEachConstItem(f, [&](const Item& it) { found = found || std::strcmp(it.shape, shape) == 0; });
+        return found;
+    }
+    static bool PostPollIntentHolds(const Program& p)
+    {
+        const bool v2 = p.version != 1;
+        if (p.postPollRead != 0 || p.postPollStore != 0)
+        {
+            const int fi = v2 ? p.postPollFn : 0;
+            if (fi < 0 || fi >= static_cast<int>(p.fns.size())) return false;
+            const Func& f = p.fns[static_cast<size_t>(fi)];
+            if (p.postPollRead != 0 && !HasShape(f, v2 ? "mod_poll.store_param" : "post.poll.store")) return false;
+            if (p.postPollStore != 0 && v2 && !(HasShape(f, "mod_poll.litptr") && HasShape(f, "mod_poll.const") && HasShape(f, "mod_poll.store"))) return false;
+            if (p.postPollStore != 0 && !v2 && !(HasShape(f, "post_store.litptr") && HasShape(f, "post_store.const") && HasShape(f, "post_store.store"))) return false;
+        }
+        if (p.postPollCall != 0)
+        {
+            if (p.postPollCall < 0 || p.postPollCall >= static_cast<int>(p.fns.size()) || p.fns.empty()) return false;
+            bool call = false;
+            ForEachConstItem(p.fns[0], [&](const Item& it) {
+                call = call || (it.type == Item::Call && it.callee == p.postPollCall && std::strncmp(it.shape, "post_call.", 10) == 0);
+            });
+            if (!call) return false;
+            const Func& g = p.fns[static_cast<size_t>(p.postPollCall)];
+            if (p.postPollCallStore != 0 && !(HasShape(g, "post_call.callee.litptr") && HasShape(g, "post_call.callee.store"))) return false;
+        }
+        return true;
+    }
     static bool IntentHolds(const Program& p)
     {
+        if (!PostPollIntentHolds(p)) return false;   // (A11-32)
         if (p.postJoin != 0)
         {
             bool skip = false, store = false, set = false;
@@ -8805,6 +8843,11 @@ struct Shrinker
         }
         for (Lit& l : p.lits)
             if ((l.kind == LitKind::Fn || l.kind == LitKind::FnRel) && l.fn > k) --l.fn;
+        // (A11-32) ...and the declarations that name a function (a removed one's: none left, which IntentHolds refuses)
+        if (p.postPollFn > k) --p.postPollFn;
+        else if (p.postPollFn == k) p.postPollFn = -2;
+        if (p.postPollCall > k) --p.postPollCall;
+        else if (p.postPollCall == k) p.postPollCall = -1;
     }
 
     Program Run()
@@ -18515,10 +18558,50 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (size_t at = w.text.find("this call may change "); at != std::string::npos; at = w.text.find("this call may change ", at + 1)) ++cautions;
             const bool one = w.text.find("this call may change r9, read after it") != std::string::npos;
             const bool two = w.text.find("this call may change r9 and r10, read after it") != std::string::npos;
-            const bool likewise = w.text.find("likewise at the calls") != std::string::npos;
+            const bool likewise = w.text.find("; likewise") != std::string::npos;
             std::printf("pin 'A3-197 w8': %zu finding(s), %zu caution(s), r9 %d, r9 and r10 %d, likewise %d\n", w.findings.size(), cautions, int(one), int(two),
                         int(likewise));
             CHECK(w.findings.empty() && cautions == 2 && one && two && likewise);
+        }
+        // A3-202 (`tools/a3_a3202/fixtures.src`): the mark was one call per value, and a join kept the first side's. x4 (round 26's): two calls of
+        // vCr8's F1 on the two arms of `tst r6,r6 ; bt`, joined, then 7 stored through r8: the caution at one call only, and with an address-order
+        // "likewise at the calls below" the arm printed first (the later address) would be pointed at by nothing above it. Now each call has
+        // its own caution (w8 above: calls in a row, each after the first on every path, still share one, "likewise"). Control x4c: x4 with
+        // the r6 = 0 arm calling F2, which keeps r8: one caution, at F1's call (0x06009040), not at F2's (0x06009060).
+        {
+            struct Placement
+            {
+                const char* name;
+                const char* words;
+                const char* funcs;
+                const char* returns;
+                const char* calls;   // the call printed after each caution, in the text's order
+                bool likewise;
+            };
+            const Placement placements[] = {
+                { "A3-202 x4", "4F22 2F86 7FF8 E205 2F22 68F3 2668 8903 B016 0009 A002 0009 B012 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                               "2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/2c,40/40/52", "1,0", "func_0x06009040 func_0x06009040", false },
+                { "A3-202 control x4c", "4F22 2F86 7FF8 E205 2F22 68F3 2668 8903 B016 0009 A002 0009 B022 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                        "2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/2c,40/40/52,60/60/64", "1,0,0", "func_0x06009040", false },
+            };
+            for (const Placement& f : placements)
+            {
+                const ModulePin m = { f.name, f.words, f.funcs, nullptr, f.returns, nullptr, nullptr };
+                const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+                std::string calls;
+                for (size_t at = w.text.find("this call may change r8, read after it"); at != std::string::npos;
+                     at = w.text.find("this call may change r8, read after it", at + 1))
+                {
+                    const size_t c = w.text.find("func_0x", at);
+                    if (c != std::string::npos) calls += (calls.empty() ? "" : " ") + w.text.substr(c, 15);
+                }
+                const bool likewise = w.text.find("; likewise") != std::string::npos;
+                std::printf("pin '%s': %zu finding(s), cautions at [%s], likewise %d\n", f.name, w.findings.size(), calls.c_str(), int(likewise));
+                for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+                CHECK(w.findings.empty() && calls == f.calls && likewise == f.likewise && w.text.find("return 7;") != std::string::npos);
+            }
         }
     }
     {
@@ -18555,6 +18638,45 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         CHECK(changed == 2 && count(c, "endless-after-store.said") > 0 && count(c, "endless-call.said") > 0 && count(c, "endless-after-store.unmade") == 0 &&
               count(c, "endless-call.unmade") == 0);
         for (const Finding& f : c.findings) CHECK(f.sig.find("endless-") == std::string::npos);
+    }
+    {
+        // A11-32 (area 11, the shrinker): the oracle asks for the item a post-poll production ends with by the program's declaration
+        // (postPollStore, postPollCall, postPollRead), and the shrinker took the items out and kept it: seed 9200735's fixture (shrunk from
+        // `endless-after-store-dropped` before A3-198) had no store at 0x26003000 and was reported with one. Now a step that takes out a
+        // declared item is not taken (Shrinker::IntentHolds). The seed's program: the intent holds; without the store, or without the
+        // call, it does not; the shrinker with every step accepted keeps both; and every program of the first 2,000 seeds of each grammar
+        // holds its own declarations (else no seed of it could be shrunk at all).
+        const Program p = Generate(9200735);
+        auto without = [&p](const char* shape) {
+            Program q = p;
+            for (Func& f : q.fns)
+                f.items.erase(std::remove_if(f.items.begin(), f.items.end(), [shape](const Item& it) { return std::strcmp(it.shape, shape) == 0; }), f.items.end());
+            return q;
+        };
+        auto shapes = [](const Program& q, const char* shape) {
+            int n = 0;
+            for (const Func& f : q.fns) ForEachConstItem(f, [&](const Item& it) { n += std::strcmp(it.shape, shape) == 0 ? 1 : 0; });
+            return n;
+        };
+        const bool holds = Shrinker::IntentHolds(p), noStore = !Shrinker::IntentHolds(without("post_store.store")),
+                   noCall = !Shrinker::IntentHolds(without("post_call.jsr")) || shapes(p, "post_call.jsr") == 0;
+        Shrinker s{ d, p, "" };
+        s.accept = [](const Program&) { return true; };
+        s.budget = 5000;
+        const Program small = s.Run();
+        int bad = 0;
+        for (uint64_t sd = 1; sd <= 2000; ++sd)
+        {
+            if (!Shrinker::IntentHolds(Generate(sd))) ++bad;
+            if (!Shrinker::IntentHolds(MakeV2(sd))) ++bad;
+        }
+        std::printf("pin 'A11-32 grammar 1 seed 9200735': store at %08X, call %d; intent holds %d, not without the store %d, not without the call %d; "
+                    "shrunk with every step accepted (%d steps): %zu item(s) in function 0, post_store.store %d, post_call %d; seeds 1-2000 refused %d\n",
+                    p.postPollStore, p.postPollCall, int(holds), int(noStore), int(noCall), s.evals, small.fns.empty() ? size_t(0) : small.fns[0].items.size(),
+                    shapes(small, "post_store.store"), shapes(small, "post_call.jsr") + shapes(small, "post_call.bsr"), bad);
+        CHECK(p.postPollStore == 0x26003000u && p.postPollCall == 1 && holds && noStore && noCall);
+        CHECK(Shrinker::IntentHolds(small) && shapes(small, "post_store.store") == 1 && shapes(small, "post_call.jsr") + shapes(small, "post_call.bsr") == 1);
+        CHECK(bad == 0);
     }
     {
         // A3-193 (area 3, oracle): grammar 2 seed 8602477, `n:return-dropped`. Each arm of `tst r4,r4 ; bf` ends with `mov #7,r0 ; mov.b @(r0,r4),r1`
