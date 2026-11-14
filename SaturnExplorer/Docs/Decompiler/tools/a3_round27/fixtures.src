@@ -779,3 +779,34 @@ mov r14,r15
 mov.l @r15+,r14
 rts
 mov.l @r15+,r8
+name lp2
+# lp with a count the walk cannot fold (`extu.b r5,r1 ; add #1,r1`): the loop's join widens r8's offset (Widen: "possibly below")
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+extu.b r5,r1
+add #1,r1
+L1:
+add #4,r8
+mov.l @r8,r2
+add #-4,r8
+dt r1
+bf L1
+rts
+mov r3,r0
