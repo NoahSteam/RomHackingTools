@@ -11300,7 +11300,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // (area 3, A3-197) A call whose unlent callee returns with one of r8-r14 changed on some path, read after the call: the text takes the call
         // to keep it (the default model), and says so at the call. One caution names every such register of the call, and a set of registers is
         // said once, at the first call, with "likewise at the calls below" when it holds at others (as A3-108's frame notes): a hand-written helper
-        // that keeps its state in r9 and r10 is called 27 times in a row (0600DC56/007).
+        // that keeps its state in r9 and r10 is called 28 times in a row (0600DC56/007).
         {
             std::map<uint32_t, uint32_t> firstOf;   // the registers -> the first call they are said at
             std::set<uint32_t> likewise;
