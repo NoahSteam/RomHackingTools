@@ -17869,7 +17869,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         // in a register, calls F1 (which may leave it there; the engine kills it), then calls F2, a walked callee (not lent: it reads the
         // register on entry) that stores 7 through the register, and returns the local (`tools/a3_round25/fixtures.src`). The mark was let out
         // at a later call only for r2 and r4-r7: `return 5;`, where every run with r4 != 0 returns 7. Now it goes out for the registers the
-        // walked callee lets out or stores through, with the note's "may". k4d: r3 (F1 lent, sets r3 on one return); k4f: r1; k4g: r9 (saved
+        // walked callee lets out or stores through (no note: the note is said of a value that is a frame address, not of one that may be). k4d: r3 (F1 lent, sets r3 on one return); k4f: r1; k4g: r9 (saved
         // by the caller); vDr0: r0; vEr1: r1, F1 not lent; vDr13: r13. Controls (right before): k4e (no F1), k4h (F1 keeps r0).
         struct Fixture
         {
@@ -17882,17 +17882,17 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         };
         const Fixture fixtures[] = {
             { "A3-194 k4d", "4F22 7FF8 E205 2F22 63F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E300 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2322",
-              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "a frame address may be in r3 here" },
+              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "" },
             { "A3-194 k4f", "4F22 7FF8 E205 2F22 61F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E100 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2122",
-              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "a frame address may be in r1 here" },
+              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "" },
             { "A3-194 k4g", "4F22 2F96 7FF8 E205 2F22 69F3 B008 0009 B016 0009 60F2 7F08 69F6 4F26 000B 0009 2448 8B02 E900 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2922",
-              "0/0/20,20/20/2e,40/40/46", "1,0,0", "return xStack_10;", "a frame address may be in r9 here" },
+              "0/0/20,20/20/2e,40/40/46", "1,0,0", "return xStack_10;", "" },
             { "A3-194 vDr0", "4F22 7FF8 E205 2F22 60F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E000 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2022",
-              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "a frame address may be in r0 here" },
+              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "" },
             { "A3-194 vEr1", "4F22 7FF8 E205 2F22 61F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2338 8904 2448 8B02 E100 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2122",
-              "0/0/1c,20/20/32,40/40/46", "1,0,0", "return xStack_c;", "a frame address may be in r1 here" },
+              "0/0/1c,20/20/32,40/40/46", "1,0,0", "return xStack_c;", "" },
             { "A3-194 vDr13", "4F22 2FD6 7FF8 E205 2F22 6DF3 B008 0009 B016 0009 60F2 7F08 6DF6 4F26 000B 0009 2448 8B02 ED00 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2D22",
-              "0/0/20,20/20/2e,40/40/46", "1,0,0", "return xStack_10;", "a frame address may be in r13 here" },
+              "0/0/20,20/20/2e,40/40/46", "1,0,0", "return xStack_10;", "" },
             { "A3-194 control k4e", "4F22 7FF8 E205 2F22 63F3 B009 0009 60F2 7F08 4F26 000B 0009 0009 0009 0009 0009 E207 000B 2322", "0/0/18,20/20/26", "1,0",
               "return xStack_c;", "a frame address is in r3 here" },
             { "A3-194 control k4h", "4F22 7FF8 E205 2F22 60F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2022",

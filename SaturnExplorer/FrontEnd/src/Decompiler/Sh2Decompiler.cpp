@@ -1286,14 +1286,11 @@ private:
                     if (r == kR15 || !((regs >> r) & 1u)) continue;
                     const Value x = Get(s, mReg[r]);
                     // (area 3, A3-194) ...and a value kept across an earlier call (Value::kept) in a register this callee reads for what it lets
-                    // out or stores through: the engine sees the earlier call's output there, so the address goes out now (UseKept), with the
-                    // note's "may" (the register is no argument the engine shows). Only r2 and r4-r7 were let out at a later call (above), and
-                    // a walked callee that stores 7 through r3, r1, r0 or r9 kept by the call before it gave `return 5;` where runs return 7.
-                    if (keepKept && x.kept != 0)
-                    {
-                        UseKept(s, x);
-                        if (r != 2 && (r < 4 || r > 7)) mHandSites[at] |= 1u << r;
-                    }
+                    // out or stores through: the engine sees the earlier call's output there, so the address goes out now (UseKept). Only r2
+                    // and r4-r7 were let out at a later call (above), and a walked callee that stores 7 through r3, r1, r0 or r9 kept by the
+                    // call before it gave `return 5;` where runs return 7. No note, as for any value that only may be a frame address (the
+                    // note is said of x.Frame()): with one, 298 corpus texts gained a caution and no line of code.
+                    if (keepKept) UseKept(s, x);
                     if (!MayBeFrame(s, x)) continue;
                     HandOut(s, x);
                     if (r != 2 && (r < 4 || r > 7) && x.Frame()) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
