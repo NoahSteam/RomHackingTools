@@ -220,7 +220,7 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
-//   SE_GENERATED_MUTATE=1|ledger|caution|second|alias|params|ret|body|cases|warn|preserved|claims|lent|data|honour|kept|tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe|toksilent
+//   SE_GENERATED_MUTATE=1|ledger|caution|cautionlate|second|alias|params|ret|body|cases|warn|preserved|claims|lent|data|honour|kept|tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe|toksilent
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
 //   SE_GENERATED_COVERAGE=1  print the mnemonics of the generated programs and how often each was emitted
@@ -5565,6 +5565,31 @@ void Mutate(DecompileResult& r, const Subject& s, int fi)
             }
             while (i < r.lines.size() && r.lines[i].text.find("*/") == std::string::npos) ++i;
         }
+        r.lines.swap(keep);
+    }
+    else if (gMutateKind == "cautionlate")
+    {
+        // (area 3, round 28, A3-216) The host that said a caution with "likewise" at the wrong call: every "this call may change ..." comment
+        // moved to before the last line that calls (a "likewise" there covers no call before it)
+        std::vector<Line> keep, moved;
+        for (size_t i = 0; i < r.lines.size(); ++i)
+        {
+            if (r.lines[i].text.find("/* this call may change ") == std::string::npos)
+            {
+                keep.push_back(r.lines[i]);
+                continue;
+            }
+            for (; i < r.lines.size(); ++i)
+            {
+                moved.push_back(r.lines[i]);
+                if (r.lines[i].text.find("*/") != std::string::npos) break;
+            }
+        }
+        size_t last = keep.size();
+        for (size_t i = 0; i < keep.size(); ++i)
+            if (keep[i].text.find("func_0x") != std::string::npos && keep[i].text.find('(') != std::string::npos && !keep[i].tokens.empty()) last = i;
+        if (last < keep.size()) keep.insert(keep.begin() + static_cast<std::ptrdiff_t>(last), moved.begin(), moved.end());
+        else keep.insert(keep.end(), moved.begin(), moved.end());
         r.lines.swap(keep);
     }
     else if (gMutateKind == "second")
@@ -19909,7 +19934,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
     // text that reads `unaff_r10`). A3-217: kn1 reads an uninitialised word of its frame and calls a lent L that sets r9; with the text made to
     // read `unaff_r9` (SE_GENERATED_MUTATE=kept's damage) the kept-read check reports r9 (before: excused by the unrelated stale read). A3-218
     // and A3-215 in the grammar: seeds 12010184 and 12024784 (the function's own write of r8 before the call; a goto after
-    // `unaff_r11 = extraout_r11;`) and 12010219, no finding.
+    // `unaff_r11 = extraout_r11;`) and 12010219, no finding; A3-222's seeds below.
     {
         const ModulePin cases[] = {
             { "A3-215 mx2", "4F22 2F96 2FC6 6943 EC05 B009 0009 B017 0009 29C2 6CF6 69F6 4F26 000B 0009 0009 2338 8B00 EC00 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
@@ -19953,13 +19978,39 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
             CHECK(clean.findings.empty() && Has(cut, "n:kept-read:r9"));
         }
-        for (uint64_t seed : { 12010184ull, 12024784ull, 12010219ull })
+        // (A3-216) ...and the oracle's "likewise": lw1 (two calls of U, which steps r8 by 4 when r3 = 0; both changes matter) says the caution at the
+        // first call with "likewise"; moved to the second call (SE_GENERATED_MUTATE=cautionlate's damage), the first call's is not said, which a
+        // "likewise" anywhere in the text passed before
         {
-            const Report rep = Evaluate(d, MakeV2(seed), false);
-            std::printf("pin 'A3-218/A3-215 grammar 2 seed %llu': %zu finding(s), caution said %d\n", static_cast<unsigned long long>(seed), rep.findings.size(),
+            const ModulePin m = { "A3-216 lw1", "4F22 2F86 7FF0 E205 1F21 68F3 B018 0009 B016 0009 E207 2822 50F1 7F10 68F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                                "2338 8B00 7804 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                                  "0/0/24,40/40/4a", nullptr, "1,0", "0,100", nullptr };
+            const Report clean = EvaluateSubject(d, ModuleSubject(m), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "cautionlate";
+            const Report late = EvaluateSubject(d, ModuleSubject(m), true);
+            gMutateKind = kept;
+            std::printf("pin '%s': as printed %zu finding(s), required %d, said %d, likewise %d; the caution moved to the second call: caution-elsewhere %d\n", m.name,
+                        clean.findings.size(), count(clean, "caution.required"), count(clean, "caution.said"), count(clean, "caution.said.likewise"),
+                        int(Has(late, "n:caution-elsewhere")));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.said.likewise") > 0 && Has(late, "n:caution-elsewhere"));
+        }
+        // (A3-222) ...and grammar 2 seeds 12018998, 12020079, 12027491, 12029336: a later unlent callee loads through GBR, or lets out a value that
+        // is GBR on one path (`stc gbr,r2`, joined with a load), after an earlier call that may change GBR: the caution said, no finding
+        struct Seed
+        {
+            uint64_t seed;
+            bool said;
+        };
+        const Seed seeds[] = { { 12010184, false }, { 12024784, false }, { 12010219, true }, { 12018998, true }, { 12020079, true }, { 12027491, true }, { 12029336, true } };
+        for (const Seed& sd : seeds)
+        {
+            const Report rep = Evaluate(d, MakeV2(sd.seed), false);
+            std::printf("pin 'A3-215/A3-218/A3-222 grammar 2 seed %llu': %zu finding(s), caution said %d\n", static_cast<unsigned long long>(sd.seed), rep.findings.size(),
                         count(rep, "caution.said"));
             for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
-            CHECK(rep.findings.empty());
+            CHECK(rep.findings.empty() && (!sd.said || count(rep, "caution.said") > 0));
         }
     }
 }

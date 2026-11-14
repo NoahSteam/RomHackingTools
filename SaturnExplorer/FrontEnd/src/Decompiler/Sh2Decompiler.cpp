@@ -1046,7 +1046,10 @@ private:
         int r = -1;
         if (v.kind == Value::Reg) r = static_cast<int>(v.v);
         else if (v.kind == Value::Fuzzy && v.part >= 0) r = v.part;
-        const uint32_t may = v.mayEntry & kModelKept & ~v.stale;
+        uint32_t may = v.mayEntry & kModelKept & ~v.stale;
+        // (area 3, round 28, A3-222) ...and a join one side of which is (or is made from) a register of r8-r14, GBR or VBR as it came in: it
+        // may be that value (grammar 2 seed 12018998: `stc gbr,r2` on one path, a load on the other, then `mov.b r2,@r5`)
+        if (v.kind == Value::Fuzzy && v.def == Value::kJoin) may |= v.Origins() & kModelKept & ~v.stale;
         if (r < 0 || r >= kTracked || ((v.stale >> r) & 1u)) return may;
         return (1u << r) | may;
     }
@@ -1463,6 +1466,16 @@ private:
                     HandOut(s, x);
                     if (r != 2 && (r < 4 || r > 7) && x.Frame()) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
                     if (r != 2 && (r < 4 || r > 7) && x.Sure()) mHandSure[at] |= 1u << r;     // (A3-120) ...with "is" only of a fact
+                }
+                // (area 3, round 28, A3-222) ...and a register of r8-r14, GBR or VBR whose entry value the callee reads in any way (CalleeEntryRead:
+                // an address it loads through too, not only one it stores through or lets out): the callee's own text reads it as its entry
+                // value (`*(xunknown2 *)(unaff_gbr + 10)`, withheld "it reads gbr on entry"), which is what an earlier call may have changed
+                // (grammar 2 seeds 12018998, 12020079, 12025721, 12027491: function 2 sets GBR on one path and loads through it)
+                if (keepKept && mUnkeptSeen && haveTarget)
+                {
+                    const uint32_t read = CalleeEntryRead(target) & kModelKept;
+                    for (int r = 0; r < kTracked; ++r)
+                        if ((read >> r) & 1u) UseUnkept(Get(s, mReg[r]));
                 }
             }
         }

@@ -791,7 +791,7 @@ nop
 # kr2: a lent L loads GBR from r4; the caller returns GBR after it (stc gbr,r0)
 name kr2
 ret 1,0
-env SE_GENERATED_CLOBBERS=0,20000
+env SE_GENERATED_CLOBBERS=0,20000 SE_GENERATED_READS=20000,0
 .word 0x4F22
 stc gbr,r1
 mov.l r1,@-r15
@@ -829,3 +829,61 @@ L:
 mov #3,r9
 rts
 nop
+#
+# ---- 7. The oracle's "likewise" ----
+# lw1: two calls of U in a row; U steps r8 by 4 when r3 = 0; 7 stored through r8 (r15 at the start), the word at r15 + 4 returned. Run also with
+# SE_GENERATED_MUTATE=cautionlate (the caution moved to the second call): the first call's caution is then not said
+name lw1
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@(4,r15)
+mov r15,r8
+bsr F1
+nop
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @(4,r15),r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+add #4,r8
+K1:
+rts
+mov r3,r0
+#
+# ---- 8. A3-108's note for r2 (060622E0/008's shape) ----
+# fr2: a local of 5, its address made in r2 and copied to r4 (`mov r2,r4`, -O0 code), U (not lent) stores 7 through r4; the local returned.
+# The text shows the address as U's argument; the note says it is "in none of the arguments"
+name fr2
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r1
+mov.l r1,@r15
+mov r15,r2
+mov r2,r4
+bsr U
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+U:
+mov #7,r1
+mov.l r1,@r4
+rts
+mov r3,r0
