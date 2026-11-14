@@ -1067,6 +1067,19 @@ private:
     static bool Merge(Value& a, const Value& b, uint8_t out = 0)
     {
         if (a == b) return false;
+        // (area 3, A3-197) the same value with and without the caution's mark is that value, marked: not a join of two
+        {
+            Value bm = b;
+            bm.unkeptAt = a.unkeptAt;
+            bm.unkeptReg = a.unkeptReg;
+            if (a == bm)
+            {
+                if (a.unkeptAt != 0) return false;
+                a.unkeptAt = b.unkeptAt;
+                a.unkeptReg = b.unkeptReg;
+                return true;
+            }
+        }
         Deps dep = a.DepsOf();
         dep |= b.DepsOf();
         Value m = Value::From(a.Origins() | b.Origins(), dep);
@@ -1652,9 +1665,6 @@ private:
         }
         return f != ctx->Handed().end() ? f->second : kHandedRegs;
     }
-    // A3-86 a: the registers a captured, unlent callee may store below the pointer it was handed, from the frame-words walk's
-    // record (or that walk, run now). 0x7FFF (every register) when the callee could not be walked: fail closed; kConvention for one whose code
-    // is not captured (area 3 round 12 fix).
     // (area 3, A3-197) The registers of r8-r14 a captured, unlent callee returns with changed on some path, as its walk shows; 0 when it
     // could not be walked (nothing is shown).
     uint32_t CalleeChanged(uint32_t target)
@@ -1668,6 +1678,9 @@ private:
         }
         return f != ctx->Changed().end() ? f->second : 0u;
     }
+    // A3-86 a: the registers a captured, unlent callee may store below the pointer it was handed, from the frame-words walk's
+    // record (or that walk, run now). 0x7FFF (every register) when the callee could not be walked: fail closed; kConvention for one whose code
+    // is not captured (area 3 round 12 fix).
     uint32_t CalleeStoresBelow(uint32_t target)
     {
         NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
