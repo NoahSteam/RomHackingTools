@@ -631,3 +631,117 @@ F3:
 mov #0,r8
 rts
 mov r3,r0
+name sw1
+# A3-108's wording: F0 pushes r8 and PR and calls U2, which writes its incoming stack word (`mov.l @r15,r1 ; mov.l r1,@r15`: the word at the call's r15, F0's saved PR); F0 pops PR and r8 after: "a saved register's word ..." (control)
+ret 0,1
+mov.l r8,@-r15
+.word 0x4F22
+bsr U2
+nop
+.word 0x4F26
+mov.l @r15+,r8
+rts
+nop
+fn
+U2:
+mov.l @r15,r1
+mov.l r1,@r15
+rts
+mov r3,r0
+name sw2
+# sw1 with a call of U1 (`rts ; mov r3,r0`: not lent, writes nothing) before U2's: the word U2 may write is still the saved PR's. Right: "a saved register's word ..."
+ret 0,1,1
+mov.l r8,@-r15
+.word 0x4F22
+bsr U1
+nop
+bsr U2
+nop
+.word 0x4F26
+mov.l @r15+,r8
+rts
+nop
+fn
+U2:
+mov.l @r15,r1
+mov.l r1,@r15
+rts
+mov r3,r0
+fn
+U1:
+rts
+mov r3,r0
+name sa1
+# the shape of 06060F34/008 (A3-108's stack-argument note): &local (r14 + 8) kept in the frame word r14 + 16; U1 (not lent, writes nothing), then U2 handed that word in r5 (`mov.l @(16,r14),r5`): the address is shown as an argument
+ret 0,1,1
+.word 0x4F22
+add #-20,r15
+mov r15,r14
+mov r14,r1
+add #8,r1
+mov.l r1,@(16,r14)
+bsr U1
+nop
+mov.l @(16,r14),r5
+bsr U2
+mov #0,r4
+add #20,r15
+.word 0x4F26
+rts
+nop
+fn
+U2:
+rts
+mov r3,r0
+fn
+U1:
+rts
+mov r3,r0
+name sa0
+# control: sa1 without U1's call
+ret 0,1
+.word 0x4F22
+add #-20,r15
+mov r15,r14
+mov r14,r1
+add #8,r1
+mov.l r1,@(16,r14)
+mov.l @(16,r14),r5
+bsr U2
+mov #0,r4
+add #20,r15
+.word 0x4F26
+rts
+nop
+fn
+U2:
+rts
+mov r3,r0
+name sa2
+# 06060F34/008's shape: &local (r14 + 8) kept in the frame word r14 + 16; U1 lent (`mov #1,r1 ; rts ; mov.b r1,@r5`: stores through r5) handed r14 + 9 in r5, then U2 (not lent: it returns r3) handed the word in r5 (`mov.l @(16,r14),r5`): the address the word holds is the argument the text shows (pxStack_8)
+ret 1,0,1
+.word 0x4F22
+add #-20,r15
+mov r15,r14
+mov r14,r1
+add #8,r1
+mov.l r1,@(16,r14)
+mov.l @(16,r14),r5
+bsr U1
+add #1,r5
+mov.l @(16,r14),r5
+bsr U2
+mov #0,r4
+add #20,r15
+.word 0x4F26
+rts
+nop
+fn
+U1:
+mov #1,r1
+rts
+mov.b r1,@r5
+fn
+U2:
+rts
+mov r3,r0
