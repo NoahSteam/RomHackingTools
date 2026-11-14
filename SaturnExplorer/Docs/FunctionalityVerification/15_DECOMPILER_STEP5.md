@@ -21058,3 +21058,61 @@ No area 3 finding. Routed below.
 
 * **Area 7:** grammar 1 seed 8901149 (`v:map-way-back`, "the instruction 06009030 is answered with a copy materialised there before its own statement (A7-25)"), grammar 1 seed 8909710 (`n:map-way-back`, at 0600901C), grammar 2 seed 8900054 (`n:map-store-after`, "line 25 `xStack_10 = unaff_r12;` is drawn at 06009034 (a call or a return) and names the store at 0600906E, which cannot run before it (A7-32)"). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`. Not shrunk.
 * **Area 5:** grammar 1 seed 8902817 (`v:folded-read-after-pointer-write`, A5-139's oracle: "the read at 06009018 the engine folded from 26002180 is named on no line, and line 31 reads the global after the write through a pointer at 06009022"). Not shrunk.
+
+## Area 7 round 21 and area 5 routed 9006019
+
+Fixer, branch `review/7-round21` cut at master `51afd0e9` (patches to 0094; 0091 and 0095 stay free). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). **No product change, no engine patch**: every finding of this round is an oracle false positive (`MappingOracle.h`, `Sh2GeneratedTests.cpp`); no printed text is wrong (no P1). Each fix reads `SE_A7_RULE_OFF=<n>` (the area 5 ones as 5142 to 5145). Scripts: `Docs/Decompiler/tools/a7_round21/` (`mutation.sh`, `sweeps.sh`, `final.sh`). Backups on `backup/review-7-round21`.
+
+| Row | P | Outcome |
+|---|---|---|
+| A7-162 | P3 | **fixed, oracle**: grammar 2 seed 9002796 (`n:map-const-join`) |
+| A5-142 | P3 | **filed and fixed, oracle**: grammar 2 seed 9006019 (`n:folded-read-after-pointer-write`) |
+| A5-143 | P3 | **filed and fixed, oracle**: grammar 2 seed 9207077 (`n:folded-store-after-access`) |
+| A5-144 | P3 | **filed and fixed, oracle**: grammar 1 seed 9201666 (`v:folded-read-after-pointer-write`) |
+| A5-145 | P3 | **filed and fixed, oracle**: grammar 1 seed 9200599 (`n:` and `v:folded-read-after-access`) |
+| A7-164 | P3 | **filed and fixed, oracle**: grammar 1 specials seed 9300913 (`v:map-const-join`) |
+| A7-165 | P3 | **filed open**: grammar 1 specials seed 9302668 (`v:map-way-back` at 0x0600900A), not root-caused |
+| A3-194 | P3 | **filed open, routed to area 3**: grammar 1 seed 9200735 (`endless-after-store-dropped`, `endless-call-dropped`) |
+
+### 1. A7-162: seed 9002796
+
+`mov #0xe,r1 ; mov.l r1,@-r15 ; mov #-0x52,r0 ; mov.l @r15+,r1 ; and r1,r0 ; mov #5,r1 ; ... ; L: or r0,r1`: `xVar1 = 0xf;` is right. A temporary print in the `and` showed r1 unknown, and one in the pop's walk that the push was not found: the walk over the instructions between a push and its pop (A7-40, `between`) took every opcode from 0xCC up for a store (meant: the gbr byte operations 0xCC to 0xCF), so the `mov #imm,Rn` (0xE...) and the pc-relative loads (0xD...) between them ended it. Fix: 0xCC to 0xCF only. The `n:` text was never wrong. Fixture `TestArea7Round21` (`Sh2DecompilerTests.cpp`: the module decompiled at 0x06009022, no violation, the rule off a violation), pins `TestArea7Round21Pins` (seed whole; shrunk module with its printed replay line pasted and replayed).
+
+### 2. A5-142: seed 9006019 (product or oracle: oracle, no wrong value)
+
+Function 0 runs into function 1: `mov.b @(5,r6),r0` (a read of 0x26002109, dead), `bf/s ; mov.b r3,@r4` (a write through a pointer), `rts ; mov.b @r6,r0`. The text `*param_1 = in_r3; return (int4)cRam26002104;` is the code's order. The rule `folded-read-after-pointer-write` (the unnamed-read search, `readsGlobal`) took any global named within 8 bytes of the read's address for the read's bytes; a `c` (char) global is the one byte. Fix: a char global of another address than the read's is counted (`order.folded-read-before-pointer-write.char-global`). Pins `TestA5FoldedPins3` (seed whole; shrunk module with its printed replay line).
+
+### 3. Sweeps (`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`; `sweeps.sh`)
+
+| Run | Failing seeds | Findings |
+|---|---|---|
+| grammar 1, 10,000 from 9,200,001 | 3 | 9200599 (A5-145), 9200735 (A3-194), 9201666 (A5-144) |
+| grammar 2, 10,000 from 9,200,001 | 1 | 9207077 (A5-143) |
+| grammar 1 specials, 5,000 from 9,300,001 | 2 | 9300913 (A7-164), 9302668 (A7-165) |
+
+* **A5-143 (9207077).** A function that runs into another function's entry: the store of 0x00000018 is printed after the frame walk that follows it in the code. The static order rule took the walk's write through a pointer for one that may reach the global; every run's trace puts it in the run's own frame (A5-137 (b) made that reading for the run-based rule only). Set aside when all traced executions are in the own frame and the store's address is outside the stack (`order.folded-store.frame-pointer`).
+* **A5-144 (9201666).** `xRam26002384 = CONCAT11(0x5b,(xunknown1)xRam26002384);`, the widened byte store of a constant (the half-word read before it is dead), judged as a read of the global after a pointer write. `PieceOfAssignedGlobal` set aside the `._1_3_` piece forms; now also the assigned global read as a cast operand inside a `CONCAT` of its own statement.
+* **A5-145 (9200599).** A slot's read the early return does not use, printed only on the other path (`return in_r1 & 0xff; }` then `iVar5 = (int4)cRam26002300;`): the read's line is after a write whose block returns. Set aside when a `return` follows the write at its own block depth before the read's line, with no label or `goto` between (`order.folded-read-before-access.returned`).
+* **A7-164 (9300913).** `tst #8,r0 ; bt` and two `cmp/eq #imm,r0 ; bf` of r0 = 7 before a `rotr r0`: each condition's never-taken edge asks the value of r0, nested once more; six levels gave no number at the `rotr` (any one of the three removed, it passed). The nesting bound is now eight (`OracleDepth()`); the 20,000-seed matrix time is unchanged.
+* **A7-165 (9302668), open.** The marked-volatile request's `xRam26001030 = Ram26001028;` for `mov.w @r7,r0 ; mov.w r0,@(8,r7)` after the poll of r7: the way back from the re-read (0x0600900A) is answered with a copy materialised there before its own statement. Not examined further (the oracle's `readHere` reading of `Ram26001028` as an operand is the first place to look).
+* **A3-194 (9200735), open, area 3.** `endless-after-store-dropped` and `endless-call-dropped` after a poll the text takes to run for ever.
+
+### 4. Pins and mutation (`mutation.sh`)
+
+Pins: `TestArea7Round21Pins` (A7-162), `TestA5FoldedPins3` (A5-142), `TestA5FoldedPins4` (A5-143 to A5-145 and A7-164: four seeds whole, three shrunk programs replayed from their printed replay lines, the A5-143 module and its replay line). Mutation (each rule off, the seed or shrunk program alone): A7-162 shrunk 0 findings on, 1 off; 9006019 0 on, 1 off; 9207077 0 on, 1 off; 9201666 0 on, 1 off; 9200599 0 on, 2 off; 9300913 (specials) 0 on, 1 off. The default run with 162, 5142, 5143, 5144, 5145 or 164 off reports 3, 2, 2, 2, 2, 2 CHECK failures (none with the rules on).
+
+### 5. Runs after the last code edit
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` | **117 of 117** passed |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (canary on, every pin) | **failing seeds=0; findings=0** |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus, both images, `SE_GAME_LEND=1` | every mapping count 0 (all passed); missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)": unchanged (no product change) |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint --tests-dir` ok (no vendored file touched) |
+
+### 6. Routed
+
+* **Area 7**: A7-165 (open, 9302668).
+* **Area 3**: A3-194 (open, 9200735).

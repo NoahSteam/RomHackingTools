@@ -283,9 +283,14 @@ static bool HasAssign(const std::string& t)
 // The address of the global a statement assigns (`xRam26002204 = ...`, `xRam26002204._2_2_ = ...`) and whether the text at `at` ("Ram...") is a piece of
 // that same global read in the statement (`xRam26002204._2_2_`): a half-word store the engine writes as a whole word keeps the other bytes with a read
 // of them, which is no read the code makes (A5-129, grammar 1 specials seed 6703972, `CONCAT22((int2)xVar2,xRam26002204._2_2_)`)
+// (A5-144: ...and the byte kept by a narrow store the engine widens through a cast, `xRam26002384 = CONCAT11(0x5b,(xunknown1)xRam26002384);` for a
+// byte store of 0x5b: the same global read as a cast operand inside a CONCAT, grammar 1 seed 9201666)
 static bool PieceOfAssignedGlobal(const std::string& text, size_t from, size_t at)
 {
-    if (from == 0 || at + 11 >= text.size() || text[at + 11] != '.') return false;
+    if (from == 0 || at + 11 > text.size()) return false;
+    const bool piece = at + 11 < text.size() && text[at + 11] == '.';
+    const bool castKept = !dts::A7RuleOff(5144) && !piece && at >= 2 && text[at - 2] == ')' && text.find("CONCAT", from) != std::string::npos;
+    if (!piece && !castKept) return false;
     const size_t b = text.find_first_not_of(' ');
     const size_t ram = text.find("Ram", b);
     if (b == std::string::npos || ram == std::string::npos || ram + 11 > from) return false;
@@ -7229,6 +7234,27 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (fb >= fr.reach.size() || mb >= fr.reach.size()) continue;
                     const bool after = runsAfter(fb, f.origOrder, mb, m.origOrder);
                     if (!after) continue;
+                    // (A5-143: a write through a pointer into the run's own frame -- a frame walk, `piVar3 = (int4 *)&xStack00000000; do { piVar3 =
+                    // piVar3 + -1; *piVar3 = ...; }` -- never reaches a global at a constant address outside the stack, and it is every run's
+                    // case: A5-137 (b)'s reading for the runs, here for the static order (grammar 2 seed 9207077, the store of 0x00000018 printed
+                    // after the walk that follows it in the code))
+                    if (!m.direct && !dts::A7RuleOff(5143) && !InStack(f.address))
+                    {
+                        bool any = false, own = true;
+                        for (const RunOut& run : runs)
+                            for (const TraceRec& t : run.trace)
+                                if (t.depth == 0 && t.insn == m.insn && t.write == m.write)
+                                {
+                                    const int32_t c = static_cast<int32_t>(t.addr - run.init[15]);
+                                    any = true;
+                                    own = own && InStack(t.addr) && c > -0x200 && c < 0x200;
+                                }
+                        if (any && own)
+                        {
+                            count("order.folded-store.frame-pointer");
+                            continue;
+                        }
+                    }
                     // (A5-109, fixed by patch 0085: a read through a pointer, or a register's access, the code makes after a folded store is
                     // judged like a write through a pointer. The engine took such a store for dead when two writes of the same value joined
                     // (`g = v; x = *p; if (c) g = v;`), or carried it into the next write of the global (`x = g; g = v; R = x`, `g = 0 ... g = g`),
@@ -7431,6 +7457,14 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 unsigned v = 0;
                                 if (at + 11 > l.text.size() || std::sscanf(l.text.c_str() + at + 3, "%8x", &v) != 1 || v > rd.address || rd.address >= v + 8u) continue;
                                 if (at >= 2 && l.text[at - 2] == '&') continue;
+                                // (A5-142: a char global, `cRam26002104`, is the one byte; a read of the byte at +5 is no read of it, grammar 2 seed 9006019,
+                                // `return (int4)cRam26002104;` after the dead read of 0x26002109 and the write through a pointer)
+                                if (!dts::A7RuleOff(5142) && at >= 1 && l.text[at - 1] == 'c' && (at == 1 || !(std::isalnum(static_cast<unsigned char>(l.text[at - 2])) || l.text[at - 2] == '_')) &&
+                                    (at + 11 >= l.text.size() || l.text[at + 11] != '.') && rd.address != v)
+                                {
+                                    count("order.folded-read-before-pointer-write.char-global");
+                                    continue;
+                                }
                                 if (PieceOfAssignedGlobal(l.text, from, at)) continue;
                                 return true;
                             }
@@ -7503,6 +7537,32 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     {
                         count(m.direct ? "order.folded-read-before-access.other-path" : "order.folded-read-before-pointer-write.other-path");
                         continue;
+                    }
+                    // (A5-145: a write the text follows with a `return` in its own block, and a line after that block's return: a read the code
+                    // makes on both paths, printed on the path that needs it, `if (c) { g = v; return; } x = *p;` for a slot's read the early return
+                    // does not use, grammar 1 seed 9200599)
+                    if (shown > statementEnd(m.firstLine) && !dts::A7RuleOff(5145))
+                    {
+                        bool returned = false, leaves = false;
+                        int depth = 0;
+                        for (int li = statementEnd(m.firstLine) + 1; li < shown && li < static_cast<int>(r.lines.size()) && !returned && !leaves; ++li)
+                        {
+                            const std::string& text = r.lines[static_cast<size_t>(li)].text;
+                            const size_t b = text.find_first_not_of(' ');
+                            if (b == std::string::npos) continue;
+                            if (text.find("LAB_") != std::string::npos || text.find("goto") != std::string::npos) { leaves = true; break; }
+                            if (depth == 0 && text.compare(b, 6, "return") == 0) { returned = true; break; }
+                            for (size_t k = b; k < text.size() && !leaves; ++k)
+                            {
+                                if (text[k] == '{') ++depth;
+                                if (text[k] == '}' && --depth < 0) leaves = true;
+                            }
+                        }
+                        if (returned)
+                        {
+                            count(m.direct ? "order.folded-read-before-access.returned" : "order.folded-read-before-pointer-write.returned");
+                            continue;
+                        }
                     }
                     if (shown > statementEnd(m.firstLine))
                         add(m.direct ? "folded-read-after-access" : "folded-read-after-pointer-write",
@@ -16842,6 +16902,42 @@ void TestArea7Round19Pins(Sh2Decompiler& d)
     gSpecialReads = savedSpecials;
 }
 
+// A7-162 (oracle): grammar 2 seed 9002796 (`n:map-const-join`), whole and shrunk (the module's replay line printed by the report, pasted and replayed):
+// `xVar1 = 0xf;` at `or r0,r1`, r0 made by an `and` with a pop of a push over a `mov #imm`. No finding of any kind.
+void TestArea7Round21Pins(Sh2Decompiler& d)
+{
+    {
+        const Report rep = Evaluate(d, MakeV2(9002796), true);
+        std::printf("pin 'A7-162 grammar 2 seed 9002796': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    static const ModulePin kShrunk = { "A7-162 grammar 2 seed 9002796 shrunk",
+                                       "2F86 2F96 2FA6 2FC6 0C2A 7FE8 6843 6953 6A63 7F18 4C2A 6CF6 6AF6 69F6 68F6 000B 0009 2FE6 7FE8 6EF3 E10E 2F16 E0AE 61F6 2019 E105 3412 8915 "
+                                       "4408 C702 014E 412B 0009 0009 0600 9058 0600 905C 0600 905C 0600 9060 0600 9060 A005 0009 A003 0009 A001 0009 210B 6060 7E18 6FE3 6EF6 000B 0009",
+                                       "0/0/22,22/22/72", "3e:4:5:64:58,5c,5c,60,60", "0,1", nullptr, nullptr };
+    const Report rep = EvaluateSubject(d, ModuleSubject(kShrunk), true);
+    std::printf("pin '%s': %zu finding(s)\n", kShrunk.name, rep.findings.size());
+    for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+    CHECK(rep.findings.empty());
+    const size_t at = rep.text.find("  replay: SE_GENERATED_WORDS=\"");
+    CHECK(at != std::string::npos);
+    if (at == std::string::npos) return;
+    const std::string line = rep.text.substr(at, rep.text.find('\n', at) - at);
+    auto value = [&](const char* name) {
+        const size_t k = line.find(std::string(name) + "=\"");
+        if (k == std::string::npos) return std::string();
+        const size_t from = k + std::strlen(name) + 2;
+        return line.substr(from, line.find('"', from) - from);
+    };
+    const std::string w = value("SE_GENERATED_WORDS"), f = value("SE_GENERATED_FUNCS"), t = value("SE_GENERATED_TABLES"), r = value("SE_GENERATED_RETURNS");
+    CHECK(!w.empty() && !f.empty() && !t.empty() && !r.empty());
+    const ModulePin again = { "replay", w.c_str(), f.c_str(), t.c_str(), r.c_str(), nullptr, nullptr };
+    const Report rr = EvaluateSubject(d, ModuleSubject(again), true);
+    std::printf("  replay line '%s': %zu finding(s)\n", line.c_str(), rr.findings.size());
+    CHECK(rr.findings.empty());
+}
+
 // ---- A5-114 to A5-118 (patch 0090): a hardware access is a barrier no read or write of ordinary memory is moved, merged or dropped across ----
 // The area 5 review round's fixtures (A5-114 to A5-117, Sh2DecompilerTests' TestArea5Review), the coordinator's A5-118 (a whole overwrite of a
 // global across a DMA enable), and the seeds that failed on master 43e945b2 with `folded-store-after-access`. Each module pin passes with the
@@ -17436,6 +17532,158 @@ void TestA5FoldedPins2(Sh2Decompiler& d)
         std::printf("  replay line '%s': %zu finding(s), %s %d\n", line.c_str(), rr.findings.size(), p.count, count(rr, p.count));
         CHECK(rr.findings.size() == rep.findings.size() && count(rr, p.count) == count(rep, p.count));
     }
+}
+
+// A5-142: grammar 2 seed 9006019 (`n:folded-read-after-pointer-write`), whole and shrunk (the module's replay line printed by the report, pasted and
+// replayed): a dead read of 0x26002109, a write through a pointer, then `return (int4)cRam26002104;` -- the char global at 2104 is not the byte read.
+void TestA5FoldedPins3(Sh2Decompiler& d)
+{
+    auto count = [](const Report& rep, const char* name) {
+        const auto it = rep.counts.find(name);
+        return it == rep.counts.end() ? 0 : it->second;
+    };
+    {
+        const Report rep = Evaluate(d, MakeV2(9006019), true);
+        std::printf("pin 'A5-142 grammar 2 seed 9006019': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "order.folded-read-before-pointer-write.char-global") > 0);
+    }
+    static const ModulePin kShrunk = { "A5-142 grammar 2 seed 9006019 shrunk", "D606 2FE6 7FF8 6EF3 8465 4315 8F00 2430 7E08 6FE3 6EF6 000B 6060 0009 2600 2104",
+                                       "0/0/2,2/2/1a", nullptr, "1,1", "0,0", "20000,0" };
+    const Report rep = EvaluateSubject(d, ModuleSubject(kShrunk), true);
+    std::printf("pin '%s': %zu finding(s), char-global %d\n", kShrunk.name, rep.findings.size(), count(rep, "order.folded-read-before-pointer-write.char-global"));
+    for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+    CHECK(rep.findings.empty() && count(rep, "order.folded-read-before-pointer-write.char-global") > 0);
+    const size_t at = rep.text.find("  replay: SE_GENERATED_WORDS=\"");
+    CHECK(at != std::string::npos);
+    if (at == std::string::npos) return;
+    const std::string line = rep.text.substr(at, rep.text.find('\n', at) - at);
+    auto value = [&](const char* name) {
+        const size_t k = line.find(std::string(name) + "=\"");
+        if (k == std::string::npos) return std::string();
+        const size_t from = k + std::strlen(name) + 2;
+        return line.substr(from, line.find('"', from) - from);
+    };
+    const std::string w = value("SE_GENERATED_WORDS"), f = value("SE_GENERATED_FUNCS"), r = value("SE_GENERATED_RETURNS"), c = value("SE_GENERATED_CLOBBERS"),
+                      rd = value("SE_GENERATED_READS");
+    const ModulePin again = { "replay", w.c_str(), f.c_str(), nullptr, r.c_str(), c.c_str(), rd.c_str() };
+    const Report rr = EvaluateSubject(d, ModuleSubject(again), true);
+    std::printf("  replay line '%s': %zu finding(s), char-global %d\n", line.c_str(), rr.findings.size(), count(rr, "order.folded-read-before-pointer-write.char-global"));
+    CHECK(rr.findings.size() == rep.findings.size() && count(rr, "order.folded-read-before-pointer-write.char-global") == count(rep, "order.folded-read-before-pointer-write.char-global"));
+}
+
+// The sweep from 9,200,001 (A5-143 to A5-145, A7-164): grammar 1 seeds 9200599, 9201666 and grammar 1 specials 9300913, grammar 2 seed 9207077, whole
+// and shrunk (each shrunk program replayed from the replay line the report prints, with its alias, volatile range and poll).
+void TestA5FoldedPins4(Sh2Decompiler& d)
+{
+    auto count = [](const Report& rep, const char* name) {
+        const auto it = rep.counts.find(name);
+        return it == rep.counts.end() ? 0 : it->second;
+    };
+    const bool savedSpecials = gSpecialReads;
+    struct Whole
+    {
+        int grammar;
+        long seed;
+        bool specials;
+    };
+    for (const Whole& w : { Whole{ 1, 9200599, false }, Whole{ 1, 9201666, false }, Whole{ 2, 9207077, false }, Whole{ 1, 9300913, true } })
+    {
+        gSpecialReads = w.specials;
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'sweep 9200001: grammar %d seed %ld%s': %zu finding(s)\n", w.grammar, w.seed, w.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    gSpecialReads = savedSpecials;
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* volatileRange;
+        const char* poll;
+        const char* count;   // (nullptr: none to reach)
+    };
+    const Shrunk kShrunk[] = {
+        // A5-144, 9201666: a byte store of 0x5b the engine widens, `xRam26002384 = CONCAT11(0x5b,(xunknown1)xRam26002384);`, after a pointer write
+        { "A5-144 grammar 1 seed 9201666 shrunk", "E308 D606 6161 2338 8900 E15B 451B D704 2610 6072 C801 89FB 000B 0009 2600 2384 0600 1008", "5:26003C14",
+          "26001000-2600100F", "6001008:until-set", nullptr },
+        // A5-145, 9200599: a slot's read the early return does not use, printed on the other path
+        { "A5-145 grammar 1 seed 9200599 shrunk", "D708 2521 6072 C801 8BFB D607 2258 8B01 C820 8D04 6160 2420 412E 000B 2701 000B 2701 0009 2100 00A4 2600 2300", nullptr,
+          nullptr, "210000a4", "order.folded-read-before-access.returned" },
+        // A7-164, 9300913 (specials): three conditions in a chain, r0 = 7 through `tst #8` and two `cmp/eq`
+        { "A7-164 grammar 1 specials seed 9300913 shrunk", "D609 E007 CF50 C808 8901 E014 0606 8803 8B00 817F 8802 8B00 8444 4005 E301 305C 4310 8BFC 000B 0009 2600 1024",
+          nullptr, "26001020-2600102F", nullptr, nullptr },
+    };
+    const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
+    for (const Shrunk& p : kShrunk)
+    {
+        const char* values[3] = { p.volatileRange, p.poll, p.alias };
+        std::string saved[3];
+        bool had[3];
+        for (int i = 0; i < 3; ++i)
+        {
+            const char* old = std::getenv(names[i]);
+            had[i] = old != nullptr;
+            if (old) saved[i] = old;
+            SetOrClear(names[i], values[i]);
+        }
+        const Subject subject = RawSubject(p.words);
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s), %s %d\n", p.name, rep.findings.size(), p.count ? p.count : "-", p.count ? count(rep, p.count) : 0);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && (!p.count || count(rep, p.count) > 0));
+        const size_t at = rep.text.find("  replay: SE_GENERATED_WORDS=\"");
+        CHECK(at != std::string::npos);
+        if (at == std::string::npos) continue;
+        const std::string line = rep.text.substr(at, rep.text.find('\n', at) - at);
+        auto value = [&](const char* name, bool quoted) {
+            const size_t k = line.find(std::string(name) + "=" + (quoted ? "\"" : ""));
+            if (k == std::string::npos) return std::string();
+            const size_t from = k + std::strlen(name) + 1 + (quoted ? 1 : 0);
+            return line.substr(from, line.find(quoted ? '"' : ' ', from) - from);
+        };
+        const std::string words = value("SE_GENERATED_WORDS", true), vol = value("SE_GENERATED_VOLATILE", false), poll = value("SE_GENERATED_POLL", false),
+                          alias = value("SE_GENERATED_ALIAS", false);
+        CHECK(vol.empty() == (p.volatileRange == nullptr));
+        CHECK(poll.empty() == (p.poll == nullptr));
+        CHECK(alias.empty() == (p.alias == nullptr));
+        const std::string got[3] = { vol, poll, alias };
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], got[i].empty() ? nullptr : got[i].c_str());
+        const Subject again = RawSubject(words.c_str());
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], nullptr);
+        const Report rr = EvaluateSubject(d, again, true);
+        std::printf("  replay line '%s': %zu finding(s), %s %d\n", line.c_str(), rr.findings.size(), p.count ? p.count : "-", p.count ? count(rr, p.count) : 0);
+        CHECK(rr.findings.size() == rep.findings.size() && (!p.count || count(rr, p.count) == count(rep, p.count)));
+    }
+    // A5-143, grammar 2 seed 9207077 shrunk: a module whose first function runs into the second; the store of 0x18 and a frame walk after it
+    static const ModulePin k143 = { "A5-143 grammar 2 seed 9207077 shrunk",
+                                    "2F86 2F96 2FA6 4F22 6843 6953 6A63 4F26 6AF6 69F6 68F6 000B 0009 2F86 2F96 2FA6 2FC6 0C2A 6843 6953 6A63 E418 6583 6673 6743 B00D 0009 6483 "
+                                    "6593 66A3 D103 4C2A 6CF6 6AF6 69F6 68F6 412B 0009 0600 9050 7FF8 D107 6012 2142 2702 62F3 7208 E102 2216 4110 8BFC E200 7F08 000B 0009 0009 "
+                                    "2600 210C",
+                                    "0/0/1a,1a/1a/4c,50/50/6e", nullptr, "0,0,0", nullptr, nullptr };
+    const Report r143 = EvaluateSubject(d, ModuleSubject(k143), true);
+    std::printf("pin '%s': %zu finding(s), frame-pointer %d\n", k143.name, r143.findings.size(), count(r143, "order.folded-store.frame-pointer"));
+    for (const Finding& f : r143.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+    CHECK(r143.findings.empty() && count(r143, "order.folded-store.frame-pointer") > 0);
+    const size_t at = r143.text.find("  replay: SE_GENERATED_WORDS=\"");
+    CHECK(at != std::string::npos);
+    if (at == std::string::npos) return;
+    const std::string line = r143.text.substr(at, r143.text.find('\n', at) - at);
+    auto value = [&](const char* name) {
+        const size_t k = line.find(std::string(name) + "=\"");
+        if (k == std::string::npos) return std::string();
+        const size_t from = k + std::strlen(name) + 2;
+        return line.substr(from, line.find('"', from) - from);
+    };
+    const std::string w = value("SE_GENERATED_WORDS"), f = value("SE_GENERATED_FUNCS"), r = value("SE_GENERATED_RETURNS");
+    CHECK(!w.empty() && !f.empty() && !r.empty());
+    const ModulePin again = { "replay", w.c_str(), f.c_str(), nullptr, r.c_str(), nullptr, nullptr };
+    const Report rr = EvaluateSubject(d, ModuleSubject(again), true);
+    std::printf("  replay line '%s': %zu finding(s), frame-pointer %d\n", line.c_str(), rr.findings.size(), count(rr, "order.folded-store.frame-pointer"));
+    CHECK(rr.findings.size() == r143.findings.size() && count(rr, "order.folded-store.frame-pointer") == count(r143, "order.folded-store.frame-pointer"));
 }
 
 void TestA3RoutedPins(Sh2Decompiler& d)
@@ -18359,6 +18607,7 @@ void TestGenerated()
         RUN(TestArea7Round17Pins(d));
         RUN(TestArea7Round18Pins(d));
         RUN(TestArea7Round19Pins(d));
+        RUN(TestArea7Round21Pins(d));
         RUN(TestA5114Pins(d));
         RUN(TestA5119Pins(d));
         RUN(TestA5126Pins(d));
@@ -18366,6 +18615,8 @@ void TestGenerated()
         RUN(TestRouted345Pins(d));
         RUN(TestA5FoldedPins(d));
         RUN(TestA5FoldedPins2(d));
+        RUN(TestA5FoldedPins3(d));
+        RUN(TestA5FoldedPins4(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
