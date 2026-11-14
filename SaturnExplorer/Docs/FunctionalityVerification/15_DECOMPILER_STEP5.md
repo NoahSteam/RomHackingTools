@@ -21332,12 +21332,14 @@ Nothing to another area. A3-203 and A3-204 are area 3's, open.
 
 ## Area 3, A3-203 and A3-204 fixes
 
-Fixer, branch `review/3-a3203`, cut at `6599dd7c` (the head of `review/3-a3202`, merged into master as `8e54a968`; its decompiler is master's). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). One host change (`Sh2Decompiler.cpp`: the walk's record of what a callee overwrites, the caution's mark at a call, A3-203; the frame notes' placement, A3-204) and the pins (`Sh2GeneratedTests.cpp`, `TestA3RoutedPins`). **No engine patch: 0089 stays free.** Fixtures and scripts: `Docs/Decompiler/tools/a3_a3203/` (`fixtures.src`; `run.py`, A3-202's; `run.sh`, each fixture's return line and each caution or frame note with the call printed after it; `difftexts.py`, the texts of two token dumps that differ; `checknotes.py`, those texts checked against the image, below).
+Fixer, branch `review/3-a3203`, cut at `6599dd7c` (the head of `review/3-a3202`, merged into master as `8e54a968`; its decompiler is master's). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). One host change (`Sh2Decompiler.cpp`: the walk's record of what a callee overwrites, the caution's mark at a call, A3-203; the frame notes' "likewise", A3-204; its new wording in `Sh2Decompiler.h`) and the pins (`Sh2GeneratedTests.cpp`, `TestA3RoutedPins`). **No engine patch: 0089 stays free.** Fixtures and scripts: `Docs/Decompiler/tools/a3_a3203/` (`fixtures.src`; `run.py`, A3-202's; `run.sh`, each fixture's return line and each caution or frame note with the call printed after it; `difftexts.py`, the texts of two token dumps that differ; `checknotes.py`, those texts checked against the image, below).
+
+A3-204 was first fixed by saying the note again at every call no earlier noted call is on every path to (`BlockDominates`); the coordinator asked for a revision before merge, since that added 341 notes to image 008's lent texts (one per arm of an `if` or a `switch`, mostly a frame pointer in r14). The revision (section 2) says the note once, as A3-108 does, with a wording that claims no order where the order does not hold; the first form is not in the branch's head.
 
 | Row | P | Outcome |
 |---|---|---|
 | A3-203 | P3 | **fixed** (host): the walk records the registers a callee overwrites on every path; a call to such a callee replaces the caution's marks, any other call adds its own |
-| A3-204 | P3 | **fixed** (host): a frame note is left to an earlier call's "likewise" only when that call is on every path to it (`BlockDominates`, as A3-202's cautions) |
+| A3-204 | P3 | **fixed** (host): the frame note is still said once; it says "likewise at other calls of this function" instead of "... at the calls below" when a call left to it is not on every path after it (`BlockDominates`, as A3-202's cautions) |
 
 No row filed.
 
@@ -21368,53 +21370,38 @@ Corpus: no caution comes or goes in either image, alone or lent (section 3): 060
 
 ### 2. A3-204
 
-A3-108's frame notes (a frame address in a register no argument shows, `regOf`; or in a stack argument word, said again where one more word holds one) were said at the first call by address with "likewise at the calls below" at it, which on f1 (the two arms of `tst r6,r6 ; bt`, the later address printed first) pointed below at nothing. Fix: the loop leaves a call to an earlier note only when a call that said it is on every path to it (`BlockDominates` over the final blocks, A3-202's rule), the nearest such call (the one the others dominate) taking the "likewise"; a stack note counts the words of the dominating notes only. f1 and f2 (A3-108's stack-argument note on the two arms) say the note at each call; the controls f1r and f2r (the calls in a row) one note, "likewise". With the address order back (the dominance test always true), f1 and f2 fail (2 CHECKs).
+A3-108's frame notes (a frame address in a register no argument shows, `regOf`; or in a stack argument word, said again where one more word holds one) are said once per fact, at the first call by address, with "likewise at the calls below" when they hold at later calls. On f1 (the two arms of `tst r6,r6 ; bt`, the lower address printed second) the note said "below" of a call printed above it.
+
+Fix (`Sh2Decompiler.cpp`, the notes' loop): which calls say a note and which are left to it is A3-108's, unchanged; the loop now records, for each call that says one, the calls left to it. When each of those is in a final block the saying call dominates (`BlockDominates`, A3-202's test: the text prints it after), the note says "; likewise at the calls below" as before; when one is not (or the saying call's block is not found), it says "; likewise at other calls of this function" (`kFrameEscapeNoteLikewiseOther`), true wherever the text prints them. A call the final code does not hold is printed nowhere and does not count. No note is added or removed. f1 and f2 (A3-108's stack-argument note on the two arms) say the note once, at the arm printed second, with the new wording; the controls f1r and f2r (the calls in a row) keep "below". With the dominance test always true, f1 and f2 fail (2 CHECKs).
+
+(Saying it at every call no noted call dominates, the first form, was exact as well, but the notes are A3-108's to keep few: a frame pointer is one fact. Listing the other calls was not possible: the comment is placed before the text has lines.)
 
 ### 3. Corpus
 
 Both images, alone and lent (`a3_round25/corpus.sh`), with this branch's final binary against master's (`6599dd7c`'s product, run here: it differs from round 26's dumps only by A3-202's two texts, as recorded there). Both runs all passed, every ledger count 0; missing and said **0** (007) and **4** (008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**", as master.
 
-Texts that differ: image 007 **47** alone and **68** lent, image 008 **123** alone and **151** lent; frame notes only. `checknotes.py` reads every one: no line but a comment changes (in all of them), no caution changes, no frame note is dropped, every note added is one the old text left to an earlier call's "likewise" (the same fact; "is" and "may be" in one register or in the stack words are one family, as A3-108's loop has them), and for each earlier call that says it in the new text the image's CFG (branches with their slots, calls falling through, compiled `mova ; mov.w @(r0,rI) ; add ; jmp @r0` switches read from their tables) has a path from the entry to the call that does not pass it.
+| Image | Texts that differ | Notes added / removed | "below" turned "other" | Comment lines added |
+|---|---|---|---|---|
+| 007 alone | 47 | 0 / 0 | 47 | +1 |
+| 007 lent | 66 | 0 / 0 | 66 | +2 |
+| 008 alone | 123 | 0 / 0 | 123 | +1 |
+| 008 lent | 149 | 0 / 0 | 149 | +2 |
 
-| Image | Texts | Notes added (r14 / r13 / stack word) | "likewise" lost |
-|---|---|---|---|
-| 007 alone | 47 | 78 (45 / 0 / 33) | 33 |
-| 007 lent | 68 | 111 (76 / 0 / 35) | 56 |
-| 008 alone | 123 | 301 (248 / 1 / 52) | 94 |
-| 008 lent | 151 | 341 (289 / 1 / 51) | 132 |
+One note per text changes, and only its last words. No caution changes (A3-203, section 1). `checknotes.py` reads every changed text against the image: no line but a comment differs; no note is added or dropped; each changed note went from "below" to "other"; and for each, the image's CFG (branches with their slots, calls falling through, compiled `mova ; mov.w @(r0,rI) ; add ; jmp @r0` switches read from their tables) holds a call at a higher address (A3-108 leaves only those to a note) that a path from the entry reaches without passing the note's call. The notes changed are also exactly those whose "likewise" the first form of the fix took off or whose left calls it said again (that form's checks, run on its dumps, found for each note it added a path from the entry avoiding the call that had covered it): the same 47 and 66 (007), 123 and 149 (008), but for 06005518 and 06005520/007 lent (06005528 and 06005530/008 lent, the same code): their note at the first call keeps "below" here, where the first form had taken its "likewise" off for a call in a block the engine removes as unreachable (0x060055C8), printed nowhere. By hand against the disassembly (`a3_a3197/dis.py`):
 
-Each is the A3-204 shape: an earlier call said the note with "likewise at the calls below" for a call some path reaches without it. The kinds, with an example of each read by hand against the disassembly (`a3_a3197/dis.py`):
-
-* arms of an `if` or loop bodies that may not run: 06008CCE/007, three `if (((uint1)uVar7 & 1) != 1)` bodies, each `jsr 06008204` (0x06008DD0, 0x06008DDC, 0x06008DE8) under its own `bt`: the first said "likewise" for the other two, now each says it; 060086E8/007, the call after the `do` loop (0x06008746) is reached by the loop's skip.
-* a call after a join: 0603E7AA/008 (`cmp/pz r9 ; bt/s 0603E7C6`, `jsr 0603E4D0` on each arm at 0x0603E7BE and 0x0603E7CA, then `jsr 0603E6C8` at 0x0603E7D6): every path passes one of the two, neither alone, so the third says its own note (no single call it is left to, the rule's reading).
-* switch cases: 06009E96, 0600A49A, 06016142, 0601EBB6, 0602071A/007 and others (`jmp @r0` through a table read by the script): each case's first call now says the note; 060670C0/008 lent (a fragment entry, its switch a `braf r0` on a byte of GBR's area the script does not read) was read by hand: the eight `case (uint1 *)0x0` to `0x7` bodies of one `switch`, each entered from the switch alone, and the `else` call at 0x06062DD8 is printed above the switch (line 1107 against 1133), where the old "likewise" at case 0 pointed "below".
-* "is" left to "may" or back: 06019A56/007 lent, the stack note "may be in a stack argument slot" at 0x06019D50 was left to "is in" at 0x06019B3A; 0604080A/008 lent, "may be in r14" at 0x06040BCE to "is in r14" at 0x06040BA6. Now said with its own wording.
-* stack words: 0601E54E/007, the calls at 0x0601E6C2, 0x0601E6F2, 0x0601E79C, 0x0601E7F0 were left to the note at 0x0601E688 (one more word), inside a `while (true)` the path `if (8 < uVar4) goto` reaches the later calls without; the notes at 0x0601E58E and 0x0601E5CE (fewer words), which dominate them, do not hold all their words.
+* 06008CCE/007: three `tst r4,r4 ; bt` bodies, each `jsr @r9` (0x06008DD0, 0x06008DDC, 0x06008DE8): the note at the first, "likewise" for the other two, which a `bt` skips it to reach.
+* 060086E8/007: the note in a `do` loop (0x06008734); `jsr @r0` at 0x06008746 is reached by the branches to 0x06008742 that skip the loop.
+* 0603E7AA/008: `jsr 0603E4D0` on each arm of `cmp/pz r9 ; bt/s` (0x0603E7BE, the note, and 0x0603E7CA), then `jsr 0603E6C8` at 0x0603E7D6, which every path reaches through one arm: the other arm is printed after the note in an `else`, but not below it on every path.
+* 060670C0/008 lent (a fragment entry; its switch is a `braf r0` on a byte at GBR + 154, which the script does not read, so it finds no later call; read here): the note at case 0's call, "likewise" for cases 1 to 7 and an `else` call (0x06062DD8) printed above the `switch`.
 
 Every function that differs, by image (alone and lent as the dumps name them):
 
 * **007, alone and lent (35):** 060056E6, 0600816A, 060085BC, 060086E8, 06008CCE, 06009E96, 0600A49A, 0600BBF2, 0600C12C, 0600F7D6, 06010786, 060110BA, 06012EC4, 06016142, 06019A56, 0601C0EA, 0601C45E, 0601C872, 0601CCDE, 0601D338, 0601DADC, 0601E54E, 0601EBB6, 0601F6FC, 0602015A, 0602071A, 06020822, 06020A54, 06020C42, 06020D76, 06020ED6, 0602C886, 0602CD36, 060315A6, 060316EA.
 * **007, alone only (12):** 06016DA2, 0601A0C8, 0601B580, 0601C5A6, 060204A8, 0602C556, 0602DB7C, 0602F11E, 0603016A, 060305BC, 060307D2, 060310DA.
-* **007, lent only (33):** 06005518, 06005520, 060086DC, 06008CC0, 0600BBE4, 0600F7CC, 0601613C, 06019A48, 0601C0E0, 0601C458, 0601C86C, 0601CCD8, 0601D330, 0601D45C, 0601D460, 0601E540, 0601EBAC, 0601F6F0, 0601FA20, 0601FA28, 06020154, 06020718, 06020814, 06020A48, 06020C38, 06020D68, 06020ECC, 06023468, 0602346C, 0602C878, 0602CD28, 06031598, 060316DC.
+* **007, lent only (31):** 060086DC, 06008CC0, 0600BBE4, 0600F7CC, 0601613C, 06019A48, 0601C0E0, 0601C458, 0601C86C, 0601CCD8, 0601D330, 0601D45C, 0601D460, 0601E540, 0601EBAC, 0601F6F0, 0601FA20, 0601FA28, 06020154, 06020718, 06020814, 06020A48, 06020C38, 06020D68, 06020ECC, 06023468, 0602346C, 0602C878, 0602CD28, 06031598, 060316DC.
 * **008, alone and lent (88):** 0600572A, 0600580E, 060082AA, 060087D8, 06008944, 06008F9A, 0600B212, 0600C2DA, 0600C49A, 0600C940, 0600EF4E, 06010186, 06010DD6, 06010F66, 06011DA0, 06014604, 0601561A, 06016C94, 06017A38, 06018D46, 060193F2, 0601A384, 0601AC7E, 0601C0A8, 0601C34E, 0601C8FE, 0601CE8A, 0602098C, 060253E6, 06025B8E, 06028F50, 0602D7DE, 0603194E, 06031F32, 060392DC, 0603A58C, 0603ADD2, 0603B8C4, 0603C3A6, 0603D9CC, 0603F632, 06040482, 0604080A, 06042690, 06044576, 0604535A, 06045FDE, 060462FA, 060488A2, 0604AD46, 0604B5BC, 0604C310, 0604CFFE, 0604F422, 06051C36, 060529BC, 06053296, 060535B6, 06054ABE, 060574D6, 0605781A, 06057CF8, 06058662, 0605B5C6, 0605B93A, 0605BD4E, 0605C1BA, 0605C814, 0605CFB8, 0605DA2A, 0605E092, 0605EBD8, 0605F636, 0605FBF6, 0605FCFE, 0605FF30, 0606011E, 06060252, 060603B2, 0606D34A, 0606D7FA, 060711BA, 060712FE, 0607383C, 06073906, 06073AC6, 06073D58, 06074054.
 * **008, alone only (35):** 060262EA, 060266CE, 06026756, 0602A376, 0602A9A8, 0602AA90, 0602C2D0, 0602D594, 0602D98A, 0602DB0A, 0602DC90, 06030BBA, 060311A6, 060352AE, 0603BB2E, 0603D5F6, 0603E75A, 0603E7AA, 060400EE, 0604289E, 0604BCE8, 0604BDA2, 0604BE30, 06057314, 06058CD4, 0605A730, 0605BA82, 0605F984, 0606D042, 0606E092, 0606E6F0, 0606FD82, 060701D4, 060703EA, 06070CF2.
-* **008, lent only (63):** 06005528, 06005530, 060087D0, 06008938, 06008F8C, 0600B204, 0600C2CC, 0600EF48, 0600F898, 0600FD34, 0600FD3C, 0600FF94, 0600FF9C, 0601033A, 06010DCC, 06039AA8, 06039AB0, 0603A584, 0603ADC8, 0603C398, 0603D9C4, 0603F624, 06048894, 0604AD38, 060529B4, 06053290, 06056414, 0605641C, 060574C8, 0605780C, 06057CEC, 06058654, 0605B5BC, 0605B934, 0605BD48, 0605C1B4, 0605C80C, 0605C938, 0605C93C, 0605DA1C, 0605E088, 0605EBCC, 0605EEFC, 0605EF04, 0605F630, 0605FBF4, 0605FCF0, 0605FF24, 06060114, 06060244, 060603A8, 06062954, 06062958, 060670C0, 0606D33C, 0606D7EC, 060711AC, 060712F0, 06073834, 06073AC0, 06073D50, 06074048, 06074198.
-
-The count of notes grows (008 lent: 341 added in 151 texts, most of them r14 frame pointers at the arms of an `if` or a `switch`): A3-108 said a frame fact once per function, and a function that keeps r14 for its frame now says it once per call no earlier note is on every path to. The text says less than that only by "likewise" pointing at a call it does not print below.
-
-### 4. Runs (after the last code edit)
-
-| Run | Result |
-|---|---|
-| ctest `-j2` | **117 of 117** (111 and the 6 Live tests) |
-| fault suite | fault matrix: **0 of 94** job(s) failed (127 s) |
-| 20,000-seed matrix (canary on, every pin) | 20,000 seeds (10,000 of each grammar), `failing seeds=0; findings=0`, all passed (32.8 ms per seed) |
-| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, all passed |
-| game corpus, lent (`a3_round25/corpus.sh`, both images, final binary, against master's dumps made here from `6599dd7c`'s `Sh2Decompiler.cpp`) | both all passed, every ledger count 0; missing and said **0** and **4**; lent **474 (645)** and **724 (975)**; texts differing 47 and 68 (007), 123 and 151 (008), frame notes only (section 3) |
-| fixture scripts (final binary) | `a3_a3203/run.sh`: x4s, x4p, x4a, x4t r8 at F1's call "likewise"; x4w, x4j r8 at F2's call; f1, f2 a note at each call; f1r, f2r one, "likewise"; `a3_a3202/run.sh`, `a3_round26/run.sh`, `a3_a3197/run.sh` as section 1 |
-| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: ok (no vendored file or patch touched) |
-
-No generator change: no seed's program changes.
+* **008, lent only (61):** 060087D0, 06008938, 06008F8C, 0600B204, 0600C2CC, 0600EF48, 0600F898, 0600FD34, 0600FD3C, 0600FF94, 0600FF9C, 0601033A, 06010DCC, 06039AA8, 06039AB0, 0603A584, 0603ADC8, 0603C398, 0603D9C4, 0603F624, 06048894, 0604AD38, 060529B4, 06053290, 06056414, 0605641C, 060574C8, 0605780C, 06057CEC, 06058654, 0605B5BC, 0605B934, 0605BD48, 0605C1B4, 0605C80C, 0605C938, 0605C93C, 0605DA1C, 0605E088, 0605EBCC, 0605EEFC, 0605EF04, 0605F630, 0605FBF4, 0605FCF0, 0605FF24, 06060114, 06060244, 060603A8, 06062954, 06062958, 060670C0, 0606D33C, 0606D7EC, 060711AC, 060712F0, 06073834, 06073AC0, 06073D50, 06074048, 06074198.
 
 ### 5. Routed
 

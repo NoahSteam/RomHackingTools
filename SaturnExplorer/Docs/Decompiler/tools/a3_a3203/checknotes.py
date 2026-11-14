@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Area 3, A3-203 and A3-204: checks each function text that differs between two token dumps (a7_round2/corpus.sh's <tag>_alone.tsv or
 _lent.tsv) against the hwram image. For each function: whether any line but a comment changed (it must not); each note (A3-108's frame
-notes, A3-197's cautions) by its text and the call printed after it (the line's address), added, dropped, or with "likewise at the calls
-below" gained or lost. A frame note said at a call of the new text that the old one left to "likewise" (A3-204) is checked on a CFG read from the
-image (branches with their delay slots; calls fall through; rts ends; `jmp`, `braf` and the like end the walk and are reported): for each
-earlier call saying the same note, a path from the entry to the call that does not pass it must exist (no one of them is on every path to it,
-so the text says it); for a
-stack note (said again where one more word holds a frame address), one that passes not the call the old text left it to.
+notes, A3-197's cautions) by its text and the call printed after it (the line's call instruction), added or dropped (none may be), or with its
+"likewise" changed. A3-204 says a frame note once, as before, and turns "likewise at the calls below" into "likewise at other calls of this
+function" when a call left to it is not on every path after it: for each such note the image's CFG (branches with their delay slots; calls
+fall through; rts ends; compiled `mova ; mov.w @(r0,rI) ; add ; jmp @r0` switches read from their tables; other `jmp` and `braf` end the walk
+and are reported) must hold a call at a higher address (A3-108 leaves only those to a note) that a path from the entry reaches without
+passing the note's call. The calls listed are candidates: the calls the note was left to are among those the probe found the fact at.
 usage: checknotes.py <hwram image> <baseline.tsv> <new.tsv> [function ...]"""
 import re, sys
 img = open(sys.argv[1], 'rb').read()
@@ -41,8 +41,9 @@ def split(lines):
             j = i + 1
             while j < len(lines) and (lines[j][0] == 0 or '/*' in lines[j][1]): j += 1
             call = lines[j][0] if j < len(lines) else 0
-            lw = c.endswith('; likewise at the calls below')
-            base = c[:-len('; likewise at the calls below')] if lw else c
+            lw, base = '', c
+            for suffix, tag in (('; likewise at the calls below', 'below'), ('; likewise at other calls of this function', 'other')):
+                if c.endswith(suffix): lw, base = tag, c[:-len(suffix)]
             kind = 'caution' if base.startswith('this call may change') else 'frame' if base.startswith(('a frame address', 'a local at or above', "a saved register's")) else 'other'
             notes.append((kind, base, lw, call))
         else:
@@ -97,30 +98,28 @@ def table(j):
         out.append(base + v)
     return out
 
-def path_avoiding(entry, target, avoid):
-    """a path from entry to target that passes none of 'avoid'; (found, unresolved jumps met)"""
-    seen, work, unresolved = {entry}, [(entry, None)], set()
-    if entry in avoid: return False, unresolved
+CALL = lambda i: i is not None and ((i & 0xF0FF) == 0x400B or i >> 12 == 0xB or (i & 0xF0FF) == 0x0003)
+
+def calls_avoiding(entry, avoid):
+    """the calls a path from the entry reaches without passing 'avoid', and the unresolved jumps met"""
+    seen, work, unresolved, calls = {entry}, [(entry, None)], set(), set()
     while work:
         a, after_slot = work.pop()
-        if a == target: return True, unresolved
+        if CALL(word(a)): calls.add(a)
         s, extra = succ(a)
         nxt = list(s)
-        if after_slot is not None: nxt = list(after_slot)   # the delay slot: on to the branch's destinations
+        if after_slot is not None: nxt = list(after_slot)
         elif isinstance(extra, str): unresolved.add('%08X %s' % (a, extra))
         for n in nxt:
-            if n in avoid or n in seen: continue
+            if n == avoid or n in seen: continue
             seen.add(n)
             slot = extra[1:] if isinstance(extra, tuple) and after_slot is None else None
             work.append((n, slot))
-    return False, unresolved
-
-# "is in" and "may be in" a register or a stack argument slot are one family: A3-108's loop leaves either to the other
-def fam(t): return t.replace('a frame address may be in ', 'a frame address is in ')
+    return calls, unresolved
 
 base, new = texts(sys.argv[2]), texts(sys.argv[3])
 names = sys.argv[4:] or sorted(k for k in set(base) | set(new) if base.get(k) != new.get(k))
-bad = 0
+bad, changed = 0, {'below>other': 0, 'other': 0}
 for k in names:
     bc, bn = split(base.get(k, []))
     nc, nn = split(new.get(k, []))
@@ -132,31 +131,22 @@ for k in names:
     for key in sorted(set(bset) | set(nset), key=lambda x: (x[2], x[1])):
         kind, text, call = key
         short = (text[:44] + '..') if len(text) > 46 else text
-        if key in bset and key in nset:
-            if bset[key] != nset[key]: out.append('  %s %08X likewise %s: %s' % (kind, call, 'gained' if nset[key] else 'lost', short))
-            continue
-        if key in bset: out.append('  %s %08X DROPPED%s: %s' % (kind, call, ' (likewise)' if bset[key] else '', short)); bad += kind == 'frame'; continue
-        line = '  %s %08X added%s: %s' % (kind, call, ' +likewise' if nset[key] else '', short)
-        if kind == 'frame':
-            same = [x for x in bn if x[0] == kind and fam(x[1]) == fam(text)]
-            earlier = [x[3] for x in nn if x[0] == kind and fam(x[1]) == fam(text) and x[3] < call and x[3] != 0]
-            if 'stack argument slot' in text:
-                # a stack note is said again at a call one more word holds a frame address at (A3-108): the new text may say it at a call its
-                # earlier notes dominate. What the old text left it to is the last stack note before it by address (its "likewise"); the
-                # call must be reachable without passing that one.
-                cover = [x[3] for x in bn if x[0] == kind and fam(x[1]) == fam(text) and x[3] < call]
-                earlier = cover[-1:] if cover else []
-            # one path for each earlier call: the call is left to a note only when that one call is on every path to it (BlockDominates)
-            found, unres = True, set()
-            for e in earlier or [None]:
-                f, u = path_avoiding(entry, call, {e} if e is not None else set())
-                found, unres = found and f, unres | u
-            line += ' | the old text says it at %s | a path from the entry avoiding each of %s: %s%s' % (
-                ','.join('%08X%s' % (x[3], '+' if x[2] else '') for x in same) or 'NONE',
-                ','.join('%08X' % e for e in earlier) or 'nothing earlier', 'yes' if found else 'NO',
-                (' (unresolved: ' + '; '.join(sorted(unres)) + ')') if unres and not found else '')
-            if not same or not found: bad += 1
+        if key not in bset or key not in nset:
+            out.append('  %s %08X %s: %s' % (kind, call, 'ADDED' if key in nset else 'DROPPED', short)); bad += 1; continue
+        if bset[key] == nset[key]: continue
+        line = '  %s %08X likewise %s -> %s: %s' % (kind, call, bset[key] or 'none', nset[key] or 'none', short)
+        if (bset[key], nset[key]) == ('below', 'other') and kind == 'frame':
+            changed['below>other'] += 1
+            calls, unres = calls_avoiding(entry, call)
+            later = sorted(c for c in calls if c > call)
+            line += ' | later calls reached without it: %s%s' % (
+                (' '.join('%08X' % c for c in later[:6]) + (' ...(%d)' % len(later) if len(later) > 6 else '')) if later else 'NONE',
+                (' (unresolved: ' + '; '.join(sorted(unres)) + ')') if unres and not later else '')
+            if not later: bad += 1
+        else:
+            changed['other'] += 1; bad += 1
         out.append(line)
     print('=== %s%s' % (k, '' if out else ' (no note changed)'))
     for l in out: print(l)
-print('checked %d function(s); %d item(s) to read by hand (code changed, a frame note dropped, a fact not in the old text, or no path found)' % (len(names), bad))
+print('checked %d function(s): %d note(s) below -> other; %d item(s) to read by hand (code changed, a note added or dropped, another change, '
+      'or no later call reached without the note\'s)' % (len(names), changed['below>other'], bad))
