@@ -4821,6 +4821,38 @@ void TestArea7Review20()
         CHECK(!backFirst(r, 0x0601FA90u, line));
         CHECK(dts::AuditMapping(r, word, "a7_161").Violations() == 0);
     }
+    // A7-163 (product) `tas.b @r6` (0x06009024) of the high byte of uRam06001028, then `mov.w r2,@r6` (0x06009030, written over) and `mov.w
+    // r1,@r6` (0x06009034): the `tas.b` line, `uRam06001028 = uRam06001028 | 0x8000;`, keeps the low byte the memory's, so it names no store
+    // after it -- master named the first (another value, and one nothing reads: A7-158's rule finds it), and with A7-158 alone the second,
+    // whose way back then answered the `tas.b` line; grammar 1 specials seed 8004782 (the default request)
+    {
+        const std::vector<uint16_t> w = { 0xD613, 0xD714, 0xD714, 0xE002, 0x2702, 0x6072, 0xC801, 0x8BFC, 0x8564, 0xE003, 0xCF1E, 0x6371, 0x2701, 0xE009,
+                                          0xCC19, 0x8801, 0x8D01, 0x4108, 0x461B, 0x8171, 0xE00E, 0xCEBE, 0x6071, 0x5244, 0x2621, 0x2532, 0x2611, 0x2660,
+                                          0xD608, 0xE141, 0x2611, 0x032A, 0x2F36, 0xD207, 0x420B, 0x0009, 0x63F6, 0x432A, 0x000B, 0x0009, 0x0600, 0x1028,
+                                          0x25F8, 0x0112, 0x0600, 0x1020, 0x2600, 0x3004, 0x0600, 0x9064, 0xD102, 0xE277, 0x2122, 0x000B, 0xE077, 0x0009,
+                                          0x2600, 0x304C };
+        const DecompileResult r = d.Decompile(snapAt(w, 0x06009000u), Request(0x06009000u));
+        Print("A7-163 the bytes a tas.b line keeps (grammar 1 specials seed 8004782)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "uRam06001028 = uRam06001028 | 0x8000;";
+        CHECK(LineWith(r, line) != nullptr && tokenAt(r, line, 0x06009024u) && !tokenAt(r, line, 0x06009030u) && !tokenAt(r, line, 0x06009034u));
+        CHECK(!backFirst(r, 0x06009034u, line));
+        CHECK(dts::AuditMapping(r, word, "a7_163_8004782").Violations() == 0);
+        // (damaged: the store after it named, as master named it)
+        DecompileResult before = r;
+        int n = 0;
+        for (Line& l : before.lines)
+            if (l.text.find(line) != std::string::npos)
+            {
+                Token t;
+                t.begin = t.end = static_cast<uint16_t>(l.text.size());
+                t.kind = TokenKind::Plain;
+                t.addr = 0x06009030u;
+                l.tokens.push_back(t);
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_163_8004782 before").storeDead >= 1);
+    }
 }
 
 void TestFixture1()

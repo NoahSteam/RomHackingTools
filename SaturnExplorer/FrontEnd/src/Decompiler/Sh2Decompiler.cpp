@@ -7822,6 +7822,25 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             if (self)
                 for (ghidra::int4 b = start; b < out->getSize(); ++b) kept[static_cast<size_t>(b)] = true;
         }
+        // A7-163: the same for the variable ORed or ANDed with a number -- `uRam06001028 = uRam06001028 | 0x8000;`, the `tas.b @r6` of its
+        // high byte -- whose bytes the number leaves alone (0 in an OR, 0xff in an AND) are the memory's: the store the statement is ahead
+        // of was searched for the low byte, and named the `mov.w r2,@r6` after the `tas.b` (with A7-158, the `mov.w r1,@r6` after that,
+        // whose way back then answered the `tas.b` line); grammar 1 specials seed 8004782
+        if ((code == ghidra::CPUI_INT_OR || code == ghidra::CPUI_INT_AND) && o->numInput() == 2 && space->isBigEndian() && out->getSize() <= 8)
+            for (int k = 0; k < 2; ++k)
+            {
+                const ghidra::Varnode* number = o->getIn(1 - k);
+                const ghidra::Varnode* part = o->getIn(k);
+                for (int hop = 0; hop < 4 && part->isWritten() && part->getDef()->code() == ghidra::CPUI_COPY; ++hop) part = part->getDef()->getIn(0);
+                if (!number->isConstant() || part->getSpace() != space || part->getOffset() != base || part->getSize() != out->getSize()) continue;
+                const uint64_t c = static_cast<uint64_t>(number->getOffset());
+                for (ghidra::int4 b = 0; b < out->getSize(); ++b)
+                {
+                    const uint64_t byteOf = (c >> (8 * (out->getSize() - 1 - b))) & 0xFF;
+                    if ((code == ghidra::CPUI_INT_OR && byteOf == 0) || (code == ghidra::CPUI_INT_AND && byteOf == 0xFF)) kept[static_cast<size_t>(b)] = true;
+                }
+                break;
+            }
         // A7-158: a store of the byte that another store of it overwrites later in its flow block, with nothing between that may read
         // memory (a load, a call, an engine operation), wrote a value nothing reads: no statement shows it. `L: mov.b r1,@r7 ; mov.b
         // r2,@r7` at a join: the engine's copy of r2's 0 on one path, `xRam26001018 = 0;`, named (and was drawn at) the store of in_r1,
