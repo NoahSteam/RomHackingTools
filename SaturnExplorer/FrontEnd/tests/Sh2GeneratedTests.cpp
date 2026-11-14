@@ -4751,6 +4751,15 @@ std::string SubjectText(const Subject& s, Sh2Decompiler& d, const std::shared_pt
     for (size_t i = 0; i < s.words.size(); ++i) o << (i ? " " : "") << Hex(s.words[i], 4);
     o << "\"";
     if (s.aliasReg) o << " SE_GENERATED_ALIAS=" << s.aliasReg << ":" << Hex(s.aliasAddr);
+    // (A11-20) The settings the words do not carry: the range a second request marks volatile and the polled addresses (a comma
+    // list; ":until-set" for a read that is ready first). Without them a shrunk program replays as plain code and the finding goes.
+    if (s.markVolatile) o << " SE_GENERATED_VOLATILE=" << std::hex << s.volFirst << "-" << s.volLast << std::dec;
+    if (!s.polls.empty())
+    {
+        o << " SE_GENERATED_POLL=";
+        for (size_t i = 0; i < s.polls.size(); ++i)
+            o << (i ? "," : "") << std::hex << s.polls[i].raw << std::dec << (s.polls[i].busy == 0 && s.polls[i].ready == 1 ? ":until-set" : "");
+    }
     if (s.v2)
     {
         o << " SE_GENERATED_FUNCS=\"";
@@ -8148,7 +8157,7 @@ void ExcludeAddressErrors(const Subject& subject, std::vector<RunOut>& runs, Rep
     runs.swap(kept);
 }
 
-Report EvaluateSubject(Sh2Decompiler& d, const Subject& s, bool wantText)
+Report EvaluateSubjectImpl(Sh2Decompiler& d, const Subject& s, bool wantText)
 {
     Report rep;
     if (s.bad)
@@ -8220,6 +8229,17 @@ Report EvaluateSubject(Sh2Decompiler& d, const Subject& s, bool wantText)
             }
         rep.text = o.str() + excludedNotes + rep.text;
     }
+    return rep;
+}
+
+// (A11-21) Every oracle count any evaluation of this process reached (the pins, the canary, the seeds), printed at the end of a run:
+// a count with a pin that lost its requirement and that no seed reaches shows as absent (tools/a11_deadcounts/deadcounts.py).
+std::map<std::string, long> gEverReached;
+
+Report EvaluateSubject(Sh2Decompiler& d, const Subject& s, bool wantText)
+{
+    Report rep = EvaluateSubjectImpl(d, s, wantText);
+    for (const auto& kv : rep.counts) gEverReached[kv.first] += kv.second;
     return rep;
 }
 
@@ -8812,9 +8832,22 @@ Subject RawSubject(const char* raw)
     }
     if (const char* poll = std::getenv("SE_GENERATED_POLL"))
     {
-        const bool untilSet = std::strstr(poll, ":until-set") != nullptr;
-        const uint32_t at = static_cast<uint32_t>(std::strtoul(poll, nullptr, 16));
-        s.polls.push_back({ Env::MemKey(at), untilSet ? 0u : 1u, untilSet ? 1u : 0u, 0, at });
+        // (A11-20) a comma list, each `<addr>[:until-set]`: the replay line of a shrunk program names every poll it had
+        std::string list(poll);
+        size_t from = 0;
+        while (from <= list.size())
+        {
+            size_t to = list.find(',', from);
+            if (to == std::string::npos) to = list.size();
+            const std::string one = list.substr(from, to - from);
+            if (!one.empty())
+            {
+                const bool untilSet = one.find(":until-set") != std::string::npos;
+                const uint32_t at = static_cast<uint32_t>(std::strtoul(one.c_str(), nullptr, 16));
+                s.polls.push_back({ Env::MemKey(at), untilSet ? 0u : 1u, untilSet ? 1u : 0u, 0, at });
+            }
+            from = to + 1;
+        }
     }
     // (A5-122) SE_GENERATED_ALIAS=<4..7>:<address>: every run starts that register at the address (a global of the words) instead of its arena
     if (const char* alias = std::getenv("SE_GENERATED_ALIAS"))
@@ -17053,6 +17086,34 @@ void TestA5FoldedPins(Sh2Decompiler& d)
         std::printf("pin '%s': %zu finding(s), %s %d\n", p.name, rep.findings.size(), p.count, count(rep, p.count));
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty() && count(rep, p.count) > 0);
+        // (A11-20) The replay line the report prints for this program, pasted: it carries the volatile range and the poll the finding
+        // depends on, and the words with those settings reproduce the count.
+        {
+            const size_t at = rep.text.find("  replay: SE_GENERATED_WORDS=\"");
+            CHECK(at != std::string::npos);
+            if (at != std::string::npos)
+            {
+                const std::string line = rep.text.substr(at, rep.text.find('\n', at) - at);
+                auto value = [&](const char* name, bool quoted) {
+                    const size_t k = line.find(std::string(name) + "=" + (quoted ? "\"" : ""));
+                    if (k == std::string::npos) return std::string();
+                    const size_t from = k + std::strlen(name) + 1 + (quoted ? 1 : 0);
+                    return line.substr(from, line.find(quoted ? '"' : ' ', from) - from);
+                };
+                const std::string words = value("SE_GENERATED_WORDS", true), vol = value("SE_GENERATED_VOLATILE", false), poll = value("SE_GENERATED_POLL", false);
+                CHECK(vol.empty() == (p.volatileRange == nullptr));
+                CHECK(poll.empty() == (p.poll == nullptr));
+                SetOrClear("SE_GENERATED_VOLATILE", vol.empty() ? nullptr : vol.c_str());
+                SetOrClear("SE_GENERATED_POLL", poll.empty() ? nullptr : poll.c_str());
+                const Subject again = RawSubject(words.c_str());
+                SetOrClear("SE_GENERATED_VOLATILE", nullptr);
+                SetOrClear("SE_GENERATED_POLL", nullptr);
+                const Report rr = EvaluateSubject(d, again, true);
+                std::printf("  replay line '%s': %zu finding(s), %s %d\n", line.c_str(), rr.findings.size(), p.count, count(rr, p.count));
+                // reproduces: the same findings and the same count as the pinned subject (not "none and more than 0": that is the pin's own check)
+                CHECK(rr.findings.size() == rep.findings.size() && count(rr, p.count) == count(rep, p.count));
+            }
+        }
         if (std::strcmp(p.count, "pointer.effect.excused") == 0)
             CHECK(rep.text.find("06009016 (caution): the pointer is stepped in a loop from 0x3DB00014: the iterations after the first reach other addresses, "
                                 "which are not said, among them 0x7DB00018 (the cache address array)") != std::string::npos);
@@ -17903,6 +17964,9 @@ void TestGenerated()
     for (const auto& s : shapes) std::printf(" %s=%d", s.first.c_str(), s.second);
     std::printf("\nchecks:");
     for (const auto& k : counts) std::printf(" %s=%d", k.first.c_str(), k.second);
+    std::printf("\n");
+    std::printf("reached (every evaluation of this run, pins included):");
+    for (const auto& k : gEverReached) std::printf(" %s=%ld", k.first.c_str(), k.second);
     std::printf("\n");
     const double ms = dts::MsSince(t0);
     std::printf("SUMMARY: seeds=%ld (grammar 1: %d, grammar 2: %d) first=%ld shapes covered: %s; second requests (mailbox marked)=%d; "
