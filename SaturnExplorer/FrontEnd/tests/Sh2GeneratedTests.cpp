@@ -18259,8 +18259,10 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
             CHECK(w.findings.empty() && (*f.reg != '\0' ? named : !any));
         }
-        // ...and w8: a register set said once, at the first call, "likewise at the calls below"; another set at another call (r9 at the first two
-        // calls, read by the next call's F1; r9 and r10 at the third, read by the add)
+        // ...and w8: a register set said once, at the first call, "likewise at the calls below". (A3-202) F1 (`mov r9,r10 ; add #1,r9` on one
+        // return) is called three times in a row and r9 and r10 are read after the third (the add): each call may have changed them, a later
+        // one keeping what an earlier one left, so the set is r9 and r10 at all three (it was r9 at the first two, read by the next call's F1,
+        // and r9 and r10 at the third, when a call's mark replaced the marks before it)
         {
             const ModulePin m = { "A3-197 w8", "4F22 2F96 2FA6 E901 EA02 B019 0009 B017 0009 B015 0009 6093 30AC 6AF6 69F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 "
                                                 "0009 0009 0009 0009 0009 0009 0009 0009 6033 2338 8903 2448 8B01 6A93 7901 000B 0009 0009 0009 0009 0009 0009 0009 0009",
@@ -18270,10 +18272,54 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (size_t at = w.text.find("this call may change "); at != std::string::npos; at = w.text.find("this call may change ", at + 1)) ++cautions;
             const bool one = w.text.find("this call may change r9, read after it") != std::string::npos;
             const bool two = w.text.find("this call may change r9 and r10, read after it") != std::string::npos;
-            const bool likewise = w.text.find("likewise at the calls") != std::string::npos;
+            const bool likewise = w.text.find("; likewise") != std::string::npos;
             std::printf("pin 'A3-197 w8': %zu finding(s), %zu caution(s), r9 %d, r9 and r10 %d, likewise %d\n", w.findings.size(), cautions, int(one), int(two),
                         int(likewise));
-            CHECK(w.findings.empty() && cautions == 2 && one && two && likewise);
+            CHECK(w.findings.empty() && cautions == 1 && !one && two && likewise);
+        }
+        // A3-202 (`tools/a3_a3202/fixtures.src`): the mark was one call per value, and a join kept the first side's. x4 (round 26's): two calls of
+        // vCr8's F1 on the two arms of `tst r6,r6 ; bt`, joined, then 7 stored through r8: the caution at one call only, and with an address-order
+        // "likewise at the calls below" the arm printed first (the later address) would be pointed at by nothing above it. Now each call has
+        // its own caution. x4s: two calls in a row, r8 read after the second only: the first may have cleared it and the second kept it, so
+        // the caution is at the first, "likewise at the calls below" (the second follows on every path). Control x4c: x4 with the r6 = 0 arm
+        // calling F2, which keeps r8: one caution, at F1's call (0x06009040), not at F2's (0x06009060).
+        {
+            struct Placement
+            {
+                const char* name;
+                const char* words;
+                const char* funcs;
+                const char* returns;
+                const char* calls;   // the call printed after each caution, in the text's order
+                bool likewise;
+            };
+            const Placement placements[] = {
+                { "A3-202 x4", "4F22 2F86 7FF8 E205 2F22 68F3 2668 8903 B016 0009 A002 0009 B012 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                               "2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/2c,40/40/52", "1,0", "func_0x06009040 func_0x06009040", false },
+                { "A3-202 x4s", "4F22 2F86 7FF8 E205 2F22 68F3 B018 0009 B016 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                "2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/24,40/40/52", "1,0", "func_0x06009040", true },
+                { "A3-202 control x4c", "4F22 2F86 7FF8 E205 2F22 68F3 2668 8903 B016 0009 A002 0009 B022 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                        "2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/2c,40/40/52,60/60/64", "1,0,0", "func_0x06009040", false },
+            };
+            for (const Placement& f : placements)
+            {
+                const ModulePin m = { f.name, f.words, f.funcs, nullptr, f.returns, nullptr, nullptr };
+                const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+                std::string calls;
+                for (size_t at = w.text.find("this call may change r8, read after it"); at != std::string::npos;
+                     at = w.text.find("this call may change r8, read after it", at + 1))
+                {
+                    const size_t c = w.text.find("func_0x", at);
+                    if (c != std::string::npos) calls += (calls.empty() ? "" : " ") + w.text.substr(c, 15);
+                }
+                const bool likewise = w.text.find("; likewise") != std::string::npos;
+                std::printf("pin '%s': %zu finding(s), cautions at [%s], likewise %d\n", f.name, w.findings.size(), calls.c_str(), int(likewise));
+                for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+                CHECK(w.findings.empty() && calls == f.calls && likewise == f.likewise && w.text.find("return 7;") != std::string::npos);
+            }
         }
     }
     {

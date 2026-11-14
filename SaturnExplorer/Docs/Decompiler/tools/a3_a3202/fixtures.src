@@ -1,0 +1,116 @@
+# Area 3, A3-202: the caution at every call a joined value of r8 may come from. Run with W=<SaturnExplorer> S=<scratch> run.sh (or run.py <name>).
+name x4
+# (round 26's x4) A3-197 attacked (placement): two calls of vCr8's F1 on two paths (r6 = 0 or not), the paths meet, then 7 stored through r8
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+tst r6,r6
+bt A1
+bsr F1
+nop
+bra J1
+nop
+A1:
+bsr F1
+nop
+J1:
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+name x4c
+# control: x4 with the call of the r6 = 0 path to F2, which keeps r8 (not lent: it returns r3): the caution at F1's call only
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+tst r6,r6
+bt A1
+bsr F1
+nop
+bra J1
+nop
+A1:
+bsr F2
+nop
+J1:
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+rts
+mov r3,r0
+name x4s
+# two calls of vCr8's F1 in a row, then 7 stored through r8: r8 is as either call left it (the second may keep what the first cleared)
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
