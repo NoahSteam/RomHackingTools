@@ -2688,9 +2688,12 @@ private:
                         // this function on that path, as one this path changed for certain is where the target does not overwrite it on every
                         // path (CalleeWritten). The path itself stays lost (mPathLost): what every path overwrites is not claimed through it.
                         // A thunk `mov.l @(lit),r1 ; jmp @r1` (A3-70's wrapper) to a callee that clears r8 on one path changed nothing (tj1).
+                        // Only with r15 back at the entry: a jump with the frame still pushed is no tail jump but a jump within the function
+                        // (0601FA80/008's switch, whose index the walk folds from a captured word: its case returns through the function's own
+                        // epilogue, which restores r8 and r14).
                         {
-                            const Value pr = Get(s, mReg[kPr]);
-                            if (pr.kind == Value::Reg && pr.v == kPr)
+                            const Value pr = Get(s, mReg[kPr]), sp = Get(s, mReg[kR15]);
+                            if (pr.kind == Value::Reg && pr.v == kPr && sp.kind == Value::Sp && sp.v == 0)
                             {
                                 uint32_t here = 0;
                                 for (int r = 0; r < kTracked; ++r)

@@ -745,3 +745,37 @@ fn
 U2:
 rts
 mov r3,r0
+name js
+# control for A3-205 (0601FA80/008's shape): F2 (not lent: it tests r3) pushes r8 and r14, loads r8, and jumps within itself through a constant (`mov.l =C,r0 ; jmp @r0`, as the walk folds 0601FA80's switch) to its epilogue, which restores r14 and r8: no tail jump (r15 is not back at the entry), no caution
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+tst r3,r3
+mov.l r8,@-r15
+mov.l r14,@-r15
+mov r15,r14
+mov.l =0x0600A000,r8
+mov.l =@C2,r0
+jmp @r0
+nop
+C2:
+mov r14,r15
+mov.l @r15+,r14
+rts
+mov.l @r15+,r8
