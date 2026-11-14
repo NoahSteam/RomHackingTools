@@ -830,17 +830,29 @@ inline WordValue SlotBefore(const sfe::decomp::DecompileResult& r, const std::fu
                 todo.push_back(p);
                 continue;
             }
+            // (A7-185: a slot of the stack pointer is not written by a store through GBR, as the read-modify-writes through GBR above are
+            // passed: the engine keeps the frame apart from the memory GBR addresses -- `mov.w r0,@(0,gbr)` on one path between `mov.l
+            // r0,@(0,r15)` and `mov.b @(0,r15),r0`; grammar 2 seed 10206181)
+            if (!A7RuleOff(185) && base == 15 && ((w >> 8) == 0xC0 || (w >> 8) == 0xC1 || (w >> 8) == 0xC2))
+            {
+                todo.push_back(p);
+                continue;
+            }
             if (reg < 0 || !BasedAccess(w, true, sbase, soff, ssize) || sbase != base) return WordValue();
             if (soff + ssize <= offset || offset + size <= soff)
             {
                 todo.push_back(p);
                 continue;
             }
-            if (soff != offset || ssize != size || !FoldedAccess(r, p, true)) return WordValue();
+            // (A7-185: a wider store that covers the slot -- `mov.l r0,@(0,r15)` of 0x59, then `mov.b @(0,r15),r0` reads its first byte, 0
+            // on the SH-2, big-endian -- gives those bytes of the register; grammar 2 seed 10206181)
+            const bool covers = !A7RuleOff(185) && soff <= offset && offset + size <= soff + ssize && ssize <= 4;
+            if ((!covers && (soff != offset || ssize != size)) || !FoldedAccess(r, p, true)) return WordValue();
             const WordValue v = RegisterBefore(r, word, into, p, reg, depth + 1);
             if (v.kind != WordValue::Number) return WordValue();
             const uint64_t bytes = size >= 4 ? 0xFFFFFFFFull : (1ull << (8 * size)) - 1;
-            const WordValue masked{ WordValue::Number, static_cast<int64_t>(static_cast<uint64_t>(v.value) & bytes) };
+            const int shift = static_cast<int>(8 * ((soff + ssize) - (offset + size)));
+            const WordValue masked{ WordValue::Number, static_cast<int64_t>((static_cast<uint64_t>(static_cast<uint32_t>(v.value)) >> shift) & bytes) };
             if (any && !(masked == result)) return WordValue();
             result = masked;
             any = true;
@@ -2138,8 +2150,32 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             operand.find_first_not_of("0123456789abcdef", operand.size() - 8) == std::string::npos)
                         {
                             const uint32_t va = static_cast<uint32_t>(std::strtoul(operand.c_str() + operand.size() - 8, nullptr, 16));
+                            // (A7-186: under a narrowing cast, `(xunknown1)uRam26001010` of the half-word the code stores at 0x26001010, the line
+                            // reads the global's low bytes, at its end on the SH-2 (big-endian): a `tas.b @r7` of the first byte reads none of them,
+                            // and the copy the engine materialised at the `tas.b` is no statement of its read; grammar 1 seed 12006099. The global's
+                            // width is the widest access of the function at its address)
+                            uint32_t from = va, bytes = 0xFFFFFFFFu;
+                            if (!A7RuleOff(186) && t.begin >= 3 && r.lines[li].text[t.begin - 1] == ')')
+                            {
+                                const std::string& lt = r.lines[li].text;
+                                const size_t open = lt.rfind('(', t.begin - 1);
+                                const std::string type = open == std::string::npos ? std::string() : lt.substr(open + 1, t.begin - 2 - open);
+                                int cast = 0;
+                                if (!type.empty() && type.find_first_of(" *") == std::string::npos)
+                                    cast = (type.back() >= '1' && type.back() <= '8') ? type.back() - '0' : (type == "char" || type == "byte" || type == "bool") ? 1 : 0;
+                                uint32_t width = 0;
+                                for (const AccessFate& f : r.accessFates)
+                                    if (!f.frame && GlobalDelta(f.address, va) == 0) width = std::max<uint32_t>(width, f.size);
+                                if (cast > 0 && width > static_cast<uint32_t>(cast) && width <= 8)
+                                {
+                                    from = va + width - static_cast<uint32_t>(cast);
+                                    bytes = static_cast<uint32_t>(cast);
+                                }
+                            }
                             for (const AccessFate& f : r.accessFates)
-                                readHere = readHere || (f.insn == t.addr && !f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
+                                readHere = readHere || (f.insn == t.addr && !f.write && !f.frame &&
+                                                        (bytes == 0xFFFFFFFFu ? GlobalDelta(va, f.address) < f.size
+                                                                              : GlobalDelta(from, f.address) < f.size || GlobalDelta(f.address, from) < bytes));
                             // (A7-165: a marked-volatile read is no fate -- the engine lists it in the ledger only, `read 2 at 0600900A direct
                             // 26001028 printed 1x` -- and `xRam26001030 = Ram26001028;` drawn at the `mov.w @r7,r0` that reads it is that load's
                             // own statement as a folded one is; grammar 1 specials seed 9302668)
@@ -2515,6 +2551,28 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             for (uint32_t x : valued) all = all && makers.count(x) != 0;
                             if (all) continue;
                         }
+                    }
+                    // (A7-184: the line's name (and its `=`) at the dead store, its value drawn at another store of the same register holding the same value
+                    // -- `uRam26001024 = (int2)xVar1;` named at the second of `mov.w r2,@r7 ; mov.w r2,@r7` and `xVar1` at the first, the
+                    // narrowing the engine made at the first store and merged; `xRam26001034 = (char)in_r3;` named at `mov.b r3,@r6` and `in_r3`
+                    // at a loop's `mov.b r3,@r5` -- is that store's own statement the engine kept (a write through a pointer before the later
+                    // store): every valued instruction stores the register the dead store stores, with the same makers of it at both; grammar 1
+                    // seeds 10202748, 10204148)
+                    if (!A7RuleOff(184) && foldedStores.count(t.addr) && t.begin >= nb && t.end <= eq + 2 && !valued.empty())
+                    {
+                        uint16_t sw = 0;
+                        int ssize = 0;
+                        const int reg = word(t.addr, sw) ? StoredRegister(sw, ssize) : -1;
+                        std::set<uint32_t> makers;
+                        bool same = reg >= 0 && RegisterMakers(r, word, into, t.addr, reg, makers) && !makers.empty();
+                        for (uint32_t x : valued)
+                        {
+                            uint16_t xw = 0;
+                            int xsize = 0;
+                            std::set<uint32_t> xm;
+                            same = same && x != t.addr && word(x, xw) && StoredRegister(xw, xsize) == reg && RegisterMakers(r, word, into, x, reg, xm) && xm == makers;
+                        }
+                        if (same) continue;
                     }
                     if (!A7RuleOff(169) && t.begin >= nb && t.begin >= eq + 3 && t.begin >= 3 && lt[t.begin - 1] == ')')
                     {
@@ -3992,7 +4050,28 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             computes = computes || (v.kind == WordValue::Number && sameNumber(static_cast<uint32_t>(v.value)));
                         }
                         EdgeT() = EdgeTruth();
-                        // (A7-152: `rotcr Rn` of a register every maker of which is a `movt` (0 or 1) is the edge's T in bit 31 and 0 below:
+                        // (A7-185: the T an instruction that reads T leaves on the edge -- `negc r3,r3` with r3 0 after a `dt` loop borrows
+                        // exactly when T was set: 1 on the `bt`'s edge, the carry the engine prints as `uVar3 = 1;`; `addc` and `subc` of
+                        // registers the words give likewise; grammar 2 seeds 10201911, 10206181)
+                        if (!computes && !A7RuleOff(185) && ((w & 0xF00F) == 0x600A || (w & 0xF00F) == 0x300E || (w & 0xF00F) == 0x300A))
+                        {
+                            const int rn = static_cast<int>((w >> 8) & 0xF), rm = static_cast<int>((w >> 4) & 0xF);
+                            const WordValue vm = RegisterBefore(r, word, sources, at, rm), vn = RegisterBefore(r, word, sources, at, rn);
+                            const uint64_t tin = static_cast<uint64_t>(edge.second);
+                            int tout = -1;
+                            if ((w & 0xF00F) == 0x600A)   // negc: 0 - Rm - T
+                            {
+                                if (tin) tout = 1;
+                                else if (vm.kind == WordValue::Number) tout = static_cast<uint32_t>(vm.value) != 0;
+                            }
+                            else if (vm.kind == WordValue::Number && vn.kind == WordValue::Number)
+                            {
+                                const uint64_t a = static_cast<uint32_t>(vn.value), b = static_cast<uint32_t>(vm.value);
+                                tout = (w & 0xF) == 0xE ? static_cast<int>((a + b + tin) >> 32) : static_cast<int>(a < b + tin);
+                            }
+                            if (tout >= 0 && sameNumber(static_cast<uint32_t>(tout))) computes = true;
+                        }
+                        // (A7-152:`rotcr Rn` of a register every maker of which is a `movt` (0 or 1) is the edge's T in bit 31 and 0 below:
                         // `movt r3 ; ... cmp/hi r1,r6 ; bt L ; ... L: rotcr r3`, `uVar1 = 0x80000000;` on the `bt`'s edge; grammar 2 seed 7807706)
                         if (!computes && !A7RuleOff(152) && (w & 0xF0FF) == 0x4025)
                         {
@@ -4008,7 +4087,42 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         }
                     }
                 }
-                if ((w >> 12) == 0x4 && ((w & 0xFF) == 0x0E || (w & 0xFF) == 0x1E || (w & 0xFF) == 0x2E || (w & 0xFF) == 0x0A || (w & 0xFF) == 0x1A ||
+                // (A7-187: the delay slot of a `bf/s` or `bt/s` that a branch also enters, on the path through the delayed branch: the straight
+                // line back to a `bf` that falls through after `tst Rn,Rn` or `dt Rn` gives Rn = 0 there -- `tst r0,r0 ; bf L ; tst r1,r3 ; bf/s M ;
+                // L: sub r0,r1` with r1 0xffffffe0 is -0x20 on that path, `cVar1 = -0x20;` -- the other way in, the `bf`'s, brings another r0;
+                // grammar 1 seed 10402034)
+                if (!computes && !A7RuleOff(187) && sources.count(at))
+                {
+                    uint16_t sw = 0;
+                    if (r.InBody(at - 2) && word(at - 2, sw) && ((sw >> 8) == 0x8D || (sw >> 8) == 0x8F))
+                    {
+                        std::map<uint32_t, std::vector<uint32_t>> slotOnly = sources;
+                        slotOnly.erase(at);
+                        for (uint32_t q = at - 2, n = 0; n < 16 && r.InBody(q - 2) && !sources.count(q); q -= 2, ++n)
+                        {
+                            uint16_t qw = 0, cw = 0;
+                            if (!word(q - 2, qw)) break;
+                            const sfe::DisassembledInstruction qd = sfe::Sh2Decode(q - 2, qw);
+                            if (!qd.IsValid) break;
+                            if ((qw >> 8) == 0x8B)
+                            {
+                                if (r.InBody(q - 4) && word(q - 4, cw) && ((cw & 0xF0FF) == 0x4010 || ((cw & 0xF00F) == 0x2008 && ((cw >> 4) & 0xF) == ((cw >> 8) & 0xF))))
+                                {
+                                    EdgeFacts().push_back(EdgeFact{ static_cast<int>((cw >> 8) & 0xF), 0, q - 2 });
+                                    for (int reg : WrittenRegisters(d))
+                                    {
+                                        const WordValue v = WrittenValue(r, word, slotOnly, at, reg, 0);
+                                        computes = computes || (v.kind == WordValue::Number && sameNumber(static_cast<uint32_t>(v.value)));
+                                    }
+                                    EdgeFacts().clear();
+                                }
+                                break;
+                            }
+                            if (qd.IsBranch || qd.IsCall || qd.HasDelaySlot) break;
+                        }
+                    }
+                }
+                if ((w >> 12) == 0x4 &&((w & 0xFF) == 0x0E || (w & 0xFF) == 0x1E || (w & 0xFF) == 0x2E || (w & 0xFF) == 0x0A || (w & 0xFF) == 0x1A ||
                                          (w & 0xFF) == 0x2A))
                 {
                     const WordValue v = RegisterBefore(r, word, sources, at, (w >> 8) & 0xF);
@@ -4032,6 +4146,20 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (!computes && !imm && !A7RuleOff(170) &&
                         (PossibleBits(r, word, sources, at, static_cast<int>((w >> 8) & 0xF)) & PossibleBits(r, word, sources, at, static_cast<int>((w >> 4) & 0xF)) & kept) == 0)
                         computes = true;
+                    // (A7-188: `and r1,r0` with r1 a number whose bits an `and #imm,r0` or `tst #imm,r0` that reads its r0 clears -- r1 0x26003c18 and
+                    // `and #0xc3,r0` in the `rts` slot: the bits the code keeps of r0 are 0, the engine's `uVar1 = 0;` -- as A7-58's `mov #imm,r0`;
+                    // grammar 1 seed 10405012)
+                    if (!computes && !imm && !A7RuleOff(188) && want == 0 && ((w >> 8) & 0xF) == 0 && ((w >> 4) & 0xF) != 0)
+                    {
+                        const WordValue v = RegisterBefore(r, word, sources, at, static_cast<int>((w >> 4) & 0xF));
+                        for (uint32_t p = r.entry; v.kind == WordValue::Number && p <= highest && highest - r.entry < 0x100000u && !computes; p += 2)
+                        {
+                            uint16_t tw = 0;
+                            if (!word(p, tw) || ((tw >> 8) != 0xC8 && (tw >> 8) != 0xC9) || (static_cast<uint32_t>(v.value) & (tw & 0xFFu)) != 0) continue;
+                            std::set<uint32_t> makers0;   // (the mask reads the AND's r0 on some path)
+                            if (RegisterMakers(r, word, sources, p, 0, makers0) && makers0.count(at)) computes = true;
+                        }
+                    }
                 }
                 // (A7-109: `or #imm,r0` and `and #imm,r0` at a join whose paths bring r0 different numbers that give one result: `or
                 // #0xBD,r0` of 8 on one path and 5 on the other is 0xBD on both; every maker of r0 an instruction that makes a number, and

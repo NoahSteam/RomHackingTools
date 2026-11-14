@@ -18532,6 +18532,76 @@ void TestArea7Review24Pins(Sh2Decompiler& d)
 // slot store from the walk; 10105433: the chain of a literal the engine folded to the number), A7-180 (grammar 2 seed 10107462, the oracle: an
 // extension of a register it cannot evaluate), and the shrunk words of A7-176 (a hoisted store in a loop) and A7-178 (a register's copy at a `bra`
 // whose slot makes the number). With the product's switch off (tools/a7_round25/mutation.sh) the oracle's rules find each.
+// Area 7 round 26: the seeds of A7-181 to A7-186 whole (and the sweep's of A7-187 and A7-188), and the shrunk programs whose word replays are faithful (the ones with a call
+// need the shrinker's function table, which the word replay does not carry: their seeds stand for them). Each fails on the mutation
+// build with the product's change off (A7-181, A7-182, A7-183, A7-186, A7-189) or with the oracle's rule off (SE_A7_RULE_OFF=184 to 188).
+void TestArea7Round26Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 1, 10202304 }, Whole{ 1, 10203009 }, Whole{ 1, 10205147 }, Whole{ 1, 10201358 }, Whole{ 1, 10202031 },
+                           Whole{ 1, 10202748 }, Whole{ 1, 10204148 }, Whole{ 2, 10201911 }, Whole{ 2, 10206181 }, Whole{ 1, 12006099 },
+                           Whole{ 1, 12009772 }, Whole{ 1, 10402034 }, Whole{ 1, 10405012 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 26: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* volatileRange;
+        const char* poll;
+    };
+    const Shrunk kShrunk[] = {
+        // A7-181: `iRam26001028 = CONCAT11(0x28,(xunknown1)iRam26001028);` at the byte store `mov.b r6,@r6` of 0x28 (0x06009018)
+        { "A7-181 grammar 1 seed 10202304 shrunk", "D607 D208 262B D708 6071 C801 8BFC E003 024C E008 0725 C00D 2660 000B 0009 0009 0600 1028 2000 0000 2600 1020",
+          "5:26003C0C", "26001020-2600102f", "26001020" },
+        { "A7-181 grammar 1 seed 10203009 shrunk", "E339 D606 735B 2631 2558 8904 E55E D704 6071 C801 8BFC 2652 000B 0009 2600 2188 2600 1024", "4:26003C18",
+          "26001020-2600102f", "26001024" },
+        // A7-182: `xRam06001024 = xVar1;`, the global as the entry left it, names no store of another value
+        { "A7-182 grammar 1 seed 10201358 shrunk", "6212 D606 3210 8F00 225B 804D 2621 2650 D603 E167 2612 000B 0009 0009 0600 1024 2600 3000", "5:26003C1C",
+          "26001020-2600102f", nullptr },
+        // A7-183: `xVar2 = (xunknown2)in_r1;` names nothing (the input, or the 0 `shll2` makes of it), not the `bt`
+        { "A7-183 grammar 1 seed 10202031 shrunk", "E301 4310 8BFD 3310 8B00 4108 2108 8901 3540 8F00 2611 D703 6072 C801 8BFC 2611 000B 0009 2600 1018", nullptr,
+          "26001010-2600101f", "26001018" },
+        // A7-184: the kept store's own statement, its value drawn at the earlier store of the same register
+        { "A7-184 grammar 1 seed 10202748 shrunk", "6212 D706 6071 C801 8BFC 2721 2721 2410 2731 D603 E106 2611 000B 0009 2600 1024 0600 3004", "4:06003C00",
+          "26001020-2600102f", "26001024" },
+        { "A7-184 grammar 1 seed 10204148 shrunk", "143E D707 2530 6071 C801 8BFB D605 2630 805B 2670 D604 E16E 2612 000B 0009 0009 2610 1038 2600 1034 0600 3008",
+          nullptr, "26001030-2600103f", "26101038" },
+        // A7-189: `xRam26001028 = (xunknown2)in_r0;` at the `mov.w r2,@r6` of the copy of in_r0 (the slot of a `bt/s`), not at `mov.w r0,@r6`
+        { "A7-189 grammar 1 seed 10407403 shrunk", "D609 4315 8D01 6203 6055 2601 C840 8901 E00B CD81 2108 8901 8802 8D00 2621 E00E 025D 000B 0009 0009 2600 1028",
+          nullptr, "26001020-2600102f", nullptr },
+    };
+    const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
+    for (const Shrunk& p : kShrunk)
+    {
+        const char* values[3] = { p.volatileRange, p.poll, p.alias };
+        std::string saved[3];
+        bool had[3];
+        for (int i = 0; i < 3; ++i)
+        {
+            const char* old = std::getenv(names[i]);
+            had[i] = old != nullptr;
+            if (old) saved[i] = old;
+            SetOrClear(names[i], values[i]);
+        }
+        const Subject subject = RawSubject(p.words);
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -20256,6 +20326,7 @@ void TestGenerated()
         RUN(TestArea7Round23Pins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
+        RUN(TestArea7Round26Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

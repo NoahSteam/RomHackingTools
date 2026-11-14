@@ -8241,7 +8241,31 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                           copied->getDef()->code() == ghidra::CPUI_COPY;
              ++hop)
             copied = copied->getDef()->getIn(0);
-        const bool selfCopy = copied && copied->getSpace() == space && copied->getOffset() == base && copied->getSize() == out->getSize();
+        // (A7-182: not the variable's value at the entry, which no store of the function wrote -- `xRam06001024 = xVar1;`, the engine's write
+        // back of the global as the entry left it after its byte 1 was stored, put over the paths' join: the stores after the read, of other
+        // values, are not its; also through the INDIRECTs of the reads that may change it (a poll loop's load) and the joins of those, back
+        // to the entry's value only; grammar 1 seed 10201358)
+        bool selfCopy = copied && copied->getSpace() == space && copied->getOffset() == base && copied->getSize() == out->getSize();
+        if (selfCopy)
+        {
+            std::set<const ghidra::Varnode*> seenSelf;
+            std::vector<const ghidra::Varnode*> todoSelf = { copied };
+            bool stored = false;
+            while (!todoSelf.empty() && !stored)
+            {
+                const ghidra::Varnode* v = todoSelf.back();
+                todoSelf.pop_back();
+                if (!seenSelf.insert(v).second) continue;
+                if (seenSelf.size() > 64) stored = true;
+                else if (v->isInput()) continue;
+                else if (!v->isWritten()) stored = true;
+                else if (v->getDef()->code() == ghidra::CPUI_INDIRECT) todoSelf.push_back(v->getDef()->getIn(0));
+                else if (v->getDef()->code() == ghidra::CPUI_MULTIEQUAL)
+                    for (ghidra::int4 i = 0; i < v->getDef()->numInput(); ++i) todoSelf.push_back(v->getDef()->getIn(i));
+                else stored = true;
+            }
+            selfCopy = stored;
+        }
         std::map<const ghidra::AccessRecord*, bool> shown;
         const auto shows = [&](const ghidra::AccessRecord* r) {
             if (!valuesFound)
@@ -8303,6 +8327,41 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     const bool v = StoreShowsValue(*r, flow, fd, zero);
                     shown[r] = v;
                     return v;
+                }
+            }
+            // A7-181: the bytes of a PIECE that are a number -- `iRam26001028 = CONCAT11(0x28,(xunknown1)iRam26001028);`, the byte store
+            // `mov.b r6,@r6` of r6's low byte 0x28 over the high byte of the word a half-word store wrote before it -- are shown by a store of
+            // those bytes only when it wrote that number (the walk's number of the stored register, as a number statement's). The value of
+            // the whole PIECE has a part the walk cannot place (the memory's, a variable's), so a store of another register "may" show it
+            // and the store of the number did not: the line was drawn at the other store (the half-word's, the rts slot's word after a
+            // call) and the store that wrote the number was on no line; grammar 1 seeds 10202304, 10203009, 10205147
+            if (code == ghidra::CPUI_PIECE && o->numInput() == 2 && r->addr.getSpace() == space && space->isBigEndian() && out->getSize() <= 8 &&
+                r->size <= 8)
+            {
+                const ghidra::uintb rel3 = (r->addr.getOffset() - base) & mask;
+                ghidra::int4 start = 0;
+                for (int k = 0; k < 2; ++k)
+                {
+                    const ghidra::int4 size = o->getIn(k)->getSize();
+                    if (rel3 >= static_cast<ghidra::uintb>(start) && rel3 + static_cast<ghidra::uintb>(r->size) <= static_cast<ghidra::uintb>(start + size))
+                    {
+                        ValueSet number;
+                        std::set<const ghidra::Varnode*> seen;
+                        FinalValues(o->getIn(k), number, seen, flow.opsEnd);
+                        if (!number.numbers.empty() && number.insns.empty() && number.inputs.empty() && number.locations.empty() && !number.rebuilt)
+                        {
+                            number.times.clear();
+                            number.partial = true;
+                            number.storeSize = r->size;
+                            number.varSize = size;
+                            number.storeAt = static_cast<int>(rel3) - start;
+                            for (int i = 0; i < r->size; ++i) number.compared |= 1u << (number.storeAt + i);
+                            const bool v = StoreShowsValue(*r, flow, fd, number);
+                            shown[r] = v;
+                            return v;
+                        }
+                    }
+                    start += size;
                 }
             }
             const ghidra::uintb rel = (r->addr.getOffset() - base) & mask;   // the store's first byte from the variable's
@@ -8391,6 +8450,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         // before the branch. Only when the statement is at no store of the variable (its own store decides then) and the search below finds
         // no store of the input itself; grammar 1 seed 4802131.
         std::vector<const ghidra::AccessRecord*> inputStores;
+        bool inputOverOwn = false;   // (A7-189: the input's stores found at a store of the variable that is not one)
         {
             const ghidra::Varnode* v = o->numInput() >= 1 ? o->getIn(0) : nullptr;
             bool lowBytes = code == ghidra::CPUI_COPY || code == ghidra::CPUI_CAST || (code == ghidra::CPUI_SUBPIECE && o->numInput() == 2 && o->getIn(1)->getOffset() == 0);
@@ -8404,7 +8464,11 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             bool atOwnStore = false;
             for (const ghidra::AccessRecord* r : stores)
                 atOwnStore = atOwnStore || (InstructionOf(*r) == at && r->addr.getSpace() == space);
-            if (lowBytes && v && v->isInput() && v->getSpace()->getType() == ghidra::IPTR_PROCESSOR && v->getSize() >= out->getSize() && !atOwnStore)
+            // A7-189: a store of a copy of the input made on every path (`mov r0,r2 ; ... ; mov.w r2,@r6`, run on both ways of a `bt/s` as its
+            // slot) is a store of the input too: `xRam26001028 = (xunknown2)in_r0;`, which the engine put at the `bt` before the paths part, was
+            // drawn at `mov.w r0,@r6`, the store of in_r0 on one path and of the word `mov.w @r5+,r0` loaded on the other, which "may" show it
+            // (grammar 1 seed 10407403). Also at a store of the variable that is no store of the input (its own store decided before).
+            if (lowBytes && v && v->isInput() && v->getSpace()->getType() == ghidra::IPTR_PROCESSOR && v->getSize() >= out->getSize())
             {
                 // (the input's low bytes in the register space: at the high end of the register on a big-endian processor)
                 const ghidra::uintb low = v->getSpace()->isBigEndian() ? v->getOffset() + static_cast<ghidra::uintb>(v->getSize() - out->getSize()) : v->getOffset();
@@ -8412,16 +8476,53 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 {
                     if (r->addr.getSpace() != space || r->addr.getOffset() != base || r->size != out->getSize()) continue;
                     FlowVn stored;
-                    if (!storedRegister(r, stored) || stored.space != v->getSpace() || stored.offset != low || stored.size != out->getSize()) continue;
+                    if (!storedRegister(r, stored) || stored.space != v->getSpace() || stored.size != out->getSize()) continue;
                     const auto pos = flow.ops.find(r->time);
+                    if (pos == flow.ops.end()) continue;
                     std::vector<const FlowOp*> writers;
                     bool input = false;
-                    if (pos != flow.ops.end() &&
-                        FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), stored, writers, &input, false) &&
-                        writers.empty() && input)
-                        inputStores.push_back(r);
+                    if (stored.offset == low)
+                    {
+                        if (FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), stored, writers, &input, false) &&
+                            writers.empty() && input)
+                            inputStores.push_back(r);
+                        continue;
+                    }
+                    // (A7-189: another register, a whole copy of the input register on every path, the input unwritten before the copy)
+                    if (v->getSize() != 4) continue;
+                    FlowVn whole = stored;
+                    whole.offset &= ~static_cast<ghidra::uintb>(3);
+                    whole.size = 4;
+                    const bool lw = FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), whole, writers, &input, false);
+                    if (!lw || input || writers.empty())
+                        continue;
+                    FlowVn inputWhole;
+                    inputWhole.space = v->getSpace();
+                    inputWhole.offset = v->getOffset();
+                    inputWhole.size = 4;
+                    bool copies = true;
+                    for (const FlowOp* w : writers)
+                    {
+                        if (!copies) break;
+                        const auto wf = flow.insnFirst.find(w->insn);
+                        copies = w->code == ghidra::CPUI_COPY && w->numIn >= 1 && w->hasOut && SameStorage(w->in[0], inputWhole) && w->out.size == 4 &&
+                                 wf != flow.insnFirst.end();
+                        std::vector<const FlowOp*> before;
+                        bool entry = false;
+                        copies = copies && FlowLastWriters(flow, fd, wf->second.first, static_cast<int>(wf->second.second), inputWhole, before, &entry, false) &&
+                                 before.empty() && entry;
+                    }
+                    if (copies) inputStores.push_back(r);
+                }
+                // (at its own store, only when that store is no store of the input: its own store decides then, as before)
+                if (atOwnStore)
+                {
+                    bool ownInput = false;
+                    for (const ghidra::AccessRecord* r : inputStores) ownInput = ownInput || InstructionOf(*r) == at;
+                    if (ownInput) inputStores.clear();
                 }
             }
+            inputOverOwn = atOwnStore && !inputStores.empty();
         }
         // A5-124: the bytes of a PIECE that keep the variable's own memory -- `xRam26001028 = CONCAT22(in_r2,xRam26001028._2_2_);`, the
         // half-word store of in_r2 over the high half, the low half the global's as it was -- are no later store's value: the store the
@@ -8788,6 +8889,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             bool found = false;
             for (const ghidra::AccessRecord* r : inputStores) found = found || chosen.count(r) != 0;
             if (!found) chosen = std::set<const ghidra::AccessRecord*>(inputStores.begin(), inputStores.end());
+            inputOverOwn = inputOverOwn && !found;
         }
         if (chosen.empty() && atLoadOrCall)
             for (ghidra::int4 b = 0; b < out->getSize(); ++b)
@@ -9179,7 +9281,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             uint32_t insn = InstructionOf(*r), canonical = 0;
             if (CanonicalAddress(insn, canonical)) insn = canonical;
             const bool slotOfCall = flow.callInsns.count(at) && r->slot && r->pc == o->getAddr() && !o->isFromDelaySlot();
-            if ((blockEnd || slotOfCall || ownOther || numberAway) && (target == 0 || insn < target)) target = insn;
+            if ((blockEnd || slotOfCall || ownOther || numberAway || inputOverOwn) && (target == 0 || insn < target)) target = insn;
         }
         if (slotMaker) target = slotMaker;
         // A7-59: a copy of memory the engine put at a call (the global's value after it, `xRam0600210c = xRam06002110;` at a `bsr`) whose
@@ -9663,9 +9765,11 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
         const uint32_t at = InstructionOf(o);
         if (flow.insnFirst.find(at) == flow.insnFirst.end()) continue;
         const bool branch = isBranch(at);
+        // (A7-186: the lines of another global's statement only, below)
+        std::set<size_t> otherLines;
+        bool otherOnly = false;
         if (!branch)
         {
-            if (out->isImplied()) continue;
             // (outside its block: the op was moved from the instruction it was made at; a register variable's line only)
             if (home->contains(o->getAddr())) continue;
             bool memory = inMemory(out->getSpace());
@@ -9676,7 +9780,39 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
                 const ghidra::MapEntry* map = entry && entry->isMapEntry() ? static_cast<const ghidra::MapEntry*>(entry) : nullptr;
                 memory = map && inMemory(map->getAddr().getSpace());
             }
-            if (memory) continue;
+            if (out->isImplied() || memory)
+            {
+                // A7-186: a narrowing the engine merged and kept at a store of one global (`mov.b r3,@r7` of `extu.w r4,r3`'s low byte into
+                // 0x26001038), printed inside the statement of another global (`xRam04000008 = CONCAT13((char)param_1,...);`, the
+                // `mov.b r4,@r6` after the `if`): on that line the operand is drawn at the store of another value, whose way back then
+                // answered that line before the store's own statement. On a line that assigns a global the store does not write, the
+                // operand's drawn tokens go to the value's makers as above (the input's: nothing); the store's own line keeps them.
+                // Grammar 1 seed 12009772
+                std::vector<const ghidra::AccessRecord*> atStores;
+                for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+                    if (rec.store && rec.fate == ghidra::fate_folded_ordinary && !rec.addr.isInvalid() && rec.addr.getSpace() == data && rec.size > 0 &&
+                        InstructionOf(rec) == at)
+                        atStores.push_back(&rec);
+                if (atStores.empty()) continue;
+                const auto norm = [](ghidra::uintb a) { return (a >> 29) <= 1 ? a & 0x07FFFFFFu : a; };
+                for (size_t line : printed.at(o).first)
+                {
+                    bool assignsOther = false, assignsStore = false;
+                    for (const ghidra::PcodeOp* p : ordered)
+                    {
+                        const ghidra::Varnode* po = p->getOut();
+                        if (p == o || !po || po->isImplied() || po->getSpace() != data || !printed.at(p).first.count(line)) continue;
+                        bool overlaps = false;
+                        for (const ghidra::AccessRecord* st : atStores)
+                            overlaps = overlaps || (norm(st->addr.getOffset()) < norm(po->getOffset()) + static_cast<ghidra::uintb>(po->getSize()) &&
+                                                    norm(po->getOffset()) < norm(st->addr.getOffset()) + static_cast<ghidra::uintb>(st->size));
+                        (overlaps ? assignsStore : assignsOther) = true;
+                    }
+                    if (assignsOther && !assignsStore) otherLines.insert(line);
+                }
+                if (otherLines.empty()) continue;
+                otherOnly = true;
+            }
         }
         // The instructions that made the converted value: through the engine's joins and copies, a flow op's on each path
         std::set<uint32_t> makers;
@@ -9765,7 +9901,10 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             makers = viaStore;
         }
         // (a global among other paths' values: those paths' makers stand, the one that is the global as the call left it names nothing)
-        if (unknown || (makers.empty() && !input) || (numbers && makers.empty())) continue;
+        // (A7-183: a number on one path and the function's input on another -- `xVar2 = (xunknown2)in_r1;` drawn at the `bt`, r1 the input
+        // or the 0 that `shll2 r1` makes of it when it is 0 -- names nothing, as the input's path alone does: the number's maker is no
+        // maker of the input's value; a number with no maker on any other path, and no input, is left as it is; grammar 1 seed 10202031)
+        if (unknown || (makers.empty() && !input)) continue;
         if (input) makers.clear();   // (a path with no maker: the line names nothing, as A7-21's)
         if (makers.count(from)) continue;
         const uint32_t lowest = makers.empty() ? 0 : *makers.begin();
@@ -9774,7 +9913,9 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             // (another op of the instruction on the line: at a branch, the engine's copy of the conversion's value, `pxStack_24 = (xunknown4 *)
             // extraout_r3;` with the frame's copy and the cast both at the `bf`, which makes neither (grammar 2 specials seed 10000825), or its
             // shift; never the branch's own line)
-            if (line >= lines.size() || control.count(std::make_pair(line, from)) || (!branch && shared.count(std::make_pair(line, from)))) continue;
+            if (line >= lines.size() || control.count(std::make_pair(line, from)) || (!branch && shared.count(std::make_pair(line, from))) ||
+                (otherOnly && !otherLines.count(line)))
+                continue;
             Line& l = lines[line];
             bool any = false;
             for (Token& t : l.tokens)
