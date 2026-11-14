@@ -16740,6 +16740,31 @@ void TestArea7Round18Pins(Sh2Decompiler& d)
     gSpecialReads = savedSpecials;
 }
 
+// Area 7 round 19: the routed seeds of A5-141 (grammar 1 seed 8203175, `v:read-after-folded-store`, A7-155: no finding of any kind),
+// `map-const-join` (8202449, 8207405: they pass on the branch's base, with and without specials) and `map-way-back` (specials seeds
+// 8302980 and 8303997, A7-157 and A7-156), pinned to no `map-*` finding (the shrunk programs are TestArea7Round19's in Sh2DecompilerTests)
+void TestArea7Round19Pins(Sh2Decompiler& d)
+{
+    struct Pin
+    {
+        int grammar;
+        int seed;
+        bool specials;
+        bool any;   // no finding of any signature
+    };
+    const bool savedSpecials = gSpecialReads;
+    for (const Pin& s : { Pin{ 1, 8203175, false, true }, Pin{ 1, 8203175, true, true }, Pin{ 1, 8202449, false, false }, Pin{ 1, 8202449, true, false },
+                          Pin{ 1, 8207405, false, false }, Pin{ 1, 8207405, true, false }, Pin{ 1, 8302980, true, false }, Pin{ 1, 8303997, true, false } })
+    {
+        gSpecialReads = s.specials;
+        const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(s.seed) : Generate(s.seed), true);
+        std::printf("pin 'area 7 round 19: grammar %d seed %d%s': %zu finding(s)\n", s.grammar, s.seed, s.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        for (const Finding& f : rep.findings) CHECK(f.sig.find("map-") == std::string::npos && !s.any);
+    }
+    gSpecialReads = savedSpecials;
+}
+
 // ---- A5-114 to A5-118 (patch 0090): a hardware access is a barrier no read or write of ordinary memory is moved, merged or dropped across ----
 // The area 5 review round's fixtures (A5-114 to A5-117, Sh2DecompilerTests' TestArea5Review), the coordinator's A5-118 (a whole overwrite of a
 // global across a DMA enable), and the seeds that failed on master 43e945b2 with `folded-store-after-access`. Each module pin passes with the
@@ -18067,6 +18092,7 @@ void TestGenerated()
         RUN(TestArea7Round16Pins(d));
         RUN(TestArea7Round17Pins(d));
         RUN(TestArea7Round18Pins(d));
+        RUN(TestArea7Round19Pins(d));
         RUN(TestA5114Pins(d));
         RUN(TestA5119Pins(d));
         RUN(TestA5126Pins(d));
