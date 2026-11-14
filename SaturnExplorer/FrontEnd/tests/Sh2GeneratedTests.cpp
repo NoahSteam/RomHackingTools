@@ -291,6 +291,48 @@ static bool PieceOfAssignedGlobal(const std::string& text, size_t from, size_t a
     if (b == std::string::npos || ram == std::string::npos || ram + 11 > from) return false;
     return text.compare(ram + 3, 8, text, at + 3, 8) == 0;
 }
+// (A5-139) A statement `G = G & 0xffffff;` or `G = G | 0xff000000;` (G the whole word, `uRam26002188`): the engine's form of a byte or half store of the
+// constant 0 or 0xff, which it has widened to the word; the bytes it keeps are read, and the stored bytes are the mask's 00 (and) or ff (or) bytes.
+// `base` is the global's address, `lo` and `hi` the byte range the mask writes (big-endian: the first byte is the word's address).
+static bool MaskedOwnWord(const std::string& text, uint32_t& base, uint32_t& lo, uint32_t& hi)
+{
+    const size_t b = text.find_first_not_of(' ');
+    if (b == std::string::npos) return false;
+    size_t e = b;
+    while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_' || text[e] == '.')) ++e;
+    const std::string name = text.substr(b, e - b);
+    const size_t ram = name.find("Ram");
+    unsigned v = 0;
+    if (ram == std::string::npos || name.size() != ram + 11 || name.find('.') != std::string::npos || std::sscanf(name.c_str() + ram + 3, "%8x", &v) != 1) return false;
+    if (text.compare(e, 3, " = ") != 0 || text.compare(e + 3, name.size(), name) != 0) return false;
+    size_t k = e + 3 + name.size();
+    char op = 0;
+    if (text.compare(k, 3, " & ") == 0) op = '&';
+    else if (text.compare(k, 3, " | ") == 0) op = '|';
+    else return false;
+    k += 3;
+    unsigned mask = 0;
+    int used = 0;
+    if (text.compare(k, 2, "0x") != 0 || std::sscanf(text.c_str() + k + 2, "%x%n", &mask, &used) != 1 || used <= 0) return false;
+    k += 2 + static_cast<size_t>(used);
+    if (text.compare(k, std::string::npos, ";") != 0) return false;
+    const unsigned keep = op == '&' ? 0xffu : 0x00u;
+    lo = 4;
+    hi = 0;
+    for (uint32_t i = 0; i < 4; ++i)
+    {
+        const unsigned byte = (mask >> (8 * (3 - i))) & 0xffu;
+        if (byte == keep) continue;
+        if (byte != (op == '&' ? 0x00u : 0xffu)) return false;
+        if (lo == 4) lo = i;
+        hi = i + 1;
+    }
+    if (lo == 4) return false;
+    for (uint32_t i = lo; i < hi; ++i)   // (the written bytes are one run)
+        if (((mask >> (8 * (3 - i))) & 0xffu) == keep) return false;
+    base = v;
+    return true;
+}
 // A read whose value is used only by an expression the engine folds to a constant (x ^ x, x - x,
 // x == x, x & 0, a test of bits a shift cleared) is dropped (ledger A5-1), and that one class fills
 // a run. SE_GENERATED_FENCE keeps its triggers out of the grammar, so the run can look for others:
@@ -7009,6 +7051,17 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         unsigned off = 0, sz = 0;
                         if (std::sscanf(l.text.c_str() + at + std::strlen(name), "%u_%u_", &off, &sz) != 2 || sz == 0) continue;
                         count("order.folded-store.piece-store");
+                        // (A5-140: `g._1_3_ = g._1_3_;` writes the bytes that are there: A5-112's class, the engine's saved copy of a piece it
+                        // restores, value-preserving; counted, not judged)
+                        {
+                            const size_t eq = l.text.find(" = ", e), semi = l.text.find_last_of(';');
+                            if (eq != std::string::npos && semi != std::string::npos && l.text.compare(b, e - b, l.text, eq + 3, semi - eq - 3) == 0 &&
+                                semi - eq - 3 == e - b)
+                            {
+                                count("order.folded-store.piece-self");
+                                continue;
+                            }
+                        }
                         const uint32_t lo = f.address + off, hi = lo + sz;
                         bool made = false, readNamed = false;
                         for (const AccessFate& o : r.accessFates)
@@ -7347,9 +7400,25 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             }
                             return false;
                         };
+                        // (A5-139: `G = G & 0xffffff;` is the engine's widened byte store of the constant 0, which the code makes from a register
+                        // it read as 0 before the pointer write, and the engine folded to the constant: the statement reads the bytes the store
+                        // keeps, and the folded read's value is the mask. A store of the line's token that writes exactly the mask's bytes.)
+                        const auto constantStore = [&](const Line& l) {
+                            uint32_t base = 0, lo = 0, hi = 0;
+                            if (!MaskedOwnWord(l.text, base, lo, hi)) return false;
+                            for (const Token& t : l.tokens)
+                                for (const AccessFate& o : r.accessFates)
+                                    if (o.write && o.insn == t.addr && o.size < 4 && o.address == base + lo && o.size == hi - lo) return true;
+                            return false;
+                        };
                         for (size_t li = mEnd + 1; li < r.lines.size(); ++li)
                         {
                             if (!readsGlobal(r.lines[li]) || !derives(r.lines[li]) || offPath(r.lines[li], m, rd.insn)) continue;
+                            if (constantStore(r.lines[li]))
+                            {
+                                count("order.folded-read-before-pointer-write.constant-store");
+                                continue;
+                            }
                             add("folded-read-after-pointer-write", "the read at " + Hex(rd.insn) + " the engine folded from " + Hex(rd.address) +
                                                                        " is named on no line, and line " + std::to_string(li) + " reads the global after the write through a pointer at " +
                                                                        Hex(m.insn) + " (line " + std::to_string(m.firstLine) + "), which the code makes after the read and before no other read of it");
@@ -17138,6 +17207,85 @@ void TestA5FoldedPins(Sh2Decompiler& d)
     }
 }
 
+// The routed folded seeds, second round (A5-139, A5-140): grammar 1 seeds 7600046 and 8105482, whole and shrunk. Each shrunk program is replayed
+// from the replay line the report prints (words, the pointer's alias, the request that marks the mailbox, its poll).
+void TestA5FoldedPins2(Sh2Decompiler& d)
+{
+    auto count = [](const Report& rep, const char* name) {
+        const auto it = rep.counts.find(name);
+        return it == rep.counts.end() ? 0 : it->second;
+    };
+    for (const long seed : { 7600046L, 8105482L })
+    {
+        const Report rep = Evaluate(d, Generate(static_cast<uint64_t>(seed)), true);
+        std::printf("pin 'A5-139/140 grammar 1 seed %ld': %zu finding(s)\n", seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* volatileRange;
+        const char* poll;
+        const char* count;
+    };
+    const Shrunk kShrunk[] = {
+        // A5-139, 7600046: a half-word read of the global, a store of it through a pointer, a byte store of the read's low byte (constant 0)
+        { "A5-139 grammar 1 seed 7600046 shrunk", "D106 D607 C840 8D03 2612 6361 2411 2630 D704 6072 C801 8BFC 000B 0009 0600 3C10 2600 238C 2600 1030", "4:06003C10",
+          "26001030-2600103F", "26001030", "order.folded-read-before-pointer-write.constant-store" },
+        // A5-140, 8105482: the engine's saved copy of the three bytes a byte store keeps, restored: `g._1_3_ = g._1_3_;`
+        { "A5-140 grammar 1 seed 8105482 shrunk", "D607 6062 D707 6071 C801 8BFC 2028 8901 8803 8D02 2610 6060 6341 000B 0009 0009 2600 2188 0600 1018", "5:26003C04",
+          "26001010-2600101F", "06001018", "order.folded-store.piece-self" },
+        // ...and by hand, without the poll and the mailbox
+        { "A5-140 hand-shrunk", "D607 6062 0009 0009 0009 0009 0009 8901 8803 8D02 2610 6060 6341 000B 0009 0009 2600 2188", nullptr, nullptr, nullptr,
+          "order.folded-store.piece-self" },
+    };
+    const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
+    for (const Shrunk& p : kShrunk)
+    {
+        const char* values[3] = { p.volatileRange, p.poll, p.alias };
+        std::string saved[3];
+        bool had[3];
+        for (int i = 0; i < 3; ++i)
+        {
+            const char* old = std::getenv(names[i]);
+            had[i] = old != nullptr;
+            if (old) saved[i] = old;
+            SetOrClear(names[i], values[i]);
+        }
+        const Subject subject = RawSubject(p.words);
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s), %s %d\n", p.name, rep.findings.size(), p.count, count(rep, p.count));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, p.count) > 0);
+        const size_t at = rep.text.find("  replay: SE_GENERATED_WORDS=\"");
+        CHECK(at != std::string::npos);
+        if (at == std::string::npos) continue;
+        const std::string line = rep.text.substr(at, rep.text.find('\n', at) - at);
+        auto value = [&](const char* name, bool quoted) {
+            const size_t k = line.find(std::string(name) + "=" + (quoted ? "\"" : ""));
+            if (k == std::string::npos) return std::string();
+            const size_t from = k + std::strlen(name) + 1 + (quoted ? 1 : 0);
+            return line.substr(from, line.find(quoted ? '"' : ' ', from) - from);
+        };
+        const std::string words = value("SE_GENERATED_WORDS", true), vol = value("SE_GENERATED_VOLATILE", false), poll = value("SE_GENERATED_POLL", false),
+                          alias = value("SE_GENERATED_ALIAS", false);
+        CHECK(vol.empty() == (p.volatileRange == nullptr));
+        CHECK(poll.empty() == (p.poll == nullptr));
+        CHECK(alias.empty() == (p.alias == nullptr));
+        const std::string got[3] = { vol, poll, alias };
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], got[i].empty() ? nullptr : got[i].c_str());
+        const Subject again = RawSubject(words.c_str());
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], nullptr);
+        const Report rr = EvaluateSubject(d, again, true);
+        std::printf("  replay line '%s': %zu finding(s), %s %d\n", line.c_str(), rr.findings.size(), p.count, count(rr, p.count));
+        CHECK(rr.findings.size() == rep.findings.size() && count(rr, p.count) == count(rep, p.count));
+    }
+}
+
 void TestA3RoutedPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -17900,6 +18048,7 @@ void TestGenerated()
         RUN(TestA5129Pins(d));
         RUN(TestRouted345Pins(d));
         RUN(TestA5FoldedPins(d));
+        RUN(TestA5FoldedPins2(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
