@@ -1343,6 +1343,13 @@ private:
                 const uint32_t outBits = e.leaks | e.outOrigins;
                 for (int r = 4; r < 8; ++r)
                     if ((outBits >> r) & 1u) HandOut(s, Get(s, mReg[r]));
+                // (A3-192) ...and a frame address this function holds in a register the engine takes the call to kill, which the callee may
+                // leave as it was: any register outOrigins names (A3-190: one return keeps it, another changes it; r1 to r3, r8 to r14, GBR,
+                // MACH, ...), and r0 and r1 when the callee keeps them, as every lent call kills those two (LendEffects). The engine reads
+                // the register after the call as the call's (`extraout_r1`), and a store through it was folded past the local it reaches.
+                for (int r = 0; r < kTracked; ++r)
+                    if (r != kR15 && (r < 4 || r >= 8) && (((outBits >> r) & 1u) || (r < 2 && ((e.preserved >> r) & 1u))))
+                        HandOut(s, Get(s, mReg[r]));
                 if (outBits & origin::kMemory)
                 {
                     const Value callSp = Get(s, mReg[kR15]);
@@ -10026,9 +10033,16 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         {
             // (A3-184: an op the actions made, with no time of the flow (the RETURN of `rts ; nop` the engine rebuilds), is the code of its
             // instruction's block, when that is one block: the text keeps that block.)
-            const std::vector<int>& inst = instancesOf(InstructionOf(o));
+            // (A3-191: ...when the final block it is in holds that instruction. The actions put an op made for an instruction where the value it
+            // takes is made: grammar 1 seed 8209018's SUBPIECE of r2 for the `mov.b r2,@r7` after a poll sits in the loop before the poll that
+            // writes r2, with the store's address, and it kept nothing of the code after the poll, which the engine removed: the store and
+            // the call there went unsaid, and the hand-shrunk form of the seed was lent.)
+            const ghidra::BlockBasic* home = static_cast<const ghidra::BlockBasic*>(o->getParent());
+            const uint32_t insn = InstructionOf(o);
+            const bool inHome = home != nullptr && !home->getStart().isInvalid() && home->getStart().getOffset() <= insn && insn <= home->getStop().getOffset();
+            const std::vector<int>& inst = instancesOf(insn);
             const int fb = inst.size() == 1 ? inst[0] : instanceOf(o).first;
-            if (fb >= 0 && static_cast<size_t>(fb) < nf) keptBlock[static_cast<size_t>(fb)] = 1;
+            if (inHome && fb >= 0 && static_cast<size_t>(fb) < nf) keptBlock[static_cast<size_t>(fb)] = 1;
         }
         const ghidra::Varnode* v = o->getOut();
         if (!v || o->code() == ghidra::CPUI_MULTIEQUAL || o->code() == ghidra::CPUI_INDIRECT) continue;

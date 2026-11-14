@@ -17652,6 +17652,56 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         for (const Finding& f : caller.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(caller.findings.empty() && count(caller, "proto.lent") > 0 && !five && caller.text.find("return xStack_c;") != std::string::npos);
     }
+    {
+        // A3-191 (routed, area 3 round 24): grammar 1 seed 8209018, `n:endless-call-dropped`. A3-184 took an op the actions made for an instruction
+        // (no time of the flow) for code of that instruction's flow block wherever the op was. The SUBPIECE of r2 the engine makes for the
+        // `mov.b r2,@r7` after the poll sits in the loop before the poll that writes r2, so the code after the poll was taken for kept, left out
+        // of the region, and its store and call went unsaid. Now such an op counts only in a final block that holds its instruction.
+        const Report seed = Evaluate(d, Generate(8209018), true);
+        std::printf("pin 'A3-191 grammar 1 seed 8209018': %zu finding(s), endless-call checked %d said %d\n", seed.findings.size(),
+                    count(seed, "endless-call.checked"), count(seed, "endless-call.said"));
+        for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(seed.findings.empty() && count(seed, "endless-call.said") > 0);
+        // hand-shrunk (the shrinker's fixture loses the push of PR), the call made by `jsr` through a literal: the function was lent
+        // `void (xunknown1 *)` with nothing said; now the store and the call after the poll are said and the signature is withheld
+        const ModulePin m = { "A3-191 hand-shrunk", "032A 2F36 E301 623C 2430 4310 8BFB D714 E001 2701 6071 C801 8BFC 2720 D111 410B 0009 63F6 432A 000B 0009 "
+                              "0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 D109 E27B 2122 000B E07B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                              "0009 0009 0600 1030 0600 9040 2600 3044", "0/0/2a,40/40/4a", nullptr, "0,0", nullptr, nullptr };
+        const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+        const bool callSaid = w.text.find("note 0600901E (caution): the call here is missing") != std::string::npos;
+        const bool storeSaid = w.text.find("note 0600901A (caution): the 1-byte write of 0x06001030 here is missing") != std::string::npos;
+        const bool withheld = w.text.find("prototype: withheld: a write after a loop the analysis takes to run for ever is missing") != std::string::npos;
+        std::printf("pin '%s': call said %d, store said %d, withheld %d\n", m.name, int(callSaid), int(storeSaid), int(withheld));
+        CHECK(callSaid && storeSaid && withheld);
+    }
+    {
+        // A3-192 (area 3 round 24): a frame address the caller holds in a register outside r4-r7 across a lent call that may leave it there. The
+        // engine kills r0 and r1 at every lent call and any register the callee does not keep, so the caller's store through it after the call
+        // was folded past the local (`return 5;`; every run returns 7). The probe handed out only r4-r7 of outOrigins (A3-91); A3-190 makes
+        // outOrigins name a register one return keeps and another changes, of any number. Each module: a local of 5, its address in the
+        // register, `bsr` F1 (lent), `mov #7,r2 ; mov.l r2,@reg`, return the local.
+        const ModulePin pins[] = {
+            { "A3-192 r1, F1 changes r1 on one return", "4F22 7FF8 E205 2F22 61F3 B009 0009 E207 2122 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E100 000B 0009 000B 0009 "
+              "0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/1c,20/20/2e", nullptr, "1,0", nullptr, nullptr },
+            { "A3-192 r1, F1 keeps r1 (the engine kills it)", "4F22 7FF8 E205 2F22 61F3 B009 0009 E207 2122 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E200 000B 0009 "
+              "000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/1c,20/20/2e", nullptr, "1,0", nullptr, nullptr },
+            { "A3-192 r3, F1 changes r3 on one return", "4F22 7FF8 E205 2F22 63F3 B009 0009 E207 2322 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E300 000B 0009 000B 0009 "
+              "0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/1c,20/20/2e", nullptr, "1,0", nullptr, nullptr },
+            { "A3-192 r9, F1 changes r9 on one return", "4F22 2F96 7FF8 E205 2F22 69F3 B008 0009 E207 2922 60F2 7F08 69F6 4F26 000B 0009 2448 8B02 E900 000B 0009 000B 0009 "
+              "0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/20,20/20/2e", nullptr, "1,0", nullptr, nullptr },
+            { "A3-192 r0, F1 keeps r0 (the engine kills it)", "4F22 7FF8 E205 2F22 60F3 B009 0009 E207 2022 60F2 7F08 4F26 000B 0009 0009 0009 2448 000B 0009 0009 0009 "
+              "0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/1c,20/20/26", nullptr, "1,0", nullptr, nullptr },
+        };
+        for (const ModulePin& m : pins)
+        {
+            const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+            const bool five = rep.text.find("return 5;") != std::string::npos;
+            const bool local = rep.text.find("return xStack_") != std::string::npos;
+            std::printf("pin '%s': %zu finding(s), lent %d, `return 5;` %s\n", m.name, rep.findings.size(), count(rep, "proto.lent"), five ? "printed" : "not printed");
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(rep.findings.empty() && count(rep, "proto.lent") > 0 && !five && local);
+        }
+    }
 }
 
 void TestA365Pins(Sh2Decompiler& d)
