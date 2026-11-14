@@ -20852,3 +20852,61 @@ No further finding in these; no fixtures were built beyond the pins.
 ### 7. Routed
 
 * **Area 7:** grammar 2 seed 8605977, `n:map-store-after` (replay `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=8605977 SE_GENERATED_CANARY=0`).
+
+## Area 3, A3-192
+
+Fixer, branch `review/3-a3192`, cut at master `9909d8df`. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). One host change (`Sh2Decompiler.cpp`, the probe), one oracle change and the pins (`Sh2GeneratedTests.cpp`, `TestA3RoutedPins`); **no engine patch: 0089 stays free.** Scripts: `Docs/Decompiler/tools/a3_a3192/` (`run.sh`: round 24's fixtures o0 to o7 through `a3_round24/run24.py`; `corpus.sh`: both images alone and lent with two binaries, and the function texts compared).
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-192 | P1 | **fixed** (host): a possible frame address the engine loses at a call is marked there and let out at its first read after it |
+| A3-193 | P3 | **fixed** (oracle): an r0 used as an index after its last write is A3-41's scratch, counted `excluded.r0-index.return-dropped` |
+
+### A3-192: let the address out where it is read
+
+The hazard is the engine's reading of a register after a call: when the engine takes the call to kill the register, the value after it is an output of the call (`extraout_r1`), a pointer it cannot place. If the register held the address of a local and the callee left it there, a store through it after the call is a store into the local; patch 0063 guards such a store only once the probe has declared that the frame went out (`declareHostEscape`), and nothing declared it, so the local was folded (`*extraout_r1 = 7; return 5;`).
+
+Which registers: the engine kills r0 and r1 at a lent call whatever the callee keeps (`LendEffects`), and every register the lent callee does not keep; at any other call, the default model's r0-r7, SR, MACH and MACL. The callee may leave the address there: a lent callee in r0 or r1 when it keeps them, and in a register it does not keep when `outOrigins` names it (A3-190: a return that leaves it as it began; a lent callee reads no register outside r4-r7 for a value, A3-5, so the address can only stay in its own register); a callee that is not lent in any register it kills.
+
+Round 24's attempt handed every such register out at the call (`HandOut`), which declares the escape for every frame address compiled code leaves in a scratch register at a call, read afterwards or not (31 and 43 texts, 2 lent signatures in each image). The fix marks instead: in the request's probe (tolerant, not nested), `Call` records for each register what letting it out would add (`KeptClass`: `EscapeClass`, with the frame's slots as `HandOut` adds them, and any mark it already carries) and, after `Apply`, sets `Value::kept` on the register's value when the engine kills it and the callee may leave it there. The mark is carried by a copy (`mov r1,r2`), a part of the register, and a join (`Merge`: the union); a later call that may leave the register as it was marks it again from the mark it carries. The first read lets it out (`UseKept`: `State::out` and the host escape, as `HandOut`): an op of `Step` that takes the value as an operand other than a copy (the address of a load or a store, a value stored, any computation, a branch), or a later call handed it in r2 or r4-r7. A mark nothing reads costs nothing.
+
+The fixtures (`tools/a3_round24/fixtures.src`, `run.sh`), each a local of 5, its address in the register, the call, `mov #7,r2 ; mov.l r2,@reg`, the local returned; every run returns 7:
+
+| Fixture | Register, callee | Master | This branch |
+|---|---|---|---|
+| o1 | r1, lent F1 sets r1 on one return | `return 5;` | `*extraout_r1 = 7; return xStack_c;` |
+| o1c | r1, lent F1 never touches it | `return 5;` | `return xStack_c;` |
+| o3 | r3, lent F1 sets r3 on one return | `return 5;` | `return xStack_c;` |
+| o4b | r9 (saved by the caller), lent F1 sets r9 on one return | `return 5;` | `return xStack_10;` |
+| o5 | r0, lent F1 keeps r0 | `return 5;` | `return xStack_c;` |
+| o7 | r1, F1 not lent (reads r3) | `return 5;` | `return xStack_c;` |
+| o0, o2, o6 (controls) | r7 | `return xStack_c;` | `return xStack_c;` |
+
+The callers stay withheld ("it uses r1 after calling ..."): the text is now right, the signature still not lent.
+
+Pins: `TestA3RoutedPins`, the A3-192 block (the nine modules: no finding, a lent callee but for o7, no `return 5;`, the local returned). Mutation: with the mark switched off (`keepKept = false`) the six fixture pins fail (6 CHECKs); the three controls pass either way.
+
+**Corpus** (`a7_round2/corpus.sh`, master's binary and this branch's, the token dumps compared function by function). Lent counts unchanged: hwram007 "[after] real entries 999: signatures lent 474 (645 parameters)", hwram008 "1543: 724 (975)"; missing and said 0 and 4; both "all passed". Four function texts change, each a correction:
+
+* **0600D316 (hwram007, alone) and 0600E372 (hwram008, alone)**, the same function: `char acStack_c [12];` becomes `char acStack_c [8];`. The function pushes PR and allocates 8 bytes (`sts.l pr,@-r15 ; add #-8,r15 ; mov r15,r14`); the array is r14 + 0 to + 7, which its loop clears byte by byte (8 bytes), and the word above it is the saved PR. The read: the second loop leaves `mov r14,r0` (the array's address) in r0 at `jsr @r12`, a callee not lent in the alone run, and reads r0 after it (`mov r0,r1`, the call's result). The engine now knows the frame went out; the 12-byte extent over the saved PR was the engine's guess for an index it cannot bound. Lent, the callee returns a value and keeps no r0, so nothing is marked and the lent text is master's.
+* **06041248 and 06041256 (hwram008, lent)**, one function and an entry inside it: the frame pointer r14 is lost at `jsr` 0x06041AA0 (at 0x060416A4). The callee saves r8-r14 and restores them, but it writes its own frame through an index (`mov.l r7,@(r0,r14)`), so its lent claim keeps no r14 and names it in `outOrigins`; the engine kills r14 at the call. After it the caller reads its locals through r14 (`mov.l @r14,r1` at 0x06041736). Master printed those reads as `uVar17 = *extraout_r14;` and dropped the stores into the frame before the call (no reader the engine could see): words read that the text never wrote. This branch declares the escape at that read, and the stores are kept (`uStack_40 = 0;`, `uStack_40 = (uint4)uRam0608daa0;`, `iStack_3c = ...`, eight locals): the text now shows what the reads read. Right; longer.
+
+### A3-193: an r0 used as an index
+
+`R0IndexAfterLastWrite` (oracle, `Sh2GeneratedTests.cpp`): a plain `return-dropped` (not the generator's own choice, `return-dropped:choice`, which keeps its rule) is counted `excluded.r0-index.return-dropped` when on every run that finished the function's own last write of r0 is followed by an instruction of its own with r0 as an index (`@(r0,Rn)`, `@(r0,gbr)`) and by no instruction of a callee (a call after it may have written r0). Read from the runs' instructions (`pcs`, `depths`), not from the productions. That is A3-41's reading (a value in r0 the function used as an address is scratch). Grammar 2 seed 8602477 now passes with the count 1. Pins (`TestA3RoutedPins`, the A3-193 block): the seed, and the reading on made-up runs over `mov #7,r0 ; mov.b @(r0,r4),r1 ; rts ; nop ; add #1,r0`: the index after the last write (yes), r0 written again after it, a callee's instruction after the last write, no write of r0, one of two runs without the index (no). With the excuse switched off the seed's pin fails (1 CHECK).
+
+### Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117** (111 and the 6 Live tests) |
+| fault suite | fault matrix: **0 of 94** job(s) failed |
+| 20,000-seed matrix (canary on) | `failing seeds=0; findings=0` |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus, lent (`a7_round2/corpus.sh`, both images; the corpus binary is byte-identical to the final build's) | both "all passed", every ledger count 0; missing and said **0** and **4**; "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**"; function texts against master's: hwram007 alone 1 (0600D316), lent 0; hwram008 alone 1 (0600E372), lent 2 (06041248, 06041256), each explained above |
+| seed 8602477 (grammar 2) | all passed, `excluded.r0-index.return-dropped=1` |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: ok (no vendored file touched) |
+
+### Routed
+
+Nothing.
