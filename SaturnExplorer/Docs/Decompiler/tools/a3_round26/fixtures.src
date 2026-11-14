@@ -1,0 +1,268 @@
+# Area 3 round 26: fixtures for run26.py (the syntax of round 25's fixtures.src). The callers are round 25's vCr8 (a local of 5, its address in
+# r8, the call, 7 stored through r8, the local returned) unless said; F1 is not lent (it reads r3 on entry).
+name x1
+# A3-197 attacked (a caution where the callee restores): F1 steps r8 by 4 and back on every path (`add #4,r8 ; ... ; add #-4,r8`): it keeps r8;
+# every run returns 7
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+add #4,r8
+mov.l @r8,r1
+add #-4,r8
+rts
+mov r3,r0
+name x2
+# A3-197 attacked (a change the walk misses): F1 saves r8, stores r3 through an index the walk cannot bound (r0 = r4 & 4, w9's store), restores
+# r8, then clears r8 when r5 = 0; the paths meet at one `rts`. On those runs the store goes to 0 and the function returns 5
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r8,@-r15
+add #-8,r15
+mov r4,r0
+and #4,r0
+mov.l r3,@(r0,r15)
+add #8,r15
+mov.l @r15+,r8
+tst r5,r5
+bf K1
+mov #0,r8
+K1:
+rts
+mov r3,r0
+name x2r
+# control for x2: the same F1 with two returns (the clear before its own `rts`): the caution
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r8,@-r15
+add #-8,r15
+mov r4,r0
+and #4,r0
+mov.l r3,@(r0,r15)
+add #8,r15
+mov.l @r15+,r8
+tst r5,r5
+bf K1
+rts
+mov #0,r8
+K1:
+rts
+mov r3,r0
+name x3
+# A3-197 attacked (a tail call): F1 tests r3 and jumps to F2 (`bra`), which clears r8 on one return (vCr8's F1)
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bra F2
+nop
+fn
+F2:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+name x4
+# A3-197 attacked (placement): two calls of vCr8's F1 on two paths (r6 = 0 or not), the paths meet, then 7 stored through r8
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+tst r6,r6
+bt A1
+bsr F1
+nop
+bra J1
+nop
+A1:
+bsr F1
+nop
+J1:
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+name x5
+# A3-197's sibling: GBR, which the default model keeps too. F1 (vCr8's shape) loads GBR from r3 on one return (`ldc r3,gbr`); the caller
+# returns GBR (`stc gbr,r0`). Runs on which F1 loads it return r3
+ret 1,0
+.word 0x4F22
+bsr F1
+nop
+.word 0x0012
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+.word 0x431E
+K1:
+rts
+nop
+name x6
+# x5 with the caller reading a word through GBR after the call (`mov.l @(4,gbr),r0`)
+ret 1,0
+.word 0x4F22
+bsr F1
+nop
+.word 0xC601
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+.word 0x431E
+K1:
+rts
+nop
+name x7
+# A3-194 attacked (a walked callee that reads, not writes): k4d with the local set to 6 after F1 and F2 returning the word at r3 (`mov.l @r3,r0`);
+# the caller returns F2's r0. Runs with r4 != 0 return 6
+ret 1,0,1
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+bsr F1
+nop
+mov #6,r2
+mov.l r2,@r15
+bsr F2
+nop
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+rts
+mov.l @r3,r0
+name x7c
+# control for x7: no F1 (r3 = &local handed straight to F2)
+ret 1,1
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+mov #6,r2
+mov.l r2,@r15
+bsr F2
+nop
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F2:
+rts
+mov.l @r3,r0

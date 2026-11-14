@@ -711,15 +711,20 @@ private:
         // address of this function (a register it keeps, or keeps on some path), so the engine sees an output of the call (`extraout_r1`) and
         // not the address. What going out makes of that address (kOut*), which a read of the value lets out (UseKept): see Call.
         uint8_t kept = 0;
-        // (area 3, A3-197) Any kind: the value is in one of r8-r14 (unkeptReg) after a call (unkeptAt) whose callee is not lent and, as the walk
+        // (area 3, A3-197) Any kind: the value is in one of r8-r14, GBR or VBR (A3-200; unkeptReg) after a call (unkeptAt) whose callee is not lent and, as the walk
         // of its code shows, does not restore that register on every path; the probe and the engine take the call to keep it. A read of it
         // (UseUnkept) puts a caution at the call.
         uint32_t unkeptAt = 0;
         int8_t unkeptReg = -1;
-        // (area 3, A3-197) Any kind: the registers (bits 8-14) whose entry value this may still be: a word that held one, saved by a prologue,
+        // (area 3, A3-197) Any kind: the registers (bits 8-14, 17, 18: kModelKept) whose entry value this may still be: a word that held one, saved by a prologue,
         // and that a store may have written over (Clobber), or a copy of it. Restored from such a word, the register may be its entry value
         // after all, so a return that holds it is no proof that the function changed the register (mChangedAt).
         uint32_t mayEntry = 0;
+        // (area 3, round 26, A3-199) Fuzzy, a join only (def == kJoin): the registers the model keeps across a call (kModelKept) that some
+        // alternative joined here holds another value in for certain (SureChanged of each side). A join of a word that may still hold the entry
+        // value (mayEntry) with a constant written on another path is the entry value or that constant: changed for certain on that path, which
+        // the join's mayEntry alone hid (x2: the clear after the restore, the paths meeting at one `rts`, said nothing).
+        uint32_t sureChanged = 0;
         static Value From(uint32_t o) { Value x; x.from = o; x.dep = Deps::All(o); return x; }
         static Value From(uint32_t o, uint32_t direct) { Value x; x.from = o; x.dep = Deps::All(direct); return x; }
         static Value From(uint32_t o, const Deps& d) { Value x; x.from = o; x.dep = d; return x; }
@@ -776,7 +781,7 @@ private:
                    exposedAt == o.exposedAt && kept == o.kept && unkeptAt == o.unkeptAt && unkeptReg == o.unkeptReg && mayEntry == o.mayEntry &&
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
                                      usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
-                                     baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure));
+                                     baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure && sureChanged == o.sureChanged));
         }
     };
     using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
@@ -954,6 +959,26 @@ private:
     {
         return v.kind == Value::Reg && ((v.v >= 8 && v.v <= 14) || v.v == 17 || v.v == 18 || v.v == kPr);
     }
+    // (area 3, A3-197, A3-199, A3-200) The registers of kModelKept that 'v', held in that register at a return, shows changed for certain: not
+    // the entry value itself (nor the entry value stepped and stepped back, `add #4,r8 ; ... ; add #-4,r8`: x1), not a word that saved it and
+    // that a store may have written over (Value::mayEntry), not a value read from memory the walk cannot place with the register among its
+    // origins. A join: what either side shows (Value::sureChanged).
+    static uint32_t SureChanged(const Value& v)
+    {
+        if (v.kind == Value::Fuzzy && v.def == Value::kJoin) return v.sureChanged;
+        uint32_t m = 0;
+        for (int r = 0; r < kTracked; ++r)
+        {
+            if (!((kModelKept >> r) & 1u) || (v.kind == Value::Reg && v.v == r) || ((v.mayEntry >> r) & 1u)) continue;
+            int br = -1;
+            int64_t bo = 0;
+            if (v.RegBase(br, bo) && br == r && bo == 0) continue;
+            const uint32_t o = v.Origins();
+            if ((o & (origin::kMemory | origin::kStack)) != 0 && ((o >> r) & 1u)) continue;
+            m |= 1u << r;
+        }
+        return m;
+    }
 
     // 'spare': the store is a lent callee's through a pointer it was handed. The engine assumes such a callee does not write its caller's
     // saved registers (a pointer to a local reaches the object, not the prologue's pushes), so the slots that hold one are left, but for the
@@ -1040,7 +1065,7 @@ private:
                 slot.second.hole = hole;
                 slot.second.exposedAt = exposedAt;
                 // (A3-197) a saved register's word written over may still hold the register's entry value
-                slot.second.mayEntry = was.mayEntry | (SavedRegister(was) && was.v >= 8 && was.v <= 14 ? 1u << was.v : 0u);
+                slot.second.mayEntry = was.mayEntry | (SavedRegister(was) && ((kModelKept >> was.v) & 1u) ? 1u << was.v : 0u);
             }
     }
 
@@ -1108,6 +1133,7 @@ private:
         m.unkeptAt = a.unkeptAt != 0 ? a.unkeptAt : b.unkeptAt;   // (A3-197) on either path
         m.unkeptReg = a.unkeptAt != 0 ? a.unkeptReg : b.unkeptReg;
         m.mayEntry = a.mayEntry | b.mayEntry;
+        m.sureChanged = SureChanged(a) | SureChanged(b);   // (A3-199) on either path
         // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
         // that steps a pointer down from r15, `mov.l r0,@-r1`, A3-16) as often as a choice of two addresses, and is not followed.
         m.callerHigh = (a.kind == Value::Fuzzy && a.callerHigh) || (b.kind == Value::Fuzzy && b.callerHigh) ||
@@ -1450,8 +1476,8 @@ private:
         // restores its own saved copy, or never uses it) loses nothing in the text.
         if (keepKept && !signatureLent && haveTarget)
         {
-            const uint32_t changed = CalleeChanged(target) & kCalleeSaved & e.preserved;
-            for (int r = 8; r < 15; ++r)
+            const uint32_t changed = CalleeChanged(target) & kModelKept & e.preserved;
+            for (int r = 0; r < kTracked; ++r)
             {
                 if (!((changed >> r) & 1u)) continue;
                 auto f = s.vars.find(KeyOf(mReg[r]));
@@ -1492,7 +1518,8 @@ private:
     static constexpr uint32_t kHandedRegs = origin::kRegisters & ~(1u << 15);
     // ...and those a lent callee can be (r4-r7; see the hand-out in Call).
     static constexpr uint32_t kLentHanded = 0xF0u;
-    static constexpr uint32_t kCalleeSaved = 0x7F00u;   // (A3-197) r8-r14, which the convention has a callee restore
+    // (A3-197, A3-200) r8-r14, GBR and VBR, which the convention has a callee restore and the default model keeps across every call (kKeptByCall)
+    static constexpr uint32_t kModelKept = 0x7F00u | (1u << 17) | (1u << 18);
     // The registers (as origins: their entry values) the values in 'regs' at this point were made from.
     uint32_t RegOrigins(const State& s, uint32_t regs) const
     {
@@ -1659,7 +1686,7 @@ private:
         // other than the entry value, and not what a word that saved it may still hold): only what a return the walk reached shows, nothing for
         // a callee it could not follow. A callee that saves r8-r14, writes its frame through an index the walk cannot bound, and restores them
         // is not shown to change them (06041AA0/008).
-        ctx->Changed()[target] = !why.empty() || callee.mEntryUndecodable ? 0u : callee.mChangedAt & kCalleeSaved;
+        ctx->Changed()[target] = !why.empty() || callee.mEntryUndecodable ? 0u : callee.mChangedAt & kModelKept;
         return words;
     }
     // (area 3 round 12 fix, A3-90) The registers (bit r: rN, GBR, MACH, ...) whose entry values a captured, unlent callee lets out (stores to
@@ -2140,10 +2167,8 @@ private:
                 continue;
             }
             mPreserved &= ~(1u << r);
-            // (A3-197) ...changed for certain on this path: not a word a store may have left holding its entry value, nor a value read from
-            // memory the walk cannot place (free stack, an unbounded pointer: what a register saved there held among its origins)
-            const bool fromMemory = (v.Origins() & (origin::kMemory | origin::kStack)) != 0 && ((v.Origins() >> r) & 1u);
-            if (!((v.mayEntry >> r) & 1u) && !fromMemory) mChangedAt |= 1u << r;
+            // (A3-197) ...changed for certain on this path, or on one of the paths joined here (SureChanged)
+            if ((SureChanged(v) >> r) & 1u) mChangedAt |= 1u << r;
             mOut |= v.Origins();
             // (area 3 round 12 fix) handed back in a register (CalleeHanded): what the value was computed from, not the register's own entry
             // value (a saved register restored from a slot its callee may have written over is that register, not a value moved elsewhere)
@@ -11406,11 +11431,12 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             for (const auto& fs : firstOf)
             {
                 std::vector<int> regs;
-                for (int reg = 8; reg < 15; ++reg)
-                    if ((fs.first >> reg) & 1u) regs.push_back(reg);
+                for (int reg = 8; reg < 19; ++reg)
+                    if (reg != 15 && reg != 16 && ((fs.first >> reg) & 1u)) regs.push_back(reg);   // r8-r14, gbr, vbr (A3-200)
                 std::string names;
                 for (size_t k = 0; k < regs.size(); ++k)
-                    names += (k == 0 ? "" : k + 1 == regs.size() ? " and " : ", ") + std::string("r") + std::to_string(regs[k]);
+                    names += (k == 0 ? "" : k + 1 == regs.size() ? " and " : ", ") +
+                             (regs[k] == 17 ? std::string("gbr") : regs[k] == 18 ? std::string("vbr") : std::string("r") + std::to_string(regs[k]));
                 std::string note = std::string(kUnkeptNoteA) + names + (regs.size() > 1 ? kUnkeptNoteBMany : kUnkeptNoteB);
                 if (likewise.count(fs.second)) note += kFrameEscapeNoteLikewise;
                 arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, fs.second), note);

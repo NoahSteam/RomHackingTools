@@ -21186,3 +21186,85 @@ No generator change: no seed's program changes.
 ### Routed
 
 Nothing.
+
+## Area 3, round 26 review
+
+Reviewer, branch `review/3-round26`, cut at master `df0ffe31`. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). Two host changes (`Sh2Decompiler.cpp`, the probe's walk and the caution at the call: A3-199, A3-200, A3-201; the note's comment in `Sh2Decompiler.h`), one oracle change and the pins (`Sh2GeneratedTests.cpp`: `PostPollUnmade`, A3-198; `TestA3RoutedPins`). **No engine patch: 0089 stays free.** Scripts and fixtures: `Docs/Decompiler/tools/a3_round26/` (`fixtures.src`; `run26.py`, round 25's runner reading this directory's fixtures; `run.sh`, every fixture's return lines, cautions and findings; `sweep.sh`, round 25's with this round's first seed).
+
+**Verdict, area 3: not clean.** Two P2 rows filed and fixed here (A3-199, A3-200), two P3 (A3-201 fixed, A3-202 open), and the routed A3-198 (P3, an oracle false positive) fixed. No P1. The clean count stays 0.
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-198 | P3 | **fixed** (oracle): seed 9200735's store and call after the poll are made in no run (a constant skips them); A3-185's gate found no finished run, because no world answers a poll the second request does not mark |
+| A3-199 | P2 | **filed and fixed** (host): A3-197's walk lost a certain change at a join with a restored word that may hold the entry value; `return 7;` with no caution where runs return 5 |
+| A3-200 | P2 | **filed and fixed** (host): A3-197's sibling for GBR and VBR, which the default model keeps too; `return *(unaff_gbr + 4);` with no caution where runs read through the callee's GBR |
+| A3-201 | P3 | **filed and fixed** (host): a false caution for a callee that steps r8 and steps it back |
+| A3-202 | P3 | **filed open** (host): two calls on two paths that both change r8, joined: the caution at one of them only |
+
+### 1. A3-194, A3-195 and A3-197 attacked
+
+Each fixture of `fixtures.src` is round 25's vCr8 caller (a local of 5, its address in r8, the call, 7 stored through r8, the local returned) unless said; F1 is not lent (it reads r3). Master is `df0ffe31`'s product; this branch after the fixes (`run.sh`):
+
+| Fixture | Shape | Master | This branch |
+|---|---|---|---|
+| x1 | F1 `add #4,r8 ; mov.l @r8,r1 ; add #-4,r8 ; rts` (keeps r8; every run returns 7) | `return 7;`, **the caution** (A3-201) | `return 7;`, no caution |
+| x2 | F1 saves r8, stores r3 through `@(r0,r15)` (r0 = r4 & 4), restores r8, clears it when r5 = 0; one `rts` | `return 7;`, **no caution** (A3-199) | the caution (r8) |
+| x2r | x2 with the clear before its own `rts` | the caution | the caution |
+| x3 | F1 `tst r3,r3 ; bra F2` (a tail jump), F2 vCr8's F1 | the caution | the caution |
+| x4 | two calls of vCr8's F1 on two paths (r6), joined | the caution at one call (A3-202) | the same |
+| x5 | `bsr F1 ; stc gbr,r0 ; rts`, F1 `ldc r3,gbr` on one return | `return;`, **no caution** (A3-200) | the caution (gbr) |
+| x6 | x5 with `mov.l @(4,gbr),r0` | `return *(xunknown4 *)(unaff_gbr + 4);`, **no caution** (A3-200) | the caution (gbr) |
+| x7, x7c | A3-194: a walked F2 that loads through r3 (not stores), after a lent F1 that may leave &local in r3 (x7) or with no F1 (x7c); the local set to 6 before F2 | the store of 6 kept (`xStack_c = 6;`) | the same |
+
+Round 25's vC and vE sweep and A3-197's w1 to w9 (`a3_a3197/run.sh`) give, with this branch's final binary, what the A3-197 fixer recorded (the same returns and cautions). A3-195's t0 to t3 (`a3_round25/fixtures.src`) still say the store and the call after the poll (t0, t1) and the value missing on one path (t2, t3).
+
+**A3-199.** The walk takes a register a return holds another value in for changed unless the value may still be the entry value (`mayEntry`: restored from a saved word a store may have written over) or is read from memory with the register among its origins. At a join `mayEntry` is the union of the sides', so a join of the restored word with the clear of another path (x2: the paths meet at one `rts`) is not a change, though the clearing path changes r8 for certain. Fix: `SureChanged` reads a value at a return as before, and a join keeps what either side shows (`Value::sureChanged`, made in `Merge` and compared in `==`, so the walk's fixed point sees it); `Return` records `mChangedAt` from it. w9 (one path, the restored word only) has no caution still.
+
+**A3-200.** The default model keeps GBR and VBR across a call whose signature is not lent, as r8-r14 (`kKeptByCall`); the A3-197 walk and mark covered r8-r14. Fix: the registers recorded, marked and said are `kModelKept` (r8-r14, GBR, VBR); a saved GBR or VBR word written over may hold its entry value as r8-r14's (`Clobber`); the caution names `gbr`, `vbr`.
+
+**A3-201.** `add #4,r8 ; ... ; add #-4,r8` leaves r8 as a value computed from r8 (Fuzzy, `baseReg` r8 at offset 0), which the walk took for a change. Fix: a value at offset 0 from the register's own entry value (`Value::RegBase`, exact for constant steps) is no change.
+
+**A3-202 (open).** The mark is one call per value (`unkeptAt`), and a join keeps the first side's: x4's caution is at one of the two calls. Carrying a set of calls through every copy, part and join is more than a reviewer's change; the function does carry the caution.
+
+Mutation (temporary switches, removed): joins read as before, x2 fails (1 CHECK); GBR and VBR masked out, x5 and x6 fail (2); the `RegBase` line off, x1's control fails (1).
+
+**A3-197's corpus cautions, sampled.** The lent dumps of master hold the caution in 14 functions of 007 and 13 of 008 (the A3-197 fixer's list). Read again with `a3_a3197/dis.py`: 060256E8/007 loops over `bsr 06024B4C`, which steps r8 through a list (`mov.w @r8+,r1` three times, `rts`) and keeps no copy, and the next call reads r8 where the last one left it: the caution "r8" is right. The other functions were read by the fixer; this branch's corpus texts equal master's (below), so no caution moved.
+
+### 2. A3-198: seed 9200735
+
+The program, after the poll of the mailbox 0x06002084 at 0x06009016: `tst r1,r1 ; bt 0x06009024 ; tst r1,r1 ; bf/s 0x0600904C ; mov.w r3,@r7`, then from 0x06009026 the store of 0x16 at 0x26003000 (0x06009038) and `jsr` 0x0600906C (0x06009040). r1 is the literal 0x26003C0C, loaded at 0x06009000 and written by nothing before: `bt` is never taken and `bf/s` always is, so on every path the slot's store (0x06009024) is made and the function returns at 0x0600904C. The store at 0x26003000 and the call are made in no run once the poll ends. The engine removes 0x06009026 on as unreachable in both requests, A3-187's reference reading drops their notes, and the slot's store is said: the text is right. A temporary print of the flow blocks confirmed the region after the poll (0x0600901C to 0x0600904E) and the block holding the store and the call in it.
+
+The oracle's gate for such an item (A3-185, `PostPollUnmade`) reads the runs of the world where the poll is answered and needs all of them finished. The poll is answered only when it is hardware or in the second request's marked range; this seed marks 0x26001020-0x2600102F, not the mailbox, so neither world answers it (0 of 3 runs finished in both) and the gate kept the findings. Fix (oracle): when some answered run does not finish and none makes the item, the runs with every poll of the program answered (`RunSpec::answerAll`) decide. Every case the old gate settled with finished runs is read as before; no seed's program changes. Pins: `TestA3RoutedPins`, the A3-198 block: the seed (no finding, both `unmade` counts) and the control (both tests made `tst r0,r0`: the polled r0 is 0 when the poll ends, so the `bt` is taken and the store and the call are made; both said, nothing unmade, no `endless-` finding). With the fallback off the seed fails (1 CHECK).
+
+The shrinker's fixture for this seed (`D703 E003 2701 6071 C801 8BFC 000B 0009 0600 2084`) keeps the finding's words from the seed's program, not its own: no store at 0x26003000 is left in it. Noted for area 11 (the shrinker's test of a reduction), not filed here.
+
+### 3. Sweep
+
+`sweep.sh`: 10,000 seeds of each grammar from 9,600,001, canary and shrink off, master's binary (`df0ffe31`).
+
+| Run | Failing | Classes |
+|---|---|---|
+| grammar 1 | 7: 9600475, 9602179, 9603811, 9606064, 9606511, 9607450, 9608430 | `map-store-dead` 9600475, 9602179, 9606064 (`n:` and `v:`), 9607450; `map-copy-merge` 9608430 (area 7); `folded-read-after-pointer-write` and `folded-read-after-access` 9603811 (area 5); `n:status` 9606511 ("status 3: Volatile memory was propagated", an engine exception). `endless-after-store` checked 668, said 666, unmade 2; `endless-call` 624, 622, 2; `endless-join` 1,236, said 1,235, printed 1; `endless-read` 595 withheld; polls 6,495 |
+| grammar 2 | 1: 9606539 | `n:map-way-back` at 0600908E, function 1 (area 7) |
+
+No area 3 finding. Routed below.
+
+### 4. Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117** (111 and the 6 Live tests) |
+| fault suite | fault matrix: **0 of 94** job(s) failed |
+| 20,000-seed matrix (canary on, every pin) | `failing seeds=0; findings=0` |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus, lent (`a3_round25/corpus.sh`, both images, this branch's final binary, against master's dumps made here with `a7_round2/corpus.sh`) | both "all passed", every ledger count 0; missing and said **0** and **4**; "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**"; every function text, alone and lent, identical to master's (0, 0, 0 and 0 differ): no callee of either image is shown changing GBR or VBR with a caller reading it after, and no A3-197 caution comes or goes with the join reading or the step-back rule |
+| replays (final binary) | grammar 1 seed 9200735: `failing seeds=0`, `endless-after-store.unmade=2`, `endless-call.unmade=2` |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: ok (no vendored file touched) |
+
+No generator change: no seed's program changes (the oracle's new runs answer the polls of an existing program).
+
+### 5. Routed
+
+* **Area 7:** grammar 1 seeds 9600475, 9602179, 9606064 (`n:` and `v:`), 9607450 (`map-store-dead`, A7-158's rule: "names the store at ..., whose bytes a later store writes over before anything reads them"), 9608430 (`n:map-copy-merge`, `cRam26001008 = (char)iVar1;` drawn only at instructions that make nothing); grammar 2 seed 9606539 (`n:map-way-back`, function 1, 0600908E). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`. Not shrunk.
+* **Area 5:** grammar 1 seed 9603811 (`n:folded-read-after-pointer-write` and two `n:folded-read-after-access`: the read at 0600900C folded from 26001008, printed on line 18 after the writes at 06009016 and 0600901E and the read at 06009020); grammar 1 seed 9606511 (`n:status`, "Volatile memory was propagated": an engine `LowlevelError` in the request with volatile memory; area 10 if it is a patch's). Not shrunk.
+* **Area 11:** the shrinker kept seed 9200735's finding text over a reduction that no longer has the store (section 2).

@@ -4927,6 +4927,7 @@ struct RunSpec
     int perturbReg = -1;       // a register started with another value (0-15, or 17-20 for GBR, VBR, MACH, MACL)
     uint32_t perturbValue = 0;
     bool volatileRun = false;  // the other processor answers what the second request marks
+    bool answerAll = false;    // (A3-198) ...and every poll of the program, marked or not (PostPollUnmade only)
     uint32_t stackFill = 0;    // (A3-111) not 0: the 512 bytes below the entry r15 are refilled with this pattern before the run, and every
                                // word the stack pointer rises past during it (Machine::SetScrub)
 };
@@ -4950,7 +4951,7 @@ public:
             if (rs.volatileRun && mS.markVolatile)
                 for (const HardwareRange& h : VolatileAliases(mS.volFirst, mS.volLast))
                     if (h.first <= poll.raw && poll.raw <= h.last) marked = true;
-            if (InHardwareRange(poll.addr) || marked) polls.push_back(poll);
+            if (InHardwareRange(poll.addr) || marked || rs.answerAll) polls.push_back(poll);
         }
         Env env;
         env.ram = mSnap->regions[1].bytes;   // HWRAM
@@ -5018,7 +5019,7 @@ public:
 
     // The ordinary inputs of a function: 3 runs (version 1) or 4 (version 2) that differ in the
     // registers and what hardware reads return, and for a jump table one more per index it can see.
-    std::vector<RunOut> Ordinary(const FnInfo& f, bool volatileRun)
+    std::vector<RunOut> Ordinary(const FnInfo& f, bool volatileRun, bool answerAll = false)
     {
         std::vector<RunOut> runs;
         const int modes = mS.v2 ? 4 : 3;
@@ -5033,6 +5034,7 @@ public:
             RunSpec rs;
             rs.mode = mode;
             rs.volatileRun = volatileRun;
+            rs.answerAll = answerAll;
             if (useSel)
             {
                 Rng pick(0x5E10 + mode);
@@ -5049,6 +5051,7 @@ public:
                     RunSpec rs;
                     rs.mode = 1 + (v < 0 ? 0 : v % 3);
                     rs.volatileRun = volatileRun;
+                    rs.answerAll = answerAll;
                     rs.selReg = f.sel;
                     rs.selValue = static_cast<uint32_t>(v);
                     runs.push_back(One(f, rs));
@@ -5754,7 +5757,20 @@ bool PostPollUnmade(Runner& runner, const Subject& s, int fi, bool volatileRun, 
 {
     const std::vector<RunOut> answered = volatileRun ? runs : runner.Ordinary(s.fns[static_cast<size_t>(fi)], true);
     if (answered.empty()) return false;
+    bool unfinished = false;
     for (const RunOut& run : answered)
+    {
+        if (made(run)) return false;
+        unfinished = unfinished || !run.finished;
+    }
+    if (!unfinished) return true;
+    // (A3-198) ...and when the second request marks no range that holds the poll (grammar 1 seed 9200735 polls the mailbox at 0x06002084 and
+    // marks 0x26001020-0x2600102F), no world answers it and no run finishes, so the gate kept the finding for a store and a call that a
+    // constant skips on every path (`tst r1,r1 ; bt ; tst r1,r1 ; bf/s R` with r1 the literal 0x26003C0C). Then the runs with every poll of
+    // the program answered are that world.
+    const std::vector<RunOut> all = runner.Ordinary(s.fns[static_cast<size_t>(fi)], true, true);
+    if (all.empty()) return false;
+    for (const RunOut& run : all)
         if (!run.finished || made(run)) return false;
     return true;
 }
@@ -18219,6 +18235,19 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             { "A3-197 control w5", "4F22 2FB6 EB05 B00B 0009 60B3 7001 6BF6 4F26 000B 0009 0009 0009 0009 0009 0009 4F22 2338 8901 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
                                    "2FB6 2448 8B00 EB00 000B 6BF6 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/16,20/20/30,40/40/4c", "1,0,0", "" },
+            // (area 3 round 26, `tools/a3_round26/fixtures.src`) A3-199 x2: vCr8's caller; F1 saves r8, stores r3 through an index the walk cannot
+            // bound, restores r8 (Value::mayEntry) and clears it when r5 = 0, the paths meeting at one `rts`: the join's mayEntry hid the clear.
+            { "A3-199 x2", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 2F86 7FF8 6043 C904 0F36 7F08 68F6 2558 8B00 E800 000B 6033 0009 0009 0009 0009",
+              "0/0/20,20/20/38", "1,0", "r8" },
+            // A3-200 x5, x6: F1 loads GBR from r3 on one return (`ldc r3,gbr`); the caller returns GBR (x5) or the word at GBR + 4 (x6). The model
+            // keeps GBR across the call as it keeps r8-r14.
+            { "A3-200 x5", "4F22 B00D 0009 0012 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2338 8902 2448 8B00 431E 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/e,20/20/2e", "1,0", "gbr" },
+            { "A3-200 x6", "4F22 B00D 0009 C601 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2338 8902 2448 8B00 431E 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/e,20/20/2e", "1,0", "gbr" },
+            // control x1 (round 26): F1 steps r8 by 4 and back on every path (`add #4,r8 ; mov.l @r8,r1 ; add #-4,r8`): it keeps r8, no caution
+            { "A3-197 control x1", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 7804 6182 78FC 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/2a", "1,0", "" },
         };
         for (const Fixture& f : fixtures)
         {
@@ -18246,6 +18275,41 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                         int(likewise));
             CHECK(w.findings.empty() && cautions == 2 && one && two && likewise);
         }
+    }
+    {
+        // A3-198 (routed by area 7 round 21; area 3 round 26, oracle): grammar 1 seed 9200735, `endless-after-store-dropped` (0x26003000) and
+        // `endless-call-dropped`. After the poll of the mailbox, `tst r1,r1 ; bt ; tst r1,r1 ; bf/s R` with r1 the literal 0x26003C0C skips to
+        // its own return on every path, so the store and the call after it are made in no run, and the text drops them rightly (the engine
+        // removes that code as unreachable in the marked request too). The gate (A3-185) needs the runs of the world where the poll is answered,
+        // and the second request marks 0x26001020-0x2600102F, not the mailbox: no run finished. Now the runs with every poll answered are taken.
+        // The control (`tst r0,r0` for both tests: the polled r0 is 0 when the poll ends, the `bt` is taken): the store and the call are made,
+        // and said; the gate does not take them.
+        const Program prog = Generate(9200735);
+        const Report rep = Evaluate(d, prog, true);
+        std::printf("pin 'A3-198 grammar 1 seed 9200735': %zu finding(s), endless-after-store checked %d unmade %d, endless-call checked %d unmade %d\n",
+                    rep.findings.size(), count(rep, "endless-after-store.checked"), count(rep, "endless-after-store.unmade"), count(rep, "endless-call.checked"),
+                    count(rep, "endless-call.unmade"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(prog.postPollStore == 0x26003000u && rep.findings.empty() && count(rep, "endless-after-store.unmade") > 0 && count(rep, "endless-call.unmade") > 0);
+        Program made = prog;
+        int changed = 0;
+        std::function<void(std::vector<Item>&)> retest = [&](std::vector<Item>& items) {
+            for (Item& it : items)
+            {
+                if (it.type == Item::Skip && it.cond == 0x2118) it.cond = 0x2008, ++changed;
+                if (it.type == Item::Skip && it.slotEntry != 0 && it.entryCond == 0x2118) it.entryCond = 0x2008, ++changed;
+                retest(it.kids);
+                retest(it.slot);
+            }
+        };
+        retest(made.fns[0].items);
+        const Report c = Evaluate(d, made, true);
+        std::printf("pin 'A3-198 control (tst r0,r0: the store and the call are made)': %zu finding(s), endless-after-store said %d unmade %d, endless-call said %d unmade %d\n",
+                    c.findings.size(), count(c, "endless-after-store.said"), count(c, "endless-after-store.unmade"), count(c, "endless-call.said"), count(c, "endless-call.unmade"));
+        for (const Finding& f : c.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(changed == 2 && count(c, "endless-after-store.said") > 0 && count(c, "endless-call.said") > 0 && count(c, "endless-after-store.unmade") == 0 &&
+              count(c, "endless-call.unmade") == 0);
+        for (const Finding& f : c.findings) CHECK(f.sig.find("endless-") == std::string::npos);
     }
     {
         // A3-193 (area 3, oracle): grammar 2 seed 8602477, `n:return-dropped`. Each arm of `tst r4,r4 ; bf` ends with `mov #7,r0 ; mov.b @(r0,r4),r1`

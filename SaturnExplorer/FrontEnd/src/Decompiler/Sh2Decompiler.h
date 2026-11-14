@@ -91,8 +91,8 @@ constexpr const char* kFrameEscapeNoteMay = "a frame address may be in r2 here, 
 constexpr const char* kFrameEscapeNoteMayR7 = "a frame address may be in r7 here, in none of the arguments: the call may keep it and write any local";
 constexpr const char* kFrameEscapeNoteMayStack = "a frame address may be in a stack argument slot here, in none of the arguments: the call may keep it and write any local";
 constexpr const char* kFrameEscapeNoteMayRegA = "a frame address may be in ";
-// (area 3, A3-197) The comment at a call whose callee has no lent signature and, as the walk of its code shows, returns on some path with one of
-// r8-r14 not restored (against the SH calling convention, which the engine's default model holds it to): the text takes the call to keep the
+// (area 3, A3-197, A3-200) The comment at a call whose callee has no lent signature and, as the walk of its code shows, returns on some path with
+// one of r8-r14, GBR or VBR not restored (against the SH calling convention, which the engine's default model holds it to): the text takes the call to keep the
 // register, and the function reads it after the call. The registers' names go between the two parts (B for one, BMany for more); said once per
 // function for a set of registers, at the first call, with kFrameEscapeNoteLikewise when it holds at others (a helper called in a run).
 constexpr const char* kUnkeptNoteA = "this call may change ";
