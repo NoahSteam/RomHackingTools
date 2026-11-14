@@ -220,7 +220,7 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
-//   SE_GENERATED_MUTATE=1|ledger|second|alias|params|ret|body|cases|warn|preserved|claims|lent|data|honour|kept|tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe|toksilent
+//   SE_GENERATED_MUTATE=1|ledger|caution|second|alias|params|ret|body|cases|warn|preserved|claims|lent|data|honour|kept|tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe|toksilent
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
 //   SE_GENERATED_COVERAGE=1  print the mnemonics of the generated programs and how often each was emitted
@@ -5535,6 +5535,21 @@ void Mutate(DecompileResult& r, const Subject& s, int fi)
 {
     if (gMutateKind.empty() || r.status != DecompileStatus::Ok) return;
     if (gMutateKind == "ledger") { if (!r.accesses.empty()) r.accesses.erase(r.accesses.begin()); }
+    else if (gMutateKind == "caution")
+    {
+        // (A11-33) The host that said no A3-197 caution: every "this call may change ..." comment taken out of the text (CheckCautions).
+        std::vector<Line> keep;
+        for (size_t i = 0; i < r.lines.size(); ++i)
+        {
+            if (r.lines[i].text.find("/* this call may change ") == std::string::npos)
+            {
+                keep.push_back(r.lines[i]);
+                continue;
+            }
+            while (i < r.lines.size() && r.lines[i].text.find("*/") == std::string::npos) ++i;
+        }
+        r.lines.swap(keep);
+    }
     else if (gMutateKind == "second")
     {
         // Lose the second of two entries of one instruction (mac's two operands): the first still has
@@ -9471,6 +9486,7 @@ void CountProgram(const Program& p, std::map<std::string, int>& shapes)
         CountShapes(f.items, shapes);
         CountShapes(f.pathA, shapes);
         CountShapes(f.pathB, shapes);
+        CountShapes(f.afterExit, shapes);   // (A11-33)
         if (!f.tail.empty()) ++shapes["rts.slot_insn"];
         if (!f.v2) continue;
         ++shapes["fn"];
@@ -9489,6 +9505,7 @@ void CountProgram(const Program& p, std::map<std::string, int>& shapes)
         if (f.retIsCall) ++shapes["fn.ret_call"];
         if (f.choiceBy >= 0) ++shapes["fn.ret_choice"];
         if (!f.argSave.empty()) ++shapes["fn.arg_copies"];
+        if (f.v2 && f.end == Func::TailJump && f.items.empty() && f.pushed.empty() && !f.savePr && f.prReg < 0 && !f.frame) ++shapes["fn.thunk"];   // (A11-33)
     }
     shapes["module.fns"] += static_cast<int>(p.fns.size());
 }
@@ -19552,6 +19569,164 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                     w.findings.size(), count(w, "excluded.r0-index.return-dropped"));
         for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(slotIndex && !slotWrite && w.findings.empty() && count(w, "excluded.r0-index.return-dropped") > 0);
+    }
+    // Area 3, A3-211 (`tools/a3_a3210/fixtures.src`, found by A11-33's oracle in grammar 2 seed 12001386): the walk of an unlent callee F2 took
+    // its call of a lent G with G's signature, which does not keep r8 and replaces it with a value the walk cannot read as changed for certain (G
+    // returns a word it loads: its summary names memory); G clears r8 when r4 (F2's r3) is 0, and F2's caller stores 7 through r8 after the call
+    // with no caution (`return 7;`, runs with r3 = 0 store through 0 and return 5). Now G's own walk marks what it changes (as A3-207's inner
+    // unlent call): l1 the caution naming r8; l1c (G saves and restores r8) none.
+    {
+        struct Lent
+        {
+            const char* name;
+            const char* words;
+            const char* reg;
+        };
+        const Lent lent[] = {
+            { "A3-211 l1", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 4F22 6433 B00C 0009 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                           "2448 8B00 E800 000B 6052 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "r8" },
+            { "A3-211 control l1c", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 4F22 6433 B00C 0009 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                    "2F86 2448 8B00 E800 68F6 000B 6052 0009 0009 0009 0009 0009 0009 0009 0009 0009", "" },
+        };
+        for (const Lent& f : lent)
+        {
+            const ModulePin m = { f.name, f.words, *f.reg ? "0/0/20,20/20/2e,40/40/4a" : "0/0/20,20/20/2e,40/40/4e", nullptr, "1,0,0", "0,100,100", nullptr };
+            const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+            const bool any = w.text.find("this call may change ") != std::string::npos;
+            const bool named = *f.reg != '\0' && w.text.find(std::string("this call may change ") + f.reg + ", read after it") != std::string::npos;
+            std::printf("pin '%s': %zu finding(s), caution %s%s; required %d, said %d\n", f.name, w.findings.size(), any ? "said" : "not said",
+                        named ? (std::string(" for ") + f.reg).c_str() : "", count(w, "caution.required"), count(w, "caution.said"));
+            for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(w.findings.empty() && (*f.reg != '\0' ? named && count(w, "caution.required") > 0 : !any));
+        }
+    }
+    // Area 3, A3-210 (`tools/a3_a3210/fixtures.src`): the caution's "read after it" took a register a later unlent callee's walk records it
+    // lets out (CalleeHanded) for a read, where that callee's own inner call overwrites the register first (06024A3C/007: 06024A72 calls
+    // 06024B18, which loads r10-r13, and then lets out what it loads through them). y1: F0 calls F1 (sets r10 to 8 when r3 != 0), then F2,
+    // which calls G (`mov #4,r10`) and stores r10 through r4: no caution (before: r10 at F1's call). Now the walk records which entry values
+    // of r8-r14, GBR and VBR a callee reads (CalleeEntryRead; an inner call's overwrite marks the entry value it leaves Value::stale), and the
+    // read after the call counts those only. y1c (G keeps r10): the caution naming r10 at F1's call, required by the runs and said.
+    {
+        struct Read
+        {
+            const char* name;
+            const char* words;
+            const char* funcs;
+            bool caution;
+        };
+        const Read reads[] = {
+            { "A3-210 y1", "4F22 2FA6 B00C 0009 B01A 0009 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 2338 8900 EA08 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                           "4F22 B00D 0009 24A2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/14,20/20/2a,40/40/4e,60/60/66", false },
+            { "A3-210 control y1c", "4F22 2FA6 B00C 0009 B01A 0009 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 2338 8900 EA08 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                    "4F22 B00D 0009 24A2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/14,20/20/2a,40/40/4e,60/60/64", true },
+        };
+        for (const Read& f : reads)
+        {
+            const ModulePin m = { f.name, f.words, f.funcs, nullptr, "1,0,0,0", "0,400,400,400", nullptr };
+            const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+            // (F2's own text says the caution at its call of G, which changes r10 before F2 stores it: right in both; F0's call of F1 is asked)
+            bool atF1 = false;
+            for (size_t at = w.text.find("this call may change "); at != std::string::npos; at = w.text.find("this call may change ", at + 1))
+            {
+                const size_t call = w.text.find("func_0x", at);
+                atF1 = atF1 || (call != std::string::npos && w.text.compare(call + 7, 8, "06009020") == 0 &&
+                                w.text.compare(at, 39, "this call may change r10, read after it") == 0);
+            }
+            std::printf("pin '%s': %zu finding(s), caution at F1's call %s; required %d, said %d\n", f.name, w.findings.size(), atF1 ? "said for r10" : "not said",
+                        count(w, "caution.required"), count(w, "caution.said"));
+            for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(w.findings.empty() && atF1 == f.caution);
+        }
+    }
+    // Area 11, A11-33: A3-197's caution held against the runs (CheckCautions). (a) The check checked: with every caution taken out of the text
+    // (SE_GENERATED_MUTATE=caution's damage), A3-211's l1 and l1u (l1 with G not lent: A3-207's n2 with a clear the runs make, r3 = 0 in
+    // input mode 0; the earlier hand fixtures clear only when r4 = 0, which no ordinary run has) each report `caution-unsaid`, and with the
+    // text as printed none, the caution required and said. (b) The grammar's caution shapes (Gen::AddCautionChange and the reads after a call, seeds from kCautionFirst): the first
+    // seed of each shape from kCautionFirst whose runs require a caution (a register a callee changes, read after the call so that setting it
+    // back changes what the function does) passes with the caution said -- a changer behind a thunk, one that leaves r15 moved, one that
+    // changes a register it saved after its epilogue (A3-199's shape), one that loads GBR or VBR -- within 600 seeds each; and no seed below
+    // kCautionFirst draws from the stream (the programs of seeds 1 to 300 of grammar 2 hold none of the shapes).
+    {
+        const ModulePin damaged[] = {
+            { "A11-33 l1u", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 4F22 6433 B00C 0009 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                            "2448 8B00 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/2e,40/40/4a", nullptr, "1,0,0", "0,100,100", nullptr },
+            { "A11-33 l1", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 4F22 6433 B00C 0009 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                           "2448 8B00 E800 000B 6052 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/2e,40/40/4a", nullptr, "1,0,0", "0,100,100", nullptr },
+        };
+        for (const ModulePin& m : damaged)
+        {
+            const Report clean = EvaluateSubject(d, ModuleSubject(m), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(m), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin '%s': as printed %zu finding(s), required %d; cautions taken out: caution-unsaid %d\n", m.name, clean.findings.size(),
+                        count(clean, "caution.required"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && flagged);
+        }
+        struct Shape
+        {
+            const char* name;
+            std::function<bool(const Program&)> has;
+        };
+        auto anyItem = [](const Program& p, const char* shape) {
+            bool found = false;
+            for (const Func& f : p.fns)
+            {
+                ForEachConstItem(f, [&](const Item& it) { found = found || std::strcmp(it.shape, shape) == 0; });
+                ForEachConstItem(f.afterExit, [&](const Item& it) { found = found || std::strcmp(it.shape, shape) == 0; });
+            }
+            return found;
+        };
+        const Shape shapes[] = {
+            { "thunk", [](const Program& p) { return p.fns.size() == 3 && p.fns[1].end == Func::TailJump && p.fns[1].items.empty() && p.fns[1].pushed.empty() &&
+                                                     (p.fns[2].clobbers & 0x67F00u) != 0; } },
+            { "r15", [&](const Program& p) { return anyItem(p, "caution.change.r15"); } },
+            { "after-exit", [&](const Program& p) { return anyItem(p, "caution.skip.after-exit"); } },
+            { "gbr-vbr", [](const Program& p) {
+                  for (const Func& f : p.fns)
+                      if (f.clobbers & ((1u << 17) | (1u << 18)))
+                          for (const Item& it : f.items)
+                              if (std::strcmp(it.shape, "caution.skip") == 0 && !it.kids.empty() && !it.kids[0].words.empty() && (it.kids[0].words[0] & 0xF0EF) == 0x400E)
+                                  return true;
+                  return false;
+              } },
+        };
+        for (const Shape& sh : shapes)
+        {
+            long found = 0;
+            int tried = 0;
+            Report rep;
+            for (uint64_t seed = kCautionFirst; seed < kCautionFirst + 600 && !found; ++seed)
+            {
+                const Program p = MakeV2(seed);
+                if (!sh.has(p)) continue;
+                ++tried;
+                rep = Evaluate(d, p, false);
+                if (count(rep, "caution.required") > 0) found = static_cast<long>(seed);
+            }
+            std::printf("pin 'A11-33 grammar, %s': %d program(s) of the shape tried, first requiring a caution: seed %ld, %zu finding(s), required %d, said %d (likewise %d)\n",
+                        sh.name, tried, found, rep.findings.size(), count(rep, "caution.required"), count(rep, "caution.said"), count(rep, "caution.said.likewise"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(found != 0 && rep.findings.empty() && count(rep, "caution.said") + count(rep, "caution.said.likewise") > 0);
+        }
+        int below = 0;
+        for (uint64_t seed = 1; seed <= 300; ++seed)
+        {
+            const Program p = MakeV2(seed);
+            std::map<std::string, int> sh;
+            CountProgram(p, sh);
+            for (const auto& kv : sh)
+                if (kv.first.compare(0, 8, "caution.") == 0) below += kv.second;
+        }
+        std::printf("pin 'A11-33 grammar below kCautionFirst': %d caution shape(s) in grammar 2 seeds 1-300\n", below);
+        CHECK(below == 0);
     }
 }
 
