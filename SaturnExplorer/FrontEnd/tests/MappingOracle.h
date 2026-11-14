@@ -3518,6 +3518,20 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             computes = computes || (v.kind == WordValue::Number && sameNumber(static_cast<uint32_t>(v.value)));
                         }
                         EdgeT() = EdgeTruth();
+                        // (A7-152: `rotcr Rn` of a register every maker of which is a `movt` (0 or 1) is the edge's T in bit 31 and 0 below:
+                        // `movt r3 ; ... cmp/hi r1,r6 ; bt L ; ... L: rotcr r3`, `uVar1 = 0x80000000;` on the `bt`'s edge; grammar 2 seed 7807706)
+                        if (!computes && !A7RuleOff(152) && (w & 0xF0FF) == 0x4025)
+                        {
+                            std::set<uint32_t> makersT;
+                            const int rn = static_cast<int>((w >> 8) & 0xF);
+                            bool all = RegisterMakers(r, word, sources, at, rn, makersT) && !makersT.empty() && !makersT.count(0);
+                            for (uint32_t mk : makersT)
+                            {
+                                uint16_t mw = 0;
+                                all = all && word(mk, mw) && (mw & 0xF0FF) == 0x0029 && static_cast<int>((mw >> 8) & 0xF) == rn;
+                            }
+                            if (all && sameNumber(edge.second ? 0x80000000u : 0u)) computes = true;
+                        }
                     }
                 }
                 if ((w >> 12) == 0x4 && ((w & 0xFF) == 0x0E || (w & 0xFF) == 0x1E || (w & 0xFF) == 0x2E || (w & 0xFF) == 0x0A || (w & 0xFF) == 0x1A ||
@@ -3639,6 +3653,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             uint32_t v = 0;
                             if (!word(m, mw)) { all = false; break; }
                             if (made(m, mw, v)) all = (v & kept) == 0;
+                            // (A7-151: `xor Rn,Rn` and `sub Rn,Rn` make 0: `xor r1,r1 ; mov #1,r3 ; L: and r5,r1 ; dt r3 ; bt X ; bra L`,
+                            // `uVar4 = 0;` at the `and`; grammar 2 seed 7800677)
+                            else if (!A7RuleOff(151) && ((mw >> 12) == 0x2 || (mw >> 12) == 0x3) && (mw & 0xF) == ((mw >> 12) == 0x2 ? 0xA : 0x8) &&
+                                     ((mw >> 8) & 0xF) == ((mw >> 4) & 0xF) && static_cast<int>((mw >> 8) & 0xF) == reg)
+                                all = true;
                             else if ((mw >> 12) == 0x2 && (mw & 0xF) == 0x9 && static_cast<int>((mw >> 8) & 0xF) == reg)
                                 all = zeroKept(m, static_cast<int>((mw >> 8) & 0xF), depth + 1) || zeroKept(m, static_cast<int>((mw >> 4) & 0xF), depth + 1);
                             else all = false;

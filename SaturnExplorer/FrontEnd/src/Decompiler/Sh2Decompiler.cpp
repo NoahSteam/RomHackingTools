@@ -6574,6 +6574,14 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
                 else if (other(false)) return true;
                 break;
             }
+            // (A7-150: memory the walk follows back from a read, read again before by an instruction the statement's value is made at,
+            // with no store of it between: the engine takes the two reads for one value -- `mov.b @r6,r2` in a `bf/s` slot and `mov.b
+            // @r6,r3` after it, `iRam26001000 = (int2)cVar2;` for the `mov.w r3,@r6` of r3; grammar 1 seed 7803022)
+            if (memory(st.vn) && op.code == ghidra::CPUI_LOAD && !op.literal && want.insns.count(op.insn))
+            {
+                const std::pair<bool, FlowVn> m = memoryOf(st.blk, i);
+                if (m.first && m.second.space == st.vn.space && m.second.offset == st.vn.offset && m.second.size == st.vn.size) return true;
+            }
             if (!op.hasOut || !overlaps(op.out, st.vn)) continue;
             done = true;
             if (want.insns.count(op.insn)) return true;   // an instruction the statement's value is made at
@@ -8492,7 +8500,22 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     extensionHere = extends && !memory;
                 }
             }
-            if (!ownStore && !extensionHere)
+            // (A7-148: the type the text gives a value an operation of the same instruction computes -- `puRam2600238c = (uint1 *)((uint4)(iVar5
+            // - cRam06002309) >> 1 | ...);`, the CAST to a pointer at the `rotcr r1` that makes the value, the variable a pointer because a
+            // later store gives it param_2 -- is that operation's statement, as A7-91's: no copy of a value made elsewhere; grammar 1 seed
+            // 7801133, the range marked volatile)
+            bool castOfOwn = false;
+            if (code == ghidra::CPUI_CAST && o->getIn(0)->isWritten())
+            {
+                const ghidra::PcodeOp* def = o->getIn(0)->getDef();
+                const ghidra::OpCode dc = def->code();
+                uint32_t di = InstructionOf(def), dcanon = 0;
+                if (CanonicalAddress(di, dcanon)) di = dcanon;
+                castOfOwn = di == own && !def->isCall() && dc != ghidra::CPUI_COPY && dc != ghidra::CPUI_LOAD && dc != ghidra::CPUI_CAST &&
+                            dc != ghidra::CPUI_SUBPIECE && dc != ghidra::CPUI_PIECE && dc != ghidra::CPUI_MULTIEQUAL && dc != ghidra::CPUI_INDIRECT &&
+                            dc != ghidra::CPUI_INT_ZEXT && dc != ghidra::CPUI_INT_SEXT;
+            }
+            if (!ownStore && !extensionHere && !castOfOwn)
                 for (size_t line : kv.second->first)
                 {
                     if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
@@ -8676,7 +8699,18 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
                 bool elsewhere = false;
                 for (size_t other = 0; other < lines.size() && !elsewhere; ++other)
                 {
-                    if (other == line || plainCopy(lines[other].text)) continue;
+                    if (other == line) continue;
+                    // (A7-149: or a copy that is the store's own statement, naming no other store -- `xRam06002104 = (char)param_1;` for the
+                    // `mov.b r1,@(r0,r7)` the piece is made at, beside `xRam0240000c = (char)param_1;` of the `mov.b r4,@r6` after it,
+                    // both drawn at the `bsr` the engine put them at (A7-11); grammar 1 seed 7807800)
+                    if (plainCopy(lines[other].text))
+                    {
+                        bool namesOther = false;
+                        for (const Token& t : lines[other].tokens)
+                            namesOther = namesOther || (t.addr && t.addr != own && t.begin == t.end &&
+                                                        flow.accessesByInsn.find(std::make_pair(t.addr, true)) != flow.accessesByInsn.end());
+                        if (namesOther) continue;
+                    }
                     for (const Token& t : lines[other].tokens) elsewhere = elsewhere || (t.addr == own && t.begin < t.end && !t.materialised);
                 }
                 if (!elsewhere) continue;
