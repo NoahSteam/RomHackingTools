@@ -20612,7 +20612,10 @@ No further finding in these; no fixtures were built beyond the pins.
 
 `sweep.sh`: 10,000 seeds of each grammar from 8,600,001, canary and shrink off. It was run on master's binary first, then again on this branch's binary:
 
-SWEEP_TABLE
+| Run | Failing | Classes and counts (this branch) |
+|---|---|---|
+| grammar 1 | 0 (master's binary: 0) | `endless-call` checked 644, said 642, unmade 2; `endless-join` checked 1,224, said 1,224; `endless-read` checked and withheld 654; `endless-store` checked 143,207, said 9,556; polls 6,569 |
+| grammar 2 | 2 (master's binary: the same 2): 8602477, 8605977 | `n:return-dropped` 8602477 (area 3, A3-193); `n:map-store-after` 8605977 (area 7). `endless-call` checked 8, said 6, unmade 2; `endless-join` 16 and 16; `endless-read` 258 withheld; polls 1,604 |
 
 * **Area 3** (rowed here): 8602477, A3-193.
 * **Area 7** (routed): 8605977, `n:map-store-after`: "line 29 `pxStack_28 = (xunknown4 *)extraout_r3;` is drawn at 06009048 (a call or a return) and names the store at 06009060, which cannot run before it (A7-32)". Not shrunk.
