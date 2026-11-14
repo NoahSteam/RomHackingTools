@@ -18,6 +18,7 @@
 namespace
 {
 using se_test::PutBE16;
+using se_test::SetReg;
 using se_test::SpritesInFront;
 using se_test::State;
 
@@ -408,6 +409,50 @@ void TestPolylinesRenderAndPickInTheExplodedView()
     se_destroy(context);
 }
 
+// A palette-bank sprite is coloured the way VDP2 reads its framebuffer word -- through the sprite
+// type's dot-colour bits and CRAOFB's sprite colour offset -- not by indexing CRAM with the raw bank
+// and texel. Virtua Fighter 2 draws its fighters as 128-colour bank sprites under sprite type C with
+// a sprite colour offset of 3 (CRAM 0x300+); the 3D view used to read CRAM at the raw word instead,
+// which is a different palette: Akira's blue gi came out olive and Lau's green out black. The decoy
+// at the raw index is a colour the sprite must NOT show.
+void TestBankSpriteUsesSpriteColourOffsetInTheExplodedView()
+{
+    State state(kVdp1Size);
+    se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SetReg(state, 0x0E0, 0x000C);   // SPCTL: sprite type C (8-bit dot colour), SPCLMD clear
+    for (uint32_t reg = 0x0F0; reg <= 0x0F6; reg += 2) SetReg(state, reg, 0x0101);
+    SetReg(state, 0x0E6, 0x0030);   // CRAOFB: sprite colour offset 3 (CRAM + 0x300)
+
+    const uint16_t bank = 0x0080;   // CMDCOLR of a 128-colour bank sprite
+    const uint16_t texel = 5;
+    const uint32_t word = bank | texel;
+    PutBE16(state.cram, (0x300 + word) * 2, 0x001F);   // what VDP2 shows: red
+    PutBE16(state.cram, word * 2, 0x7C00);              // the raw-word entry: blue (wrong)
+
+    const int w = 32, h = 32;
+    const uint32_t cmd = 0x20, texture = 0x1000;
+    PutBE16(state.vdp1, cmd + 0x00, 0x0000);                          // normal sprite
+    PutBE16(state.vdp1, cmd + 0x04, 0x0018 | 0x0040);                 // 128-colour bank, SPD
+    PutBE16(state.vdp1, cmd + 0x06, bank);                            // CMDCOLR
+    PutBE16(state.vdp1, cmd + 0x08, static_cast<uint16_t>(texture / 8));
+    PutBE16(state.vdp1, cmd + 0x0A, static_cast<uint16_t>(((w / 8) << 8) | h));
+    PutBE16(state.vdp1, cmd + 0x0C, static_cast<uint16_t>(kFrameWidth / 2 - w / 2));
+    PutBE16(state.vdp1, cmd + 0x0E, static_cast<uint16_t>(kFrameHeight / 2 - h / 2));
+    for (int i = 0; i < w * h; ++i) state.vdp1[texture + static_cast<uint32_t>(i)] = texel;
+    PutBE16(state.vdp1, 0x40, 0x8000);   // draw end
+
+    se_context* context = Open(state);
+    const Image composite = Render(context, nullptr);
+    CHECK(Find(composite, 255, 0, 0).count > 100);   // the reference: red
+    CHECK(Find(composite, 0, 0, 255).count == 0);
+
+    const se_camera3d front = Camera(0.0f, 0.0f);
+    const Image view = Render(context, &front);
+    CHECK(Find(view, 255, 0, 0).count > 100);        // the 3D view agrees
+    CHECK(Find(view, 0, 0, 255).count == 0);         // and shows nothing from the raw index
+    se_destroy(context);
+}
+
 // An NBG3 filling the frame with solid white (CRAM entry 1), priority 1: the smallest VDP2 screen
 // that covers every pixel. Layered under whatever VDP1 the caller put in the state.
 void AddWhiteNbg3(State& state)
@@ -633,6 +678,7 @@ int main()
     TestEqualPriorityScreensStackLikeTheComposite();
     TestSpecialPriorityScreenAtPriorityZeroIsAPlane();
     TestTransparentPolygonIsNotPickable();
+    TestBankSpriteUsesSpriteColourOffsetInTheExplodedView();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " check(s) failed\n";
