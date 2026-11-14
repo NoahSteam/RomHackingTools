@@ -356,8 +356,9 @@ public:
     // alias is declared) walked the same callees again, with a budget of its own. Each probe keeps its own budget; a result is reused as found.
     void ShareWalks(std::map<uint32_t, uint32_t>* walks, std::map<uint32_t, uint32_t>* below = nullptr,
                     std::map<uint32_t, uint32_t>* handed = nullptr, std::map<uint32_t, uint32_t>* changed = nullptr,
-                    std::map<uint32_t, uint32_t>* written = nullptr)
+                    std::map<uint32_t, uint32_t>* written = nullptr, std::map<uint32_t, uint32_t>* entryRead = nullptr)
     {
+        mOwnCtx.sharedEntryRead = entryRead;
         mOwnCtx.shared = walks;
         mOwnCtx.sharedBelow = below;
         mOwnCtx.sharedHanded = handed;
@@ -465,6 +466,7 @@ public:
         mUnkeptSites.clear();
         mInnerSeen = false;
         mHanded = 0;
+        mEntryRead = 0;
         std::map<uint32_t, State> in;
         std::map<uint32_t, int> changes;   // how often the state at an address grew
         std::set<uint32_t> work;
@@ -757,6 +759,11 @@ private:
         // return, the mark is that function's change of rN (mChangedAt). Copies and operations carry it (not a load through it, which reads
         // memory); a join keeps both sides' (Merge).
         uint32_t innerChanged = 0;
+        // (area 3, A3-210) Reg (or a part of one), a walk of a callee's code only: bit v when an inner call overwrites the register on every
+        // path (CalleeWritten), so the entry value the walk's model of that call (the convention's: it keeps r8-r14) still holds there is not
+        // what the walked function was entered with. A read of it is no read of the caller's register (mEntryRead). A join keeps a bit only
+        // when both sides have it.
+        uint32_t stale = 0;
         static Value From(uint32_t o) { Value x; x.from = o; x.dep = Deps::All(o); return x; }
         static Value From(uint32_t o, uint32_t direct) { Value x; x.from = o; x.dep = Deps::All(direct); return x; }
         static Value From(uint32_t o, const Deps& d) { Value x; x.from = o; x.dep = d; return x; }
@@ -811,6 +818,7 @@ private:
         {
             return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget && read == o.read &&
                    exposedAt == o.exposedAt && kept == o.kept && unkept == o.unkept && mayEntry == o.mayEntry && innerChanged == o.innerChanged &&
+                   stale == o.stale &&
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
                                      usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
                                      baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure && sureChanged == o.sureChanged &&
@@ -895,6 +903,7 @@ private:
                 p.unkept = v.second.unkept;   // (A3-197) likewise
                 p.mayEntry = v.second.mayEntry;
                 p.innerChanged = v.second.innerChanged;   // (A3-207) likewise
+                p.stale = v.second.stale;   // (A3-210) likewise
                 return p;
             }
             const uint64_t whole = std::get<2>(v.first), below = whole - (vn.offset - std::get<1>(v.first)) - vn.size;
@@ -1026,6 +1035,28 @@ private:
     }
     // (area 3, A3-207) Bit r when 'v', held in rN (r) at a return of a walked callee, shows rN changed for certain on this path or a path joined
     // here (SureChanged), or is what an inner call that changes rN on some path left (Value::innerChanged).
+    // (area 3, A3-210) The register whose entry value 'v' is, as the walked function was entered with it (not overwritten by an inner call:
+    // Value::stale), as a bit; 0 for any other value. Every register, not only kModelKept's: a copy of r9 in r1 read by an inner callee that
+    // reads r1 is a read of r9 (Call maps the inner callee's record through the values it is handed).
+    static uint32_t EntryOf(const Value& v)
+    {
+        int r = -1;
+        if (v.kind == Value::Reg) r = static_cast<int>(v.v);
+        else if (v.kind == Value::Fuzzy && v.part >= 0) r = v.part;
+        if (r < 0 || r >= kTracked || ((v.stale >> r) & 1u)) return 0;
+        return 1u << r;
+    }
+    // ...of the values in 'regs' and the words from the call's r15 up: what a callee reads of them (an inner call, a tail jump)
+    uint32_t EntryOfRegs(const State& s, uint32_t regs) const
+    {
+        uint32_t m = 0;
+        for (int r = 0; r < kTracked; ++r)
+            if ((regs >> r) & 1u) m |= EntryOf(Get(s, mReg[r]));
+        const Value callSp = Get(s, mReg[kR15]);
+        for (const auto& slot : s.slots)
+            if (callSp.kind != Value::Sp || slot.first >= callSp.v) m |= EntryOf(slot.second);
+        return m;
+    }
     static uint32_t ChangedAtReturn(const Value& v, int r)
     {
         return (SureChanged(v) | v.innerChanged) & (1u << r);
@@ -1158,15 +1189,18 @@ private:
         // (area 3, A3-197) the same value with and without the caution's mark is that value, marked: not a join of two. (A3-202) With the
         // marks of both sides.
         // (area 3, A3-207) ...and likewise the mark of a register an inner call may have changed (Value::innerChanged): both sides'.
-        if (!b.unkept.empty() || !a.unkept.empty() || a.innerChanged != b.innerChanged)
+        // (area 3, A3-210) ...and the entry value overwritten by an inner call on one path only is the entry value (Value::stale)
+        if (!b.unkept.empty() || !a.unkept.empty() || a.innerChanged != b.innerChanged || a.stale != b.stale)
         {
             Value bm = b;
             bm.unkept = a.unkept;
             bm.innerChanged = a.innerChanged;
+            bm.stale = a.stale;
             if (a == bm)
             {
-                const bool grew = (b.innerChanged & ~a.innerChanged) != 0;
+                const bool grew = (b.innerChanged & ~a.innerChanged) != 0 || (a.stale & ~b.stale) != 0;
                 a.innerChanged |= b.innerChanged;
+                a.stale &= b.stale;
                 return Value::JoinUnkept(a.unkept, b.unkept) || grew;
             }
         }
@@ -1407,6 +1441,9 @@ private:
                     for (const Value& w : words) HandOut(s, w);
                 }
                 const uint32_t regs = haveTarget ? CalleeStoresBelow(target) | CalleeHanded(target) : kConvention;
+                // (area 3, A3-210) ...of which the caution's read after an earlier call is a register of r8-r14, GBR or VBR only when the callee
+                // reads its entry value (CalleeEntryRead): not one its own inner call overwrites before it reads it
+                const uint32_t unread = haveTarget ? kModelKept & ~CalleeEntryRead(target) : 0u;
                 for (int r = 0; r < kTracked; ++r)
                 {
                     if (r == kR15 || !((regs >> r) & 1u)) continue;
@@ -1417,7 +1454,7 @@ private:
                     // call before it gave `return 5;` where runs return 7. No note, as for any value that only may be a frame address (the
                     // note is said of x.Frame()): with one, 298 corpus texts gained a caution and no line of code.
                     if (keepKept) UseKept(s, x);
-                    if (keepKept) UseUnkept(x);   // (A3-197)
+                    if (keepKept && !((unread >> r) & 1u)) UseUnkept(x);   // (A3-197; A3-210: the callee reads it as it was left)
                     if (!MayBeFrame(s, x)) continue;
                     HandOut(s, x);
                     if (r != 2 && (r < 4 || r > 7) && x.Frame()) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
@@ -1520,9 +1557,13 @@ private:
         // with changed (InnerChanged) is put beside the values as a mark (Value::innerChanged), which no frame rule reads: held in the register
         // at a return, it is this function's change too (ChangedAtReturn). Without it a callee whose only change of r11 is its own callee's
         // (w6's F1 calling G) showed none.
-        if (mNested && !signatureLent && haveTarget)
+        // (area 3, A3-211) ...and likewise a call of a lent callee: its signature's effects replace what it does not keep (Apply), with a value
+        // the walk cannot read as changed for certain (what a callee returns may be anything, the entry value among them), so what its own
+        // walk shows it changing is marked the same way, where the signature does not say it keeps the register. F2 (not lent) calling a lent
+        // G that clears r8 on one path showed nothing, and F2's caller read r8 after the call with no caution (l1; grammar 2 seed 12001386).
+        if (mNested && haveTarget)
         {
-            const uint32_t changed = InnerChanged(target) & kUnkeptRegs;
+            const uint32_t changed = InnerChanged(target) & kUnkeptRegs & (signatureLent ? ~e.preserved : ~0u);
             for (int r = 0; r < kTracked; ++r)
             {
                 if (!((changed >> r) & 1u)) continue;
@@ -1530,6 +1571,21 @@ private:
                 if (f == s.vars.end()) continue;
                 f->second.innerChanged |= 1u << r;
                 mInnerSeen = true;
+            }
+        }
+        // (area 3, A3-210) ...and, for the caution's "read after it", what this inner call reads of the walked function's entry values (the
+        // registers its walk records read as left, CalleeEntryRead; the convention's r2 and r4-r7 and the stack words for any other callee),
+        // and what it overwrites on every path (CalleeWritten): the entry value the model of the call leaves there is no longer the caller's
+        // (Value::stale). 06024A72/007 calls 06024B18, which loads r10-r13 on every path, and then reads r10-r13: not its caller's.
+        if (mNested)
+        {
+            mEntryRead |= EntryOfRegs(s, kConvention | (haveTarget && !signatureLent ? CalleeEntryRead(target) : 0u));
+            const uint32_t written = haveTarget ? CalleeWritten(target) & kModelKept & (signatureLent ? ~e.preserved : ~0u) : 0u;
+            for (int r = 0; r < kTracked; ++r)
+            {
+                if (!((written >> r) & 1u)) continue;
+                auto f = s.vars.find(KeyOf(mReg[r]));
+                if (f != s.vars.end() && f->second.kind == Value::Reg && f->second.v == r) f->second.stale |= 1u << r;
             }
         }
         if (keepKept)
@@ -1790,6 +1846,8 @@ private:
         // (area 3 round 12 fix, A3-90) ...and the registers whose values it lets out or writes through (CalleeHanded), every one when the walk
         // could not follow it.
         ctx->Handed()[target] = !why.empty() ? kHandedRegs : callee.mEntryUndecodable ? kConvention : callee.mHanded;
+        // (area 3, A3-210) ...and the registers whose entry value it reads, every one when the walk could not follow it
+        ctx->EntryRead()[target] = !why.empty() ? origin::kRegisters : callee.mEntryUndecodable ? kConvention : callee.mEntryRead;
         // (area 3, A3-197) ...and the registers of r8-r14 the walk shows it returning with changed on some path (a return that holds something
         // other than the entry value, and not what a word that saved it may still hold): only what a return the walk reached shows, nothing for
         // a callee it could not follow. A callee that saves r8-r14, writes its frame through an index the walk cannot bound, and restores them
@@ -1827,6 +1885,20 @@ private:
             f = ctx->Handed().find(target);
         }
         return f != ctx->Handed().end() ? f->second : kHandedRegs;
+    }
+    // (area 3, A3-210) The registers whose entry value a captured, unlent callee reads, as its walk shows (not one an inner call of it
+    // overwrites first: Value::stale); every one when it could not be walked, the convention's when its code is not captured. What the
+    // caution's "read after it" takes of a later call (UseUnkept); the frame rules keep CalleeHanded.
+    uint32_t CalleeEntryRead(uint32_t target)
+    {
+        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
+        auto f = ctx->EntryRead().find(target);
+        if (f == ctx->EntryRead().end())
+        {
+            CalleeFrameWrites(target);
+            f = ctx->EntryRead().find(target);
+        }
+        return f != ctx->EntryRead().end() ? f->second : origin::kRegisters;
     }
     // (area 3, A3-197) The registers of r8-r14 a captured, unlent callee returns with changed on some path, as its walk shows; 0 when it
     // could not be walked (nothing is shown).
@@ -2351,6 +2423,7 @@ private:
             // (area 3 round 12 fix) handed back in a register (CalleeHanded): what the value was computed from, not the register's own entry
             // value (a saved register restored from a slot its callee may have written over is that register, not a value moved elsewhere)
             mHanded |= v.Direct() & kHandedRegs & ~(1u << r);
+            mEntryRead |= EntryOf(v) & ~(1u << r);   // (A3-210) another register's entry value handed back
         }
         return true;
     }
@@ -2552,6 +2625,18 @@ private:
                 }
             // (area 3, A3-207) ...and a value computed from one an inner call may have changed carries the mark (not a load's: what it reads
             // is memory, not the address)
+            // (area 3, A3-210) A walked function reads the entry value of a register it was entered with: an operand of any op but a copy,
+            // and the value a store puts in its own frame (a push: the word holds the value, read when it is loaded back and used), or the
+            // registers an inner call or a jump is handed (Call; the jumps below). The caution's "read after it" at a call of it (CalleeEntryRead).
+            if (mNested && op.code != ghidra::CPUI_COPY && op.code != ghidra::CPUI_CALL && op.code != ghidra::CPUI_CALLIND &&
+                op.code != ghidra::CPUI_BRANCHIND && op.code != ghidra::CPUI_RETURN)
+                for (size_t k = 0; k < op.in.size(); ++k)
+                {
+                    const ghidra::VarnodeData& vn = op.in[k];
+                    if (vn.space->getType() == ghidra::IPTR_CONSTANT) continue;
+                    if (op.code == ghidra::CPUI_STORE && k == 2 && Get(s, op.in[1]).kind == Value::Sp) continue;
+                    mEntryRead |= EntryOf(Get(s, vn));
+                }
             uint32_t inner = 0;
             if (mInnerSeen && op.hasOut && op.code != ghidra::CPUI_LOAD && op.code != ghidra::CPUI_CALL && op.code != ghidra::CPUI_CALLIND &&
                 op.code != ghidra::CPUI_CALLOTHER)
@@ -2805,6 +2890,12 @@ private:
                     if (!isReturn && mNested && to.kind == Value::Imm)
                     {
                         MapCalleeWords(CalleeFrameWrites(static_cast<uint32_t>(to.v)), s, Get(s, mReg[kR15]));   // a thunk: walk its target
+                        // (area 3, A3-210) ...and what the target reads of this function's entry values (as an inner call's, Call)
+                        {
+                            const auto lp = mLent.find(static_cast<uint32_t>(to.v));
+                            const bool lentTo = lp != mLent.end() && lp->second.known;
+                            mEntryRead |= EntryOfRegs(s, kConvention | (lentTo ? 0u : CalleeEntryRead(static_cast<uint32_t>(to.v))));
+                        }
                         // (area 3 round 11 fix) ...and a tail jump to a lent callee that stores below the pointer it is handed carries that
                         // storesBelow transitively, so a walked thunk (CalleeStoresBelow) reports it: the thunk stores below whatever it
                         // passed in that register (A3-82, through a tail jump). A lent callee's exact storesBelow is in its signature.
@@ -2818,7 +2909,10 @@ private:
                         // epilogue, which restores r8 and r14). (The code after this block is the round 11 fix's, said above it.)
                         {
                             const Value pr = Get(s, mReg[kPr]), sp = Get(s, mReg[kR15]);
-                            if (pr.kind == Value::Reg && pr.v == kPr && sp.kind == Value::Sp && sp.v == 0)
+                            // (area 3, A3-213) ...and with PR reloaded from the word that saved it, which the model of an inner call wrote over
+                            // (Value::mayEntry, A3-207's reading of a return): the jump may go on to the caller's return as well. F1 saving PR,
+                            // calling a lent G and tail-jumping to it after its epilogue showed nothing it or G changes (grammar 2 seed 12007469).
+                            if (((pr.kind == Value::Reg && pr.v == kPr) || ((pr.mayEntry >> kPr) & 1u)) && sp.kind == Value::Sp && sp.v == 0)
                             {
                                 uint32_t here = 0;
                                 for (int r = 0; r < kTracked; ++r)
@@ -2852,6 +2946,7 @@ private:
                     // (A3-90) ...and a jump to code it cannot name passes on what the convention hands (a callback in a register).
                     if (!isReturn && mNested && to.kind != Value::Imm && to.kind != Value::Fuzzy)
                     {
+                        mEntryRead |= EntryOfRegs(s, kConvention);   // (A3-210)
                         mStoresBelow |= RegOrigins(s, kConvention) & 0x7FFFu;
                         mHanded |= RegDeps(s, kConvention);
                     }
@@ -2998,6 +3093,8 @@ private:
         std::map<uint32_t, uint32_t>* sharedBelow = nullptr;
         std::map<uint32_t, uint32_t> handedOwn;   // (area 3 round 12 fix) ...and the registers it lets out or writes through (CalleeHanded)
         std::map<uint32_t, uint32_t>* sharedHanded = nullptr;
+        std::map<uint32_t, uint32_t> entryReadOwn;   // (area 3, A3-210) ...and the registers whose entry value it reads (CalleeEntryRead)
+        std::map<uint32_t, uint32_t>* sharedEntryRead = nullptr;
         std::map<uint32_t, uint32_t> changedOwn;   // (area 3, A3-197) ...and the registers of r8-r14 it returns with changed on some path
         std::map<uint32_t, uint32_t>* sharedChanged = nullptr;
         std::map<uint32_t, uint32_t> writtenOwn;   // (area 3, A3-203) ...and the ones it overwrites on every path (CalleeWritten)
@@ -3009,6 +3106,7 @@ private:
         std::map<uint32_t, uint32_t>& Cache() { return shared != nullptr ? *shared : cache; }
         std::map<uint32_t, uint32_t>& Below() { return sharedBelow != nullptr ? *sharedBelow : belowOwn; }
         std::map<uint32_t, uint32_t>& Handed() { return sharedHanded != nullptr ? *sharedHanded : handedOwn; }
+        std::map<uint32_t, uint32_t>& EntryRead() { return sharedEntryRead != nullptr ? *sharedEntryRead : entryReadOwn; }
         std::map<uint32_t, uint32_t>& Changed() { return sharedChanged != nullptr ? *sharedChanged : changedOwn; }
         std::map<uint32_t, uint32_t>& Written() { return sharedWritten != nullptr ? *sharedWritten : writtenOwn; }
     };
@@ -3034,6 +3132,7 @@ private:
     bool mInnerSeen = false;    // (area 3, A3-207) a walked callee's inner call marked a register Value::innerChanged
     std::map<uint32_t, uint32_t> mUnkeptSites;   // (A3-197) UnkeptSites
     uint32_t mHanded = 0;       // ...and, of a walked callee, the registers it lets out or writes through (CalleeHanded)
+    uint32_t mEntryRead = 0;    // (area 3, A3-210) ...and the registers whose entry value it reads (CalleeEntryRead)
 
 };
 
@@ -11539,6 +11638,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     std::map<uint32_t, uint32_t> calleeHanded;  // ...and the registers each lets out or writes through (area 3 round 12 fix, A3-90)
     std::map<uint32_t, uint32_t> calleeChanged; // ...and the registers of r8-r14 each returns with changed on some path (area 3, A3-197)
     std::map<uint32_t, uint32_t> calleeWritten; // ...and the ones it overwrites on every path (area 3, A3-203)
+    std::map<uint32_t, uint32_t> calleeEntryRead; // ...and the ones whose entry value it reads (area 3, A3-210)
     auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
@@ -11713,7 +11813,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             probe.SetTolerant();
             probe.SetLiterals(scan.literalWords, *snapshot);
             probe.SetCancel(cancel);   // the callee walk can be long for an adversarial callee (A3-74)
-            probe.ShareWalks(&calleeWalks, &calleeBelow, &calleeHanded, &calleeChanged, &calleeWritten);
+            probe.ShareWalks(&calleeWalks, &calleeBelow, &calleeHanded, &calleeChanged, &calleeWritten, &calleeEntryRead);
             CallEffects unused;
             probe.Run(unused);
             // (area 3 round 12 fix) An address of the frame went out by a way the engine may not see (a callee that keeps it or hands it back

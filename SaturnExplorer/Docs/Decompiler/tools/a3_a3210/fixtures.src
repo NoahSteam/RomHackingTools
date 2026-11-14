@@ -1,0 +1,185 @@
+# Area 3, A11-33 and A3-210 fixer: A3-211 (found by the A11-33 oracle) and A3-210. Run with run.sh / run.py (W=<SaturnExplorer> S=<scratch>).
+# l1 (A3-211): A3-207's n2 with G lent (it reads no register outside r4-r7, so it is lent a signature that does not keep r8): F2 (not lent: it
+# returns r3) saves PR and calls G with r3 in r4; G clears r8 when r4 = 0 and returns a word it loads (its summary names memory beside r8). The caller keeps a local of 5, its address in r8, stores 7 through r8 after
+# the call and returns the local. Right: the caution naming r8
+name l1
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+mov r3,r4
+bsr G
+nop
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+tst r4,r4
+bf K1
+mov #0,r8
+K1:
+rts
+mov.l @r5,r0
+# l1u: l1 with G not lent (it returns r3): A3-207's n2 with a clear the runs make (r3 = 0 in input mode 0). Right: the caution naming r8
+name l1u
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+mov r3,r4
+bsr G
+nop
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+tst r4,r4
+bf K1
+mov #0,r8
+K1:
+rts
+mov r3,r0
+# l1c (control): l1 with G saving r8 around its clear. Right: no caution
+name l1c
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+mov r3,r4
+bsr G
+nop
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov.l r8,@-r15
+tst r4,r4
+bf K1
+mov #0,r8
+K1:
+mov.l @r15+,r8
+rts
+mov.l @r5,r0
+# y1 (A3-210): F0 saves r10, calls F1 (not lent: it returns r3), which sets r10 to 8 when r3 != 0, then F2 (not lent), which calls G and
+# stores r10 through r4; G overwrites r10 on every path (`mov #4,r10`). F0 reads r10 only to restore it. F1's r10 is never read: G's 4 is
+# what F2 stores. Run with SE_GENERATED_CLOBBERS=0,400,400,400. Right: no caution (master: "this call may change r10" at F1's call, F2's
+# walk taking r10 for its caller's)
+name y1
+ret 1,0,0,0
+.word 0x4F22
+mov.l r10,@-r15
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F1:
+tst r3,r3
+bt K0
+mov #8,r10
+K0:
+rts
+mov r3,r0
+fn
+F2:
+.word 0x4F22
+bsr G
+nop
+mov.l r10,@r4
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# y1c (control): y1 with G keeping r10: F2 stores what F1 left. Right: the caution naming r10 at F1's call
+name y1c
+ret 1,0,0,0
+.word 0x4F22
+mov.l r10,@-r15
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F1:
+tst r3,r3
+bt K0
+mov #8,r10
+K0:
+rts
+mov r3,r0
+fn
+F2:
+.word 0x4F22
+bsr G
+nop
+mov.l r10,@r4
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+rts
+mov r3,r0

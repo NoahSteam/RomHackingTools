@@ -21830,3 +21830,133 @@ No generator change: no seed's program changes.
 ### 6. Routed
 
 Nothing.
+
+## Area 3, caution oracle (A11-33) and A3-210
+
+Fixer, branch `review/3-a3210`, cut at master `10ff3a92`. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). One host file changed (`Sh2Decompiler.cpp`: A3-210, A3-211, A3-213), the oracle, the generator and the pins in `Sh2GeneratedTests.cpp` (A11-33, A3-212; `TestA3RoutedPins`), and area 3's oracle cell of `REVIEW_PROGRAM.md`. **No engine patch: 0089 stays free.** Scripts and fixtures: `Docs/Decompiler/tools/a3_a3210/` (`fixtures.src`; `run.py` and `run.sh`, A3-207's reading this directory; `cautions.py`, the texts of two token dumps that differ with each caution and the call printed after it, and whether any other line differs; `sweep.sh`, the caution range; `reverts.sh`, the reverted-fix runs).
+
+| Row | P | Outcome |
+|---|---|---|
+| A11-33 | P3 | **fixed** (oracle and generator): `CheckCautions` holds A3-197's caution against the runs; the caution shapes are drawn for grammar 2 seeds from **12,000,001** (`kCautionFirst`) on |
+| A3-210 | P3 | **fixed** (host): the caution's read after a call takes a register a later callee hands only when that callee reads its entry value (`CalleeEntryRead`) |
+| A3-211 | P2 | **filed and fixed** (host, found by the oracle): an unlent callee's call of a lent callee that changes r8 on one path showed nothing changed |
+| A3-212 | P3 | **filed and fixed** (oracle, found by the sweep): A3-3's kept-read check took a stale stack word that held the saved register for a read of the register |
+| A3-213 | P2 | **filed and fixed** (host, found by the sweep): A3-205's carry at a tail jump asked for PR exactly the caller's, not one that may be (A3-207's reading) |
+
+### 1. The oracle (`CheckCautions`)
+
+The engine's default model keeps r8-r14, GBR, VBR and r15 across a call whose callee was lent no signature, and the text is printed with it; A3-197 (and A3-199, A3-200, A3-205, A3-206, A3-207) says "this call may change rN, read after it ..." where the walk of the callee shows it may not. Until now only hand fixtures held that caution to anything. The oracle reads the runs instead of the walk:
+
+* `Machine::Run` records each call the function itself makes (depth 0): the callee's entry and r8-r15, GBR, VBR at that entry (after the delay slot) and where the run comes back to the function (`CallRet`, `RunOut::calls`). Nothing else of a run changes.
+* For a call of the function's own layout to a callee not lent a known signature, each of those registers that comes back other than it was at the entry is run again from the same inputs with that register set back where the run comes back (`RunSpec::fixCall`, `Machine::SetFix`): the call taken to keep it, as the text takes it. When the two runs do not do the same to the world (`SameBehaviour`: hardware, marked memory, the parameter arenas, r0 when the function returns it; and whether the run finishes), the change is read after the call and matters, and the text must carry a caution naming the register whose next printed line holds the call's token, or one naming it with "likewise" (A3-108's rule for calls in a row). A miss is `caution-unsaid` when the two runs part first at an instruction of the function itself (an operand, a branch, the return), `caution-elsewhere` when a caution names the register at another call only. When they part first inside a later callee the miss is counted (`caution.unsaid.deep`, and `.own-effect` when the function's own accesses or return then differ): that callee's read is A3-197's only as far as its walk records it (A3-194), and the one case the sweep met (a later callee's GBR-relative load, whose value the caller gets as an unlent call's unknown result) leaves no printed value wrong; `SE_GENERATED_CAUTION=deep` lists them as findings.
+* A caution naming a register no run changes at its call is counted (`caution.unchanged`): the walk sees paths no run takes.
+* Default request only, the ordinary runs (not the perturbed ones), at most 24 runs again per function. `SE_GENERATED_CAUTION=0` turns it off; `SE_GENERATED_MUTATE=caution` takes every caution out of the text (the check checked); `SE_GENERATED_PINS=0` runs a range without the pins.
+
+### 2. The grammar (seeds from 12,000,001)
+
+New productions of version 2, drawn from a stream of their own (`Gen::cautionRng`) and only when `cautionOn` (`Generate2`: seed >= `kCautionFirst` = 12,000,001): no seed below changes its program (the pin checks that grammar 2 seeds 1-300 hold none of the shapes; the 20,000-seed matrix and the printed-C run are the seeds below and give what they gave). Seven modules in ten of the range are caution modules:
+
+* one or two registers of r8-r14, GBR, VBR the module's changers change (`cautionKept`; no function of the module keeps PR in one of them, and none uses r14 for a frame pointer when r14 is one);
+* a changer (`Gen::AddCautionChange`, `caution.skip`): `tst Rt,Rt ; bt/bf L ; <change> ; L:` first among its items, Rt = r3 (the caller's leftover: the function is withheld, as A3-197's fixtures) three times in four, else a parameter (lentable); the change `mov #4k,Rn` (no address error through it) or `ldc Rp,gbr/vbr` from a parameter; when the function saves the register, after its epilogue's pops and before `rts` (`Func::afterExit`, `caution.skip.after-exit`: A3-199's restored-then-cleared shape);
+* one module in four of two functions or more: the last function leaves r15 moved on one path (`add #4,r15`, `add #-4,r15`, `mov.l r3,@-r15`; `caution.skip.r15`) and has no stack of its own; every other function then returns by `rts` and has a frame pointer, whose epilogue takes the stack back;
+* one module in three of three functions: function 1 is a thunk (`mov.l @(lit),rN ; jmp @rN`, `fn.thunk`) to function 2, a changer, and function 0 calls it;
+* function 0 of a caution module makes at least one call; a caller of a changer copies the changed register to a scratch register after the call and stores it through r4 or r5 restored from its callee-saved copy (`caution.call.read`; a copy of r15 is never left for later items, which took it for a pointer: seed 12005835 before that);
+* nested unlent calls and PR saved on the stack or in a register come with the module grammar.
+
+Replay a seed: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0 build/bin/SaturnExplorerSh2GeneratedTests <dir>`; the range: `tools/a3_a3210/sweep.sh <build> <scratch> 12000001 10000`.
+
+### 3. The past P2s, reverted
+
+Each fix was switched off in turn by a temporary switch in `Sh2Decompiler.cpp` (removed; not in the branch): A3-199 the join's `sureChanged` (`SureChanged` read a join as before), A3-200 GBR and VBR masked out of `SureChanged`, A3-205 the carry at a tail jump, A3-206 the r15 rule of `SureChanged`, A3-207 both parts (the return through a PR that may be the caller's and the inner call's mark). `reverts.sh`: 2,000 seeds of grammar 2 from 12,000,001, canary and shrink off, the binary with the oracle and the grammar as first made (before A3-211's fix and the two generator corrections of section 4, which change no program but those with r15 copies). Baseline (no switch): 1 seed with `caution-unsaid`, 12001386 (A3-211), and two later-callee misses (12000764, 12001092, counted since). Seeds with `caution-unsaid` or `caution-elsewhere` beyond 12001386:
+
+| Reverted | Seeds | The first ones |
+|---|---|---|
+| A3-199 | 57 | 12000025, 12000049, 12000079, 12000111, 12000132 |
+| A3-200 | 22 | 12000126, 12000196, 12000199, 12000311, 12000359 |
+| A3-205 | 8 | 12000126, 12000199, 12000334, 12000567, 12001250 |
+| A3-206 | 56 | 12000025, 12000049, 12000079, 12000111, 12000132 |
+| A3-207 | 7 | 12000182, 12000196, 12000781, 12000876, 12001220 (one `caution-elsewhere`) |
+
+Each is found within the first 200 seeds of the range. A3-210 and A3-211 off (temporary switches likewise): the pins fail (A3-210: y1, 1 CHECK; A3-211: l1, 3 CHECKs), A3-213 off: its two seed pins (2 CHECKs).
+
+### 4. The sweep of the range (final binary)
+
+`sweep.sh`: 10,000 seeds of each grammar from 12,000,001, canary, shrink and pins off. The first sweep (the oracle's first binary, with A3-210's and A3-211's fixes) found five seeds of grammar 2; each is filed and fixed below, or was the generator's:
+
+| Seed | Finding | Outcome |
+|---|---|---|
+| 12007469, 12005467 | `caution-unsaid` (r9 and r10; GBR) | **A3-213** (P2), fixed |
+| 12003477, 12006529 | `kept-read:r8`, `kept-read:r11` | **A3-212** (P3, oracle), fixed |
+| 12005835 | `generator:callee-saved` (r9 ends 0x...0F) | the generator's: a copy of r15 the conventions' read after a call (`ReadRegisterInto`, its bit 15 from the caution grammar) left for later items, which passed it to a callee that stored through it into the saved r9. Neither read of r15 leaves the copy for later items now (no seed below the range has bit 15) |
+
+On the final binary:
+
+| Run | Failing | Counts |
+|---|---|---|
+| grammar 2, 10,000 from 12,000,001 | **0** | caution notes 1,736; required 759: said 668, said by "likewise" 87, later-callee misses 3 (`caution.unsaid.deep`) and 1 (`.own-effect`); reruns 5,680; cautions naming a register no run changes at their call 629 (`caution.unchanged`), cautions at calls no run made 237. Shapes: `caution.change` 6,610, `caution.skip.after-exit` 933, `caution.skip.r15` 1,085, `fn.thunk` 467, `caution.call.read` 2,510 |
+| grammar 1, 10,000 from 12,000,001 | 2: 12006099, 12009772 | `n:map-way-back` (area 7: "the instruction 0600902C (06009034) is answered with a line that does not begin with it"); no caution in either text, so master's product prints the same. The caution productions are version 2 only; grammar 1 has 0 cautions in the range |
+
+The four later-callee misses (`SE_GENERATED_CAUTION=deep` lists them; 12000764 and 12001092 in the first 2,000 seeds, read): a callee loads GBR (the conventions' `ldc r5,gbr` on every path), and a later unlent callee reads through GBR (`mov.w @(10,gbr),r0`) and returns the value, which the caller tests; the caller's text shows that callee's result as an unknown call's, and no printed value is wrong. Not filed. The 629 `caution.unchanged` are the walk's paths no run takes (the runs' inputs choose one path of `tst r3,r3` per mode); counted, not read one by one.
+
+### 5. A3-211, A3-212, A3-213
+
+**A3-211 (P2).** A3-207 marks what an inner call of a walked unlent callee changes (`Value::innerChanged`, from the inner callee's own walk) only at a call of an unlent callee. A lent inner callee's signature replaces what it does not keep (`Apply`) with a value the walk cannot read as changed for certain when the summary names memory (what a callee returns may be anything, the entry value among them). Seed 12001386: function 1 (not lent: it reads r3) calls the lent function 2, which sets r10 to 0x18 on one path (`tst r3,r3 ; bt ; mov #0x18,r10`); function 0 reads r10 after its call of function 1 and stores it (`*(int4 *)(param_2 + 0xc) = param_3;`, the runs store 0x18): no caution. Shrunk by hand to l1 (A3-207's n2 with G lent and returning a loaded word). Fix (`Call`): the mark is put at a lent inner call too, for what its walk shows changed and its signature does not say it keeps. l1: the caution; l1c (G saves r8): none; l1u (G not lent): the caution, as before.
+
+**A3-212 (P3, oracle).** A3-3's check (when a lent callee changes r8, the text reads no `unaff_r8`) is textual. Seed 12006529, shrunk by the generator: function 0 pops r8-r11 and PR and tail-jumps to function 1, lent, which sets r11 and reads its frame's first word before writing it (`add #-16,r15 ; mov #0x30,r11 ; mov.w @r15,r1`): that word held function 0's saved r11, and the text's `(int4)(int2)((uint4)unaff_r11 >> 0x10)` is the value the runs read. 12003477 is the same with r8. Fix: before the finding, A3-111's stack-refill test; a stale stack read is excused and counted (`excluded.stale-stack-read.kept-read`: 2 and 1). No other case of the check changes (it runs the test only when it would report).
+
+**A3-213 (P2).** A3-205 carries a tail jump's target's changes (and this path's) into the walked callee's record only with PR exactly the caller's and r15 back at the entry. Seed 12007469: function 1 saves PR, calls the lent function 2 (whose model writes over the saved word: PR comes back `mayEntry`), restores PR, r13, r9, r8 and tail-jumps to function 2 (`mov.l @(lit),r1 ; ... jmp @r1`); function 1 sets r10 on one path and function 2 sets r9 on one path; function 0 reads both after its call of function 1 (`mov r10,r1 ; mov.l r1,@(0xc,r4)`, `mov r9,r5` then a store through r5): no caution. 12005467 the same with GBR. Fix: PR that may be the caller's (as A3-207 reads a return) carries it too; the path stays lost, so nothing is claimed overwritten. Both seeds: the caution ("r9 and r10"; "gbr"), no finding.
+
+### 6. A3-210
+
+A walked callee's record of what it hands its caller's registers to (`CalleeHanded`: lets out, stores through, hands to a callee) is made with its own inner unlent calls modelled by the convention, which keeps r8-r14; a register an inner call reloads before the callee reads it was recorded as the caller's, and the caution's "read after it" at an earlier call took it for a read (06024A3C/007: 06024A72 calls 06024B18, which loads r10-r13 through r8, and then reads `@(0,r10)` ... and stores what it loads through r7). The row's direction, a record of what the callee reads as its caller left it beside `mHanded`, is the fix, made without a counterpart at every `mHanded` site:
+
+* `Value::stale` (a register's entry value, or a part of one): set at an inner call of a walked callee for the registers that callee overwrites on every path (`CalleeWritten`, A3-203); carried by copies; a join keeps it only when both sides have it.
+* `mEntryRead` (`CalleeEntryRead`, shared like the walk's other records): the registers whose entry value, not stale, the walked function reads: an operand of any op but a copy, a call or an indirect jump; the value of a store to anywhere but its own frame (a push holds the value, which is read when it is loaded back and used); another register's entry value handed back at a return; what an inner call or a tail jump is handed (r2, r4-r7 and the stack words from the call's r15 up, and, for a walked target, its own record mapped through the values it is handed). Every register when the walk could not follow the callee; r2 and r4-r7 when its entry does not decode.
+* At a call in the probe, a register of r8-r14, GBR or VBR the callee hands (`CalleeStoresBelow | CalleeHanded`) is a read after an earlier call (`UseUnkept`) only when the callee reads its entry value. The frame rules, `UseKept` and the hand-outs read `CalleeHanded` as before.
+
+Fixtures (`a3_a3210/fixtures.src`): y1 (F0 calls F1, which sets r10 to 8 when r3 != 0, then F2, which calls G, `mov #4,r10`, and stores r10 through r4): master says "this call may change r10" at F1's call, this branch none (F1's r10 is never read: G's 4 is stored); y1c (G keeps r10): the caution, required by the runs and said. Every fixture of `a3_a3197`, `a3_round26`, `a3_a3202`, `a3_a3203`, `a3_round27` and `a3_a3207` gives what its fixer recorded (`run.sh` of each, this branch against master: identical).
+
+### 7. Corpus
+
+Both images alone and lent (`a7_round2/corpus.sh`), this branch's final binary against master's dumps made here (master `10ff3a92`'s `Sh2Decompiler.cpp` built in this tree), compared with `a3_a3210/cautions.py`. Both runs all passed, every ledger count 0; missing and said **0** (007) and **4** (008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**", as master. **Cautions only, no other line**: 007 4 texts alone and 5 lent, 008 the same code at + 0x3FCA0 (4 and 5). A3-211 and A3-213 change no text.
+
+| Function (007; 008) | Master | Now | Read |
+|---|---|---|---|
+| 06024A3C (060646DC) | r8, r10, r11, r12 and r13 at the calls of 06024A72 and 06024ACC (the two arms) | r8 at each | A3-210's row: 06024A72 calls 06024B18 first, which loads r10-r13 through r8 on every path (`mov.w @r8+,r10` ... `r13`), then reads `@(4,r10)` ... `@(0,r13)` and stores what it loads through r7; 06024ACC the same with 06024B34. r8 is read by 06024A3C itself (the loop's `mov.w @r8+,r0` at 06024A4E) and stays |
+| 060247B0, 06024720 lent (06064450, 060643C0 lent) | r10-r13 at the call of 060254C8; r10-r12 at 060256E8 | none | after `bsr 060254C8` (loads r13, r11, r10, r9 and r12 at 060254CE-060254E8) come `bsr 060256E8` and `bsr 06024A3C`, then the epilogue. 060256E8 either returns at once (`cmp/pl r8 ; bf 0602570E`) or loads r11 (`mov r0,r11`), r10 (`mov.l @(28,r14),r10`) and r12 (a literal) before its loop reads them; 06024A3C's callees load r10-r13 first (above). Nothing reads 060254C8's r10-r13 or 060256E8's r10-r12 as left; 060247B0 itself does not use them |
+| 060247E2 (06064482) | r10-r13 at 06025564; r10-r12 at 060256E8 | none | the same sequence with `bsr 06025564` (060254C8's own loader, entered past its GBR test) |
+| 0602481C (060644BC) | r9 at `bsr 06025604`, "likewise at the calls below" | none | 06025604 loads r9-r13 and keeps none. 0602481C never uses r9; its loop calls 06024B18 (reads r8, r14, GBR), 06024B64 (r10-r13, reloaded by 06024B18 before), 06024BC8 and, on the other arm, 06024B34, 06024B9C, 06024BF4. 06024BC8 and 06024BF4 dispatch through a `braf` table to cases that reach 06026AD4 (`mov #0,r9` before the shifts of r9) and 06026B68, which overwrite r9 on every path (`CalleeWritten`) before 06026F6A's `mov r9,r0 ; mov.l r0,@(41,gbr)` reads it: the r9 their walk lets out is their own. The calls the "likewise" covered (06024BC8, 06024BF4, which change r9) are read after by the loop's next call of the same callees, which overwrite it first, and 0602481C returns without reading r9 |
+
+The changes are exactly the over-naming A3-210 filed (06024A3C, 060247B0 and 060254C8's call), and the same reading for 060247E2 and 0602481C; no caution is added.
+
+### 8. Pins
+
+`TestA3RoutedPins` (`Sh2GeneratedTests.cpp`), four blocks after A3-196's:
+
+* A3-211: l1 (the caution for r8, required by the runs and said), control l1c (none).
+* A3-210: y1 (no caution at F1's call), control y1c (the caution for r10 at F1's call, required).
+* A3-212/A3-213: grammar 2 seeds 12007469 and 12005467 (no finding, the caution said) and 12003477 and 12006529 (no finding, `excluded.stale-stack-read.kept-read` counted).
+* A11-33: l1u and l1 as printed (required, said, no finding) and with every caution taken out (`gMutateKind = "caution"` for the call: `caution-unsaid`); the first program from 12,000,001 of each shape whose runs require a caution (thunk: seed 12000126; r15: 12000025; after the epilogue: 12000182; GBR or VBR: 12000126) passes with the caution said; grammar 2 seeds 1-300 hold no caution shape.
+
+Mutation (temporary switches, removed): A3-210's record off, 1 CHECK (y1); A3-211's lent case off, 3 (l1 and A11-33's l1, which then fail with `caution-unsaid`); A3-213's `mayEntry` off, 2 (its seeds). With the oracle off (`SE_GENERATED_CAUTION=0`), 9 CHECKs fail (A3-211 l1, both A3-213 seeds, both damaged texts and the four grammar shapes).
+
+### 9. Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117** (111 and the 6 Live tests), 319 s |
+| fault suite | fault matrix: **0 of 94** job(s) failed (87 s) |
+| 20,000-seed matrix (canary on, every pin) | 20,000 seeds (10,000 of each grammar), `failing seeds=0; findings=0`, all passed (33.6 ms per seed); the oracle in the seeds below the range: caution notes 171, required 70, said 64 and "likewise" 6, reruns 1,754 (capped twice), `caution.unchanged` 14 |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, all passed |
+| the caution range (`a3_a3210/sweep.sh`, 10,000 seeds of each grammar from 12,000,001) | grammar 2: **failing seeds=0**; grammar 1: 2 (area 7, section 4) |
+| game corpus, lent (`a7_round2/corpus.sh`, both images, this branch's final binary, against master's dumps made here) | both all passed, every ledger count 0; missing and said **0** and **4**; lent **474 (645)** and **724 (975)**; texts that differ 4 and 5 (007), 4 and 5 (008), cautions only (section 7) |
+| fixture scripts (final binary) | `a3_a3210/run.sh`: l1 r8, l1u r8, l1c none, y1 none, y1c r10 (with `SE_GENERATED_CLOBBERS=0,400,400,400`); `a3_a3207`, `a3_round27`, `a3_a3203`, `a3_a3202`, `a3_round26`, `a3_a3197`: what master gives, no finding |
+| binaries | every run above on the final build (md5 of `SaturnExplorerSh2GeneratedTests`, `SaturnExplorerSh2DecompilerTests`, `SaturnExplorerDecompilerFaultTests` checked after the runs) |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: not needed (no vendored file or patch touched) |
+
+Generator: no seed below 12,000,001 changes its program (every new draw and override is behind `cautionOn`, `cautionModule`, `cautionSpFn` or `cautionThunk`, all off below it; the conventions' read after a call skips r15, which no seed below has; the frame walk's base is r14 only in an r15 module).
+
+### 10. Routed
+
+* **Area 7:** grammar 1 seeds 12006099 and 12009772 (`n:map-way-back`: "the instruction 0600902C (06009034) is answered with a line that does not begin with it"), from this sweep; no caution in either text (the same on master's product). Replay: `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`. Not shrunk.
+* **Coordinator:** the container's disk was at 30-200 MB free during this work (16 GB of earlier rounds' scratch under the session's scratchpad); this fixer's corpus dumps and sweep output went to `/dev/shm`.
