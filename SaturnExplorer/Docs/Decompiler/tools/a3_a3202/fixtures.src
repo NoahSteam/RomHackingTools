@@ -82,7 +82,7 @@ F2:
 rts
 mov r3,r0
 name x4s
-# two calls of vCr8's F1 in a row, then 7 stored through r8: r8 is as either call left it (the second may keep what the first cleared)
+# A3-203 (open): two calls of vCr8's F1 in a row, then 7 stored through r8: r8 is as either call left it (the second may keep what the first cleared)
 ret 1,0
 .word 0x4F22
 mov.l r8,@-r15
@@ -114,3 +114,31 @@ nop
 K1:
 rts
 nop
+name f1
+# A3-204: A3-108's frame note, placed by address too: a frame address in r3 at two calls on two arms (A3-194's k4e caller and callee), joined
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+tst r6,r6
+bt A1
+bsr F1
+nop
+bra J1
+nop
+A1:
+bsr F1
+nop
+J1:
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov #7,r2
+rts
+mov.l r2,@r3

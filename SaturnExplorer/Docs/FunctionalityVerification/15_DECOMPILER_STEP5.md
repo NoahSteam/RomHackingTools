@@ -21268,3 +21268,64 @@ No generator change: no seed's program changes (the oracle's new runs answer the
 * **Area 7:** grammar 1 seeds 9600475, 9602179, 9606064 (`n:` and `v:`), 9607450 (`map-store-dead`, A7-158's rule: "names the store at ..., whose bytes a later store writes over before anything reads them"), 9608430 (`n:map-copy-merge`, `cRam26001008 = (char)iVar1;` drawn only at instructions that make nothing); grammar 2 seed 9606539 (`n:map-way-back`, function 1, 0600908E). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`. Not shrunk.
 * **Area 5:** grammar 1 seed 9603811 (`n:folded-read-after-pointer-write` and two `n:folded-read-after-access`: the read at 0600900C folded from 26001008, printed on line 18 after the writes at 06009016 and 0600901E and the read at 06009020); grammar 1 seed 9606511 (`n:status`, "Volatile memory was propagated": an engine `LowlevelError` in the request with volatile memory; area 10 if it is a patch's). Not shrunk.
 * **Area 11:** the shrinker kept seed 9200735's finding text over a reduction that no longer has the store (section 2).
+
+## Area 3, A3-202 fix
+
+Fixer, branch `review/3-a3202`, cut at master `331103a6`. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). One host change (`Sh2Decompiler.cpp`: the caution's mark and where the caution is said; A3-202), one change to the generator's shrinker (`Sh2GeneratedTests.cpp`, `Shrinker::IntentHolds`; A11-32) and the pins (`TestA3RoutedPins`). **No engine patch: 0089 stays free.** Fixtures and scripts: `Docs/Decompiler/tools/a3_a3202/` (`fixtures.src`: x4, the control x4c, x4s for A3-203, f1 for A3-204; `run.py`, round 26's `run26.py` reading this directory; `run.sh`, each fixture's return lines, cautions and findings).
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-202 | P3 | **fixed** (host): the mark is a set of (call, register), joined at joins; "likewise at the calls below" only for calls the saying call dominates |
+| A3-203 | P3 | **filed open** (host): a call's mark replaces an earlier call's, so of two calls in a row only the second is cautioned; adding to the marks instead is wrong where the later callee writes the register on every path (0602481C/007), which the walk does not record |
+| A3-204 | P3 | **filed open** (host): A3-108's frame note says "likewise at the calls below" by address order, as the caution did; f1 |
+| A11-32 | P3 | **filed and fixed** (shrinker): a step that took out a post-poll production's items kept its declaration, and the shrunk program was checked for a store it no longer makes |
+
+### 1. A3-202
+
+A3-197's mark was one call per value (`Value::unkeptAt`, `unkeptReg`), and a join kept the first side's. x4 (round 26's): `tst r6,r6 ; bt A ; bsr F1 ; bra J ; A: bsr F1 ; J:`, then 7 stored through r8, F1 vCr8's (clears r8 when r3 != 0 and r4 = 0): `if (param_3 == 0) { func(); } else { /* this call may change r8 ... */ func(); }`.
+
+Fix (`Sh2Decompiler.cpp`):
+
+* The mark is `Value::unkept`, a sorted set of `call << 8 | register` (`UnkeptMark`; empty, no allocation, for every value but the marked ones). Copies and parts carry it as they carried `unkeptAt`; `Merge` keeps the marks of both sides (`JoinUnkept`, a set union), in its "the same value, marked or not" case too, and reports a change only when the set grew, so the walk's fixed point ends (the sets are bounded by the calls and registers). A read (`UseUnkept`) cautions every call in the set. A call to a callee that changes the register still sets its own mark alone (A3-203).
+* With the join alone x4 had "likewise at the calls below" at the `bt`-not-taken call (0x0600900C, the lower address) and nothing at the other, which the text prints first (`if (param_3 == 0)`): "below" pointed at nothing. A call is now left to an earlier call's "likewise" only when every path from the entry to its final block passes that call's (`BlockDominates`, a walk of the final basic blocks with the saying call's block taken out); the text prints a dominated block after its dominator. Calls in a row (w8, 0600DC56/007's 28 calls) still share one caution.
+
+x4: a caution before each call, no "likewise"; x4c (control: the r6 = 0 arm calls F2, `rts ; mov r3,r0`, which keeps r8): one caution, at F1's call (0x06009040), none at F2's. A3-197's pins (vCr8 to vCr14, vEr8, w3, w4, w8 and the controls), A3-199's x2, A3-200's x5 and x6 and A3-201's x1 give what they gave; round 26's `run.sh` with the final binary: x1 none, x2 r8, x2r r8, x3 r8, x4 r8 at both calls, x5 gbr, x6 gbr, x7 and x7c none.
+
+Mutation (temporary, removed): joins keeping the first side's mark (as before), the x4 pin fails (1 CHECK: one caution); "likewise" by address order (`BlockDominates` always true), the x4 pin fails (1 CHECK: one caution, "likewise").
+
+**A3-203 (open).** A call's mark replaces what the register carried. x4s (two calls of F1 in a row, r8 read after the second): the caution at the second call only, though on a run where the first clears r8 and the second keeps it the text is wrong by the first. I tried adding the call's mark to the earlier ones (a set union at the call): x4s then had the caution at the first call, "likewise", and w8's first two calls named r9 and r10, but 0602481C/007 (060644BC/008 is the same code) gained r10, r11, r12 and r13 at `bsr 06025604` (0x06024834). 06025604 loads r9 to r13 at entry and keeps none (it saves r14 only), but the next calls, `bsr 06024B18` (0x06024858) and `bsr 06024B34` (0x0602487A), load r10 to r13 at their entry on every path (`mov.w @r8+,r10 ; mov.w @r8+,r11 ; mov.w @r8+,r12 ; ... mov.w @r8+,r13`, and in 06024B34 `mov r12,r13` in the slot of its only branch) before anything reads them, and 06024B64 and 06024B9C read them after (`mov.b @(7,r13),r0` ...): 06025604's r10 to r13 are never read, a false caution. Replacing is right when the later callee writes the register on every path and adding when it may keep it; the walk records only "changed for certain on some path" (`mChangedAt`). Taken back; filed with that analysis.
+
+**A3-204 (open).** A3-108's frame note is placed the same way (the first call by address says it, "likewise at the calls below"): f1, a frame address in r3 at two calls on the two arms (A3-194's k4e caller and callee), `if (param_3 == 0) { func(); } else { /* a frame address is in r3 here ...; likewise at the calls below */ func(); }`. `BlockDominates` applies to the notes' loop as to the cautions; not made here (the frame notes are in many corpus texts, outside this brief).
+
+### 2. A11-32: the shrinker's fixture of seed 9200735
+
+The finding text was not stale: the shrunk program carried it rightly by the oracle's reading. The post-poll checks (`endless-read-dropped`, `endless-after-store-dropped`, `endless-call-dropped`) ask for the item a production ends with by the program's declaration (`Program::postPollRead`, `postPollStore`, `postPollCall`, `postPollCallStore`), not by its items, and `Shrinker::IntentHolds` (A2-50, A3-189) checked `return g(p);` and `postJoin` only. So the shrinker took the `post_store.*` items and the post-poll call out and kept `postPollStore = 0x26003000`; the reduced 10 words (a poll that reads its own write) still took the poll for endless, the oracle asked for 4 bytes at 0x26003000, and the gate (A3-185) found no finished run: the shrunk program "had" the finding. The fix is the shrinker's alone: `PostPollIntentHolds` (called by `IntentHolds`) refuses a step that leaves a declared post-poll item without its productions (version 1: `post.poll.store`; `post_store.litptr`, `.const`, `.store`; a `post_call.*` call in function 0 to `postPollCall` and, with `postPollCallStore`, the callee's `post_call.callee.litptr` and `.store`; version 2: `mod_poll.*` in `postPollFn`), and `Remove` renumbers `postPollFn` and `postPollCall` (a removed function's: none, refused). No generator change: no seed's program changes, only which reductions the shrinker takes.
+
+Pin (`TestA3RoutedPins`, the A11-32 block): seed 9200735's program holds its intent and does not without `post_store.store` or without the call; the shrinker with every step accepted keeps both (4 items of function 0 left; with the check off, none: the store and the call go first); the programs of seeds 1 to 2,000 of each grammar all hold their own declarations. With the check off the pin fails (2 CHECKs). (The seed itself no longer fails since A3-198, so its shrink cannot be replayed as it was.)
+
+### 3. Corpus
+
+Both images with lending (`a3_round25/corpus.sh`, this branch's final binary), against master's dumps (round 26's final binary, which is master `331103a6`'s product): one function text of each image differs, alone and lent, and only by a caution added:
+
+* 0602481C/007, the loop after `bsr 06025604`: `bf/s 06024878` (0x06024852) splits into `bsr 06024B18` (0x06024858, fall-through) and `bsr 06024B34` (0x0602487A). Both callees load r10 to r13 and step r8 (`mov.w @r8+,...`) on every path and keep none, and the caller reads them after (06024B64 and 06024B9C read r10 to r13 through `@(7,rN)`; the loop rereads r8 at 0x0602484A). Master said the caution once, at 0x06024858, "likewise at the calls below"; the `else` that holds 0x0602487A is printed below it here, but neither call dominates the other. Now each arm has its own caution (the same registers, r8, r10, r11, r12 and r13) and the first loses "likewise". The caution at `bsr 06025604` (r9) is unchanged.
+* 060644BC/008: the same code (`bsr 060652A4`; the arms `060647B8` and `060647D4`), the same change.
+
+Both runs "all passed", every ledger count 0; missing and said **0** (007) and **4** (008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**", as master. No other function text differs, alone or lent: no other caution moved. The union at a call tried for A3-203 (section 1) changed the same two functions more (r10 to r13 added at `bsr 06025604` / `bsr 060652A4`), the false caution analysed there; it is not in this branch. A3-197's scripts (`a3_a3197/run.sh`, w1 to w9 and the vC/vE sweep) give what the A3-197 fixer recorded (w8: r9 at the first call, "likewise", r9 and r10 at the third).
+
+### 4. Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117** (111 and the 6 Live tests) |
+| fault suite | fault matrix: **0 of 94** job(s) failed (117 s) |
+| 20,000-seed matrix (canary on, every pin) | 20,000 seeds (10,000 of each grammar), `failing seeds=0; findings=0`, all passed (36.1 ms per seed) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, all passed |
+| game corpus, lent (`a3_round25/corpus.sh`, both images, final binary, against round 26's final dumps) | both all passed, every ledger count 0; missing and said **0** and **4**; lent **474 (645)** and **724 (975)**; one text each differs (0602481C/007, 060644BC/008), by the caution added at the second arm (section 3) |
+| fixture scripts (final binary) | `a3_round26/run.sh`: x1 none, x2 r8, x2r r8, x3 r8, x4 r8 twice, x5 gbr, x6 gbr, x7 and x7c none; `a3_a3202/run.sh`: x4 r8 twice, x4c r8 once, x4s r8 once (A3-203, open), f1 the frame note only (A3-204, open) |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: not needed (no vendored file or patch touched) |
+
+No generator change: no seed's program changes (the shrinker only refuses more steps).
+
+### 5. Routed
+
+Nothing to another area. A3-203 and A3-204 are area 3's, open.
