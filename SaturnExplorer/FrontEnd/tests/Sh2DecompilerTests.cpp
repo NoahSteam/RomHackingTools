@@ -5010,6 +5010,18 @@ void TestArea7Round22()
         CHECK(dts::AuditMapping(r, word, "a7_169").Violations() == 0);
         CHECK(mutated(r, "169", "a7_169 mutated") >= 1);
     }
+    // A7-170 `mov #1,r0 ; mov.b r1,@(r0,r5) ; and r0,r1 ; shal r2 ; tst r1,r7 ; bf L ; ... ; L: and r2,r1`: r1 holds only bit 0, r2 any but bit 0, so `and r2,r1` makes
+    // the 0 of `uVar1 = 0;` (grammar 2 seed 9404185, shrunk; the function at 0x0600900A)
+    {
+        const std::vector<uint16_t> w = { 0x7FE8, 0x6073, 0x7F18, 0x000B, 0x0009, 0x7FFC, 0xE001, 0x0514, 0x2109, 0x4220, 0x2718, 0x8B01, 0xA003, 0x0009, 0x2129,
+                                          0xA000, 0x0009, 0x6043, 0x7F04, 0x000B, 0x0009 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x0600900Au));
+        Print("A7-170 an AND of values with no bit in common (grammar 2 seed 9404185)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uVar1 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_170").Violations() == 0);
+        CHECK(mutated(r, "170", "a7_170 mutated") >= 1);
+    }
 }
 
 void TestFixture1()

@@ -612,6 +612,12 @@ inline bool AccessAddress(const sfe::decomp::DecompileResult& r, const std::func
     addr = static_cast<uint32_t>(a);
     return true;
 }
+// (A7-170: set while PossibleBits walks the makers of a register: an edge the words' own T never takes brings none)
+inline bool& MakersSkipImpossible()
+{
+    static bool v = false;
+    return v;
+}
 // A7-69: is the edge from instruction `p` (a branch, a delayed branch's slot, or the one before `a`) to `a` never taken, by the T the
 // words give (`tst #4,r0 ; bt L` with r0 2 always branches) or because `p` is never run (RegisterBefore's pruning, for the walks over
 // memory too)?
@@ -1280,6 +1286,62 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
 inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                            const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, std::set<uint32_t>& makers,
                            bool throughUpdate = false, std::set<int>* entryRegs = nullptr);
+// (A7-170) The bits register `reg` may have set where the instruction at `at` reads it, from the instructions that make it: a mask ANDed, a number, a
+// shift, a zero extension; every other maker, or a path in from outside, may set any. Used for an AND whose operands have no bit in common
+// (`and #1` of a value, then `shal` of another: `and r2,r1` is 0; grammar 2 seed 9404185).
+inline uint32_t PossibleBits(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                             const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth = 0)
+{
+    if (depth > 4) return 0xFFFFFFFFu;
+    std::set<uint32_t> makers;
+    MakersSkipImpossible() = true;
+    const bool found = RegisterMakers(r, word, into, at, reg, makers, false, nullptr);
+    MakersSkipImpossible() = false;
+    if (!found || makers.empty() || makers.count(0)) return 0xFFFFFFFFu;
+    uint32_t bits = 0;
+    for (uint32_t mk : makers)
+    {
+        uint16_t w = 0;
+        if (!word(mk, w) || !r.InBody(mk)) return 0xFFFFFFFFu;
+        const int hi = w >> 12, n = (w >> 8) & 0xF, m = (w >> 4) & 0xF, lo = w & 0xF;
+        uint32_t b = 0xFFFFFFFFu;
+        if (hi == 0xE && n == reg) b = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF)));
+        else if (hi == 0x2 && lo == 0x9 && n == reg) b = PossibleBits(r, word, into, mk, n, depth + 1) & PossibleBits(r, word, into, mk, m, depth + 1);
+        else if ((w >> 8) == 0xC9 && reg == 0) b = PossibleBits(r, word, into, mk, 0, depth + 1) & (w & 0xFFu);
+        else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x00) b = PossibleBits(r, word, into, mk, n, depth + 1) << 1;    // shll
+        else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x20) b = PossibleBits(r, word, into, mk, n, depth + 1) << 1;    // shal
+        else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x08) b = PossibleBits(r, word, into, mk, n, depth + 1) << 2;    // shll2
+        else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x18) b = PossibleBits(r, word, into, mk, n, depth + 1) << 8;    // shll8
+        else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x28) b = PossibleBits(r, word, into, mk, n, depth + 1) << 16;   // shll16
+        else if (hi == 0x6 && n == reg && lo == 0xC) b = PossibleBits(r, word, into, mk, m, depth + 1) & 0xFFu;           // extu.b
+        else if (hi == 0x6 && n == reg && lo == 0xD) b = PossibleBits(r, word, into, mk, m, depth + 1) & 0xFFFFu;         // extu.w
+        else if (hi == 0x6 && n == reg && m == 15 && lo == 0x6)                                                           // mov.l @r15+,Rn
+        {
+            // (the pop of a push in the straight code before it, `mov.l r2,@-r15 ; ... ; mov.l @r15+,r2`: the pushed register's bits)
+            int open = 0;
+            for (uint32_t q = mk - 2, steps = 0; steps < 16 && r.InBody(q); q -= 2, ++steps)
+            {
+                uint16_t qw = 0;
+                if (!word(q, qw)) break;
+                const sfe::DisassembledInstruction qd = sfe::Sh2Decode(q, qw);
+                if (!qd.IsValid || qd.IsBranch || qd.IsCall || qd.HasDelaySlot) break;
+                if ((qw & 0xF00F) == 0x6006 && ((qw >> 4) & 0xF) == 15) ++open;               // an inner pop
+                else if ((qw & 0xF00F) == 0x2006 && ((qw >> 8) & 0xF) == 15)                    // a push
+                {
+                    if (open == 0)
+                    {
+                        b = PossibleBits(r, word, into, q, static_cast<int>((qw >> 4) & 0xF), depth + 1);
+                        break;
+                    }
+                    --open;
+                }
+                else if (qd.Mnemonic == "add" && ((qw >> 8) & 0xF) == 15) break;
+            }
+        }
+        bits |= b;
+    }
+    return bits;
+}
 inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                               const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int reg, int depth)
 {
@@ -1626,6 +1688,7 @@ inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::fun
         {
             sfe::DisassembledInstruction d;
             if (!decode(p, d)) return false;
+            if (MakersSkipImpossible() && EdgeImpossible(r, word, into, p, a, 0)) continue;
             sfe::DisassembledInstruction call;
             if (p + 2 == a && decode(p - 2, call) && call.IsCall && call.HasDelaySlot && rg <= 7)
             {
@@ -3789,6 +3852,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         computes = computes || (v.kind == WordValue::Number && (static_cast<uint32_t>(v.value) & kept) == 0);
                     }
                     if (imm && ((w & 0xFFu) & kept) == 0) computes = true;
+                    // (A7-170: no bit the two registers may both set -- `shal r2` clears bit 0, `and #1` keeps only it -- `and r2,r1` is 0)
+                    if (!computes && !imm && !A7RuleOff(170) &&
+                        (PossibleBits(r, word, sources, at, static_cast<int>((w >> 8) & 0xF)) & PossibleBits(r, word, sources, at, static_cast<int>((w >> 4) & 0xF)) & kept) == 0)
+                        computes = true;
                 }
                 // (A7-109: `or #imm,r0` and `and #imm,r0` at a join whose paths bring r0 different numbers that give one result: `or
                 // #0xBD,r0` of 8 on one path and 5 on the other is 0xBD on both; every maker of r0 an instruction that makes a number, and

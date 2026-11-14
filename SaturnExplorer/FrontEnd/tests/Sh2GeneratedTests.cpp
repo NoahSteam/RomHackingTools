@@ -4304,8 +4304,91 @@ bool OrsIntoOnChip(const std::string& text)
             if (c == '&') return n != '&';
             return c == '^' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '<' || c == '>';
         };
-        if (b > 0 && text[b - 1] == '|' && (b < 2 || text[b - 2] != '|') && !tighterAfter()) return true;
-        if (e < text.size() && text[e] == '|' && (e + 1 >= text.size() || text[e + 1] != '|') && !tighterBefore()) return true;
+        // (A5-148) ...and the OR's parenthesised value is not ANDed with another: `(param_2 | 0xffffffc0) & uRam06009058` has the mask's value to clear the top
+        // bits again (the code ANDs with 0x1c); the partition is no longer the OR's. Sweep seed 9404677.
+        auto andedAround = [&]() {
+            if (dts::A7RuleOff(5148)) return false;
+            int depth = 0;
+            size_t open = std::string::npos, close = std::string::npos;
+            for (size_t k = b; k > 0; --k)
+            {
+                if (text[k - 1] == ')') ++depth;
+                else if (text[k - 1] == '(' && depth-- == 0)
+                {
+                    open = k - 1;
+                    break;
+                }
+            }
+            depth = 0;
+            for (size_t k = e; k < text.size(); ++k)
+            {
+                if (text[k] == '(') ++depth;
+                else if (text[k] == ')' && depth-- == 0)
+                {
+                    close = k;
+                    break;
+                }
+            }
+            if (open == std::string::npos || close == std::string::npos) return false;
+            size_t after = close + 1, before = open;
+            while (after < text.size() && text[after] == ' ') ++after;
+            while (before > 0 && text[before - 1] == ' ') --before;
+            auto numberAt = [&](size_t q) {
+                while (q < text.size() && (text[q] == ' ' || text[q] == '(')) ++q;
+                return q < text.size() && std::isdigit(static_cast<unsigned char>(text[q]));
+            };
+            const bool andAfter = after < text.size() && text[after] == '&' && (after + 1 >= text.size() || text[after + 1] != '&') && !numberAt(after + 1);
+            bool andBefore = before > 0 && text[before - 1] == '&' && (before < 2 || text[before - 2] != '&');
+            if (andBefore)
+            {
+                size_t q = before - 1;
+                while (q > 0 && (text[q - 1] == ' ' || text[q - 1] == ')')) --q;
+                size_t t0 = q;
+                while (t0 > 0 && (std::isalnum(static_cast<unsigned char>(text[t0 - 1])) || text[t0 - 1] == '_')) --t0;
+                andBefore = !(t0 < q && std::isdigit(static_cast<unsigned char>(text[t0])));
+            }
+            return andAfter || andBefore;
+        };
+        if (b > 0 && text[b - 1] == '|' && (b < 2 || text[b - 2] != '|') && !tighterAfter() && !andedAround()) return true;
+        if (e < text.size() && text[e] == '|' && (e + 1 >= text.size() || text[e + 1] != '|') && !tighterBefore() && !andedAround()) return true;
+    }
+    return false;
+}
+
+// (A5-148) Whether `id` is an operand of an AND in `text` (`(uint4)pxVar1 & uRam06009064`), the other operand not a constant that keeps the top three bits:
+// the value is then masked again, and what ORed the top bits into it no longer says where the pointer is.
+bool AndedWith(const std::string& text, const std::string& id)
+{
+    for (size_t at = text.find(id); at != std::string::npos; at = text.find(id, at + 1))
+    {
+        const size_t end = at + id.size();
+        if ((at > 0 && (std::isalnum(static_cast<unsigned char>(text[at - 1])) || text[at - 1] == '_')) ||
+            (end < text.size() && (std::isalnum(static_cast<unsigned char>(text[end])) || text[end] == '_')))
+            continue;
+        size_t r = end;
+        while (r < text.size() && (text[r] == ' ' || text[r] == ')')) ++r;
+        auto numeric = [&](size_t q) {   // (the operand at q is a number: ANDed with a constant the engine reads the range, A5-135's `& 0x1c`)
+            while (q < text.size() && (text[q] == ' ' || text[q] == '(')) ++q;
+            return q < text.size() && std::isdigit(static_cast<unsigned char>(text[q]));
+        };
+        if (r < text.size() && text[r] == '&' && (r + 1 >= text.size() || text[r + 1] != '&') && !numeric(r + 1)) return true;
+        size_t l = at;
+        while (l > 0 && text[l - 1] == ' ') --l;
+        if (l > 0 && text[l - 1] == ')')   // (a cast: `(uint4)id`)
+        {
+            size_t k = l - 1;
+            while (k > 0 && text[k - 1] != '(') --k;
+            l = k > 0 ? k - 1 : 0;
+            while (l > 0 && text[l - 1] == ' ') --l;
+        }
+        if (l > 0 && text[l - 1] == '&' && (l < 2 || text[l - 2] != '&'))
+        {
+            size_t q = l - 1;
+            while (q > 0 && (text[q - 1] == ' ' || text[q - 1] == ')')) --q;
+            size_t t0 = q;
+            while (t0 > 0 && (std::isalnum(static_cast<unsigned char>(text[t0 - 1])) || text[t0 - 1] == '_')) --t0;
+            if (!(t0 < q && std::isdigit(static_cast<unsigned char>(text[t0])))) return true;
+        }
     }
     return false;
 }
@@ -4377,6 +4460,11 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
         while (!rhs.empty() && (rhs.back() == ';' || rhs.back() == ' ')) rhs.pop_back();
         assigns.push_back(Assign{ l.text.substr(b, e - b), rhs, li });
     }
+    // (A5-148: the names the output ANDs with another value somewhere)
+    std::set<std::string> anded;
+    for (const Line& l : r.lines)
+        for (const std::string& id : Identifiers(l.text))
+            if (!IsFreeValue(id) && AndedWith(l.text, id)) anded.insert(id);
     const std::vector<std::pair<size_t, size_t>> spans = BackEdgeSpans(r.lines);
     auto reaches = [&](size_t assignLine, size_t useLine) {
         if (assignLine <= useLine) return true;
@@ -4473,7 +4561,7 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
                 if (rhs != a.rhs || !DerefOperands(rhs).empty()) openSource = true;
                 // (A5-96) what is loaded through an address is not the address: a mask in it bounds the address, not the value loaded
                 const std::string value = LoadsBlanked(rhs);
-                if (!loaded) maskSeen |= OrsIntoOnChip(value);
+                if (!loaded && !(!dts::A7RuleOff(5148) && anded.count(name))) maskSeen |= OrsIntoOnChip(value);
                 if (NamesHardwareBase(rhs, reached, tooFar)) found = true;
                 const std::vector<std::string> direct = Identifiers(value);
                 selfSeen |= std::find(direct.begin(), direct.end(), name) != direct.end();
@@ -17709,7 +17797,8 @@ void TestArea7Round22Pins(Sh2Decompiler& d)
         bool specials;
     };
     for (const Whole& w : { Whole{ 1, 9302668, true }, Whole{ 1, 8901149, false }, Whole{ 1, 8909710, false }, Whole{ 2, 8900054, false }, Whole{ 1, 8902817, false },
-                           Whole{ 1, 9401568, false }, Whole{ 1, 9406270, false }, Whole{ 1, 9408552, false } })
+                           Whole{ 1, 9401568, false }, Whole{ 1, 9406270, false }, Whole{ 1, 9408552, false }, Whole{ 2, 9404185, false },
+                           Whole{ 2, 9404677, false } })
     {
         gSpecialReads = w.specials;
         const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
@@ -17795,7 +17884,28 @@ void TestArea7Round22Pins(Sh2Decompiler& d)
                                     "2F86 2F96 4F22 6843 6953 63C3 2F36 63F6 D305 430B 0009 6483 6593 D304 4F26 69F6 68F6 432B 0009 0009 0600 9030 0600 9030 2F86 2F96 2FA6 "
                                     "2FC6 2FD6 0C2A 7FE8 6843 6953 6A63 62F3 7218 E103 2216 4110 8BFC E200 E05E 7F18 4C2A 6DF6 6CF6 6AF6 69F6 68F6 000B 0009",
                                     "0/0/26,30/30/66", nullptr, "1,1", "184000,184000", "1000,100000" };
-    for (const ModulePin* m : { &kBsr, &kJsr })
+    // A7-170, grammar 2 seed 9404185 shrunk three times: `and #1` of a value and a `shal` of another, `and r2,r1` at a join is 0 (a never-taken branch
+    // between; a push and a pop of r2 between)
+    static const ModulePin kAnd = { "A7-170 grammar 2 seed 9404185 shrunk (and, shal)",
+                                    "7FE8 6073 7F18 000B 0009 7FFC E001 0514 2109 4220 2718 8B01 A003 0009 2129 A000 0009 6043 7F04 000B 0009", "0/0/a,a/a/2a", nullptr, "1,1",
+                                    nullptr, nullptr };
+    static const ModulePin kAndNever = { "A7-170 grammar 2 seed 9404185 shrunk (a branch never taken)",
+                                         "7FE8 6073 7F18 000B 0009 7FFC E000 017E 8801 8903 E001 0514 2109 4220 2718 8B01 A003 0009 2129 A000 0009 6043 7F04 000B 0009",
+                                         "0/0/a,a/a/32", nullptr, "1,1", nullptr, nullptr };
+    static const ModulePin kAndPop = { "A7-170 grammar 2 seed 9404185 shrunk (a push and a pop)",
+                                       "7FE8 6073 7F18 000B 0009 7FFC E001 0514 2109 4220 2F26 62F6 2718 8B01 A003 0009 2129 A000 0009 6043 7F04 000B 0009", "0/0/a,a/a/2e",
+                                       nullptr, "1,1", nullptr, nullptr };
+    // A5-148, grammar 2 seed 9404677 shrunk twice: the pointer `(param_2 | 0xffffffc0) & uRam06009058` (and `pxVar1 & uRam06009064`, the OR in a variable),
+    // ANDed with a value that clears the top bits again; the write at FFFFFFFE is the pre-decrement of 0, no on-chip pointer made by the OR
+    static const ModulePin kOnChip = { "A5-148 grammar 2 seed 9404677 shrunk (the OR in the expression)",
+                                       "D103 251B 3350 89FF D102 412B 0009 0009 FFFF FFC0 0600 9018 2F86 2F96 2FA6 2FB6 2FD6 4F22 6843 6953 6A63 6B73 D204 4F26 6DF6 6BF6 6AF6 "
+                                       "69F6 68F6 422B 0009 0009 0600 9044 7FF0 D204 2529 6151 2515 6053 7F10 000B 0009 0009 0000 001C",
+                                       "0/0/e,18/18/3e,44/44/56", nullptr, "1,1,1", "101000,101000,0", "100000,4000,0" };
+    static const ModulePin kOnChipVar = { "A5-148 grammar 2 seed 9404677 shrunk (the OR in a variable)",
+                                          "D103 251B 3350 89FF D102 412B 0009 0009 FFFF FFC0 0600 9018 2F86 2F96 2FA6 2FB6 2FD6 4F22 6843 6953 6A63 6B73 B010 0009 6483 6593 66A3 "
+                                          "67B3 2530 D204 4F26 6DF6 6BF6 6AF6 69F6 68F6 422B 0009 0600 9050 7FF0 D204 2529 6151 2515 6053 7F10 000B 0009 0009 0000 001C",
+                                          "0/0/e,18/18/4c,50/50/62", nullptr, "1,1,1", "101000,101000,0", "100000,4000,0" };
+    for (const ModulePin* m : { &kBsr, &kJsr, &kAnd, &kAndNever, &kAndPop, &kOnChip, &kOnChipVar })
     {
         const Report rep = EvaluateSubject(d, ModuleSubject(*m), true);
         std::printf("pin '%s': %zu finding(s)\n", m->name, rep.findings.size());
@@ -17813,8 +17923,8 @@ void TestArea7Round22Pins(Sh2Decompiler& d)
         };
         const std::string w = value("SE_GENERATED_WORDS"), f = value("SE_GENERATED_FUNCS"), r = value("SE_GENERATED_RETURNS"), c = value("SE_GENERATED_CLOBBERS"),
                           rd = value("SE_GENERATED_READS");
-        CHECK(!w.empty() && !f.empty() && !r.empty() && !c.empty() && !rd.empty());
-        const ModulePin again = { "replay", w.c_str(), f.c_str(), nullptr, r.c_str(), c.c_str(), rd.c_str() };
+        CHECK(!w.empty() && !f.empty() && !r.empty() && c.empty() == (m->clobbers == nullptr) && rd.empty() == (m->reads == nullptr));
+        const ModulePin again = { "replay", w.c_str(), f.c_str(), nullptr, r.c_str(), c.empty() ? nullptr : c.c_str(), rd.empty() ? nullptr : rd.c_str() };
         const Report rr = EvaluateSubject(d, ModuleSubject(again), true);
         std::printf("  replay line '%s': %zu finding(s)\n", line.c_str(), rr.findings.size());
         CHECK(rr.findings.size() == rep.findings.size());
