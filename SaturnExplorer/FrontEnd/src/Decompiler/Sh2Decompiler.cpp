@@ -9192,13 +9192,23 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
     const std::set<std::pair<size_t, uint32_t>> shared = SharedInstructionLines(printed, ordered);
     const ghidra::AddrSpace* data = fd.getArch()->getDefaultDataSpace();
     const auto inMemory = [data](const ghidra::AddrSpace* s) { return s && (s->getType() == ghidra::IPTR_SPACEBASE || s == data); };
+    // (the instruction's last op, as A7-171's test: a delayed branch's own ops are split by its slot's, `bf/s` negates T, runs the slot, branches)
     const auto isBranch = [&flow](uint32_t insn) {
+        const auto ib = flow.insnBlock.find(insn);
+        if (ib == flow.insnBlock.end() || ib->second.first < 0 || static_cast<size_t>(ib->second.first) >= flow.blockOps.size() ||
+            ib->second.second >= flow.blockOps[static_cast<size_t>(ib->second.first)].size())
+            return false;
+        const ghidra::OpCode last = flow.blockOps[static_cast<size_t>(ib->second.first)][ib->second.second].code;
+        if (last != ghidra::CPUI_BRANCH && last != ghidra::CPUI_CBRANCH && last != ghidra::CPUI_BRANCHIND) return false;
+        // (...and no access of its own: `mac.w @r5+,@r6+` ends in its saturation's branch, A7-39 (c), but reads two words; grammar 1 seed 1862210)
         const auto first = flow.insnFirst.find(insn);
         if (first == flow.insnFirst.end() || first->second.first < 0 || static_cast<size_t>(first->second.first) >= flow.blockOps.size()) return false;
         const std::vector<FlowOp>& iops = flow.blockOps[static_cast<size_t>(first->second.first)];
-        for (size_t i = first->second.second; i < iops.size() && iops[i].insn == insn; ++i)
-            if (iops[i].code == ghidra::CPUI_BRANCH || iops[i].code == ghidra::CPUI_CBRANCH || iops[i].code == ghidra::CPUI_BRANCHIND) return true;
-        return false;
+        for (size_t i = first->second.second; i < iops.size() && (iops[i].insn == insn || iops[i].slot); ++i)
+            if (!iops[i].slot && (iops[i].code == ghidra::CPUI_LOAD || iops[i].code == ghidra::CPUI_STORE || iops[i].code == ghidra::CPUI_CALL ||
+                                  iops[i].code == ghidra::CPUI_CALLIND || iops[i].code == ghidra::CPUI_CALLOTHER))
+                return false;
+        return true;
     };
     int moved = 0;
     for (const ghidra::PcodeOp* o : ordered)
@@ -9229,7 +9239,7 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
         }
         // The instructions that made the converted value: through the engine's joins and copies, a flow op's on each path
         std::set<uint32_t> makers;
-        bool input = false, unknown = false;
+        bool input = false, unknown = false, numbers = false;
         std::set<const ghidra::Varnode*> seen;
         std::vector<const ghidra::Varnode*> work(1, o->getIn(0));
         while (!work.empty() && !unknown)
@@ -9237,7 +9247,8 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             const ghidra::Varnode* v = work.back();
             work.pop_back();
             if (!seen.insert(v).second) continue;
-            if (seen.size() > 16 || v->isConstant()) unknown = true;
+            if (seen.size() > 16) unknown = true;
+            else if (v->isConstant()) numbers = true;   // (a number on a path: its maker is A7-22's to find; the other paths' makers stand)
             else if (!v->isWritten()) (v->isInput() ? input : unknown) = true;
             else if (v->getDef()->getTime() < flow.opsEnd)
             {
@@ -9258,7 +9269,7 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             else
                 unknown = true;
         }
-        if (unknown || (makers.empty() && !input)) continue;
+        if (unknown || (makers.empty() && !input) || (numbers && makers.empty())) continue;
         if (input) makers.clear();   // (a path with no maker: the line names nothing, as A7-21's)
         uint32_t from = at, c = 0;
         if (CanonicalAddress(from, c)) from = c;
@@ -9266,7 +9277,9 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
         const uint32_t lowest = makers.empty() ? 0 : *makers.begin();
         for (size_t line : printed.at(o).first)
         {
-            if (line >= lines.size() || shared.count(std::make_pair(line, from))) continue;
+            // (another op of the instruction on the line: at a branch, the engine's copy of the conversion's value, `pxStack_24 = (xunknown4 *)
+            // extraout_r3;` with the frame's copy and the cast both at the `bf`, which makes neither; grammar 2 specials seed 10000825)
+            if (line >= lines.size() || (!branch && shared.count(std::make_pair(line, from)))) continue;
             Line& l = lines[line];
             bool any = false;
             for (Token& t : l.tokens)
@@ -12025,7 +12038,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         AddJoinConstantTokens(r.lines, printed, *fd, flow);
         AddFrameStoreTokens(r.lines, printed, *fd, flow);
         RetargetTwinExtensions(r.lines, printed, flow);
-        if (!std::getenv("SE_R24_OFF")) RetargetHoistedConversions(r.lines, printed, *fd, flow);   // A7-175
+        RetargetHoistedConversions(r.lines, printed, *fd, flow);   // A7-175
         MarkMaterialisedReads(r.lines, printed, *fd, flow);
         for (Line& l : r.lines)   // A7-12: the word flow halted at is no instruction; the line's hover text says so
             for (Token& t : l.tokens)

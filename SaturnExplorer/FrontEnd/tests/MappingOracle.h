@@ -139,7 +139,8 @@ struct MappingAudit
     int storeDead = 0, storeUnnamed = 0;
     // Area 7 review round 24 (A7-175): the operand of a conversion a statement prints, drawn at a branch, which converts nothing (a violation;
     // A7-25's copies the product marks materialised there are its own choice and are not counted)
-    int conversionAtBranch = 0;
+    int conversionAtBranch = 0, conversionAtBranchInside = 0;   // (...the statement a conversion, `V = (type)W;`, every drawn token at the branch: a violation;
+                                                                 // a conversion inside a larger expression, a condition's comma or a call's argument: counted)
     std::vector<std::string> problems;   // the first few of each kind, "kind: where: what"
 
     void Add(const MappingAudit& o)
@@ -161,7 +162,7 @@ struct MappingAudit
         storeValueOther += o.storeValueOther; copyOtherValue += o.copyOtherValue; constLines += o.constLines; constAtJoin += o.constAtJoin;
         copyMergeAtBranch += o.copyMergeAtBranch; copyRegisterMade += o.copyRegisterMade; copyNoAddress += o.copyNoAddress; copyNumberMade += o.copyNumberMade; copyInputMerged += o.copyInputMerged;
         numberStoreOther += o.numberStoreOther; caseOtherEntry += o.caseOtherEntry; caseJudged += o.caseJudged; storeAfterUse += o.storeAfterUse;
-        storeDead += o.storeDead; storeUnnamed += o.storeUnnamed; conversionAtBranch += o.conversionAtBranch;
+        storeDead += o.storeDead; storeUnnamed += o.storeUnnamed; conversionAtBranch += o.conversionAtBranch; conversionAtBranchInside += o.conversionAtBranchInside;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -2536,7 +2537,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             }
     }
     // A7-175 (A7-171's class on any line): a statement, not a condition, whose conversion's operand -- the name after `(type)` -- is drawn at a
-    // branch (`cVar2 = (char)iVar1;` at the `bf` of a later block, the narrowing the engine merged and hoisted; `Ram26001008 = (char)in_r2;` with
+    // branch. A violation when the statement is the conversion alone, drawn only there; counted inside a larger statement (A7-179, open) (`cVar2 = (char)iVar1;` at the `bf` of a later block, the narrowing the engine merged and hoisted; `Ram26001008 = (char)in_r2;` with
     // `in_r2` at the `bf` before the store's block). The branch makes nothing; a click on the line went to it, and the way back from the
     // branch answered the line before the branch's own `if`. A copy the product marks materialised there (A7-25, A7-66) is not judged.
     if (!A7RuleOff(175))
@@ -2562,8 +2563,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 if (!word(t.addr, w)) continue;
                 const sfe::DisassembledInstruction d = sfe::Sh2Decode(t.addr, w);
                 if (!d.IsValid || !d.IsBranch || d.IsCall || d.Mnemonic == "rts" || d.Mnemonic == "rte") continue;
+                // (the statement is the conversion: its name, `=`, the cast and its one operand, and every drawn token at the branch)
+                bool whole = lt.compare(lt.size() - 1, 1, ";") == 0 && t.end + 1 == lt.size() && lt.compare(eq, 4, " = (") == 0 && open == eq + 3 &&
+                             lt.find_first_of(" ,()", nb) == eq;
+                for (const Token& u : r.lines[li].tokens) whole = whole && (!u.addr || u.begin == u.end || (u.addr == t.addr && !u.materialised));
+                if (!whole)
+                {
+                    ++a.conversionAtBranchInside;
+                    break;
+                }
                 ++a.conversionAtBranch;
-                problem("conversion-branch", "line " + std::to_string(li) + " '" + lt + "' draws the operand of its conversion at the branch " + MappingHex(t.addr) +
+                problem("conversion-branch", "line " + std::to_string(li) + " '" + lt + "' is a conversion drawn only at the branch " + MappingHex(t.addr) +
                                                  ", which converts nothing (A7-171, A7-175)");
                 break;
             }
@@ -4638,7 +4648,8 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
     std::printf("  mapping (%s): area 7 review round 20: %d lines name a store a later store writes over before anything reads it (A7-158, a violation); %d folded stores "
                 "of a global not written over so are on no line (A7-159, counted)\n",
                 label, a.storeDead, a.storeUnnamed);
-    std::printf("  mapping (%s): area 7 review round 24: %d statements draw the operand of a conversion at a branch (A7-175, a violation)\n", label, a.conversionAtBranch);
+    std::printf("  mapping (%s): area 7 review round 24: %d conversions drawn only at a branch (A7-175, a violation); %d lines draw a conversion's operand at a "
+                "branch inside a larger statement (A7-179, counted)\n", label, a.conversionAtBranch, a.conversionAtBranchInside);
     std::printf("  mapping (%s): area 7 round 8 (A7-52): %d of the lines with no instruction are statements the product says so of (counted); %d statements with none that do not say so, or say so with one (a violation)\n",
                 label, a.noOriginLines, a.noInstruction);
     std::printf("  mapping (%s): area 7 round 8 (A7-55): %d copies of the function's input drawn only at the moves that put it in a register, or "

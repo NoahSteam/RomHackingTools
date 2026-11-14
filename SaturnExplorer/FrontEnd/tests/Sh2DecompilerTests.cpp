@@ -5185,6 +5185,17 @@ void TestArea7Review24()
             }
         const dts::MappingAudit a = dts::AuditMapping(bad, word, "a7_175 damaged");
         CHECK(a.conversionAtBranch >= 1 && a.Violations() >= 1);
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", "175");
+#else
+        setenv("SE_A7_RULE_OFF", "175", 1);
+#endif
+        CHECK(dts::AuditMapping(bad, word, "a7_175 damaged, rule off").Violations() == 0);   // (the rule is what sees it)
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", "");
+#else
+        unsetenv("SE_A7_RULE_OFF");
+#endif
     }
     // ...the same with r3 the function's input: the line names nothing (no instruction makes in_r3), and says so
     {
