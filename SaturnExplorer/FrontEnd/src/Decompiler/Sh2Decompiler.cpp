@@ -463,6 +463,7 @@ public:
         mKeptSeen = false;
         mUnkeptSeen = false;
         mUnkeptSites.clear();
+        mInnerSeen = false;
         mHanded = 0;
         std::map<uint32_t, State> in;
         std::map<uint32_t, int> changes;   // how often the state at an address grew
@@ -748,6 +749,14 @@ private:
         // side, an intersection): held in the register at a return, the value is another one on every path and none computed from the register's
         // own entry value. A callee that returns so (CalleeWritten) leaves nothing of what an earlier call left there.
         uint32_t sureWritten = 0;
+        // (area 3, A3-207) Any kind, a walk of a callee's code (CalleeFrameWrites) only: bit r (of kUnkeptRegs) when the value is, or was
+        // computed by this function's own operations from, what rN held after a call of an unlent callee that, as its own walk shows, returns
+        // on some path with rN changed for certain (InnerChanged: CalleeChanged, a self-call's provisional result, or every register for a call
+        // into another walk still in progress). The walk's model of the call (the convention's: it keeps r8-r14, GBR, VBR and r15) is not
+        // changed, so the frame words, stores below and hand-outs the walk records are the same with or without the mark; held in rN at a
+        // return, the mark is that function's change of rN (mChangedAt). Copies and operations carry it (not a load through it, which reads
+        // memory); a join keeps both sides' (Merge).
+        uint32_t innerChanged = 0;
         static Value From(uint32_t o) { Value x; x.from = o; x.dep = Deps::All(o); return x; }
         static Value From(uint32_t o, uint32_t direct) { Value x; x.from = o; x.dep = Deps::All(direct); return x; }
         static Value From(uint32_t o, const Deps& d) { Value x; x.from = o; x.dep = d; return x; }
@@ -801,7 +810,7 @@ private:
         bool operator==(const Value& o) const
         {
             return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget && read == o.read &&
-                   exposedAt == o.exposedAt && kept == o.kept && unkept == o.unkept && mayEntry == o.mayEntry &&
+                   exposedAt == o.exposedAt && kept == o.kept && unkept == o.unkept && mayEntry == o.mayEntry && innerChanged == o.innerChanged &&
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
                                      usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
                                      baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure && sureChanged == o.sureChanged &&
@@ -885,6 +894,7 @@ private:
                 p.kept = v.second.kept;   // (A3-192) a part of it is read as the whole is
                 p.unkept = v.second.unkept;   // (A3-197) likewise
                 p.mayEntry = v.second.mayEntry;
+                p.innerChanged = v.second.innerChanged;   // (A3-207) likewise
                 return p;
             }
             const uint64_t whole = std::get<2>(v.first), below = whole - (vn.offset - std::get<1>(v.first)) - vn.size;
@@ -1014,6 +1024,12 @@ private:
         if (v.kind == Value::Fuzzy && v.def == Value::kJoin) return v.sureWritten;
         return SureChanged(v) & ~v.Origins() & kModelKept;
     }
+    // (area 3, A3-207) Bit r when 'v', held in rN (r) at a return of a walked callee, shows rN changed for certain on this path or a path joined
+    // here (SureChanged), or is what an inner call that changes rN on some path left (Value::innerChanged).
+    static uint32_t ChangedAtReturn(const Value& v, int r)
+    {
+        return (SureChanged(v) | v.innerChanged) & (1u << r);
+    }
 
     // 'spare': the store is a lent callee's through a pointer it was handed. The engine assumes such a callee does not write its caller's
     // saved registers (a pointer to a local reaches the object, not the prologue's pushes), so the slots that hold one are left, but for the
@@ -1101,6 +1117,10 @@ private:
                 slot.second.exposedAt = exposedAt;
                 // (A3-197) a saved register's word written over may still hold the register's entry value
                 slot.second.mayEntry = was.mayEntry | (SavedRegister(was) && ((kModelKept >> was.v) & 1u) ? 1u << was.v : 0u);
+                // (area 3, A3-207) ...and so may PR's (a return through it may go to the caller: Return), and what the word held after an
+                // inner call that may have changed it keeps the mark
+                if (SavedRegister(was) && was.v == kPr) slot.second.mayEntry |= 1u << kPr;
+                slot.second.innerChanged = was.innerChanged;
             }
     }
 
@@ -1137,11 +1157,18 @@ private:
         if (a == b) return false;
         // (area 3, A3-197) the same value with and without the caution's mark is that value, marked: not a join of two. (A3-202) With the
         // marks of both sides.
-        if (!b.unkept.empty() || !a.unkept.empty())
+        // (area 3, A3-207) ...and likewise the mark of a register an inner call may have changed (Value::innerChanged): both sides'.
+        if (!b.unkept.empty() || !a.unkept.empty() || a.innerChanged != b.innerChanged)
         {
             Value bm = b;
             bm.unkept = a.unkept;
-            if (a == bm) return Value::JoinUnkept(a.unkept, b.unkept);
+            bm.innerChanged = a.innerChanged;
+            if (a == bm)
+            {
+                const bool grew = (b.innerChanged & ~a.innerChanged) != 0;
+                a.innerChanged |= b.innerChanged;
+                return Value::JoinUnkept(a.unkept, b.unkept) || grew;
+            }
         }
         Deps dep = a.DepsOf();
         dep |= b.DepsOf();
@@ -1163,6 +1190,7 @@ private:
         m.unkept = a.unkept;   // (A3-197) on either path; (A3-202) the calls of both
         Value::JoinUnkept(m.unkept, b.unkept);
         m.mayEntry = a.mayEntry | b.mayEntry;
+        m.innerChanged = a.innerChanged | b.innerChanged;   // (A3-207) on either path
         m.sureChanged = SureChanged(a) | SureChanged(b);   // (A3-199) on either path
         m.sureWritten = SureWritten(a) & SureWritten(b);   // (A3-203) on both
         // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
@@ -1487,6 +1515,23 @@ private:
             for (int r = 0; r < kTracked; ++r)
                 if (r != kR15) keptClass[r] = KeptClass(s, Get(s, mReg[r]));
         Apply(s, e, targetIsR0);
+        // (area 3, A3-207) In a walk of a callee's code, a call of an unlent callee is the convention's (above: it keeps r8-r14, GBR, VBR and
+        // r15), and what the walk records of this function's frame is made with that model. What the inner callee's own walk shows it returning
+        // with changed (InnerChanged) is put beside the values as a mark (Value::innerChanged), which no frame rule reads: held in the register
+        // at a return, it is this function's change too (ChangedAtReturn). Without it a callee whose only change of r11 is its own callee's
+        // (w6's F1 calling G) showed none.
+        if (mNested && !signatureLent && haveTarget)
+        {
+            const uint32_t changed = InnerChanged(target) & kUnkeptRegs;
+            for (int r = 0; r < kTracked; ++r)
+            {
+                if (!((changed >> r) & 1u)) continue;
+                auto f = s.vars.find(KeyOf(mReg[r]));
+                if (f == s.vars.end()) continue;
+                f->second.innerChanged |= 1u << r;
+                mInnerSeen = true;
+            }
+        }
         if (keepKept)
             for (int r = 0; r < kTracked; ++r)
             {
@@ -1704,8 +1749,10 @@ private:
         callee.mCancel = mCancel;
         callee.SetTolerant();
         CallEffects unused;
+        ctx->walking.insert(target);
         const std::string why = callee.Run(unused);
         ctx->budget -= std::min(ctx->budget, callee.mStepsUsed);
+        ctx->walking.erase(target);
         uint32_t words = 0;
         if (!why.empty()) words = CallEffects::kFrameAny;
         else if (callee.mEntryUndecodable) words = 0;
@@ -1729,6 +1776,19 @@ private:
         // (no path lost) and some return was reached
         ctx->Written()[target] = !why.empty() || callee.mEntryUndecodable || callee.mPathLost || !callee.mSpSeen ? 0u
                                                                                                                    : callee.mWrittenAt & callee.mChangedAt & kModelKept;
+        // (area 3, A3-207) ...and the walks that took this one's result as nothing while it was in progress (a cycle through other functions:
+        // InnerChanged), or took the result of such a walk: what this function changes reaches their callers through them, so it is added to
+        // theirs (not what they restore of it: more, never less), with the walks in progress further up whose results this one took likewise.
+        for (auto t = ctx->taint.begin(); t != ctx->taint.end();)
+        {
+            if (t->first != target && t->second.erase(target) != 0)
+            {
+                ctx->Changed()[t->first] |= ctx->Changed()[target];
+                const auto up = ctx->taint.find(target);
+                if (up != ctx->taint.end()) t->second.insert(up->second.begin(), up->second.end());
+            }
+            t = t->second.empty() ? ctx->taint.erase(t) : std::next(t);
+        }
         return words;
     }
     // (area 3 round 12 fix, A3-90) The registers (bit r: rN, GBR, MACH, ...) whose entry values a captured, unlent callee lets out (stores to
@@ -1757,6 +1817,30 @@ private:
             f = ctx->Changed().find(target);
         }
         return f != ctx->Changed().end() ? f->second : 0u;
+    }
+    // (area 3, A3-207) ...as an inner call of a walked callee takes it. A call of a callee whose walk is in progress (a cycle) has no result
+    // yet, and is taken as changing nothing for now. When it is this walk's own function (self-recursion) that is its result: a register the
+    // recursion returns changed was changed for certain on its own path by the activation that changed it, a path of this function, so the
+    // walk's own returns show it (rc: `mov #0,r8` after the recursive `bsr`), and one an activation restores is not changed. Through other
+    // functions (F calls G, G calls F, F's walk in progress while G's is made), G's result is kept for G's other callers, and F's own changes
+    // reach them through G: this walk is marked as having taken F's result as nothing (taint), and when F's walk ends what F changes is added
+    // to this one's (CalleeFrameWrites). So is a walk that takes a result so marked while F's walk is still in progress. A cycle is never taken
+    // to keep a register it may change. A callee the walk does not descend into (the levels or the budget exhausted, too many paths) shows
+    // nothing (CalleeChanged's 0), as at the top level.
+    uint32_t InnerChanged(uint32_t target)
+    {
+        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
+        if (ctx->walking.count(target) != 0)
+        {
+            if (target != mExec) ctx->taint[mExec].insert(target);
+            return 0u;
+        }
+        const uint32_t changed = CalleeChanged(target);
+        const auto t = ctx->taint.find(target);
+        if (t != ctx->taint.end())
+            for (const uint32_t root : t->second)
+                if (root != mExec) ctx->taint[mExec].insert(root);
+        return changed;
     }
     // (area 3, A3-203) ...and the ones it overwrites on every path, as its walk shows (CalleeFrameWrites); 0 when nothing is shown.
     uint32_t CalleeWritten(uint32_t target)
@@ -2203,6 +2287,15 @@ private:
         if (!(t.kind == Value::Reg && t.v == kPr))
         {
             mPathLost = true;   // (A3-203) a jump elsewhere, or a return the walk cannot prove: what reaches the caller from it is not read
+            // (area 3, A3-207) ...but in a walk of a callee's code, PR reloaded from the word that saved it, which an inner call of an unlent
+            // callee may have written over (the convention's model of that call writes every word from its r15 up: Clobber), may be the
+            // caller's: when it is, this path returns there with what it changed. Only the record of the registers it changes for certain
+            // (mChangedAt) takes it; the path stays lost, so nothing is claimed overwritten on every path (mWrittenAt), and nothing the frame
+            // rules read (preserved, outOrigins, the hand-outs, r15's delta) changes. w6: F1 saves PR and calls an unlent G that clears r11 on
+            // one path; no return of F1 was proven, so it showed nothing changed.
+            if (mNested && ((t.mayEntry >> kPr) & 1u))
+                for (int r = 0; r < kTracked; ++r)
+                    if ((kUnkeptRegs >> r) & 1u) mChangedAt |= ChangedAtReturn(Get(s, mReg[r]), r);
             return false;
         }
         const Value sp = Get(s, mReg[kR15]);
@@ -2224,11 +2317,13 @@ private:
             if (same)
             {
                 mKeptAt |= 1u << r;   // (A3-190) an origin of the register if another return changes it
+                // (area 3, A3-207) ...the entry value as the walk's model of an inner call has it, which that callee may have changed
+                if ((kUnkeptRegs >> r) & 1u) mChangedAt |= ChangedAtReturn(v, r);
                 continue;
             }
             mPreserved &= ~(1u << r);
-            // (A3-197) ...changed for certain on this path, or on one of the paths joined here (SureChanged)
-            if ((SureChanged(v) >> r) & 1u) mChangedAt |= 1u << r;
+            // (A3-197) ...changed for certain on this path, or on one of the paths joined here (SureChanged), or by an inner call (A3-207)
+            if ((kUnkeptRegs >> r) & 1u) mChangedAt |= ChangedAtReturn(v, r);
             mOut |= v.Origins();
             // (area 3 round 12 fix) handed back in a register (CalleeHanded): what the value was computed from, not the register's own entry
             // value (a saved register restored from a slot its callee may have written over is that register, not a value moved elsewhere)
@@ -2432,6 +2527,13 @@ private:
                             vn.offset < std::get<1>(v.first) + std::get<2>(v.first))
                             UseUnkept(v.second);
                 }
+            // (area 3, A3-207) ...and a value computed from one an inner call may have changed carries the mark (not a load's: what it reads
+            // is memory, not the address)
+            uint32_t inner = 0;
+            if (mInnerSeen && op.hasOut && op.code != ghidra::CPUI_LOAD && op.code != ghidra::CPUI_CALL && op.code != ghidra::CPUI_CALLIND &&
+                op.code != ghidra::CPUI_CALLOTHER)
+                for (const ghidra::VarnodeData& vn : op.in)
+                    if (vn.space->getType() != ghidra::IPTR_CONSTANT) inner |= Get(s, vn).innerChanged;
             bool falls = true;
             switch (op.code)
             {
@@ -2697,9 +2799,9 @@ private:
                             {
                                 uint32_t here = 0;
                                 for (int r = 0; r < kTracked; ++r)
-                                    if (((kUnkeptRegs >> r) & 1u) && ((SureChanged(Get(s, mReg[r])) >> r) & 1u)) here |= 1u << r;
+                                    if ((kUnkeptRegs >> r) & 1u) here |= ChangedAtReturn(Get(s, mReg[r]), r);   // (A3-207: an inner call's too)
                                 const uint32_t target = static_cast<uint32_t>(to.v);
-                                mChangedAt |= (CalleeChanged(target) | (here & ~CalleeWritten(target))) & kUnkeptRegs;
+                                mChangedAt |= (InnerChanged(target) | (here & ~CalleeWritten(target))) & kUnkeptRegs;   // (A3-207: a cycle)
                             }
                         }
                         auto p = mLent.find(static_cast<uint32_t>(to.v));
@@ -2811,6 +2913,11 @@ private:
                 }
                 break;
             }
+            if (inner != 0)
+            {
+                auto f = s.vars.find(KeyOf(op.out));
+                if (f != s.vars.end()) f->second.innerChanged |= inner;
+            }
             if (falls && fallTo(i + 1, s)) work.insert(i + 1);
         }
         if (at[n].reached) succ.emplace_back(next, Leaving(std::move(at[n])));
@@ -2874,6 +2981,8 @@ private:
         std::map<uint32_t, uint32_t>* sharedWritten = nullptr;
         size_t budget = 0;
         bool started = false;
+        std::set<uint32_t> walking;   // (area 3, A3-207) the targets whose walk is in progress (InnerChanged: a cycle)
+        std::map<uint32_t, std::set<uint32_t>> taint;   // ...and, by walked target, the ones in progress whose result it took as nothing
         std::map<uint32_t, uint32_t>& Cache() { return shared != nullptr ? *shared : cache; }
         std::map<uint32_t, uint32_t>& Below() { return sharedBelow != nullptr ? *sharedBelow : belowOwn; }
         std::map<uint32_t, uint32_t>& Handed() { return sharedHanded != nullptr ? *sharedHanded : handedOwn; }
@@ -2899,6 +3008,7 @@ private:
     bool mFrameOut = false;     // (area 3 round 12 fix) a possible frame address went out to code that may keep it (HandOut)
     bool mKeptSeen = false;     // (area 3, A3-192) a call marked a register Value::kept in this run
     bool mUnkeptSeen = false;   // (area 3, A3-197) ...and one of r8-r14 Value::unkept
+    bool mInnerSeen = false;    // (area 3, A3-207) a walked callee's inner call marked a register Value::innerChanged
     std::map<uint32_t, uint32_t> mUnkeptSites;   // (A3-197) UnkeptSites
     uint32_t mHanded = 0;       // ...and, of a walked callee, the registers it lets out or writes through (CalleeHanded)
 

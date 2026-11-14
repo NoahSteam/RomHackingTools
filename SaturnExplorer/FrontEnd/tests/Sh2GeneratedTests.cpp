@@ -18856,6 +18856,75 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                 CHECK(w.findings.empty() && w.text.find(f.ret) != std::string::npos && (*f.reg != '\0' ? named : !any));
             }
         }
+        // Area 3, A3-207 (`tools/a3_a3207/fixtures.src`). The walk of an unlent callee took a call of another unlent callee for the convention's
+        // (it writes every word from its r15 up), so a callee that saves PR and makes such a call proved none of its returns and showed no register
+        // changed: w6 (F1 calls G, which clears r11 on one path; `return 6;` where runs return 1) had no caution; nor rc (F2 recursive, `mov #0,r8`
+        // after its own `bsr`). Now PR reloaded from its saved word may be the caller's (Value::mayEntry), and the inner callee's own walk marks
+        // the registers it changes (Value::innerChanged): n2 (G clears r8), n3 (two levels), mr (F2 and F3 call each other), mt (F3's walk made
+        // inside F2's, which clears r9: the caution at F3's call), s15 (G pops its caller's word: r15). Controls with no caution: n1c (G keeps
+        // everything), n2c (F2 saves and restores r8 around the call), n3c (G1 does), s15c (F2 sets r15 back from its frame pointer). 'at': the
+        // call the caution is said at (the callee printed after it).
+        {
+            struct Nested
+            {
+                const char* name;
+                const char* words;
+                const char* funcs;
+                const char* returns;
+                const char* clobbers;   // the registers a function changes on purpose (the generator's own check of its contract)
+                const char* ret;
+                const char* reg;   // the register the caution names, or "" for none
+                const char* at;    // ...and the callee of the call it is said at
+            };
+            const Nested nested[] = {
+                { "A3-207 w6", "4F22 2FB6 EB05 B00B 0009 60B3 7001 6BF6 4F26 000B 0009 0009 0009 0009 0009 0009 4F22 2338 8901 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                "6033 2448 8B00 EB00 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/16,20/20/30,40/40/4c", "1,0,0", nullptr, "return 6;", "r11", "06009020" },
+                { "A3-207 rc", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 2448 8905 4F22 4401 BFFA 0009 4F26 E800 000B 6033 0009 0009 0009 0009 0009 0009",
+                  "0/0/20,20/20/34", "1,0", "0,100", "return 7;", "r8", "06009020" },
+                { "A3-207 control n1c", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 4F22 B00D 0009 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                 "000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/20,20/20/2c,40/40/44", "1,0,0", nullptr, "return 7;", "", "" },
+                { "A3-207 control n2c", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 4F22 2F86 B00C 0009 68F6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                 "6033 2448 8B00 E800 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/20,20/20/30,40/40/4c", "1,0,0", nullptr, "return 7;", "", "" },
+                { "A3-207 n2", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 4F22 B00D 0009 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                "6033 2448 8B00 E800 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/20,20/20/2c,40/40/4c", "1,0,0", nullptr, "return 7;", "r8", "06009020" },
+                { "A3-207 n3", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 4F22 B00D 0009 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                "4F22 B00D 0009 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 6033 2448 8B00 E800 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/20,20/20/2c,40/40/4c,60/60/6c", "1,0,0,0", nullptr, "return 7;", "r8", "06009020" },
+                { "A3-207 control n3c", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 4F22 B00D 0009 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                 "4F22 2F86 B00C 0009 68F6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 6033 2448 8B00 E800 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/20,20/20/2c,40/40/50,60/60/6c", "1,0,0,0", nullptr, "return 7;", "", "" },
+                { "A3-207 mr", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 2448 8903 4F22 B00B 4401 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                "4F22 BFED 0009 4F26 2558 8B00 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/20,20/20/30,40/40/52", "1,0,0", nullptr, "return 7;", "r8", "06009020" },
+                { "A3-207 mt", "4F22 2F96 B00C 0009 E901 B019 0009 6093 69F6 4F26 000B 0009 0009 0009 0009 0009 2448 8905 4F22 B00B 4401 4F26 000B 6033 E900 000B 6033 0009 0009 0009 0009 0009 "
+                                "4F22 BFED 0009 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/18,20/20/36,40/40/4c", "1,0,0", "0,200,200", "return 1;", "r9", "06009040" },
+                { "A3-207 s15", "4F22 2FE6 7FF8 6EF3 E205 2F22 E209 1F21 B016 0009 60F2 6FE3 7F08 6EF6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                 "092A B00D 0009 492A 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2338 8900 7F04 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/22,40/40/4c,60/60/6a", "1,0,0", "200,8200,8000", "return 5;", "r15", "06009040" },
+                { "A3-207 control s15c", "4F22 2FE6 7FF8 6EF3 E205 2F22 E209 1F21 B016 0009 60F2 6FE3 7F08 6EF6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                  "2FE6 4F22 6EF3 B00B 0009 6FE3 4F26 000B 6EF6 0009 0009 0009 0009 0009 0009 0009 2338 8900 7F04 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/22,40/40/52,60/60/6a", "1,0,0", "0,0,8000", "return 5;", "", "" },
+            };
+            for (const Nested& f : nested)
+            {
+                const ModulePin m = { f.name, f.words, f.funcs, nullptr, f.returns, f.clobbers, nullptr };
+                const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+                const size_t any = w.text.find("this call may change ");
+                const std::string said = std::string("this call may change ") + f.reg + ", read after it";
+                const size_t named = *f.reg != '\0' ? w.text.find(said) : std::string::npos;
+                const size_t call = named != std::string::npos ? w.text.find("func_0x", named) : std::string::npos;
+                const bool placed = call != std::string::npos && w.text.compare(call + 7, 8, f.at) == 0;
+                std::printf("pin '%s': %zu finding(s), caution %s%s%s\n", f.name, w.findings.size(), any != std::string::npos ? "said" : "not said",
+                            named != std::string::npos ? (std::string(" for ") + f.reg).c_str() : "", placed ? (std::string(" at ") + f.at).c_str() : "");
+                for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+                CHECK(w.findings.empty() && w.text.find(f.ret) != std::string::npos && (*f.reg != '\0' ? placed : any == std::string::npos));
+            }
+        }
     }
     {
         // A3-198 (routed by area 7 round 21; area 3 round 26, oracle): grammar 1 seed 9200735, `endless-after-store-dropped` (0x26003000) and

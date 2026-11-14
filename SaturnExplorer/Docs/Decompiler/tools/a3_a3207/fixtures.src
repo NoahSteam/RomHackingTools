@@ -1,0 +1,421 @@
+# Area 3, A3-207: a callee that saves PR and calls an unlent callee (a nested call), and recursion. Run with run.sh / run.py (W=<SaturnExplorer> S=<scratch>).
+# Unless said, the caller is rc's (A3-197's vCr8 caller: a local of 5, its address in r8, the call of F2, 7 stored through r8, the local returned):
+# runs on which F2 clears r8 store through 0 and return 5, the text says `return 7;`. G is not lent (it reads r3).
+# w6 (A3-197's fixture, as recorded there): F1 saves PR and calls G, which clears r11 when r4 = 0; the caller returns r11 + 1. Right: the caution naming r11
+name w6
+ret 1,0,0
+.word 0x4F22
+mov.l r11,@-r15
+mov #5,r11
+bsr F1
+nop
+mov r11,r0
+add #1,r0
+mov.l @r15+,r11
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+tst r3,r3
+bt K0
+bsr G
+nop
+K0:
+.word 0x4F26
+rts
+nop
+fn
+G:
+mov r3,r0
+tst r4,r4
+bf K1
+mov #0,r11
+K1:
+rts
+nop
+# rc (round 27's, with `shlr r4` for its `add #-1,r4` so that every run ends: at most 32 levels): F2 recursive while r4 != 0, `mov #0,r8` after its own
+# recursive `bsr`. Right: the caution naming r8
+name rc
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+tst r4,r4
+bt E2
+.word 0x4F22
+shlr r4
+bsr F2
+nop
+.word 0x4F26
+mov #0,r8
+E2:
+rts
+mov r3,r0
+name n1c
+# control: F2 saves PR, calls G, which keeps everything (`rts ; mov r3,r0`), restores PR: no caution
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+bsr G
+nop
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+rts
+mov r3,r0
+name n2c
+# control: F2 saves PR and r8, calls G (clears r8 when r4 = 0), restores r8 and PR: no caution (every run returns 7)
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+mov.l r8,@-r15
+bsr G
+nop
+mov.l @r15+,r8
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov r3,r0
+tst r4,r4
+bf K1
+mov #0,r8
+K1:
+rts
+nop
+name n2
+# n2c without the save of r8: F2 saves PR, calls G (clears r8 when r4 = 0), restores PR. Right: the caution naming r8
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+bsr G
+nop
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov r3,r0
+tst r4,r4
+bf K1
+mov #0,r8
+K1:
+rts
+nop
+name n3
+# two levels: F2 saves PR and calls G1, which saves PR and calls G (clears r8 when r4 = 0). Right: the caution naming r8
+ret 1,0,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+bsr G1
+nop
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G1:
+.word 0x4F22
+bsr G
+nop
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov r3,r0
+tst r4,r4
+bf K1
+mov #0,r8
+K1:
+rts
+nop
+name n3c
+# control: n3 with G1 saving r8 before its call of G and restoring it after: no caution
+ret 1,0,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+bsr G1
+nop
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G1:
+.word 0x4F22
+mov.l r8,@-r15
+bsr G
+nop
+mov.l @r15+,r8
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov r3,r0
+tst r4,r4
+bf K1
+mov #0,r8
+K1:
+rts
+nop
+name mr
+# mutual recursion: F2 (r4 != 0) saves PR and calls F3 with r4 >> 1; F3 saves PR, calls F2, and clears r8 when r5 = 0. Right: the caution naming r8
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+tst r4,r4
+bt E2
+.word 0x4F22
+bsr F3
+shlr r4
+.word 0x4F26
+E2:
+rts
+mov r3,r0
+fn
+F3:
+.word 0x4F22
+bsr F2
+nop
+.word 0x4F26
+tst r5,r5
+bf K3
+mov #0,r8
+K3:
+rts
+mov r3,r0
+name mt
+# a cycle's result taken by another caller: F2 (r4 = 0) clears r9, else saves PR and calls F3 with r4 >> 1; F3 saves PR and calls F2. The caller calls F2, sets
+# r9 = 1, calls F3 and returns r9: F3's walk is made inside F2's, with F2's in progress. Every run returns 0 (F2 ends at r4 = 0). Right: the caution at F3's call naming r9
+ret 1,0,0
+.word 0x4F22
+mov.l r9,@-r15
+bsr F2
+nop
+mov #1,r9
+bsr F3
+nop
+mov r9,r0
+mov.l @r15+,r9
+.word 0x4F26
+rts
+nop
+fn
+F2:
+tst r4,r4
+bt E2
+.word 0x4F22
+bsr F3
+shlr r4
+.word 0x4F26
+rts
+mov r3,r0
+E2:
+mov #0,r9
+rts
+mov r3,r0
+fn
+F3:
+.word 0x4F22
+bsr F2
+nop
+.word 0x4F26
+rts
+mov r3,r0
+name s15
+# r15: A3-206's sp caller (frame in r14, a local of 5 at @r15, 9 above it, `mov.l @r15,r0` returned after the call); F2 keeps PR in r9 around a call of G,
+# which pops its caller's word (`add #4,r15`) when r3 != 0. Runs with r3 != 0 return 9. Right: the caution naming r15
+ret 1,0,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov r15,r14
+mov #5,r2
+mov.l r2,@r15
+mov #9,r2
+mov.l r2,@(4,r15)
+bsr F2
+nop
+mov.l @r15,r0
+mov r14,r15
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F2:
+sts pr,r9
+bsr G
+nop
+lds r9,pr
+rts
+nop
+fn
+G:
+tst r3,r3
+bt K1
+add #4,r15
+K1:
+rts
+nop
+name s15c
+# control: F2 sets r15 back from its frame pointer after the call of G: no caution (every run returns 5)
+ret 1,0,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov r15,r14
+mov #5,r2
+mov.l r2,@r15
+mov #9,r2
+mov.l r2,@(4,r15)
+bsr F2
+nop
+mov.l @r15,r0
+mov r14,r15
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov.l r14,@-r15
+.word 0x4F22
+mov r15,r14
+bsr G
+nop
+mov r14,r15
+.word 0x4F26
+rts
+mov.l @r15+,r14
+fn
+G:
+tst r3,r3
+bt K1
+add #4,r15
+K1:
+rts
+nop
