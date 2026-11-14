@@ -1343,13 +1343,6 @@ private:
                 const uint32_t outBits = e.leaks | e.outOrigins;
                 for (int r = 4; r < 8; ++r)
                     if ((outBits >> r) & 1u) HandOut(s, Get(s, mReg[r]));
-                // (A3-192) ...and a frame address this function holds in a register the engine takes the call to kill, which the callee may
-                // leave as it was: any register outOrigins names (A3-190: one return keeps it, another changes it; r1 to r3, r8 to r14, GBR,
-                // MACH, ...), and r0 and r1 when the callee keeps them, as every lent call kills those two (LendEffects). The engine reads
-                // the register after the call as the call's (`extraout_r1`), and a store through it was folded past the local it reaches.
-                for (int r = 0; r < kTracked; ++r)
-                    if (r != kR15 && (r < 4 || r >= 8) && (((outBits >> r) & 1u) || (r < 2 && ((e.preserved >> r) & 1u))))
-                        HandOut(s, Get(s, mReg[r]));
                 if (outBits & origin::kMemory)
                 {
                     const Value callSp = Get(s, mReg[kR15]);

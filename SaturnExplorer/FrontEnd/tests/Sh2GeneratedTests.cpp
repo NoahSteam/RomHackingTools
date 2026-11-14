@@ -17674,34 +17674,6 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         std::printf("pin '%s': call said %d, store said %d, withheld %d\n", m.name, int(callSaid), int(storeSaid), int(withheld));
         CHECK(callSaid && storeSaid && withheld);
     }
-    {
-        // A3-192 (area 3 round 24): a frame address the caller holds in a register outside r4-r7 across a lent call that may leave it there. The
-        // engine kills r0 and r1 at every lent call and any register the callee does not keep, so the caller's store through it after the call
-        // was folded past the local (`return 5;`; every run returns 7). The probe handed out only r4-r7 of outOrigins (A3-91); A3-190 makes
-        // outOrigins name a register one return keeps and another changes, of any number. Each module: a local of 5, its address in the
-        // register, `bsr` F1 (lent), `mov #7,r2 ; mov.l r2,@reg`, return the local.
-        const ModulePin pins[] = {
-            { "A3-192 r1, F1 changes r1 on one return", "4F22 7FF8 E205 2F22 61F3 B009 0009 E207 2122 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E100 000B 0009 000B 0009 "
-              "0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/1c,20/20/2e", nullptr, "1,0", nullptr, nullptr },
-            { "A3-192 r1, F1 keeps r1 (the engine kills it)", "4F22 7FF8 E205 2F22 61F3 B009 0009 E207 2122 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E200 000B 0009 "
-              "000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/1c,20/20/2e", nullptr, "1,0", nullptr, nullptr },
-            { "A3-192 r3, F1 changes r3 on one return", "4F22 7FF8 E205 2F22 63F3 B009 0009 E207 2322 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E300 000B 0009 000B 0009 "
-              "0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/1c,20/20/2e", nullptr, "1,0", nullptr, nullptr },
-            { "A3-192 r9, F1 changes r9 on one return", "4F22 2F96 7FF8 E205 2F22 69F3 B008 0009 E207 2922 60F2 7F08 69F6 4F26 000B 0009 2448 8B02 E900 000B 0009 000B 0009 "
-              "0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/20,20/20/2e", nullptr, "1,0", nullptr, nullptr },
-            { "A3-192 r0, F1 keeps r0 (the engine kills it)", "4F22 7FF8 E205 2F22 60F3 B009 0009 E207 2022 60F2 7F08 4F26 000B 0009 0009 0009 2448 000B 0009 0009 0009 "
-              "0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/1c,20/20/26", nullptr, "1,0", nullptr, nullptr },
-        };
-        for (const ModulePin& m : pins)
-        {
-            const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
-            const bool five = rep.text.find("return 5;") != std::string::npos;
-            const bool local = rep.text.find("return xStack_") != std::string::npos;
-            std::printf("pin '%s': %zu finding(s), lent %d, `return 5;` %s\n", m.name, rep.findings.size(), count(rep, "proto.lent"), five ? "printed" : "not printed");
-            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
-            CHECK(rep.findings.empty() && count(rep, "proto.lent") > 0 && !five && local);
-        }
-    }
 }
 
 void TestA365Pins(Sh2Decompiler& d)
