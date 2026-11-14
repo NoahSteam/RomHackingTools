@@ -21403,6 +21403,20 @@ Every function that differs, by image (alone and lent as the dumps name them):
 * **008, alone only (35):** 060262EA, 060266CE, 06026756, 0602A376, 0602A9A8, 0602AA90, 0602C2D0, 0602D594, 0602D98A, 0602DB0A, 0602DC90, 06030BBA, 060311A6, 060352AE, 0603BB2E, 0603D5F6, 0603E75A, 0603E7AA, 060400EE, 0604289E, 0604BCE8, 0604BDA2, 0604BE30, 06057314, 06058CD4, 0605A730, 0605BA82, 0605F984, 0606D042, 0606E092, 0606E6F0, 0606FD82, 060701D4, 060703EA, 06070CF2.
 * **008, lent only (61):** 060087D0, 06008938, 06008F8C, 0600B204, 0600C2CC, 0600EF48, 0600F898, 0600FD34, 0600FD3C, 0600FF94, 0600FF9C, 0601033A, 06010DCC, 06039AA8, 06039AB0, 0603A584, 0603ADC8, 0603C398, 0603D9C4, 0603F624, 06048894, 0604AD38, 060529B4, 06053290, 06056414, 0605641C, 060574C8, 0605780C, 06057CEC, 06058654, 0605B5BC, 0605B934, 0605BD48, 0605C1B4, 0605C80C, 0605C938, 0605C93C, 0605DA1C, 0605E088, 0605EBCC, 0605EEFC, 0605EF04, 0605F630, 0605FBF4, 0605FCF0, 0605FF24, 06060114, 06060244, 060603A8, 06062954, 06062958, 060670C0, 0606D33C, 0606D7EC, 060711AC, 060712F0, 06073834, 06073AC0, 06073D50, 06074048, 06074198.
 
+### 4. Runs (after the last code edit, the revised A3-204)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117** (111 and the 6 Live tests) |
+| fault suite | fault matrix: **0 of 94** job(s) failed (165 s) |
+| 20,000-seed matrix (canary on, every pin) | 20,000 seeds (10,000 of each grammar), `failing seeds=0; findings=0`, all passed (36.3 ms per seed) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, all passed |
+| game corpus, lent (`a3_round25/corpus.sh`, both images, the final binary (the same bytes as the build these runs used), against master's dumps made here from `6599dd7c`'s `Sh2Decompiler.cpp`) | both all passed, every ledger count 0; missing and said **0** and **4**; lent **474 (645)** and **724 (975)**; texts differing 47 and 66 (007), 123 and 149 (008), one note's wording each (section 3) |
+| fixture scripts (final binary) | `a3_a3203/run.sh`: x4s, x4p, x4a, x4t r8 at F1's call, "likewise"; x4w, x4j r8 at F2's call; f1, f2 one note, "likewise at other calls of this function"; f1r, f2r one, "likewise at the calls below"; `a3_a3202/run.sh`, `a3_round26/run.sh`, `a3_a3197/run.sh` as section 1 (run on the first form's binary; A3-203's code is unchanged since) |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: ok (no vendored file or patch touched) |
+
+A3-203's off switches (section 1) were run on the first form's build; its code is the same in the head. No generator change: no seed's program changes.
+
 ### 5. Routed
 
 Nothing to another area.
