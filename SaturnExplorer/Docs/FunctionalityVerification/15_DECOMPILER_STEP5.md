@@ -20436,3 +20436,53 @@ Branch `review/11-replay-timeouts`, cut from master `de867d3a`. Test harness onl
 * **A11-23 (open, routed to areas 7 and 5).** On the unmodified master `de867d3a`, `SaturnExplorerSh2GeneratedTests` already fails in `TestA5FoldedPins` for grammar 1 specials seed 7102142 and its shrunk words: one finding `v:map-way-back` at 0x0600900A and `order.folded-store.instance-assigned` 0. So ctest shows 1 failed of 117 here.
 
 Runs after the last code edit: ctest 116 of 117 (only `SaturnExplorerSh2GeneratedTests`, A11-23); fault matrix 0 of 94; 20k matrix `failing seeds=0; findings=0`; printed-C agrees=5196; both lints ok.
+## Area 3, outOrigins 7004216
+
+Fixer, branch `review/3-outorigins`, cut at master `06884b11`. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). **No engine patch: 0089 stays free.** The routed seed is the product's: the lent claim was wrong, filed and fixed as **A3-190** (P1, host, `Sh2Decompiler.cpp`). Scripts: `Docs/Decompiler/tools/a3_outorigins/` (`replay.sh`: the seed, its shrunk words, the fixture and the caller module; `sweep.sh`: the sweep below).
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-190 | P1 | **filed and fixed** (host): `outOrigins` left out the entry value of a register one return keeps and another changes |
+
+### Which grammar
+
+`SE_GENERATED_SEED=7004216 SE_GENERATED_CANARY=0`: grammar 1 reproduces (`n:` and `v:claim-wrong:outOrigins`, "r7 ends as 06023100, a pointer from r7, and outOrigins names neither it nor memory"); grammar 2 passes. Shrunk (250 evaluations): `D108 251B 605C 7170 E301 1738 4310 8BFC 621D 4215 8D03 4124 D703 000B 0009 000B 0009 0009 4000 0000 0600 1018`.
+
+### A3-190: the claim, not the oracle
+
+The shrunk function stores through r7 (`mov.l r3,@(0x20,r7)` in a loop), then `extu.w r1,r2 ; cmp/pl r2 ; bt/s R2 ; rotcl r1`: r1 is the literal 0x40000000 plus 0x70, so the skip is taken always and the engine removes the block at 0x06009018 (`mov.l @(0x6009028,pc),r7 ; rts`). Every run returns at 0x0600901E with r7 as it began, a pointer from r7, which the run read.
+
+The lent claim says r7 is not preserved (right: `ReturnCheck`'s walk does not decide the branch, and on the other path r7 is the literal) and `outOrigins` names nothing but what the literal path holds (a constant: no origin). `ReturnCheck::Return` drops a register from `preserved` at a return where it differs and adds the origins of what it holds there, but at a return that leaves it as it began it adds nothing. When the paths meet before one `rts` the join holds both values and r7's own origin is in it; with two `rts` it was lost. So the oracle is right and the claim is wrong.
+
+The consequence: a caller takes every register a lent callee does not preserve for `Value::Returned(outOrigins)`. A frame address it held in that register was gone at the call, and nothing told the engine the address was still there. Shown with a caller module (the pin): function 0 stores 5 in a local, puts its address in r7, calls function 1 (the fixture without its store: `tst r4,r4 ; bf R2 ; mov #0,r7 ; rts ; nop ; R2: rts ; nop`, lent, which keeps r7 when r4 is not 0) and then function 2 (withheld: it reads r3), which stores `7 + r3` through r7 into the local. On master the text is `return 5;`; every run returns the stored value. With the fix the text declares the local and ends `return xStack_c;`. A wrong value, so P1. (The generator's own value check for this, A3-34's canary, is planted only in generated programs; the module has none, so the pin reads the text.)
+
+Fix: `ReturnCheck` records the registers some return leaves as they began (`mKeptAt`); at the end of the walk each of them that is not preserved adds its own origin (r15: the stack) to `outOrigins`. The claim only grows, so a caller only takes more for possible.
+
+Pins (`TestA3RoutedPins`, the A3-190 block; the ctest count is unchanged): the seed whole, the shrunk words, the fixture `2742 2448 8B02 E700 000B 0009 000B 0009` (two returns), the control `2742 2448 8B01 E700 0009 000B 0009` (one `rts` after both paths, right before the fix too), and the caller module (no finding, a lent callee, no `return 5;`, `return xStack_c;`). Mutation: with the new line switched off (`false &&`) in one build, the seed, the shrunk words, the fixture and the caller fail (5 CHECKs; the control passes); restored before the runs.
+
+### Sweep
+
+`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`, 10,000 seeds from 8,100,001 (`sweep.sh`), with the fix:
+
+| Run | Failing | Classes |
+|---|---|---|
+| grammar 1 | 2: 8103971, 8105482 | area 7: `n:map-store-value` (8103971, `uRam26002280 = 0xf;` at 0x0600900A); area 5: `v:folded-store-after-access` (8105482, `xRam26002188._1_3_ = xRam26002188._1_3_;`) |
+| grammar 2 | 0 | |
+
+Both reproduce on master's binary (built from `06884b11` in this worktree): neither is caused by the fix, neither is area 3's (no `claim-wrong:*`, `lent.*`, `kept-read` or `endless-*`). Not triaged here; routed below.
+
+### Routed
+
+* **Area 7:** grammar 1 seed 8103971, `n:map-store-value`. Replay: `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEED=8103971 SE_GENERATED_CANARY=0`.
+* **Area 5:** grammar 1 seed 8105482, `v:folded-store-after-access` (a read of a piece of the global made a write of it).
+
+### Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` with Live | 116 of 117: only `SaturnExplorerSh2GeneratedTests`, the known 7102142 pins of `TestA5FoldedPins` (A11-23; 3 CHECKs, area 7's to fix); the A3-190 pins pass |
+| fault suite | fault matrix: 0 of 94 job(s) failed |
+| 20,000-seed matrix | TWENTYK |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | agrees=5196 |
+| game corpus, lent (`a7_round2/corpus.sh`) | both "all passed"; missing and said 0 (hwram007) and 4 (hwram008); "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)": unchanged (the claim grows, it lends nothing more or less) |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint` ok (no vendored file touched) |
