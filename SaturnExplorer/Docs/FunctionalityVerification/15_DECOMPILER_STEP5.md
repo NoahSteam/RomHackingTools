@@ -21116,3 +21116,72 @@ Pins: `TestArea7Round21Pins` (A7-162), `TestA5FoldedPins3` (A5-142), `TestA5Fold
 
 * **Area 7**: A7-165 (open, 9302668).
 * **Area 3**: A3-198 (open, 9200735).
+
+## Area 7, round 22
+
+Fixer, branch `review/7-round22` cut at master `31427c71` (patches to 0094; 0091 and 0095 stay free). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). **No product change, no engine patch**: every finding of this round is an oracle false positive (`MappingOracle.h`, `Sh2GeneratedTests.cpp`); no printed text is wrong (no P1) and no mapping token sends the user to the wrong code (no P2). Each fix reads `SE_A7_RULE_OFF=<n>` (the area 5 ones as 5147 and 5148). Scripts: `Docs/Decompiler/tools/a7_round22/` (`mutation.sh`, `sweeps.sh`, `final.sh`). Backups on `backup/review-7-round22`.
+
+| Row | P | Outcome |
+|---|---|---|
+| A7-165 | P3 | **fixed, oracle**: grammar 1 specials seed 9302668 (`v:map-way-back` at 0x0600900A) |
+| A7-166 | P3 | **filed and fixed, oracle**: grammar 1 seeds 8901149 (`v:map-way-back`) and 8909710 (`n:map-way-back`) |
+| A7-167 | P3 | **filed and fixed, oracle**: grammar 2 seed 8900054 (`n:map-store-after`) |
+| A5-146 | P3 | **filed, already fixed by A5-144, pin only**: grammar 1 seed 8902817 (`v:folded-read-after-pointer-write`) |
+| A7-168 | P3 | **filed and fixed, oracle**: sweep, grammar 1 seed 9401568 (`n:` and `v:map-store-dead`) |
+| A7-169 | P3 | **filed and fixed, oracle**: sweep, grammar 1 seed 9406270 (`n:` and `v:map-store-dead`) |
+| A5-147 | P3 | **filed and fixed, oracle**: sweep, grammar 1 seed 9408552 (`n:folded-read-after-pointer-write`) |
+| A7-170 | P3 | **filed and fixed, oracle**: sweep, grammar 2 seed 9404185 (`n:` and `v:map-const-join`) |
+| A5-148 | P3 | **filed and fixed, oracle**: sweep, grammar 2 seed 9404677 (`n:onchip-span-unsaid`) |
+
+For each seed the product's text was compared with the oracle's claim (the code's order and values read off the words and the emulator's trace): in all nine the text is the code's, and the token the oracle objected to either belongs to the instruction it is drawn at or is the second of two lines that are both its own. Replays: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`, with `SE_GENERATED_ALPHABET=specials` for 9302668.
+
+### 1. A7-165: seed 9302668 (specials)
+
+`lp: mov.w @r7,r0 ; tst #1,r0 ; bt lp ; mov #-0x7a,r1 ; mov.w @r7,r0 ; mov.w r0,@(8,r7) ; cmp/pl r1 ; ...` with r7 the marked mailbox: `uVar2 = Ram26001028;` is the poll and `xRam26001030 = Ram26001028;` (tokens 0x0600900A 0x0600900C) the re-read and its store, the code's. The line the way back from 0x0600900A answers is the right one; the oracle judged it a copy because A7-78's `readHere` (a global the line reads, drawn at the instruction that reads it, is that load's own statement) searched the access fates, and a marked-volatile read has none (the engine lists it in the ledger as `read 2 at 0600900A direct 26001028`). Fix: `readHere` also takes the ledger's direct reads (`r.accesses`).
+
+### 2. A7-166: seeds 8901149 and 8909710
+
+A delay slot's store, both paths of a `bt/s` or `bf/s` run it. 8901149 shrunk: `xRam2600208c = 0x3e003e;` (tokens 0x0600900C 0x0600901C: the slot's word store merged with the half-word store after it) in the taken path's block, which returns, and `xRam2600208c = 0x3e;` (0x0600900C) after it. 8909710 shrunk: the slot store appears in the condition as `(xRam260021a0 = 0x20000000, in_r2 != in_r3)` and as the same statement `xRam260021a0 = 0x2000ffe2;` three times. A7-129's rule (another line that assigns the variable with its name drawn at the store is the store's statement, and this line's name there is a copy) took each line for the copy of another. Fix: that search skips a line with the same text as this one, and one the text between them separates by a `return` in this one's block. The damaged controls of A7-145 and A7-147 (the product's `materialised` marks removed) still fail, which a first try (a line's own name at the store is always its own) lost.
+
+### 3. A7-167: seed 8900054
+
+Function 0 `bsr` (or `jsr @r3` with r3 the pool's literal) calls function 1 and ends in a tail jump to it. The engine prints `xStack_10 = unaff_r12;` at the call, before `func_0x06009028();`, naming the push of r12 at the callee's 0x0600902E (a frame local nothing reads; r12 is the same after the call): the code's order and value. `store-after` (A7-32) asked whether the named store may run before the call in the flow of the body, where the callee's block is reached from the call's target and by no path from the call. Fix: a store whose block the flow reaches from the call's target (a `bsr`'s, a `jsr`'s register when the paths agree on a number) runs before the call returns.
+
+### 4. A5-146: seed 8902817
+
+Passes on master `31427c71`: A5-144's rule covers it (`SE_A7_RULE_OFF=5144` brings the finding back). Pinned whole.
+
+### 5. Sweeps (`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`; `sweeps.sh`)
+
+| Run | Failing seeds | Findings |
+|---|---|---|
+| grammar 1, 10,000 from 9,400,001 | 3 | 9401568 (A7-168), 9406270 (A7-169), 9408552 (A5-147) |
+| grammar 2, 10,000 from 9,400,001 | 2 | 9404185 (A7-170), 9404677 (A5-148) |
+| grammar 1 specials, 5,000 from 9,500,001 | 0 | none |
+
+The sweeps ran on the binary with the A7-165 to A7-167 fixes; every later change loosens the oracle only, so the seeds that passed pass on the final binary, and the five failing seeds pass on it (the replays of the pins and of `mutation.sh`).
+
+* **A7-168 (9401568).** `uRam0600210c = (int4)cRam26002300;` before `*(xunknown4 *)(param_2 + 8) = 0x10;` and the store that writes over the global: the engine keeps the first store (a write through a pointer between; without it the store is dropped) and the line is its statement. A7-158's `store-dead` took it for a line that names a store written over. Fix: a line whose value tokens are all at makers of the register the dead store stores is that store's own statement (A7-158's control, `tas.b` naming a store whose register no value token makes, still fails).
+* **A7-169 (9406270).** `*(int2 *)(param_4 + 0xe) = in_r1 - (int2)param_1;` draws `param_1` at the first of two stores of a word (the narrowing, `mov.w r1,@(r0,r6)`, the second writes over it). Fix: the operand of a conversion the line prints is no statement of a dead store.
+* **A7-170 (9404185).** `and r2,r1` at a join after `and r0,r1` (r0 = 1) and `shal r2`: no common bit, 0 (`uVar1 = 0;`). New `PossibleBits` (the bits a register may have set from its makers: ANDed masks, numbers, shifts, extensions, a pop of a push; makers over an edge the words' own T never takes are left out through `EdgeImpossible`), and an AND of two registers with no bit in common makes 0.
+* **A5-147 (9408552).** `(uRam26002084 = uRam26002084 & 0xffffff, in_r0 != 2)`, the slot's byte store of the constant 0 the engine puts into the branch's condition; `MaskedOwnWord` knew the statement form only.
+* **A5-148 (9404677).** `pxVar1 = (xunknown2 *)((param_2 | 0xffffffc0) & uRam06009058); pxVar2 = pxVar1 + -1;` and the same with the OR in a variable: the code ANDs with 0x1c, the run's pointer is 0 and its write at 0 - 2 is FFFFFFFE. Not a pointer the OR made on-chip: an OR whose value is ANDed with a non-constant (or a name the output ANDs with one) is not counted; an AND with a constant is (A5-135's `(x & 0x1c) - 0x20`, its pin says the note).
+
+### 6. Pins and mutation (`mutation.sh`)
+
+Fixture `TestArea7Round22` (`Sh2DecompilerTests.cpp`; the rule off, a violation each): A7-165, 166 (both seeds), 167 (`bsr` and `jsr`), 168, 169, 170. Pins `TestArea7Round22Pins` (`Sh2GeneratedTests.cpp`): nine seeds whole, each shrunk program evaluated and replayed from its printed replay line (alias, volatile range, poll, functions, returns, clobbers and reads). Mutation (seed whole and shrunk alone: findings on, off): every row 0 on and 1 or more off (A7-165 to A7-170, A5-147, A5-148, and 5144 for 8902817). The default run (every pin) with 165, 166, 167, 168, 169, 170, 5147 or 5148 off reports 2, 4, 3, 2, 2, 4, 2, 3 CHECK failures; none with the rules on.
+
+### 7. Runs after the last code edit
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` | **117 of 117** passed |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (canary on, every pin) | **failing seeds=0; findings=0** |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus, both images, `SE_GAME_LEND=1` | every mapping count 0 (all passed); missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)": unchanged. No product change, so the function texts and tokens are master's (no token diff to make) |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint --tests-dir` ok (no vendored file touched) |
+
+### 8. Routed
+
+* **Area 3**: none this round.
