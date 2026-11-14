@@ -1490,9 +1490,9 @@ private:
                 if (!((changed >> r) & 1u)) continue;
                 auto f = s.vars.find(KeyOf(mReg[r]));
                 if (f == s.vars.end()) continue;
-                // (area 3, A3-202) ...added to the marks it has: the value after this call is as an earlier such call left it, or as this one
-                // did (the walk shows a change on some path, not on every one), so a read after both is a read after each (x4s)
-                Value::JoinUnkept(f->second.unkept, std::vector<uint64_t>(1, Value::UnkeptMark(at, r)));
+                // (A3-202) this call's mark replaces an earlier call's: the walk does not say whether the callee writes the register on every
+                // path, and a later callee that does (0602481C/007: 06024B18 loads r10-r13 at entry) leaves nothing of an earlier one's (A3-203)
+                f->second.unkept.assign(1, Value::UnkeptMark(at, r));
                 mUnkeptSeen = true;
             }
         }
