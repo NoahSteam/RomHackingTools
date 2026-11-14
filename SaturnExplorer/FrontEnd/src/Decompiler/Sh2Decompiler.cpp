@@ -9172,6 +9172,131 @@ int RetargetTwinExtensions(std::vector<Line>& lines, const PrintedOperations& pr
     return moved;
 }
 
+// A7-175 (A7-171's class outside a store's line): a conversion the engine made itself and drew at an instruction that makes nothing of
+// it. Two identical narrowings are merged into one and the one kept is put where it reaches both uses, keeping its own address: the
+// `bf` of a later block (`cVar2 = (char)iVar1;` before the first `if`, the request that marks the global volatile, so no store is folded
+// and AddFrameStoreTokens has no line to give a maker), or the store of another value the narrowing was split from
+// (`mov.b r2,@r6` of `in_r2 - r3`, whose own line is `cRam26001008 = in_r2 - cVar2;`). The statement's drawn tokens go to the
+// instructions that made the value it converts (the flow's op that wrote it, or the instruction the engine drew its own computation of it at; through a join, one on each path, the lowest drawn and an
+// empty token at each other, as A7-21's register merge); when a path brings the function's input, which no instruction makes, the line
+// names nothing (A7-23 (b)). At a branch for any line (A7-171 gave a store's line the maker of a flow op's output, not of a join's); at
+// another instruction outside the op's block for a register variable's line only (a store's line is AddFrameStoreTokens'). Left as it
+// is when the value comes from anything else (a number, a value the engine computed at a branch). At a branch, a conversion printed inside
+// another statement too (`Ram26001008 = (char)in_r2;` with `in_r2` at the `bf` before the store's block: a click on the line went to the
+// branch, and the way back from the branch answered the store's line before its own `if`).
+int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations& printed, const ghidra::Funcdata& fd, const FlowRecord& flow)
+{
+    std::vector<const ghidra::PcodeOp*> ordered;
+    for (const auto& kv : printed) ordered.push_back(kv.first);
+    std::sort(ordered.begin(), ordered.end(), [](const ghidra::PcodeOp* a, const ghidra::PcodeOp* b) { return a->getTime() < b->getTime(); });
+    const std::set<std::pair<size_t, uint32_t>> shared = SharedInstructionLines(printed, ordered);
+    const ghidra::AddrSpace* data = fd.getArch()->getDefaultDataSpace();
+    const auto inMemory = [data](const ghidra::AddrSpace* s) { return s && (s->getType() == ghidra::IPTR_SPACEBASE || s == data); };
+    const auto isBranch = [&flow](uint32_t insn) {
+        const auto first = flow.insnFirst.find(insn);
+        if (first == flow.insnFirst.end() || first->second.first < 0 || static_cast<size_t>(first->second.first) >= flow.blockOps.size()) return false;
+        const std::vector<FlowOp>& iops = flow.blockOps[static_cast<size_t>(first->second.first)];
+        for (size_t i = first->second.second; i < iops.size() && iops[i].insn == insn; ++i)
+            if (iops[i].code == ghidra::CPUI_BRANCH || iops[i].code == ghidra::CPUI_CBRANCH || iops[i].code == ghidra::CPUI_BRANCHIND) return true;
+        return false;
+    };
+    int moved = 0;
+    for (const ghidra::PcodeOp* o : ordered)
+    {
+        const ghidra::OpCode code = o->code();
+        if (code != ghidra::CPUI_INT_SEXT && code != ghidra::CPUI_INT_ZEXT && code != ghidra::CPUI_SUBPIECE && code != ghidra::CPUI_CAST) continue;
+        const ghidra::Varnode* out = o->getOut();
+        if (!out || o->isFromDelaySlot() || o->numInput() < 1 || o->getTime() < flow.opsEnd || o->getIn(0)->isConstant()) continue;
+        const ghidra::BlockBasic* home = o->getParent();
+        if (!home) continue;
+        const uint32_t at = InstructionOf(o);
+        if (flow.insnFirst.find(at) == flow.insnFirst.end()) continue;
+        const bool branch = isBranch(at);
+        if (!branch)
+        {
+            if (out->isImplied()) continue;
+            // (outside its block: the op was moved from the instruction it was made at; a register variable's line only)
+            if (home->contains(o->getAddr())) continue;
+            bool memory = inMemory(out->getSpace());
+            if (!memory && out->getHigh())
+            {
+                const ghidra::Symbol* sym = out->getHigh()->getSymbol();
+                const ghidra::SymbolEntry* entry = sym ? sym->getFirstWholeMap() : nullptr;
+                const ghidra::MapEntry* map = entry && entry->isMapEntry() ? static_cast<const ghidra::MapEntry*>(entry) : nullptr;
+                memory = map && inMemory(map->getAddr().getSpace());
+            }
+            if (memory) continue;
+        }
+        // The instructions that made the converted value: through the engine's joins and copies, a flow op's on each path
+        std::set<uint32_t> makers;
+        bool input = false, unknown = false;
+        std::set<const ghidra::Varnode*> seen;
+        std::vector<const ghidra::Varnode*> work(1, o->getIn(0));
+        while (!work.empty() && !unknown)
+        {
+            const ghidra::Varnode* v = work.back();
+            work.pop_back();
+            if (!seen.insert(v).second) continue;
+            if (seen.size() > 16 || v->isConstant()) unknown = true;
+            else if (!v->isWritten()) (v->isInput() ? input : unknown) = true;
+            else if (v->getDef()->getTime() < flow.opsEnd)
+            {
+                uint32_t m = InstructionOf(v->getDef()), c = 0;
+                makers.insert(CanonicalAddress(m, c) ? c : m);
+            }
+            else if (v->getDef()->code() == ghidra::CPUI_MULTIEQUAL)
+                for (ghidra::int4 k = 0; k < v->getDef()->numInput(); ++k) work.push_back(v->getDef()->getIn(k));
+            else if (v->getDef()->code() == ghidra::CPUI_COPY || v->getDef()->code() == ghidra::CPUI_CAST)
+                work.push_back(v->getDef()->getIn(0));
+            else if (!isBranch(InstructionOf(v->getDef())) && flow.insnFirst.count(InstructionOf(v->getDef())))
+            {
+                // (a value the engine computed itself, `cVar2 = (char)((uint2)iRam26001000 >> 8);` of a folded read: the instruction it drew
+                // that computation at, the read; A7-150's fixture, where the store's line drew `cVar2` at the `bf` into the store's slot)
+                uint32_t m = InstructionOf(v->getDef()), c = 0;
+                makers.insert(CanonicalAddress(m, c) ? c : m);
+            }
+            else
+                unknown = true;
+        }
+        if (unknown || (makers.empty() && !input)) continue;
+        if (input) makers.clear();   // (a path with no maker: the line names nothing, as A7-21's)
+        uint32_t from = at, c = 0;
+        if (CanonicalAddress(from, c)) from = c;
+        if (makers.count(from)) continue;
+        const uint32_t lowest = makers.empty() ? 0 : *makers.begin();
+        for (size_t line : printed.at(o).first)
+        {
+            if (line >= lines.size() || shared.count(std::make_pair(line, from))) continue;
+            Line& l = lines[line];
+            bool any = false;
+            for (Token& t : l.tokens)
+                if (t.addr == from && t.begin < t.end)
+                {
+                    t.addr = lowest;
+                    t.materialised = false;
+                    any = true;
+                }
+            if (!any) continue;
+            ++moved;
+            for (uint32_t m : makers)
+            {
+                bool carried = false;
+                for (const Token& t : l.tokens) carried = carried || t.addr == m;
+                if (carried) continue;
+                Token t;
+                t.begin = t.end = static_cast<uint16_t>(std::min<size_t>(l.text.size(), 0xFFFF));
+                t.kind = TokenKind::Plain;
+                t.addr = m;
+                l.tokens.push_back(t);
+            }
+            l.firstAddr = 0;
+            for (const Token& t : l.tokens)
+                if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+        }
+    }
+    return moved;
+}
+
 }  // namespace
 
 std::string DecompileResult::Text() const
@@ -11900,6 +12025,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         AddJoinConstantTokens(r.lines, printed, *fd, flow);
         AddFrameStoreTokens(r.lines, printed, *fd, flow);
         RetargetTwinExtensions(r.lines, printed, flow);
+        if (!std::getenv("SE_R24_OFF")) RetargetHoistedConversions(r.lines, printed, *fd, flow);   // A7-175
         MarkMaterialisedReads(r.lines, printed, *fd, flow);
         for (Line& l : r.lines)   // A7-12: the word flow halted at is no instruction; the line's hover text says so
             for (Token& t : l.tokens)

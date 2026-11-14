@@ -7846,6 +7846,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             flag("map-store-dead", audit.storeDead);
             flag("map-case-entry", audit.caseOtherEntry);
             flag("map-store-after", audit.storeAfterUse);
+            flag("map-conversion-branch", audit.conversionAtBranch);   // (A7-175, area 7 review round 24)
             // A7-52: a statement line with no instruction that does not say so. Until then the audit counted the lines with none
             // (nonCodeLines) and judged only the shapes above, so a statement named by no check passed with a click that did nothing.
             flag("map-no-instruction", audit.noInstruction);

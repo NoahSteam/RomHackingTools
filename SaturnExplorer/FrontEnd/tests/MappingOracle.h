@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <map>
 #include <set>
@@ -136,6 +137,9 @@ struct MappingAudit
     // store of a global, not written over so in the straight code after it and not said missing, on no line (A7-159's store; counted: a
     // store the engine drops past reads it can tell from the global's, or with a poll's loop it takes to run for ever, is on none either)
     int storeDead = 0, storeUnnamed = 0;
+    // Area 7 review round 24 (A7-175): the operand of a conversion a statement prints, drawn at a branch, which converts nothing (a violation;
+    // A7-25's copies the product marks materialised there are its own choice and are not counted)
+    int conversionAtBranch = 0;
     std::vector<std::string> problems;   // the first few of each kind, "kind: where: what"
 
     void Add(const MappingAudit& o)
@@ -157,7 +161,7 @@ struct MappingAudit
         storeValueOther += o.storeValueOther; copyOtherValue += o.copyOtherValue; constLines += o.constLines; constAtJoin += o.constAtJoin;
         copyMergeAtBranch += o.copyMergeAtBranch; copyRegisterMade += o.copyRegisterMade; copyNoAddress += o.copyNoAddress; copyNumberMade += o.copyNumberMade; copyInputMerged += o.copyInputMerged;
         numberStoreOther += o.numberStoreOther; caseOtherEntry += o.caseOtherEntry; caseJudged += o.caseJudged; storeAfterUse += o.storeAfterUse;
-        storeDead += o.storeDead; storeUnnamed += o.storeUnnamed;
+        storeDead += o.storeDead; storeUnnamed += o.storeUnnamed; conversionAtBranch += o.conversionAtBranch;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -173,7 +177,7 @@ struct MappingAudit
     {
         return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip +
                accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther + storeValueOther + constAtJoin +
-               copyMergeAtBranch + numberStoreOther + caseOtherEntry + storeAfterUse + noInstruction + storeDead;
+               copyMergeAtBranch + numberStoreOther + caseOtherEntry + storeAfterUse + noInstruction + storeDead + conversionAtBranch;
     }
 };
 
@@ -2531,6 +2535,39 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 ++a.storeUnnamed;   // (counted, not a violation)
             }
     }
+    // A7-175 (A7-171's class on any line): a statement, not a condition, whose conversion's operand -- the name after `(type)` -- is drawn at a
+    // branch (`cVar2 = (char)iVar1;` at the `bf` of a later block, the narrowing the engine merged and hoisted; `Ram26001008 = (char)in_r2;` with
+    // `in_r2` at the `bf` before the store's block). The branch makes nothing; a click on the line went to it, and the way back from the
+    // branch answered the line before the branch's own `if`. A copy the product marks materialised there (A7-25, A7-66) is not judged.
+    if (!A7RuleOff(175))
+        for (size_t li = 0; li < r.lines.size(); ++li)
+        {
+            const std::string& lt = r.lines[li].text;
+            const size_t nb = lt.find_first_not_of(' '), eq = lt.find(" = ");
+            if (nb == std::string::npos || eq == std::string::npos) continue;
+            static const char* const kControl[] = { "if ", "if(", "while", "for ", "for(", "do ", "switch", "return", "goto", "else", "case ", "default", "}" };
+            bool control = false;
+            for (const char* k : kControl) control = control || lt.compare(nb, std::strlen(k), k) == 0;
+            if (control) continue;
+            for (const Token& t : r.lines[li].tokens)
+            {
+                if (!t.addr || t.begin >= t.end || t.materialised || t.begin < eq + 3 || t.begin < 2 || lt[t.begin - 1] != ')') continue;
+                const size_t open = lt.rfind('(', t.begin - 1);
+                if (open == std::string::npos || open + 1 >= t.begin - 1) continue;
+                bool cast = true;
+                for (size_t k = open + 1; cast && k + 1 < t.begin; ++k)
+                    cast = std::isalnum(static_cast<unsigned char>(lt[k])) || lt[k] == '_' || lt[k] == ' ' || lt[k] == '*';
+                if (!cast) continue;
+                uint16_t w = 0;
+                if (!word(t.addr, w)) continue;
+                const sfe::DisassembledInstruction d = sfe::Sh2Decode(t.addr, w);
+                if (!d.IsValid || !d.IsBranch || d.IsCall || d.Mnemonic == "rts" || d.Mnemonic == "rte") continue;
+                ++a.conversionAtBranch;
+                problem("conversion-branch", "line " + std::to_string(li) + " '" + lt + "' draws the operand of its conversion at the branch " + MappingHex(t.addr) +
+                                                 ", which converts nothing (A7-171, A7-175)");
+                break;
+            }
+        }
     // A7-19 (area 7 round 3), counted: a bare value assigned to a frame local or a global, at an instruction that does not write it.
     bool haveSources = false;
     std::map<uint32_t, std::vector<uint32_t>> sources;
@@ -4601,6 +4638,7 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
     std::printf("  mapping (%s): area 7 review round 20: %d lines name a store a later store writes over before anything reads it (A7-158, a violation); %d folded stores "
                 "of a global not written over so are on no line (A7-159, counted)\n",
                 label, a.storeDead, a.storeUnnamed);
+    std::printf("  mapping (%s): area 7 review round 24: %d statements draw the operand of a conversion at a branch (A7-175, a violation)\n", label, a.conversionAtBranch);
     std::printf("  mapping (%s): area 7 round 8 (A7-52): %d of the lines with no instruction are statements the product says so of (counted); %d statements with none that do not say so, or say so with one (a violation)\n",
                 label, a.noOriginLines, a.noInstruction);
     std::printf("  mapping (%s): area 7 round 8 (A7-55): %d copies of the function's input drawn only at the moves that put it in a register, or "
