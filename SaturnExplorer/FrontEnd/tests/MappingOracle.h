@@ -137,6 +137,12 @@ struct MappingAudit
     // store of a global, not written over so in the straight code after it and not said missing, on no line (A7-159's store; counted: a
     // store the engine drops past reads it can tell from the global's, or with a poll's loop it takes to run for ever, is on none either)
     int storeDead = 0, storeUnnamed = 0;
+    // Area 7 review round 25 (A7-176): a folded store of a global on no line while two statements assign that global, every token of each
+    // drawn at one other store (a hoisted copy drawn at an earlier store of another value; a violation)
+    int storeTwin = 0;
+    // Area 7 round 25 (A7-178): `V = <number>;` drawn only at a delayed branch (a jump, not a call) whose delay slot is the `mov #imm,Rn` that
+    // makes that number: the branch makes nothing (a violation)
+    int numberAtSlotBranch = 0;
     // Area 7 review round 24 (A7-175): the operand of a conversion a statement prints, drawn at a branch, which converts nothing (a violation;
     // A7-25's copies the product marks materialised there are its own choice and are not counted)
     int conversionAtBranch = 0, conversionAtBranchInside = 0;   // (...the statement a conversion, `V = (type)W;`, every drawn token at the branch: a violation;
@@ -162,7 +168,7 @@ struct MappingAudit
         storeValueOther += o.storeValueOther; copyOtherValue += o.copyOtherValue; constLines += o.constLines; constAtJoin += o.constAtJoin;
         copyMergeAtBranch += o.copyMergeAtBranch; copyRegisterMade += o.copyRegisterMade; copyNoAddress += o.copyNoAddress; copyNumberMade += o.copyNumberMade; copyInputMerged += o.copyInputMerged;
         numberStoreOther += o.numberStoreOther; caseOtherEntry += o.caseOtherEntry; caseJudged += o.caseJudged; storeAfterUse += o.storeAfterUse;
-        storeDead += o.storeDead; storeUnnamed += o.storeUnnamed; conversionAtBranch += o.conversionAtBranch; conversionAtBranchInside += o.conversionAtBranchInside;
+        storeDead += o.storeDead; storeUnnamed += o.storeUnnamed; storeTwin += o.storeTwin; numberAtSlotBranch += o.numberAtSlotBranch; conversionAtBranch += o.conversionAtBranch; conversionAtBranchInside += o.conversionAtBranchInside;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -178,7 +184,7 @@ struct MappingAudit
     {
         return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip +
                accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther + storeValueOther + constAtJoin +
-               copyMergeAtBranch + numberStoreOther + caseOtherEntry + storeAfterUse + noInstruction + storeDead + conversionAtBranch;
+               copyMergeAtBranch + numberStoreOther + caseOtherEntry + storeAfterUse + noInstruction + storeDead + conversionAtBranch + storeTwin + numberAtSlotBranch;
     }
 };
 
@@ -2524,6 +2530,32 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     break;
                 }
         }
+        // A7-176: statements of a global whose every token is drawn at one instruction, a store of it (the statement's own store, as the
+        // engine kept it): when two lines of one global are both drawn at the same store, and another folded store of the global's bytes is
+        // on no line, one of the two is that store's statement, drawn at the wrong one (`xRam26001008 = (xunknown1)in_r2;` of the store
+        // of in_r2 - r3 at the store of r3, where `xRam26001008 = (xunknown1)iVar1;` is).
+        std::map<std::pair<uint32_t, uint32_t>, std::set<std::string>> alone;   // (the global's address, the store) -> its lines' statements (not numbers)
+        std::map<std::pair<uint32_t, uint32_t>, std::set<std::string>> names;   // ...and the names they assign
+        if (!A7RuleOff(176))
+            for (size_t li = 0; li < r.lines.size(); ++li)
+            {
+                const std::string& lt = r.lines[li].text;
+                const size_t nb = lt.find_first_not_of(' '), eq = lt.find(" = ");
+                if (nb == std::string::npos || eq == std::string::npos) continue;
+                const size_t at = lt.find("Ram", nb);
+                unsigned v = 0;
+                if (at == std::string::npos || at - nb > 2 || at > eq || at + 11 > lt.size() || std::sscanf(lt.c_str() + at + 3, "%8x", &v) != 1) continue;
+                std::set<uint32_t> insns;
+                for (const Token& t : r.lines[li].tokens)
+                    if (t.addr && t.end > t.begin) insns.insert(t.addr);
+                // (two statements of different values: the same statement twice, a store the engine duplicated on two paths, is no twin)
+                std::string rhs = lt.substr(eq + 3);
+                if (rhs.empty() || std::isdigit(static_cast<unsigned char>(rhs[0])) || rhs[0] == '-' || rhs[0] == '\'') continue;
+                if (insns.size() == 1 && foldedStores.count(*insns.begin())) {
+                    alone[std::make_pair(static_cast<uint32_t>(v), *insns.begin())].insert(lt.substr(nb, eq - nb) + " = " + rhs);
+                    names[std::make_pair(static_cast<uint32_t>(v), *insns.begin())].insert(lt.substr(nb, eq - nb));
+                }
+            }
         for (const auto& kv : foldedStores)
             {
                 const AccessFate& f = *kv.second;
@@ -2533,6 +2565,26 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 for (const sfe::decomp::HardwareNote& n : r.hardwareNotes)
                     said = said || (n.address == f.insn && n.text.find("here is missing") != std::string::npos);
                 if (said) continue;
+                bool twin = false;
+                // (a store of the same register as the one the lines are drawn at wrote the same value: the engine draws either)
+                uint16_t sw = 0;
+                int sSize = 0;
+                const int sReg = word(f.insn, sw) ? StoredRegister(sw, sSize) : -1;
+                for (const auto& al : alone)
+                {
+                    uint16_t tw = 0;
+                    int tSize = 0;
+                    const int tReg = word(al.first.second, tw) ? StoredRegister(tw, tSize) : -1;
+                    twin = twin || (al.second.size() >= 2 && names[al.first].size() == 1 && al.first.second != f.insn && f.address >= al.first.first && f.address < al.first.first + 4u &&
+                                    sReg >= 0 && tReg >= 0 && sReg != tReg);
+                }
+                if (twin)
+                {
+                    ++a.storeTwin;
+                    problem("store-twin", "the store at " + MappingHex(f.insn) + " the engine folded into " + MappingHex(f.address) +
+                                              " is on no line, and two lines of the global are both drawn only at another store of it (A7-176)");
+                    continue;
+                }
                 ++a.storeUnnamed;   // (counted, not a violation)
             }
     }
@@ -2573,6 +2625,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 if (!whole)
                 {
                     ++a.conversionAtBranchInside;
+                    if (std::getenv("SE_A7_INSIDE")) problem("conversion-inside", "line " + std::to_string(li) + " '" + lt + "' draws a conversion's operand at the branch " + MappingHex(t.addr));
                     break;
                 }
                 ++a.conversionAtBranch;
@@ -2580,6 +2633,42 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                                  ", which converts nothing (A7-171, A7-175)");
                 break;
             }
+        }
+    // A7-178 (area 7 round 25): a statement `V = <number>;` of a register variable, every drawn token at one delayed branch whose delay slot is
+    // `mov #imm,Rn` of that number: the engine's merge copy at the end of the branch's block, whose maker is the slot (`xVar3 = 5;` at a `bra`
+    // with `mov #5,r1` in its slot, hwram008 0x0604BCE8). A click went to the row before the maker.
+    if (!A7RuleOff(178))
+        for (size_t li = 0; li < r.lines.size(); ++li)
+        {
+            const std::string& lt = r.lines[li].text;
+            const size_t nb = lt.find_first_not_of(' '), eq = lt.find(" = ");
+            if (nb == std::string::npos || eq == std::string::npos || lt.empty() || lt.back() != ';' || lt.find_first_of(" ,()[]*.", nb) != eq) continue;
+            if (lt.find("Ram", nb) != std::string::npos || lt.find("Stack", nb) != std::string::npos) continue;
+            std::string rhs = lt.substr(eq + 3, lt.size() - eq - 4);
+            bool negative = !rhs.empty() && rhs[0] == '-';
+            if (negative) rhs.erase(0, 1);
+            if (rhs.empty()) continue;
+            char* end = nullptr;
+            const unsigned long long num = std::strtoull(rhs.c_str(), &end, rhs.compare(0, 2, "0x") == 0 ? 16 : 10);
+            if (!end || *end) continue;
+            const uint32_t want = negative ? 0u - static_cast<uint32_t>(num) : static_cast<uint32_t>(num);
+            uint32_t at = 0;
+            bool one = true;
+            for (const Token& t : r.lines[li].tokens)
+            {
+                if (!t.addr || t.begin == t.end) continue;
+                if (t.materialised || (at && t.addr != at)) one = false;
+                at = t.addr;
+            }
+            uint16_t w = 0, sw = 0;
+            if (!one || !at || !word(at, w) || !word(at + 2, sw)) continue;
+            const sfe::DisassembledInstruction d = sfe::Sh2Decode(at, w);
+            if (!d.IsValid || !d.IsBranch || d.IsCall || !d.HasDelaySlot || (sw >> 12) != 0xE) continue;
+            const uint32_t imm = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(sw & 0xFF)));
+            if (imm != want && (imm & 0xFFFFu) != want && (imm & 0xFFu) != want) continue;
+            ++a.numberAtSlotBranch;
+            problem("slot-number", "line " + std::to_string(li) + " '" + lt + "' is drawn only at the delayed branch " + MappingHex(at) + " (" + d.Mnemonic +
+                                       "), whose slot " + MappingHex(at + 2) + " makes the number (A7-178)");
         }
     // A7-19 (area 7 round 3), counted: a bare value assigned to a frame local or a global, at an instruction that does not write it.
     bool haveSources = false;
@@ -4120,6 +4209,54 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     }
                 }
                 if (w == 0x0018 && want == 1) computes = true;
+                // A7-180: an extension or a byte swap of a register whose value the words do not give (a rotation through T of a literal on
+                // one path) computes what the engine may know a bit-level fact of -- `extu.b r0,r1` of the `swap.b r1,r0` of a literal's word
+                // whose rotated bits leave its byte alone: `iVar1 = 0x3c;` (grammar 1 seed 10105433). Not known is not wrong: judged only
+                // where the source register is a number the words give (then the check below stands).
+                // Only when every maker of the source register permutes bits (a swap, `xtrct`, a shift or a rotation): a byte or a bit of a
+                // number it does not give; any other source (an input, a load, an addition) gives the engine no such fact.
+                if (!computes && !A7RuleOff(180) && ((w & 0xF00F) >= 0x600C && (w & 0xF00F) <= 0x600F) &&
+                    RegisterBefore(r, word, sources, at, (w >> 4) & 0xF).kind != WordValue::Number)
+                {
+                    std::set<uint32_t> makers;
+                    bool permutes = RegisterMakers(r, word, sources, at, (w >> 4) & 0xF, makers) && !makers.empty() && !makers.count(0);
+                    bool swaps = false;
+                    for (uint32_t m : makers)
+                    {
+                        uint16_t mw = 0;
+                        if (!permutes || !word(m, mw)) { permutes = false; break; }
+                        swaps = swaps || (mw & 0xF00F) == 0x6008 || (mw & 0xF00F) == 0x6009 || (mw & 0xF00F) == 0x200D;
+                        const unsigned lo = mw & 0xFFu;
+                        permutes = (mw & 0xF00F) == 0x6008 || (mw & 0xF00F) == 0x6009 || (mw & 0xF00F) == 0x200D ||
+                                   ((mw >> 12) == 0x4 && (lo == 0x00 || lo == 0x01 || lo == 0x04 || lo == 0x05 || lo == 0x08 || lo == 0x09 || lo == 0x18 ||
+                                                          lo == 0x19 || lo == 0x20 || lo == 0x21 || lo == 0x24 || lo == 0x25 || lo == 0x28 || lo == 0x29));
+                    }
+                    computes = permutes && swaps;
+                }
+                // ...or a 0 that stays 0 round a loop: the extension's source made only by numbers whose extension is 0 and by sums, differences,
+                // logical operations and shifts of the source and the extension's own register (`mov #0,r0` then `add r2,r0` with `extu.w r0,r2`
+                // at the loop's head: r0 and r2 are 0 on every pass; grammar 2 seed 10107462)
+                if (!computes && !A7RuleOff(180) && want == 0 && ((w & 0xF00F) >= 0x600C && (w & 0xF00F) <= 0x600F) &&
+                    RegisterBefore(r, word, sources, at, (w >> 4) & 0xF).kind != WordValue::Number)
+                {
+                    const int rm = (w >> 4) & 0xF, rn = (w >> 8) & 0xF;
+                    const uint32_t keep = (w & 0xF) == 0xC || (w & 0xF) == 0xE ? 0xFFu : 0xFFFFu;
+                    std::set<uint32_t> makers;
+                    bool closed = RegisterMakers(r, word, sources, at, rm, makers) && !makers.empty() && !makers.count(0);
+                    for (uint32_t m : makers)
+                    {
+                        uint16_t mw = 0;
+                        uint32_t v = 0;
+                        if (!closed || !word(m, mw)) { closed = false; break; }
+                        const int mn = (mw >> 8) & 0xF, mm = (mw >> 4) & 0xF;
+                        const unsigned op = mw & 0xF00Fu, lo = mw & 0xFFu;
+                        if (made(m, mw, v)) closed = (v & keep) == 0;
+                        else if ((op == 0x300C || op == 0x3008 || op == 0x2009 || op == 0x200B || op == 0x200A) && (mn == rm || mn == rn) && (mm == rm || mm == rn)) closed = true;
+                        else if ((mw >> 12) == 0x4 && (mn == rm || mn == rn) && (lo == 0x00 || lo == 0x01 || lo == 0x08 || lo == 0x09 || lo == 0x18 || lo == 0x19 || lo == 0x28 || lo == 0x29)) closed = true;
+                        else closed = false;
+                    }
+                    computes = closed;
+                }
                 // (A7-69: `xtrct Rm,Rn` is Rm's low half over Rn's high half; the engine prints the part that is a number -- Rm shifted
                 // left by 16 -- as a variable's value and the other part as another; grammar 2 seed 3204314, `in_r2 = 0x40000;` for r1 = 4)
                 if (!computes && (w & 0xF00F) == 0x200D)
@@ -4653,6 +4790,10 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 label, a.storeDead, a.storeUnnamed);
     std::printf("  mapping (%s): area 7 review round 24: %d conversions drawn only at a branch (A7-175, a violation); %d lines draw a conversion's operand at a "
                 "branch inside a larger statement (A7-179, counted)\n", label, a.conversionAtBranch, a.conversionAtBranchInside);
+    std::printf("  mapping (%s): area 7 review round 25: %d folded stores on no line while two lines of the global are drawn at another store (A7-176, a violation)\n",
+                label, a.storeTwin);
+    std::printf("  mapping (%s): area 7 round 25: %d number statements drawn only at a delayed branch whose slot makes the number (A7-178, a violation)\n",
+                label, a.numberAtSlotBranch);
     std::printf("  mapping (%s): area 7 round 8 (A7-52): %d of the lines with no instruction are statements the product says so of (counted); %d statements with none that do not say so, or say so with one (a violation)\n",
                 label, a.noOriginLines, a.noInstruction);
     std::printf("  mapping (%s): area 7 round 8 (A7-55): %d copies of the function's input drawn only at the moves that put it in a register, or "

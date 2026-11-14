@@ -1429,7 +1429,11 @@ void TestArea7Round7()
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, words);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_34 triage");
-        if (a.Violations()) Print("A7-34 triage", r);
+        if (a.Violations())
+        {
+            Print("A7-34 triage", r);
+            dts::PrintMappingAudit(a, "a7_34 triage");
+        }
         CHECK(a.Violations() == 0);
     }
     // A7-39 (a), grammar 1 seed 1814817 shrunk: a loop counter the engine merges under a global's name. `mov #1,r3 ; L: mov.l lit,r1 ; and
