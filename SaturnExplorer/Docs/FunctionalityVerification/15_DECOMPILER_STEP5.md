@@ -21399,3 +21399,23 @@ Every function that differs, by image (alone and lent as the dumps name them):
 * **008, alone and lent (88):** 0600572A, 0600580E, 060082AA, 060087D8, 06008944, 06008F9A, 0600B212, 0600C2DA, 0600C49A, 0600C940, 0600EF4E, 06010186, 06010DD6, 06010F66, 06011DA0, 06014604, 0601561A, 06016C94, 06017A38, 06018D46, 060193F2, 0601A384, 0601AC7E, 0601C0A8, 0601C34E, 0601C8FE, 0601CE8A, 0602098C, 060253E6, 06025B8E, 06028F50, 0602D7DE, 0603194E, 06031F32, 060392DC, 0603A58C, 0603ADD2, 0603B8C4, 0603C3A6, 0603D9CC, 0603F632, 06040482, 0604080A, 06042690, 06044576, 0604535A, 06045FDE, 060462FA, 060488A2, 0604AD46, 0604B5BC, 0604C310, 0604CFFE, 0604F422, 06051C36, 060529BC, 06053296, 060535B6, 06054ABE, 060574D6, 0605781A, 06057CF8, 06058662, 0605B5C6, 0605B93A, 0605BD4E, 0605C1BA, 0605C814, 0605CFB8, 0605DA2A, 0605E092, 0605EBD8, 0605F636, 0605FBF6, 0605FCFE, 0605FF30, 0606011E, 06060252, 060603B2, 0606D34A, 0606D7FA, 060711BA, 060712FE, 0607383C, 06073906, 06073AC6, 06073D58, 06074054.
 * **008, alone only (35):** 060262EA, 060266CE, 06026756, 0602A376, 0602A9A8, 0602AA90, 0602C2D0, 0602D594, 0602D98A, 0602DB0A, 0602DC90, 06030BBA, 060311A6, 060352AE, 0603BB2E, 0603D5F6, 0603E75A, 0603E7AA, 060400EE, 0604289E, 0604BCE8, 0604BDA2, 0604BE30, 06057314, 06058CD4, 0605A730, 0605BA82, 0605F984, 0606D042, 0606E092, 0606E6F0, 0606FD82, 060701D4, 060703EA, 06070CF2.
 * **008, lent only (63):** 06005528, 06005530, 060087D0, 06008938, 06008F8C, 0600B204, 0600C2CC, 0600EF48, 0600F898, 0600FD34, 0600FD3C, 0600FF94, 0600FF9C, 0601033A, 06010DCC, 06039AA8, 06039AB0, 0603A584, 0603ADC8, 0603C398, 0603D9C4, 0603F624, 06048894, 0604AD38, 060529B4, 06053290, 06056414, 0605641C, 060574C8, 0605780C, 06057CEC, 06058654, 0605B5BC, 0605B934, 0605BD48, 0605C1B4, 0605C80C, 0605C938, 0605C93C, 0605DA1C, 0605E088, 0605EBCC, 0605EEFC, 0605EF04, 0605F630, 0605FBF4, 0605FCF0, 0605FF24, 06060114, 06060244, 060603A8, 06062954, 06062958, 060670C0, 0606D33C, 0606D7EC, 060711AC, 060712F0, 06073834, 06073AC0, 06073D50, 06074048, 06074198.
+
+The count of notes grows (008 lent: 341 added in 151 texts, most of them r14 frame pointers at the arms of an `if` or a `switch`): A3-108 said a frame fact once per function, and a function that keeps r14 for its frame now says it once per call no earlier note is on every path to. The text says less than that only by "likewise" pointing at a call it does not print below.
+
+### 4. Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117** (111 and the 6 Live tests) |
+| fault suite | fault matrix: **0 of 94** job(s) failed (127 s) |
+| 20,000-seed matrix (canary on, every pin) | 20,000 seeds (10,000 of each grammar), `failing seeds=0; findings=0`, all passed (32.8 ms per seed) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, all passed |
+| game corpus, lent (`a3_round25/corpus.sh`, both images, final binary, against master's dumps made here from `6599dd7c`'s `Sh2Decompiler.cpp`) | both all passed, every ledger count 0; missing and said **0** and **4**; lent **474 (645)** and **724 (975)**; texts differing 47 and 68 (007), 123 and 151 (008), frame notes only (section 3) |
+| fixture scripts (final binary) | `a3_a3203/run.sh`: x4s, x4p, x4a, x4t r8 at F1's call "likewise"; x4w, x4j r8 at F2's call; f1, f2 a note at each call; f1r, f2r one, "likewise"; `a3_a3202/run.sh`, `a3_round26/run.sh`, `a3_a3197/run.sh` as section 1 |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: ok (no vendored file or patch touched) |
+
+No generator change: no seed's program changes.
+
+### 5. Routed
+
+Nothing to another area.
