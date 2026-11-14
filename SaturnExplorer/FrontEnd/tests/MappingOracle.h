@@ -2293,9 +2293,15 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 into = BranchSources(r, word);
                 haveInto = true;
             }
-            uint16_t w = 0;
+            uint16_t w = 0, sw = 0;
             // (a delay slot's store: the flow goes on at its branch's target)
             if (r.InBody(f.insn - 2) && word(f.insn - 2, w) && sfe::Sh2Decode(f.insn - 2, w).HasDelaySlot) return false;
+            // (an instruction that reads the memory too, `tas.b @r7`, draws its read: a line's tokens there are that read's)
+            if (!word(f.insn, sw) || (sw & 0xF0FF) == 0x401B || ((sw >> 8) >= 0xCC && (sw >> 8) <= 0xCF)) return false;
+            int storedSize = 0;
+            const int stored = StoredRegister(sw, storedSize);
+            (void)storedSize;
+            bool storedKept = stored >= 0;   // (the register it stores, not written since: a later store of it writes the same value)
             const auto covers = [&f](const AccessFate& g) {
                 const auto delta = [&f](uint32_t a, uint32_t b) { return f.frame ? a - b : GlobalDelta(a, b); };
                 return g.fate == AccessFate::FoldedOrdinary && g.write && g.frame == f.frame && (f.frame || g.constantAddress) &&
@@ -2309,9 +2315,18 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 const MemoryShape m = ShapeOf(d);
                 // (a read-modify-write reads: `tas.b @Rn`, `and.b #imm,@(r0,gbr)` and its kin)
                 if (m.load || (w & 0xF0FF) == 0x401B || ((w >> 8) >= 0xCC && (w >> 8) <= 0xCF)) return false;
-                if (!m.store) continue;
-                for (const AccessFate& g : r.accessFates)
-                    if (g.insn == p && covers(g)) return true;
+                if (m.store)
+                    for (const AccessFate& g : r.accessFates)
+                        if (g.insn == p && covers(g))
+                        {
+                            // (the same register stored again: the store wrote (a piece of) the value the later one writes, and the engine
+                            // may draw that value at either -- `mov.b r1,@r15 ; mov.b r1,@r5 ; mov.b r1,@r15`, grammar 2 seed 9000950;
+                            // `mov.w r0,@(0,r14) ; mov.w r0,@r5 ; ... ; mov.l r0,@(0,r14)`, 9007284)
+                            int laterSize = 0;
+                            if (storedKept && StoredRegister(w, laterSize) == stored) return false;
+                            return true;
+                        }
+                if (stored >= 0 && WrittenRegisters(d).count(stored)) storedKept = false;
             }
             return false;
         };
@@ -2323,6 +2338,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             if (!A7RuleOff(158) && overwritten(*kv.second)) dead.insert(kv.first);
         for (size_t li = 0; li < r.lines.size() && !dead.empty(); ++li)
         {
+            // (a statement: a case label's token at its first instruction says where the case begins, not a value)
+            if (r.lines[li].text.find(" = ") == std::string::npos) continue;
             // (the store's own statement, which the engine kept -- the name the line assigns and its value drawn at it, `uRam06001028 =
             // (int2)xVar3;` at `mov.w r2,@r6` before a store through a parameter it cannot tell from the global -- is the store's. Not a
             // line whose value is drawn elsewhere: `xRam26001018 = 0;` with its name at the store of in_r1 and the 0 at `mov #0,r2`)
