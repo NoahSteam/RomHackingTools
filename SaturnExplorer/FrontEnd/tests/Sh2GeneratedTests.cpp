@@ -17064,9 +17064,35 @@ void TestRouted345Pins(Sh2Decompiler& d)
         CHECK(sh.findings.empty() && count(sh, "endless-store.checked") > 0);
         Program p = Generate(6906675);
         CHECK(p.postJoin != 0 && Shrinker::IntentHolds(p));
+        // (A12-31) Take the store out of every list IntentHolds walks, not only a function's top level: the Windows CI build (MSVC) found
+        // a post-join store this loop did not reach when it erased from `f.items` alone, so the check failed there and passed with gcc.
+        int erased = 0;
+        std::function<void(std::vector<Item>&)> eraseStores = [&](std::vector<Item>& list) {
+            for (size_t i = list.size(); i-- > 0;)
+            {
+                if (list[i].shape == "post_join.store")
+                {
+                    list.erase(list.begin() + static_cast<std::ptrdiff_t>(i));
+                    ++erased;
+                    continue;
+                }
+                eraseStores(list[i].slot);
+                eraseStores(list[i].kids);
+                for (std::vector<Item>& c : list[i].cases) eraseStores(c);
+            }
+        };
+        int topLevel = 0;
+        for (const Func& f : p.fns)
+            for (const Item& it : f.items) topLevel += it.shape == "post_join.store" ? 1 : 0;
         for (Func& f : p.fns)
-            for (size_t i = f.items.size(); i-- > 0;)
-                if (f.items[i].shape == "post_join.store") f.items.erase(f.items.begin() + static_cast<std::ptrdiff_t>(i));
+        {
+            eraseStores(f.items);
+            eraseStores(f.tail);
+            eraseStores(f.pathA);
+            eraseStores(f.pathB);
+        }
+        std::printf("pin 'A3-189 intent': post-join stores erased %d (top level %d), function 0 items %zu\n", erased, topLevel, p.fns.empty() ? size_t(0) : p.fns[0].items.size());
+        CHECK(erased > 0);
         CHECK(!Shrinker::IntentHolds(p));
     }
     // A4-18: grammar 2 seed 6805860, and its shrunk module: `tas.b @r5` and `and.b #0x67,@(r0,gbr)` joined into the switch's block across a
