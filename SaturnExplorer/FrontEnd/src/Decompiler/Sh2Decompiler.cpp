@@ -355,12 +355,14 @@ public:
     // the lent signatures, which no pass of a request changes, and each of the request's probes (two a printing pass, one more pass when a host
     // alias is declared) walked the same callees again, with a budget of its own. Each probe keeps its own budget; a result is reused as found.
     void ShareWalks(std::map<uint32_t, uint32_t>* walks, std::map<uint32_t, uint32_t>* below = nullptr,
-                    std::map<uint32_t, uint32_t>* handed = nullptr, std::map<uint32_t, uint32_t>* changed = nullptr)
+                    std::map<uint32_t, uint32_t>* handed = nullptr, std::map<uint32_t, uint32_t>* changed = nullptr,
+                    std::map<uint32_t, uint32_t>* written = nullptr)
     {
         mOwnCtx.shared = walks;
         mOwnCtx.sharedBelow = below;
         mOwnCtx.sharedHanded = handed;
         mOwnCtx.sharedChanged = changed;
+        mOwnCtx.sharedWritten = written;
     }
 
     // The calls (by the instruction that makes them) a frame address escapes at in a register the call is shown without, and which (bit 2: r2, bit 7: r7).
@@ -452,6 +454,8 @@ public:
         mOut = 0;
         mKeptAt = 0;
         mChangedAt = 0;
+        mWrittenAt = kModelKept;
+        mPathLost = false;
         mLeaks = 0;
         mFrameValues = 0;
         mLowestSp = 0;
@@ -479,6 +483,7 @@ public:
             // the instructions; past the bound, fail closed -- the callee may write any word of its caller's frame.
             if (mNested && in[a].slots.size() > kNestedMaxSlots)
             {
+                mPathLost = true;   // (A3-203)
                 mOwnFrameWords |= CallEffects::kFrameAny;
                 mCallerFrameStores |= origin::kFrame;
                 break;
@@ -739,6 +744,10 @@ private:
         // value (mayEntry) with a constant written on another path is the entry value or that constant: changed for certain on that path, which
         // the join's mayEntry alone hid (x2: the clear after the restore, the paths meeting at one `rts`, said nothing).
         uint32_t sureChanged = 0;
+        // (area 3, A3-203) Fuzzy, a join only: the registers of kModelKept that every alternative joined here overwrites (SureWritten of each
+        // side, an intersection): held in the register at a return, the value is another one on every path and none computed from the register's
+        // own entry value. A callee that returns so (CalleeWritten) leaves nothing of what an earlier call left there.
+        uint32_t sureWritten = 0;
         static Value From(uint32_t o) { Value x; x.from = o; x.dep = Deps::All(o); return x; }
         static Value From(uint32_t o, uint32_t direct) { Value x; x.from = o; x.dep = Deps::All(direct); return x; }
         static Value From(uint32_t o, const Deps& d) { Value x; x.from = o; x.dep = d; return x; }
@@ -795,7 +804,8 @@ private:
                    exposedAt == o.exposedAt && kept == o.kept && unkept == o.unkept && mayEntry == o.mayEntry &&
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
                                      usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
-                                     baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure && sureChanged == o.sureChanged));
+                                     baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure && sureChanged == o.sureChanged &&
+                                     sureWritten == o.sureWritten));
         }
     };
     using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
@@ -992,6 +1002,14 @@ private:
         }
         return m;
     }
+    // (area 3, A3-203) Of SureChanged, the registers 'v', held in that register at a return, overwrites: not computed from the register's own
+    // entry value (its origins do not name it), so what the caller had there before the call is gone. `mov.w @r8+,r10` overwrites r10 (06024B18,
+    // called by 0602481C/007); `add #4,r8` changes r8 but keeps what an earlier call left in it, stepped. A join: what every side overwrites.
+    static uint32_t SureWritten(const Value& v)
+    {
+        if (v.kind == Value::Fuzzy && v.def == Value::kJoin) return v.sureWritten;
+        return SureChanged(v) & ~v.Origins() & kModelKept;
+    }
 
     // 'spare': the store is a lent callee's through a pointer it was handed. The engine assumes such a callee does not write its caller's
     // saved registers (a pointer to a local reaches the object, not the prologue's pushes), so the slots that hold one are left, but for the
@@ -1142,6 +1160,7 @@ private:
         Value::JoinUnkept(m.unkept, b.unkept);
         m.mayEntry = a.mayEntry | b.mayEntry;
         m.sureChanged = SureChanged(a) | SureChanged(b);   // (A3-199) on either path
+        m.sureWritten = SureWritten(a) & SureWritten(b);   // (A3-203) on both
         // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
         // that steps a pointer down from r15, `mov.l r0,@-r1`, A3-16) as often as a choice of two addresses, and is not followed.
         m.callerHigh = (a.kind == Value::Fuzzy && a.callerHigh) || (b.kind == Value::Fuzzy && b.callerHigh) ||
@@ -1485,14 +1504,18 @@ private:
         if (keepKept && !signatureLent && haveTarget)
         {
             const uint32_t changed = CalleeChanged(target) & kModelKept & e.preserved;
+            const uint32_t written = CalleeWritten(target);
             for (int r = 0; r < kTracked; ++r)
             {
                 if (!((changed >> r) & 1u)) continue;
                 auto f = s.vars.find(KeyOf(mReg[r]));
                 if (f == s.vars.end()) continue;
-                // (A3-202) this call's mark replaces an earlier call's: the walk does not say whether the callee writes the register on every
-                // path, and a later callee that does (0602481C/007: 06024B18 loads r10-r13 at entry) leaves nothing of an earlier one's (A3-203)
-                f->second.unkept.assign(1, Value::UnkeptMark(at, r));
+                // (A3-203) this call's mark replaces an earlier call's only when its callee overwrites the register on every path
+                // (CalleeWritten: 0602481C/007's 06024B18 and 06024B34 load r10-r13 at entry, so 06025604's values there are never read); a
+                // callee that may keep it (x4s: F1 clears r8 on one return) passes on what an earlier call left, so both are marked
+                const uint64_t mark = Value::UnkeptMark(at, r);
+                if ((written >> r) & 1u) f->second.unkept.assign(1, mark);
+                else Value::JoinUnkept(f->second.unkept, std::vector<uint64_t>(1, mark));
                 mUnkeptSeen = true;
             }
         }
@@ -1696,6 +1719,10 @@ private:
         // a callee it could not follow. A callee that saves r8-r14, writes its frame through an index the walk cannot bound, and restores them
         // is not shown to change them (06041AA0/008).
         ctx->Changed()[target] = !why.empty() || callee.mEntryUndecodable ? 0u : callee.mChangedAt & kModelKept;
+        // (area 3, A3-203) ...and the ones it overwrites on every path: only when every path the walk followed ended in a return it read
+        // (no path lost) and some return was reached
+        ctx->Written()[target] = !why.empty() || callee.mEntryUndecodable || callee.mPathLost || !callee.mSpSeen ? 0u
+                                                                                                                   : callee.mWrittenAt & callee.mChangedAt & kModelKept;
         return words;
     }
     // (area 3 round 12 fix, A3-90) The registers (bit r: rN, GBR, MACH, ...) whose entry values a captured, unlent callee lets out (stores to
@@ -1724,6 +1751,18 @@ private:
             f = ctx->Changed().find(target);
         }
         return f != ctx->Changed().end() ? f->second : 0u;
+    }
+    // (area 3, A3-203) ...and the ones it overwrites on every path, as its walk shows (CalleeFrameWrites); 0 when nothing is shown.
+    uint32_t CalleeWritten(uint32_t target)
+    {
+        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
+        auto f = ctx->Written().find(target);
+        if (f == ctx->Written().end())
+        {
+            CalleeFrameWrites(target);
+            f = ctx->Written().find(target);
+        }
+        return f != ctx->Written().end() ? f->second : 0u;
     }
     // A3-86 a: the registers a captured, unlent callee may store below the pointer it was handed, from the frame-words walk's
     // record (or that walk, run now). 0x7FFF (every register) when the callee could not be walked: fail closed; kConvention for one whose code
@@ -2155,7 +2194,11 @@ private:
     bool Return(const State& s, const ghidra::VarnodeData& target)
     {
         const Value t = Get(s, target);
-        if (!(t.kind == Value::Reg && t.v == kPr)) return false;
+        if (!(t.kind == Value::Reg && t.v == kPr))
+        {
+            mPathLost = true;   // (A3-203) a jump elsewhere, or a return the walk cannot prove: what reaches the caller from it is not read
+            return false;
+        }
         const Value sp = Get(s, mReg[kR15]);
         if (!mSpSeen)
         {
@@ -2170,6 +2213,8 @@ private:
             const Value v = Get(s, mReg[r]);
             if (r == 0) ReturnValue(s, v);
             const bool same = r == kR15 ? v.kind == Value::Sp && v.v == 0 : v.kind == Value::Reg && v.v == r;
+            // (A3-203) ...and overwritten on every path the walk reached a return by
+            if (!((SureWritten(v) >> r) & 1u)) mWrittenAt &= ~(1u << r);
             if (same)
             {
                 mKeptAt |= 1u << r;   // (A3-190) an origin of the register if another return changes it
@@ -2309,6 +2354,7 @@ private:
         catch (ghidra::LowlevelError&)   // bad data, memory not captured
         {
             if (a == mExec) mEntryUndecodable = true;
+            mPathLost = true;   // (A3-203) a path that ends here may return through code the walk does not read
             return mTolerant ? std::string() : std::string("an instruction that does not decode");
         }
         const uint32_t next = a + static_cast<uint32_t>(length);
@@ -2593,6 +2639,7 @@ private:
                     const Value pr = Get(s, mReg[kPr]);
                     if (!(pr.kind == Value::Reg && pr.v == kPr))
                     {
+                        mPathLost = true;   // (A3-203)
                         if (!mTolerant) return "a return not to its caller";
                         falls = false;
                         break;
@@ -2769,6 +2816,8 @@ private:
     uint32_t mPreserved = 0, mStoresThrough = 0, mStoresBelow = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
     uint32_t mKeptAt = 0;   // (A3-190) the registers some return leaves as they began
     uint32_t mChangedAt = 0;   // (A3-197) ...and the ones some return holds another value in, for certain (Value::mayEntry)
+    uint32_t mWrittenAt = 0;   // (A3-203) ...and the ones every return overwrites (SureWritten), while no path was lost (mPathLost)
+    bool mPathLost = false;    // (A3-203) a path ended other than by a return to the caller (tolerant walk, slots bound)
     std::atomic<bool>* mCancel = nullptr;   // A3-74: checked in Run
     std::set<uint64_t> mSrWritten;          // the ops whose value `ldc Rm,sr` wrote back (Inputs: the interrupt-mask idiom)
     bool mSpSeen = false, mSpKnown = true;   // r15 at the returns reached: one constant offset from its entry value, or not
@@ -2796,12 +2845,15 @@ private:
         std::map<uint32_t, uint32_t>* sharedHanded = nullptr;
         std::map<uint32_t, uint32_t> changedOwn;   // (area 3, A3-197) ...and the registers of r8-r14 it returns with changed on some path
         std::map<uint32_t, uint32_t>* sharedChanged = nullptr;
+        std::map<uint32_t, uint32_t> writtenOwn;   // (area 3, A3-203) ...and the ones it overwrites on every path (CalleeWritten)
+        std::map<uint32_t, uint32_t>* sharedWritten = nullptr;
         size_t budget = 0;
         bool started = false;
         std::map<uint32_t, uint32_t>& Cache() { return shared != nullptr ? *shared : cache; }
         std::map<uint32_t, uint32_t>& Below() { return sharedBelow != nullptr ? *sharedBelow : belowOwn; }
         std::map<uint32_t, uint32_t>& Handed() { return sharedHanded != nullptr ? *sharedHanded : handedOwn; }
         std::map<uint32_t, uint32_t>& Changed() { return sharedChanged != nullptr ? *sharedChanged : changedOwn; }
+        std::map<uint32_t, uint32_t>& Written() { return sharedWritten != nullptr ? *sharedWritten : writtenOwn; }
     };
     NestedContext mOwnCtx;
     NestedContext* mNestedCtx = nullptr;
@@ -11180,6 +11232,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     std::map<uint32_t, uint32_t> calleeBelow;   // ...and each walked callee's storesBelow (A3-86 a), shared the same way
     std::map<uint32_t, uint32_t> calleeHanded;  // ...and the registers each lets out or writes through (area 3 round 12 fix, A3-90)
     std::map<uint32_t, uint32_t> calleeChanged; // ...and the registers of r8-r14 each returns with changed on some path (area 3, A3-197)
+    std::map<uint32_t, uint32_t> calleeWritten; // ...and the ones it overwrites on every path (area 3, A3-203)
     auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
@@ -11354,7 +11407,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             probe.SetTolerant();
             probe.SetLiterals(scan.literalWords, *snapshot);
             probe.SetCancel(cancel);   // the callee walk can be long for an adversarial callee (A3-74)
-            probe.ShareWalks(&calleeWalks, &calleeBelow, &calleeHanded, &calleeChanged);
+            probe.ShareWalks(&calleeWalks, &calleeBelow, &calleeHanded, &calleeChanged, &calleeWritten);
             CallEffects unused;
             probe.Run(unused);
             // (area 3 round 12 fix) An address of the frame went out by a way the engine may not see (a callee that keeps it or hands it back
@@ -11450,7 +11503,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             std::map<int, uint32_t> regSaid;       // a register's note: the call it was said at
             std::set<int64_t> wordsSaid;            // the stack words a stack note was said for
             uint32_t lastStack = 0;                 // the call the last stack note was said at
-            std::set<uint32_t> skipped, likewise;
+            std::set<uint32_t> skipped;
+            std::map<uint32_t, std::vector<uint32_t>> likewise;   // a call said at -> the calls left to its note
             for (const auto& sn : noteAt)
             {
                 const auto r = regOf.find(sn.first);
@@ -11461,7 +11515,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                     else
                     {
                         skipped.insert(sn.first);
-                        likewise.insert(said->second);
+                        likewise[said->second].push_back(sn.first);
                     }
                     continue;
                 }
@@ -11478,14 +11532,38 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 else
                 {
                     skipped.insert(sn.first);
-                    likewise.insert(lastStack);
+                    likewise[lastStack].push_back(sn.first);
                 }
             }
+            // (area 3, A3-204) "Below" is the text's order, not the addresses': the text prints a call after the one that says the note when
+            // every path to it passes that call (BlockDominates over the final blocks, A3-202's rule for the cautions). When a call left to the
+            // note is not so (f1: the two arms of an `if`, the lower address printed second), the note says "likewise at other calls of this
+            // function" instead: true wherever they are printed, and the note is still said once (one per arm put 341 more notes in 008's lent
+            // texts, mostly a frame pointer in r14 at every arm of an `if` or a `switch`). A call the final code does not hold is printed nowhere.
+            std::map<uint32_t, const ghidra::FlowBlock*> blockOf;   // a call's final block
+            if (!likewise.empty())
+                for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it)
+                    if (((*it)->code() == ghidra::CPUI_CALL || (*it)->code() == ghidra::CPUI_CALLIND) && (*it)->getParent() != nullptr &&
+                        noteAt.count(static_cast<uint32_t>((*it)->getAddr().getOffset())))
+                        blockOf[static_cast<uint32_t>((*it)->getAddr().getOffset())] = (*it)->getParent();
             for (const auto& sn : noteAt)
             {
                 if (skipped.count(sn.first)) continue;
-                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, sn.first),
-                                            likewise.count(sn.first) ? sn.second + kFrameEscapeNoteLikewise : sn.second);
+                std::string note = sn.second;
+                const auto lw = likewise.find(sn.first);
+                if (lw != likewise.end())
+                {
+                    bool below = true;
+                    const auto from = blockOf.find(sn.first);
+                    for (uint32_t c : lw->second)
+                    {
+                        const auto to = blockOf.find(c);
+                        if (to == blockOf.end()) continue;   // not in the text
+                        if (from == blockOf.end() || !BlockDominates(fd->getBasicBlocks(), from->second, to->second)) below = false;
+                    }
+                    note += below ? kFrameEscapeNoteLikewise : kFrameEscapeNoteLikewiseOther;
+                }
+                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, sn.first), note);
             }
         }
         // (area 3, A3-197) A call whose unlent callee returns with one of r8-r14 changed on some path, read after the call: the text takes the call

@@ -80,6 +80,9 @@ constexpr const char* kFrameEscapeNoteSlot = "a local at or above the stack poin
 constexpr const char* kFrameEscapeNoteSaved = "a saved register's word at or above the stack pointer is read after this call, which may write it as one of its stack arguments";
 // (A3-108) A note that holds at more calls than the first is said once, at the first, with this added.
 constexpr const char* kFrameEscapeNoteLikewise = "; likewise at the calls below";
+// (area 3, A3-204) ...or this, when a call left to the note is not printed below it (another arm of an `if`, a `switch` case): the note is said
+// once all the same, and the reader is not sent below for a call printed above.
+constexpr const char* kFrameEscapeNoteLikewiseOther = "; likewise at other calls of this function";
 // ...and for a frame address in another register a callee with no lent signature stores through, lets out or hands back (area 3 round 12 fix:
 // r0, r1, r3, r8-r14, GBR, MACH, ..., which the engine never takes for an argument). The register's name goes between the two parts.
 constexpr const char* kFrameEscapeNoteRegA = "a frame address is in ";
