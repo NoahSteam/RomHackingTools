@@ -17843,6 +17843,52 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         }
     }
     {
+        // A3-194 (area 3, round 25): A3-192's mark read by a later call to a callee that is not lent. The caller holds the address of a local (5)
+        // in a register, calls F1 (which may leave it there; the engine kills it), then calls F2, a walked callee (not lent: it reads the
+        // register on entry) that stores 7 through the register, and returns the local (`tools/a3_round25/fixtures.src`). The mark was let out
+        // at a later call only for r2 and r4-r7: `return 5;`, where every run with r4 != 0 returns 7. Now it goes out for the registers the
+        // walked callee lets out or stores through, with the note's "may". k4d: r3 (F1 lent, sets r3 on one return); k4f: r1; k4g: r9 (saved
+        // by the caller); vDr0: r0; vEr1: r1, F1 not lent; vDr13: r13. Controls (right before): k4e (no F1), k4h (F1 keeps r0).
+        struct Fixture
+        {
+            const char* name;
+            const char* words;
+            const char* funcs;
+            const char* returns;
+            const char* local;
+            const char* note;
+        };
+        const Fixture fixtures[] = {
+            { "A3-194 k4d", "4F22 7FF8 E205 2F22 63F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E300 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2322",
+              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "a frame address may be in r3 here" },
+            { "A3-194 k4f", "4F22 7FF8 E205 2F22 61F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E100 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2122",
+              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "a frame address may be in r1 here" },
+            { "A3-194 k4g", "4F22 2F96 7FF8 E205 2F22 69F3 B008 0009 B016 0009 60F2 7F08 69F6 4F26 000B 0009 2448 8B02 E900 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2922",
+              "0/0/20,20/20/2e,40/40/46", "1,0,0", "return xStack_10;", "a frame address may be in r9 here" },
+            { "A3-194 vDr0", "4F22 7FF8 E205 2F22 60F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E000 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2022",
+              "0/0/1c,20/20/2e,40/40/46", "1,0,0", "return xStack_c;", "a frame address may be in r0 here" },
+            { "A3-194 vEr1", "4F22 7FF8 E205 2F22 61F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2338 8904 2448 8B02 E100 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2122",
+              "0/0/1c,20/20/32,40/40/46", "1,0,0", "return xStack_c;", "a frame address may be in r1 here" },
+            { "A3-194 vDr13", "4F22 2FD6 7FF8 E205 2F22 6DF3 B008 0009 B016 0009 60F2 7F08 6DF6 4F26 000B 0009 2448 8B02 ED00 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2D22",
+              "0/0/20,20/20/2e,40/40/46", "1,0,0", "return xStack_10;", "a frame address may be in r13 here" },
+            { "A3-194 control k4e", "4F22 7FF8 E205 2F22 63F3 B009 0009 60F2 7F08 4F26 000B 0009 0009 0009 0009 0009 E207 000B 2322", "0/0/18,20/20/26", "1,0",
+              "return xStack_c;", "a frame address is in r3 here" },
+            { "A3-194 control k4h", "4F22 7FF8 E205 2F22 60F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 000B 2022",
+              "0/0/1c,20/20/24,40/40/46", "1,0,0", "return xStack_c;", "" },
+        };
+        for (const Fixture& f : fixtures)
+        {
+            const ModulePin m = { f.name, f.words, f.funcs, nullptr, f.returns, nullptr, nullptr };
+            const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+            const bool five = w.text.find("return 5;") != std::string::npos, local = w.text.find(f.local) != std::string::npos;
+            const bool note = w.text.find(f.note) != std::string::npos;
+            std::printf("pin '%s': %zu finding(s), `return 5;` %s, `%s` %s, note %d\n", f.name, w.findings.size(), five ? "printed" : "not printed", f.local,
+                        local ? "printed" : "not printed", int(note));
+            for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(w.findings.empty() && !five && local && note);
+        }
+    }
+    {
         // A3-193 (area 3, oracle): grammar 2 seed 8602477, `n:return-dropped`. Each arm of `tst r4,r4 ; bf` ends with `mov #7,r0 ; mov.b @(r0,r4),r1`
         // or `mov #2,r0 ; mov.b @(r0,r5),r3`: r0 is an index the function used after its last write of it, scratch by A3-41's reading. Counted
         // (`excluded.r0-index.return-dropped`), no finding.
