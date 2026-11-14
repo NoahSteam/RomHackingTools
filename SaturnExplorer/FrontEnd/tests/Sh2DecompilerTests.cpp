@@ -4673,6 +4673,156 @@ void TestArea7Round19()
 }
 
 
+// Area 7 review round 20. The words of 0x0601FA28 of the first corpus image (hwram007), 0x0601FA28 to 0x0601FC00 with the literal pool:
+// `tst r0,r0 ; bt/s L ; mov.l r0,@(0xc,r14)` (0x0601FA7C, r0 = 0 on the taken path) then `L: mov #0,r8 ; mov.l @(lit),r9 ; mov #-1,r5`
+// into a loop whose head calls `jsr @r9` and stores its result in the slot of a `bt/s` (0x0601FA90). A7-161's function.
+const std::vector<uint16_t> kA7161Words = {
+        0x4F22, 0x7FEC, 0x6EF3, 0x6953, 0xD167, 0x2142, 0xD167, 0xE200, 0x2122, 0xD867, 0xD167, 0x410B, 0x2822, 0xD167, 0x410B, 0x6493, 0xD066, 0x400B,
+        0x64E3, 0x6082, 0x2008, 0x8901, 0xA0AE, 0x0009, 0x60E0, 0xC90F, 0x8809, 0x8F02, 0xE0F6, 0xA0A7, 0x0009, 0xD060, 0x400B, 0x0009, 0xD05F, 0xE70F,
+        0xE604, 0xE500, 0x400B, 0xE400, 0x2008, 0x8D02, 0x1E03, 0xA098, 0x0009, 0xE800, 0xD95A, 0xE5FF, 0x490B, 0xE400, 0x2008, 0x8D0D, 0x1E03, 0x88FF,
+        0x8D02, 0xE0FE, 0xA08C, 0x0009, 0xD155, 0x3817, 0x8F02, 0x7801, 0xA086, 0x0009, 0xAFEE, 0xE5FF, 0xD148, 0x6212, 0xD851, 0xD150, 0x121F, 0x480B,
+        0xE440, 0x2008, 0x8B07, 0xD144, 0x6112, 0x521F, 0x4210, 0x8FF6, 0x112F, 0xA073, 0xE0FE, 0xD140, 0x6212, 0xE100, 0x121F, 0xD149, 0x410B, 0xE4E7,
+        0xE800, 0xE900, 0xEA01, 0xD045, 0x946E, 0x400B, 0x0009, 0x2008, 0x8D1E, 0x2998, 0xD142, 0x9468, 0x410B, 0x7801, 0x9166, 0x3817, 0x8D5A, 0xE0FE,
+        0xD038, 0x400B, 0x64E3, 0xD134, 0x6012, 0x2008, 0x8B52, 0x60E0, 0xC90F, 0x30A3, 0x8F0A, 0x2998, 0xE102, 0x3017, 0x8F04, 0x8809, 0x8F04, 0x2998,
+        0xA046, 0xE0F6, 0x69A3, 0x2998, 0x8DD9, 0x64E3, 0xD033, 0x400B, 0x740C, 0xD133, 0x6A12, 0xD033, 0x9145, 0x3A1C, 0x400B, 0x64A3, 0x2008, 0x8F34,
+        0x1E03, 0x68E3, 0x7810, 0xD92F, 0x6583, 0x490B, 0xE400, 0x6480, 0x6583, 0x490B, 0x644C, 0x6180, 0x611C, 0x4108, 0x31AC, 0x71FC, 0x6212, 0xD129,
+        0x2219, 0x2228, 0x8D20, 0xE0F1, 0x952A, 0x942A, 0xD026, 0x400B, 0x0009, 0x1E03, 0xD113, 0x6212, 0xD11B, 0x121F, 0xD01B, 0x400B, 0xE440, 0x2008,
+        0x8909, 0xD10F, 0x6412, 0xD013, 0xE100, 0x141F, 0x400B, 0x7440, 0xD10D, 0xA007, 0x6012, 0xD10A, 0x6112, 0x521F, 0x4210, 0x8FEB, 0x112F, 0xE0FE,
+        0x7E14, 0x6FE3, 0x4F26, 0x6EF6, 0x6AF6, 0x69F6, 0x000B, 0x68F6, 0x0400, 0xFBFF, 0x0258, 0x0460, 0x00FF, 0x00FC, 0x0605, 0x83B8, 0x0605, 0x83BC,
+        0x0605, 0x83B4, 0x0602, 0x1224, 0x0601, 0xF9F4, 0x0602, 0x0154, 0x0602, 0x2370, 0x0602, 0x1E50, 0x0602, 0x23CC, 0x0003, 0x0000, 0x0602, 0x1200,
+        0x0602, 0x1410
+};
+
+void TestArea7Review20()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto snapAt = [&](const std::vector<uint16_t>& w, uint32_t at) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, at - 0x06000000u + 2 * static_cast<uint32_t>(i), w[i]);
+        return MakeSnapshot(hw);
+    };
+    const auto tokenAt = [](const DecompileResult& r, const char* what, uint32_t insn) {
+        const Line* l = LineWith(r, what);
+        if (!l) return false;
+        for (const Token& t : l->tokens)
+            if (t.addr == insn) return true;
+        return false;
+    };
+    const auto ruleOff = [](const char* rows) {
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", rows ? rows : "");
+#else
+        if (rows) setenv("SE_A7_RULE_OFF", rows, 1);
+        else unsetenv("SE_A7_RULE_OFF");
+#endif
+    };
+    const auto mutated = [&](const DecompileResult& r, const char* row, const char* name) {
+        ruleOff(row);
+        const int v = dts::AuditMapping(r, word, name).Violations();
+        ruleOff(nullptr);
+        return v;
+    };
+    // (the way back's first line for an instruction holds `what`)
+    const auto backFirst = [](const DecompileResult& r, uint32_t insn, const char* what) {
+        const LineLookup at = LineForInstruction(r, insn);
+        return at.kind == LineLookup::Exact && !at.lines.empty() && r.lines[at.lines[0]].text.find(what) != std::string::npos;
+    };
+    // (damaged: every token of the line's at `from` moved to `to`, as master drew it)
+    const auto moved = [](const DecompileResult& r, const char* what, uint32_t from, uint32_t to, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+            if (l.text.find(what) != std::string::npos)
+                for (Token& t : l.tokens)
+                    if (t.addr == from)
+                    {
+                        t.addr = to;
+                        ++n;
+                    }
+        return x;
+    };
+    // A7-158 (product and oracle) `tst r4,r4 ; bf L ; add r5,r2 ; L: mov.b r1,@r7 ; mov.b r2,@r7`: the store of in_r1 (0x0600900A) is written
+    // over before anything reads it, so `xRam26001018 = 0;` (the copy of r2's 0 on the path round the `add`) is the second store's
+    // (0x0600900C), not the first's, whose value "may" be 0 by the flow's `tst`
+    {
+        const std::vector<uint16_t> w = { 0xE200, 0xD704, 0x2448, 0x8B00, 0x325C, 0x2710, 0x2720, 0x000B, 0x0009, 0x0009, 0x2600, 0x1018 };
+        const DecompileResult r = d.Decompile(snapAt(w, 0x06009000u), Request(0x06009000u));
+        Print("A7-158 a store written over before any read (review round 20)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "xRam26001018 = 0;";
+        CHECK(LineWith(r, line) != nullptr && tokenAt(r, line, 0x0600900Cu) && !tokenAt(r, line, 0x0600900Au));
+        CHECK(!backFirst(r, 0x0600900Au, line));
+        CHECK(dts::AuditMapping(r, word, "a7_158").Violations() == 0);
+        int n = 0;
+        const DecompileResult before = moved(r, line, 0x0600900Cu, 0x0600900Au, n);
+        CHECK(n >= 1 && dts::AuditMapping(before, word, "a7_158 before").storeDead >= 1);
+        CHECK(mutated(before, "158", "a7_158 before, rule off") == 0);
+    }
+    // A7-158 in A7-141's shape: grammar 1 specials seed 7701445 shrunk, with `mov.b r1,@r7` before the join's store: the join's first store
+    // written over is passed, and both copies name the store of r2 (0x06009026), not the store of in_r1 nor the poll's store of 2
+    {
+        const std::vector<uint16_t> w = { 0xD30A, 0x6032, 0x2372, 0x2502, 0xD209, 0x262B, 0x4208, 0xD709, 0xE002, 0x2700, 0x2411, 0x6070, 0xC801, 0x8BFB,
+                                          0x2219, 0x8801, 0x8B00, 0x325C, 0x2710, 0x2720, 0x000B, 0x2602, 0x0600, 0x2200, 0xFFFF, 0xFFC0, 0x2600, 0x1018 };
+        const DecompileResult r = d.Decompile(snapAt(w, 0x06009000u), Request(0x06009000u));
+        Print("A7-158 the join's first store written over (A7-141's shape, review round 20)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* zero = "cRam26001018 = 0;";
+        const char* copy = "cRam26001018 = (char)param_2;";
+        CHECK(tokenAt(r, zero, 0x06009026u) && !tokenAt(r, zero, 0x06009024u));
+        CHECK(tokenAt(r, copy, 0x06009026u) && !tokenAt(r, copy, 0x06009012u) && !tokenAt(r, copy, 0x06009024u));
+        CHECK(dts::AuditMapping(r, word, "a7_158_7701445").Violations() == 0);
+    }
+    // A7-159 (product) `mov.b r1,@r7 ; mov.b @r7,r0 ; ... ; movt r2 ; bf L ; add r5,r2 ; L: mov.b r2,@r7`: `cRam26001018 = '\0';`, the
+    // copy of r2's 0 on the path round the `add`, printed before the `if`, is the join's store's (0x06009014), not the earlier store of the
+    // same number (0x06009006), whose own line is `cRam26001018 = 0;` and whose value the read after it took. The oracle does not see this:
+    // the earlier store wrote that number too; its count of stores of a global on no line (counted) does
+    {
+        const std::vector<uint16_t> w = { 0xD706, 0xE100, 0x4100, 0x2710, 0x6070, 0x2502, 0x2448, 0x0229, 0x8B00, 0x325C, 0x2720, 0x000B, 0x0009, 0x0009,
+                                          0x2600, 0x1018 };
+        const DecompileResult r = d.Decompile(snapAt(w, 0x06009000u), Request(0x06009000u));
+        Print("A7-159 the join store's copy before an if (review round 20)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* copy = "cRam26001018 = '\\0';";
+        CHECK(LineWith(r, copy) != nullptr && tokenAt(r, copy, 0x06009014u) && !tokenAt(r, copy, 0x06009006u));
+        CHECK(backFirst(r, 0x06009014u, copy) && backFirst(r, 0x06009006u, "cRam26001018 = 0;"));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_159");
+        CHECK(a.Violations() == 0 && a.storeUnnamed == 0);
+        int n = 0;
+        const DecompileResult before = moved(r, copy, 0x06009014u, 0x06009006u, n);
+        CHECK(n >= 1 && dts::AuditMapping(before, word, "a7_159 before").storeUnnamed >= 1);
+    }
+    // A7-160 (oracle) `mov.l r1,@r7 ; mov.l r1,@r6 ; mov.l @r6,r2` (r6 0xC0000024): the engine's statements of both stores are drawn at the
+    // load that reads the second back (copies materialised there, A7-25); the name `uRamc0000024` the line assigns is no read of the load's,
+    // so neither line is the load's own statement (grammar 1 seed 9000706, shrunk)
+    {
+        const std::vector<uint16_t> w = { 0xD604, 0xD705, 0x2138, 0x8902, 0x2712, 0x2612, 0x6262, 0x000B, 0x0009, 0x0009, 0xC000, 0x0024, 0x2600, 0x1004 };
+        const DecompileResult r = d.Decompile(snapAt(w, 0x06009000u), Request(0x06009000u));
+        Print("A7-160 an assigned global drawn at a load of it (grammar 1 seed 9000706)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uRamc0000024 = in_r1;") != nullptr && tokenAt(r, "uRamc0000024 = in_r1;", 0x0600900Cu));
+        CHECK(dts::AuditMapping(r, word, "a7_160_9000706").Violations() == 0);
+        CHECK(mutated(r, "160", "a7_160_9000706 mutated") >= 1);
+    }
+    // A7-161 (product) hwram007 0x0601FA28: `iStack_c = 0;` before the `while` is the value the slot store of the `bt/s` (0x0601FA7C, r0 = 0
+    // on that path) leaves going into the loop, not the loop's slot store of the call's result (0x0601FA90), which A7-141's rule took: the
+    // join's store stores a register the join itself sets (a call's), no path's value
+    {
+        const DecompileResult r = d.Decompile(snapAt(kA7161Words, 0x0601FA28u), Request(0x0601FA28u));
+        Print("A7-161 the variable's value going into a loop whose head stores a call's result (hwram007 0x0601FA28)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "iStack_c = 0;";
+        CHECK(LineWith(r, line) != nullptr && tokenAt(r, line, 0x0601FA7Cu) && !tokenAt(r, line, 0x0601FA90u));
+        CHECK(!backFirst(r, 0x0601FA90u, line));
+        CHECK(dts::AuditMapping(r, word, "a7_161").Violations() == 0);
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -19661,6 +19811,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round17());
         RUN(TestArea7Round18());
         RUN(TestArea7Round19());
+        RUN(TestArea7Review20());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());

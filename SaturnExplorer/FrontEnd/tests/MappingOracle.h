@@ -2017,7 +2017,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     // `iRam2600103a` at the `mov.w @(r0,r6),r3` that loads it, naming the store of r3 -- is that load's own statement;
                     // grammar 1 seed 3300988)
                     bool readHere = false;
-                    if (plain && t.end <= r.lines[li].text.size())
+                    // (A7-160: an operand the line reads, after its `=`: the name it assigns, `uRamc0000024 = in_r1;` drawn at the `mov.l @r6,r2`
+                    // that reads the word back, is the store's statement materialised at the load, not the load's; grammar 1 seed 9000706)
+                    if (plain && t.end <= r.lines[li].text.size() && (A7RuleOff(160) || (assign != std::string::npos && t.begin > assign)))
                     {
                         const std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
                         if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
@@ -2321,13 +2323,20 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             if (!A7RuleOff(158) && overwritten(*kv.second)) dead.insert(kv.first);
         for (size_t li = 0; li < r.lines.size() && !dead.empty(); ++li)
         {
-            // (the store's own statement, which the engine kept -- the name the line assigns drawn at it, `uRam06001028 = (int2)xVar3;` at
-            // `mov.w r2,@r6` before a store through a parameter it cannot tell from the global -- is the store's)
+            // (the store's own statement, which the engine kept -- the name the line assigns and its value drawn at it, `uRam06001028 =
+            // (int2)xVar3;` at `mov.w r2,@r6` before a store through a parameter it cannot tell from the global -- is the store's. Not a
+            // line whose value is drawn elsewhere: `xRam26001018 = 0;` with its name at the store of in_r1 and the 0 at `mov #0,r2`)
             const std::string& lt = r.lines[li].text;
             const size_t nb = lt.find_first_not_of(' '), eq = lt.find(" = ");
-            std::set<uint32_t> ownName;
+            std::set<uint32_t> named, valued, ownName;
             for (const Token& t : r.lines[li].tokens)
-                if (t.addr && nb != std::string::npos && eq != std::string::npos && t.begin == nb && t.end <= eq && t.end > t.begin) ownName.insert(t.addr);
+                if (t.addr && nb != std::string::npos && eq != std::string::npos && t.end > t.begin)
+                {
+                    if (t.begin == nb && t.end <= eq) named.insert(t.addr);
+                    if (t.begin >= eq + 3) valued.insert(t.addr);
+                }
+            for (uint32_t x : named)
+                if (valued.count(x)) ownName.insert(x);
             for (const Token& t : r.lines[li].tokens)
                 if (t.addr && dead.count(t.addr) && !ownName.count(t.addr))
                 {
