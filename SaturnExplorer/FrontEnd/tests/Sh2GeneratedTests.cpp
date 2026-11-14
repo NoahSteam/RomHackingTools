@@ -7592,6 +7592,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             flag("map-const-join", audit.constAtJoin);
             flag("map-copy-merge", audit.copyMergeAtBranch);
             flag("map-number-store", audit.numberStoreOther);
+            flag("map-store-dead", audit.storeDead);
             flag("map-case-entry", audit.caseOtherEntry);
             flag("map-store-after", audit.storeAfterUse);
             // A7-52: a statement line with no instruction that does not say so. Until then the audit counted the lines with none
@@ -8186,7 +8187,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (t.addr) at.insert(t.addr);
                 o << "    //";
                 for (uint32_t a : at) o << " " << Hex(a, 4);
-                if (std::strcmp(std::getenv("SE_GENERATED_TOKENS"), "2") == 0)   // =2: each token with its address, to see which text an instruction owns
+                if (std::strcmp(std::getenv("SE_GENERATED_TOKENS"), "1") != 0)   // =2 (and =3): each token with its address, to see which text an instruction owns
                 {
                     o << "\n      tokens:";
                     // (an 'm' after the address: the token is a copy materialised at the instruction, A7-25)
@@ -8194,6 +8195,19 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }
             }
             o << "\n";
+        }
+        // (=3: also the way back, the line a click on each body instruction goes to first; area 7 review round 20)
+        if (tokens && std::strcmp(std::getenv("SE_GENERATED_TOKENS"), "3") == 0)
+        {
+            const InstructionLineIndex index(r);
+            for (const auto& b : r.body)
+                for (uint32_t a = b.first; a < b.second; a += 2)
+                {
+                    const LineLookup at = index.Find(a);
+                    o << "  way back " << Hex(a, 4) << ": " << (at.kind == LineLookup::Exact ? "exact" : at.kind == LineLookup::Folded ? "folded" : "outside");
+                    if (!at.lines.empty() && at.lines[0] < r.lines.size()) o << " line " << at.lines[0] << " '" << r.lines[at.lines[0]].text << "'";
+                    o << "\n";
+                }
         }
         rep.text += o.str();
     }
