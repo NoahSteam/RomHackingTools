@@ -3640,7 +3640,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // the engine prints the 0 where the text uses the low bits only. Grammar 1 seed 6900150)
                 if (!computes && want == 0 && (w >> 12) == 0x2 && (w & 0xF) == 0x9 && !A7RuleOff(130))
                 {
-                    const uint32_t kept = widthMask == 0xFFFFFFFFu ? 0xFFFFu : widthMask;
+                    uint32_t kept = widthMask == 0xFFFFFFFFu ? 0xFFFFu : widthMask;
                     std::set<std::pair<uint32_t, int>> active;
                     std::function<bool(uint32_t, int, int)> zeroKept = [&](uint32_t before, int reg, int depth) -> bool {
                         std::set<uint32_t> makers;
@@ -3667,6 +3667,47 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         return all;
                     };
                     if (zeroKept(at, static_cast<int>((w >> 8) & 0xF), 0) || zeroKept(at, static_cast<int>((w >> 4) & 0xF), 0)) computes = true;
+                    // (A7-153: the bits the text reads of the variable, when it reads it only through masks, `(uVar2 & 0x20000000) == 0`, and
+                    // ORs into itself, `uVar2 = uVar2 | X;`, which keeps each bit where it is: the engine prints the 0 the `and` makes in those
+                    // bits, r1 the literal 0x06003C0C; grammar 1 seed 8500725, specials)
+                    if (!computes && !A7RuleOff(153))
+                    {
+                        const std::string var = text.substr(nameAt, text.find(" = ", nameAt) - nameAt);
+                        const auto identChar = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+                        uint32_t masks = 0;
+                        bool onlyMasked = !var.empty();
+                        for (size_t lj = 0; lj < r.lines.size() && onlyMasked; ++lj)
+                        {
+                            const std::string& lt = r.lines[lj].text;
+                            const size_t lb = lt.find_first_not_of(' ');
+                            const bool assigns = lb != std::string::npos && lt.compare(lb, var.size() + 3, var + " = ") == 0;
+                            for (size_t p = lt.find(var); p != std::string::npos && onlyMasked; p = lt.find(var, p + var.size()))
+                            {
+                                if ((p > 0 && identChar(lt[p - 1])) || (p + var.size() < lt.size() && (identChar(lt[p + var.size()]) || lt[p + var.size()] == '.')))
+                                    continue;
+                                if (assigns && p == lb) continue;
+                                const size_t after = p + var.size();
+                                if (lt.find(" = ") == std::string::npos && after + 1 == lt.size() && lt[after] == ';') continue;   // (its declaration)
+                                // (`V & 0x...`: a mask; `V | ...` or `... | V` on a line `V = ...` that is an OR of V and one other value)
+                                if (lt.compare(after, 5, " & 0x") == 0)
+                                {
+                                    masks |= static_cast<uint32_t>(std::strtoul(lt.c_str() + after + 3, nullptr, 16));
+                                    continue;
+                                }
+                                const bool orSelf = assigns && lt.compare(lb + var.size() + 3, var.size() + 3, var + " | ") == 0 && p == lb + var.size() + 3 &&
+                                                    lt.find(" | ", after + 3) == std::string::npos && lt.find(" & ") == std::string::npos &&
+                                                    lt.find(" ^ ") == std::string::npos && lt.find('+') == std::string::npos && lt.find('-') == std::string::npos &&
+                                                    lt.find("<<") == std::string::npos && lt.find(">>") == std::string::npos && lt.find('*') == std::string::npos;
+                                if (!orSelf) onlyMasked = false;
+                            }
+                        }
+                        if (onlyMasked && masks != 0 && masks != kept)
+                        {
+                            kept = masks;
+                            active.clear();
+                            if (zeroKept(at, static_cast<int>((w >> 8) & 0xF), 0) || zeroKept(at, static_cast<int>((w >> 4) & 0xF), 0)) computes = true;
+                        }
+                    }
                 }
                 // (A7-110: `and Rm,Rn` of a number and a register whose low bits left shifts made 0, the number inside those bits: `and
                 // r2,r0` with r0 the 2 a poll reads back and r2 shifted by `shll2` is 0; grammar 1 seed 5207679)

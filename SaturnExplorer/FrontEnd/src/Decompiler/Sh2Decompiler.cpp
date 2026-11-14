@@ -6997,7 +6997,31 @@ bool StoreShowsValue(const ghidra::AccessRecord& r, const FlowRecord& flow, cons
     // statement's, as the walk answers for a computation it does not know; grammar 2 seed 6806713)
     if (!placed && !flow.insnFirst.count(InstructionOf(r)) && !flow.insnBlock.count(InstructionOf(r))) return true;
     if (!isStore) return false;
-    return FlowValueMayBe(flow, fd, at->second.first, static_cast<int>(at->second.second), store->in[2], want);
+    // A7-154: a statement of some of the bytes a wider store writes, and no number -- `uRam26002108._1_3_ = (unkbyte3)param_1;`, the low
+    // three bytes of `mov.l r1,@r7` with r1 = param_1 | 0x40000000, the high byte the `tas.b` after it rewrites -- shows those bytes of the
+    // stored register only (big-endian in memory and in the registers): the walk follows them, and an `or` of 0x40000000 leaves them as
+    // they were (grammar 2 seed 8405964). Only when the walk of the whole register finds another value: a walk of fewer bytes passes ops
+    // whose value it then cannot place (the `rebuilt` answer of the whole walk stands)
+    if (FlowValueMayBe(flow, fd, at->second.first, static_cast<int>(at->second.second), store->in[2], want)) return true;
+    FlowVn v = store->in[2];
+    if (want.partial && want.numbers.empty() && !v.Constant() && v.size == want.storeSize && want.storeSize <= 8)
+    {
+        int lo = want.storeSize, hi = -1;
+        for (int i = 0; i < want.varSize && i < 32; ++i)
+        {
+            const int j = i - want.storeAt;
+            if (!(want.compared >> i & 1) || j < 0 || j >= want.storeSize) continue;
+            lo = std::min(lo, j);
+            hi = std::max(hi, j);
+        }
+        if (hi >= lo && (lo > 0 || hi < want.storeSize - 1))
+        {
+            v.offset += static_cast<ghidra::uintb>(lo);
+            v.size = hi - lo + 1;
+            return FlowValueMayBe(flow, fd, at->second.first, static_cast<int>(at->second.second), v, want);
+        }
+    }
+    return false;
 }
 
 // The lines on which two printed ops of one instruction are (a statement's tokens there cannot be told from the other op's). The ops
