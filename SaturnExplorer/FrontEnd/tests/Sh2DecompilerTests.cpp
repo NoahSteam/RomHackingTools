@@ -4994,13 +4994,23 @@ void TestArea7Round22()
         CHECK(rb.status == DecompileStatus::Ok);
         CHECK(LineWith(rb, "xStack_10 = unaff_r12;") != nullptr);
         CHECK(dts::AuditMapping(rb, word, "a7_167_bsr").Violations() == 0);
-        CHECK(mutated(rb, "167", "a7_167_bsr mutated") >= 1);
+        // (area 7 round 26, A7-189: the caller's own `mov r12,r3 ; mov.l r3,@-r15` writes xStack_10 with r12's value before the call, and is now
+        // a store of the input (a whole copy of r12): the line names it, as A7-32 has a call's copy name the stores that run before the call,
+        // not the push of r12 in the code the call and the tail jump enter (rule 167's case, which this fixture no longer reaches))
+        const auto namesPush = [](const DecompileResult& r) {
+            const Line* l = LineWith(r, "xStack_10 = unaff_r12;");
+            bool push = false;
+            if (l)
+                for (const Token& t : l->tokens) push = push || t.addr == 0x0600900Cu;
+            return push;
+        };
+        CHECK(namesPush(rb));
         const DecompileResult rj = d.Decompile(snapOf(jsr), Request(0x06009000u));
         Print("A7-167 a store in the code a jsr calls (grammar 2 seed 8900054)", rj);
         CHECK(rj.status == DecompileStatus::Ok);
         CHECK(LineWith(rj, "xStack_10 = unaff_r12;") != nullptr);
         CHECK(dts::AuditMapping(rj, word, "a7_167_jsr").Violations() == 0);
-        CHECK(mutated(rj, "167", "a7_167_jsr mutated") >= 1);
+        CHECK(namesPush(rj));
     }
     // A7-168 `mov.b @r7,r0 ; ... ; mov.l r0,@r6 ; mov #0x10,r0 ; mov.l r0,@(r0,r5) ; mov.l r1,@r6`: the first store is kept (a write through a pointer
     // is between), `uRam0600210c = (int4)cRam26002300;` names it, and the store after writes over it (grammar 1 seed 9401568, shrunk)
@@ -5114,7 +5124,22 @@ void TestArea7Round23()
         Print("A7-174 a global's name at the literal load of its address (grammar 1 seed 9703317)", r);
         CHECK(r.status == DecompileStatus::Ok);
         CHECK(dts::AuditMapping(r, word, "a7_174").Violations() == 0);
-        CHECK(mutated(r, "174", "a7_174 mutated") >= 1);
+        // (area 7 round 26, A7-182: the loop's line is the engine's no-op of byte 1 as the entry and the poll left it, which no store of the
+        // function wrote -- `mov.b r1,@r6` writes byte 0 -- so it names no store and is drawn at the poll's read of the word, `mov.w @r7,r0`
+        // (A7-49); before, it named the byte 0 store and the later `mov.w r1,@r6` as a copy of the global would, and with rule 174 off the
+        // way back judged it a copy materialised at the pool load. The pool load's name in the condition stays rule 174's.)
+        const Line* loop = LineWith(r, "xRam26001004._1_1_ = (uint1)xRam26001004;");
+        CHECK(loop != nullptr);
+        if (loop)
+        {
+            bool atLoad = false, atStore = false;
+            for (const Token& t : loop->tokens)
+            {
+                atLoad = atLoad || (t.addr == 0x06009008u && t.begin < t.end);
+                atStore = atStore || t.addr == 0x06009006u || t.addr == 0x06009012u;
+            }
+            CHECK(atLoad && !atStore);
+        }
     }
     // A10-18 `mov.l r0,@r6 ; mov.l @(r0,r6),r0 (0x2600100C) ; mac.w @r5+,@r6+ ; mov.l r1,@r6` and a word store to 0x0600100E: the aliased longword
     // 0x2600100C-0x2600100F, and the 4-byte store at 0x2600100A (r6 after the `mac.w`'s increment, an address error the caution says) straddling
