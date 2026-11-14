@@ -450,6 +450,7 @@ public:
         mFrameValues = 0;
         mLowestSp = 0;
         mFrameOut = false;
+        mKeptSeen = false;
         mHanded = 0;
         std::map<uint32_t, State> in;
         std::map<uint32_t, int> changes;   // how often the state at an address grew
@@ -699,6 +700,10 @@ private:
         // "may" of every other one the frame flag is set for: the flag is the hazard, this is the fact.
         bool sure = false;
         bool Sure() const { return kind == Sp || (kind == Fuzzy && frame && sure); }
+        // (area 3, A3-192) Any kind: the value is in a register the engine takes a call to kill, where the callee may have left a possible frame
+        // address of this function (a register it keeps, or keeps on some path), so the engine sees an output of the call (`extraout_r1`) and
+        // not the address. What going out makes of that address (kOut*), which a read of the value lets out (UseKept): see Call.
+        uint8_t kept = 0;
         static Value From(uint32_t o) { Value x; x.from = o; x.dep = Deps::All(o); return x; }
         static Value From(uint32_t o, uint32_t direct) { Value x; x.from = o; x.dep = Deps::All(direct); return x; }
         static Value From(uint32_t o, const Deps& d) { Value x; x.from = o; x.dep = d; return x; }
@@ -752,7 +757,7 @@ private:
         bool operator==(const Value& o) const
         {
             return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget && read == o.read &&
-                   exposedAt == o.exposedAt &&
+                   exposedAt == o.exposedAt && kept == o.kept &&
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
                                      usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
                                      baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure));
@@ -832,6 +837,7 @@ private:
                 p.own = v.second.Own();
                 p.frame = v.second.Frame();
                 p.sure = v.second.Sure();
+                p.kept = v.second.kept;   // (A3-192) a part of it is read as the whole is
                 return p;
             }
             const uint64_t whole = std::get<2>(v.first), below = whole - (vn.offset - std::get<1>(v.first)) - vn.size;
@@ -1064,6 +1070,7 @@ private:
         m.keepsR0 = a.KeepsR0() || b.KeepsR0();
         m.frame = a.Frame() || b.Frame();
         m.sure = a.Sure() && b.Sure();   // (A3-120) a frame address on both paths
+        m.kept = a.kept | b.kept;        // (A3-192) on either path
         // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
         // that steps a pointer down from r15, `mov.l r0,@-r1`, A3-16) as often as a choice of two addresses, and is not followed.
         m.callerHigh = (a.kind == Value::Fuzzy && a.callerHigh) || (b.kind == Value::Fuzzy && b.callerHigh) ||
@@ -1166,6 +1173,12 @@ private:
                 signatureLent = p->second.known;
             }
         }
+        // (area 3, A3-192) The probe only: a value kept across an earlier call (Value::kept) handed to this one in a register a callee is handed
+        // (r2, r4-r7) is read by it; the engine sees an output of the earlier call there, so the address goes out now (UseKept).
+        const bool keepKept = mTolerant && !mNested;
+        if (keepKept && mKeptSeen)
+            for (int r = 2; r < 8; ++r)
+                if (((kConvention >> r) & 1u)) UseKept(s, Get(s, mReg[r]));
         if (!signatureLent)
         {
             NoteFrameEscape(s, 2, true, at);
@@ -1354,7 +1367,49 @@ private:
                 mHanded |= RegDeps(s, (e.leaks | e.outOrigins | e.storesThrough | e.storesBelow) & kLentHanded);
             }
         }
+        // (area 3, A3-192) A possible frame address in a register the engine takes this call to kill, which the callee may leave there: the engine
+        // reads the register after the call as the call's output (`extraout_r1`), a pointer it cannot place, and nothing told it the frame went
+        // out, so a store through it after the call was folded away (`*extraout_r1 = 7; return 5;`, every run returns 7). The engine kills r0 and
+        // r1 at a lent call whatever the callee keeps (LendEffects), and every register the callee does not keep; the default model's r0-r7, SR,
+        // MACH and MACL at any other call. The callee may leave the address there: a lent one in r0 or r1 when it keeps them, and in a register
+        // it does not keep when outOrigins names it (a return that leaves it as it began, A3-190; a lent callee reads no register outside r4-r7
+        // for a value, A3-5, so the address can come back only in its own register); a callee that is not lent in any register it kills. Not
+        // handed out here (round 24's attempt hands out every frame address compiled code leaves in a scratch register at a call, read or not:
+        // 31 and 43 corpus texts changed and 2 lent signatures lost in each image), but marked (Value::kept): the first read of it -- an op that
+        // takes it as an operand other than a copy, which carries the mark, or a later call handed it (above) -- lets it out (UseKept).
+        uint8_t keptClass[kTracked] = {};
+        if (keepKept)
+            for (int r = 0; r < kTracked; ++r)
+                if (r != kR15) keptClass[r] = KeptClass(s, Get(s, mReg[r]));
         Apply(s, e, targetIsR0);
+        if (keepKept)
+            for (int r = 0; r < kTracked; ++r)
+            {
+                if (r == kR15 || keptClass[r] == 0) continue;
+                const bool keeps = ((e.preserved >> r) & 1u) != 0;
+                const bool left = signatureLent ? (r < 2 && keeps) || (!keeps && ((e.outOrigins >> r) & 1u)) : !keeps;
+                if (!left) continue;
+                auto f = s.vars.find(KeyOf(mReg[r]));
+                if (f == s.vars.end()) continue;
+                f->second.kept |= keptClass[r];
+                mKeptSeen = true;
+            }
+    }
+    // (area 3, A3-192) What going out would make of 'x' (HandOut's State::out bits), with a mark it already carries, without letting it out.
+    uint8_t KeptClass(const State& s, const Value& x) const
+    {
+        uint8_t c = EscapeClass(s, x);
+        if (c != 0 && x.Frame())
+            for (const auto& slot : s.slots)
+                if (slot.second.Frame()) c |= EscapeClass(s, slot.second);
+        return static_cast<uint8_t>(c | x.kept);
+    }
+    // ...and a read of a value so marked: the address it may be has gone out (as HandOut).
+    void UseKept(State& s, const Value& x)
+    {
+        if (x.kept == 0) return;
+        s.out |= x.kept;
+        mFrameOut = true;
     }
 
     // (area 3 round 12 fix) The registers of the calling convention a callee the probe cannot read is taken to be handed: r4-r7, and r2, the
@@ -2175,6 +2230,17 @@ private:
                             break;
                         }
             }
+            // (area 3, A3-192) a value kept across a call where the engine sees the call's output, read by this op (not copied: a copy carries the
+            // mark) -- the address of a load or a store, a value stored, an operand of any computation, a branch's target or condition
+            if (mKeptSeen && op.code != ghidra::CPUI_COPY)
+                for (const ghidra::VarnodeData& vn : op.in)
+                {
+                    if (vn.space->getType() == ghidra::IPTR_CONSTANT) continue;
+                    for (const auto& v : s.vars)
+                        if (v.second.kept != 0 && std::get<0>(v.first) == vn.space && std::get<1>(v.first) < vn.offset + vn.size &&
+                            vn.offset < std::get<1>(v.first) + std::get<2>(v.first))
+                            UseKept(s, v.second);
+                }
             bool falls = true;
             switch (op.code)
             {
@@ -2608,6 +2674,7 @@ private:
     int64_t mEscapeLow = 0;     // ...and the lowest exact base (when mEscapedLow, with mLowestSp)
     int64_t mLowestSp = 0;      // the lowest stack offset any register or slot held
     bool mFrameOut = false;     // (area 3 round 12 fix) a possible frame address went out to code that may keep it (HandOut)
+    bool mKeptSeen = false;     // (area 3, A3-192) a call marked a register Value::kept in this run
     uint32_t mHanded = 0;       // ...and, of a walked callee, the registers it lets out or writes through (CalleeHanded)
 
 };

@@ -5478,6 +5478,59 @@ bool UsesCallResult(const Subject& subject, const FnInfo& fn, bool* passed = nul
     return read;
 }
 
+// (area 3, A3-193) ...and A3-41's address reading, accepted: a value in r0 the function used as an address after its last write of it is scratch,
+// not a result. Grammar 2 seed 8602477 ends each arm of `tst r4,r4 ; bf` with `mov #7,r0 ; mov.b @(r0,r4),r1` or `mov #2,r0 ; mov.b @(r0,r5),r3`
+// before a shared exit: the lent `void` is right (a caller that reads r0 afterwards is withheld). Read from the runs, not the generator's
+// productions: on every run that finished, the last instruction of the function's own (no callee's) that wrote r0 is followed by one of its own
+// with r0 as an index (`@(r0,Rn)`, `@(r0,gbr)`), and by no instruction of a callee (a call after it may have written r0).
+bool R0IndexAfterLastWrite(const Subject& subject, const std::vector<RunOut>& runs)
+{
+    bool any = false;
+    for (const RunOut& run : runs)
+    {
+        if (!run.finished) continue;
+        size_t lastWrite = run.pcs.size();
+        bool indexAfter = false, calleeAfter = false;
+        for (size_t k = 0; k < run.pcs.size(); ++k)
+        {
+            if (k < run.depths.size() && run.depths[k] != 0)
+            {
+                calleeAfter = true;
+                continue;
+            }
+            const sfe::DisassembledInstruction d = sfe::Sh2Decode(run.pcs[k], subject.WordAt(run.pcs[k]));
+            if (!d.IsValid) return false;
+            std::vector<std::string> ops;
+            int depth = 0;
+            std::string cur;
+            for (char ch : d.Operands)
+            {
+                if (ch == '(') ++depth;
+                if (ch == ')') --depth;
+                if (ch == ',' && depth == 0) { ops.push_back(cur); cur.clear(); continue; }
+                cur += ch;
+            }
+            if (!cur.empty()) ops.push_back(cur);
+            const bool readOnly = d.Mnemonic.compare(0, 3, "cmp") == 0 || d.Mnemonic == "tst" || d.Mnemonic == "braf" || d.Mnemonic == "bsrf";
+            bool writes = false, index = false;
+            for (size_t j = 0; j < ops.size(); ++j)
+            {
+                if ((j + 1 == ops.size() && ops[j] == "r0" && !readOnly) || ops[j] == "@r0+" || ops[j] == "@-r0") writes = true;
+                if (ops[j].compare(0, 5, "@(r0,") == 0) index = true;
+            }
+            if (index && lastWrite < run.pcs.size()) indexAfter = true;
+            if (writes)
+            {
+                lastWrite = k;
+                indexAfter = calleeAfter = false;
+            }
+        }
+        if (lastWrite == run.pcs.size() || !indexAfter || calleeAfter) return false;
+        any = true;
+    }
+    return any;
+}
+
 // (area 3 fixer, A3-153) ...and a callee's r0 passed on untouched, read or not: grammar 2 seed 4700578 (the specials alphabet) calls function 1,
 // lent `void` (its r0 is a word it loads, `mov.l @r5,r0`, which the return rule lets a void signature drop: A3-5's "memory"), and leaves r0
 // alone on both arms to its own return. Its r0 there is the callee's scratch, as A3-19 and A3-41 take it; the caller's `void` is the callee's.
@@ -7956,6 +8009,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 // checked where it is drawn.
                 else if (fn.choiceBy >= 0 && fn.choiceInherited) count("excluded.choice-inherited.return-dropped");
                 else if (fn.choiceBy >= 0) add("return-dropped:choice", "r0 is one of two values an input of the function chooses between and the prototype returns nothing");
+                else if (R0IndexAfterLastWrite(subject, runs)) count("excluded.r0-index.return-dropped");   // A3-193: A3-41's address reading, accepted
                 else add("return-dropped", "the function writes r0 as its result on every path and the prototype returns nothing");
             }
             // A parameter copied to r0 on one path and r0 left alone on the other (A3-20): the engine takes the join for no return, and
@@ -17722,6 +17776,75 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         const bool withheld = w.text.find("prototype: withheld: a write after a loop the analysis takes to run for ever is missing") != std::string::npos;
         std::printf("pin '%s': call said %d, store said %d, withheld %d\n", m.name, int(callSaid), int(storeSaid), int(withheld));
         CHECK(callSaid && storeSaid && withheld);
+    }
+    {
+        // A3-192 (area 3): a caller holds the address of a local (5) in a register the engine takes a call to kill, the callee may leave it there,
+        // and the caller stores 7 through the register after the call and returns the local (`tools/a3_round24/fixtures.src`). The engine read the
+        // register as the call's output (`extraout_r1`), a pointer it cannot place, and nothing told it the frame went out: `return 5;`, every run
+        // returns 7. Now the probe marks such a register at the call (Value::kept) and lets the address out at its first read after it. o1: r1,
+        // which the lent callee sets on one return; o1c: r1, which it never touches (lent calls kill r0 and r1); o3: r3; o4b: r9 (the caller saves
+        // it); o5: r0, which the callee keeps; o7: r1, the callee not lent. Controls (right before): o0 (A3-190's caller), o2 (r7), o6 (a tail call).
+        struct Fixture
+        {
+            const char* name;
+            const char* words;
+            const char* funcs;
+            const char* returns;
+            const char* local;
+        };
+        const Fixture fixtures[] = {
+            { "A3-192 o1", "4F22 7FF8 E205 2F22 61F3 B009 0009 E207 2122 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E100 000B 0009 000B 0009", "0/0/1c,20/20/2e", "1,0", "return xStack_c;" },
+            { "A3-192 o1c", "4F22 7FF8 E205 2F22 61F3 B009 0009 E207 2122 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E200 000B 0009 000B 0009", "0/0/1c,20/20/2e", "1,0", "return xStack_c;" },
+            { "A3-192 o3", "4F22 7FF8 E205 2F22 63F3 B009 0009 E207 2322 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E300 000B 0009 000B 0009", "0/0/1c,20/20/2e", "1,0", "return xStack_c;" },
+            { "A3-192 o4b", "4F22 2F96 7FF8 E205 2F22 69F3 B008 0009 E207 2922 60F2 7F08 69F6 4F26 000B 0009 2448 8B02 E900 000B 0009 000B 0009", "0/0/20,20/20/2e", "1,0", "return xStack_10;" },
+            { "A3-192 o5", "4F22 7FF8 E205 2F22 60F3 B009 0009 E207 2022 60F2 7F08 4F26 000B 0009 0009 0009 2448 000B 0009", "0/0/1c,20/20/26", "1,0", "return xStack_c;" },
+            { "A3-192 o7", "4F22 7FF8 E205 2F22 61F3 B009 0009 E207 2122 60F2 7F08 4F26 000B 0009 0009 0009 2338 8B02 E200 000B 0009 000B 0009", "0/0/1c,20/20/2e", "1,0", "return xStack_c;" },
+            { "A3-192 control o0", "4F22 7FF8 E105 2F12 67F3 B009 0009 B017 0009 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E700 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 323C 2722 000B 0009", "0/0/1c,20/20/2e,40/40/4a", "1,0,0", "return xStack_c;" },
+            { "A3-192 control o2", "4F22 7FF8 E205 2F22 67F3 B009 0009 E207 2722 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 E700 000B 0009 000B 0009", "0/0/1c,20/20/2e", "1,0", "return xStack_c;" },
+            { "A3-192 control o6", "4F22 7FF8 E105 2F12 67F3 B009 0009 B027 0009 60F2 7F08 4F26 000B 0009 0009 0009 2448 8B02 D216 422B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E700 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 E207 323C 2722 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0600 9040",
+              "0/0/1c,20/20/2e,40/40/46,60/60/6a", "1,0,0,0", "return xStack_c;" },
+        };
+        for (const Fixture& f : fixtures)
+        {
+            const ModulePin m = { f.name, f.words, f.funcs, nullptr, f.returns, nullptr, nullptr };
+            const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+            const bool five = w.text.find("return 5;") != std::string::npos, local = w.text.find(f.local) != std::string::npos;
+            std::printf("pin '%s': %zu finding(s), lent %d, `return 5;` %s, `%s` %s\n", f.name, w.findings.size(), count(w, "proto.lent"), five ? "printed" : "not printed",
+                        f.local, local ? "printed" : "not printed");
+            for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            // (o7's callee reads r3 and is withheld: nothing is lent there)
+            CHECK(w.findings.empty() && (count(w, "proto.lent") > 0 || std::string(f.name) == "A3-192 o7") && !five && local);
+        }
+    }
+    {
+        // A3-193 (area 3, oracle): grammar 2 seed 8602477, `n:return-dropped`. Each arm of `tst r4,r4 ; bf` ends with `mov #7,r0 ; mov.b @(r0,r4),r1`
+        // or `mov #2,r0 ; mov.b @(r0,r5),r3`: r0 is an index the function used after its last write of it, scratch by A3-41's reading. Counted
+        // (`excluded.r0-index.return-dropped`), no finding.
+        const Report seed = EvaluateSubject(d, MakeSubject(MakeV2(8602477)), true);
+        std::printf("pin 'A3-193 grammar 2 seed 8602477': %zu finding(s), r0-index %d\n", seed.findings.size(), count(seed, "excluded.r0-index.return-dropped"));
+        for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(seed.findings.empty() && count(seed, "excluded.r0-index.return-dropped") > 0);
+        // ...and the reading itself, on runs made up for it over `mov #7,r0 ; mov.b @(r0,r4),r1 ; rts ; nop ; add #1,r0`: the index after the last
+        // write (yes); r0 written again after the index (no); a callee's instruction after the last write (no); no write of r0 at all (no); one of
+        // two runs without the index (no).
+        const Subject sub = RawSubject("E007 014C 000B 0009 7001");
+        auto runOf = [](std::initializer_list<uint32_t> pcs, std::initializer_list<int> depths) {
+            RunOut r;
+            r.finished = true;
+            r.pcs.assign(pcs);
+            r.depths.assign(depths);
+            return r;
+        };
+        const RunOut indexed = runOf({ 0x06009000, 0x06009002, 0x06009004, 0x06009006 }, { 0, 0, 0, 0 });
+        const RunOut rewritten = runOf({ 0x06009000, 0x06009002, 0x06009008, 0x06009004, 0x06009006 }, { 0, 0, 0, 0, 0 });
+        const RunOut called = runOf({ 0x06009000, 0x06009002, 0x06009004, 0x06009006, 0x06009004 }, { 0, 0, 1, 1, 0 });
+        const RunOut unwritten = runOf({ 0x06009002, 0x06009004, 0x06009006 }, { 0, 0, 0 });
+        const RunOut plain = runOf({ 0x06009000, 0x06009004, 0x06009006 }, { 0, 0, 0 });
+        const bool yes = R0IndexAfterLastWrite(sub, { indexed });
+        const bool no1 = R0IndexAfterLastWrite(sub, { rewritten }), no2 = R0IndexAfterLastWrite(sub, { called });
+        const bool no3 = R0IndexAfterLastWrite(sub, { unwritten }), no4 = R0IndexAfterLastWrite(sub, { indexed, plain });
+        std::printf("pin 'A3-193 reading': indexed %d, rewritten %d, callee after %d, unwritten %d, one run plain %d\n", int(yes), int(no1), int(no2), int(no3), int(no4));
+        CHECK(yes && !no1 && !no2 && !no3 && !no4);
     }
 }
 
