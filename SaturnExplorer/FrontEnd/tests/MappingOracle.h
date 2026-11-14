@@ -1948,7 +1948,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             uint16_t w = 0;
             if (!word(x, w)) return false;
             const sfe::DisassembledInstruction d = sfe::Sh2Decode(x, w);
-            return d.IsValid && ShapeOf(d).store;
+            // (A7-172: `tas.b @Rn` writes the byte it read, the one store of one operand; seed 9606539's `uRam26001008 = 0x8001;`, the word
+            // store's 1 with the byte's 0x80, drawn at the slot store beside `tas.b`, is a copy materialised there as any other)
+            return d.IsValid && (ShapeOf(d).store || (!A7RuleOff(172) && d.Mnemonic == "tas.b"));
         };
         // (A7-34's triage: at any instruction but a branch -- a load, the first instruction of a loop the engine put a register's copy
         // under a global's name at, `iRam06001038 = iVar2;` at the loop's `mov.w @r4,r2`; an `and` -- naming a store elsewhere)
@@ -2163,8 +2165,28 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         const std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
                         inputAtEntry = operand.compare(0, 3, "in_") == 0 || operand.compare(0, 6, "param_") == 0 || operand.compare(0, 6, "unaff_") == 0;
                     }
+                    // (A7-174: a global's name drawn at the literal load of a pointer to it -- `xRam26001004._1_1_ = (uint1)xRam26001004;` with
+                    // `xRam26001004` at the `mov.l @(0x600901c,pc),r6` that loads 0x26001004 -- is the load of the variable's address, where the
+                    // product draws every use of the name the function's pointer reaches: no value materialised there; grammar 1 seed 9703317)
+                    bool addressHere = false;
+                    uint16_t aw = 0;
+                    if (!A7RuleOff(174) && plain && assign != std::string::npos && t.begin > assign && t.end <= r.lines[li].text.size() && word(t.addr, aw) &&
+                        (aw >> 12) == 0xD)
+                    {
+                        std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
+                        const size_t piece = operand.find("._");
+                        if (piece != std::string::npos) operand.resize(piece);
+                        uint16_t hi = 0, lo = 0;
+                        const uint32_t q = (t.addr & ~3u) + 4 + (aw & 0xFFu) * 4;
+                        if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
+                            operand.find_first_not_of("0123456789abcdef", operand.size() - 8) == std::string::npos && word(q, hi) && word(q + 2, lo))
+                        {
+                            const uint32_t va = static_cast<uint32_t>(std::strtoul(operand.c_str() + operand.size() - 8, nullptr, 16));
+                            addressHere = GlobalDelta(va, static_cast<uint32_t>(hi) << 16 | lo) < 16;
+                        }
+                    }
                     const bool copy = plain && !isBranch(t.addr) && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore || readAtStore) && !castAtExtension &&
-                                      !ownStoreHere && !readHere && !inputAtEntry;
+                                      !ownStoreHere && !readHere && !inputAtEntry && !addressHere;
                     // (A7-157: a merge of a byte store into its word, `iRam26001000 = CONCAT11(in_r2,(xunknown1)iRam26001000);`, drawn at the
                     // literal's load of the pointer a later store goes through, naming the byte store before it: the engine's copy of the store's
                     // value put where a store through the pointer may alias it (the copy A7-25 marks); the load computes none of it, so the line

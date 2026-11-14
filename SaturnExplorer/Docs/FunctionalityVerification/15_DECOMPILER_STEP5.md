@@ -21397,3 +21397,74 @@ No generator change: no seed's program changes (the shrinker only refuses more s
 ### 5. Routed
 
 Nothing to another area. A3-203 and A3-204 are area 3's, open.
+
+## Area 7, round 23
+
+Fixer, branch `review/7-round23` cut at master `72a44746` (patches to 0094; 0091 and 0095 stay free: **no engine patch**). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). Two host changes (`Sh2Decompiler.cpp`: A7-171, A10-18), three oracle fixes (`MappingOracle.h`: A7-172, A7-174; `Sh2GeneratedTests.cpp`: A5-149), the pins and fixtures. **One P2** (A7-171: a token that sent a click on a line to a `bf`), no P1: the printed text of every seed of this round is the code's. Each oracle fix reads `SE_A7_RULE_OFF=<n>` (the area 5 one as 5149). Scripts: `Docs/Decompiler/tools/a7_round23/` (`sweeps.sh`, `mutation.sh`, `final.sh`). Backups on `backup/review-7-round23`.
+
+| Row | P | Outcome |
+|---|---|---|
+| A7-171 | P2 | **filed and fixed, host**: grammar 1 seed 9608430 (`n:map-copy-merge`): the line `cRam26001008 = (char)iVar1;` was drawn at a `bf`, not at the load that made r3 |
+| A7-172 | P3 | **filed and fixed, oracle**: grammar 2 seed 9606539 (`n:map-way-back`, function 1): `tas.b` is a store |
+| A7-173 | P3 | **filed, already fixed by A7-168 and A7-169, pins only**: grammar 1 seeds 9600475, 9606064 (A7-168), 9602179, 9607450 (A7-169) |
+| A5-149 | P3 | **filed and fixed, oracle**: grammar 1 seed 9603811 (`folded-read-after-pointer-write` and two `folded-read-after-access`), and the sweep's grammar 2 seed 9701412 |
+| A10-18 | P3 | **filed and fixed, host**: grammar 1 seed 9606511 (`n:status` "Volatile memory was propagated"); the stock engine's check, not a patch's |
+| A10-19 | P3 | **filed open**: the same exception with the user's own range cut by the misaligned access |
+| A7-174 | P3 | **filed and fixed, oracle**: sweep, grammar 1 seed 9703317 (`n:map-way-back`) |
+
+For each seed the product's text was read against the disassembly and the emulator's trace. Replays: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`.
+
+### 1. A7-171: seed 9608430 (a wrong token, P2)
+
+Shrunk, `mov.l @(0x6009028,pc),r6 ; mov.w @r4,r3 ; sub r3,r2 ; tst r0,r5 ; bt L ; cmp/eq r1,r3 ; bf/s M ; mov.b r3,@r6 ; mov.b r0,@r4 ; M: tst r1,r4 ; bf N ; cmp/eq r3,r0 ; bt/s ... ; mov.b r2,@r6`, with r6 the global 0x26001008 (the slot of the `bf/s` stores r3's low byte on both paths; a later byte store of `r2 - r3` writes over it). The default request prints `iVar1 = *param_1; cRam26001008 = (char)iVar1; cVar2 = in_r2 - cRam26001008;` before the first `if`: right, the byte of r3 and the sum with it. The line `cRam26001008 = (char)iVar1;` carried one token, at the `bf` of a later block (0x06009014 shrunk, 0x06009018 whole): the narrowing of r3 the engine hoisted into the entry block kept the address of the op it was made at. The statement mapping (`AddFrameStoreTokens`) gave a copy at its block's end the maker of its value (A7-21) and a conversion at a branch the same, but only at its block's own end (`o->getAddr() == home->getStop()`); this op is in another block than its address's. A click on the line went to a `bf` that makes nothing. The oracle's `copy-merge` was right.
+
+Fix (host): a conversion at a branch instruction outside its block's end, with no store chosen, takes the maker of the register it narrows (a flow op's output, here the `mov.w @r4,r3` at 0x06009002). Fixture `TestArea7Round23` (`Sh2DecompilerTests.cpp`: the line has a token at the load and none at the `bf`, the audit is clean). With the fix off (a temporary switch of the mutation build, removed from the final tree) the seed whole and shrunk fail, and the fixture fails 2 CHECKs.
+
+### 2. A7-172: seed 9606539
+
+Function 1: `movt r1 ; mov.w @r7,r3 ; cmp/eq r4,r6 ; bf/s L ; mov.w r1,@r6 (slot) ; tas.b @r6 ; ...` with r6 = 0x26001008. The text is the code's: `uRam26001008 = (uint2)(0 < param_1);` and, in the `if (param_1 == 0x26001008)` branch (the one that falls into `tas.b`), `uRam26001008 = 0x8001;`: with r4 equal to the address the movt value is 1, and `tas.b` sets bit 7 of the byte at 0x26001008, the word's high byte. The second line is drawn whole at the slot store (a copy the product marks materialised there, A7-25) and the `tas.b` is named by an empty token; the way back from the slot store answers the first line, the store's own. `ShapeOf` has one operand for `tas.b`, so the oracle took it for no store, the second line for the store's own statement, and wanted the click to go to it. Fix: the copy classification's `isStore` includes `tas.b` (`SE_A7_RULE_OFF=172`).
+
+### 3. A5-149: seed 9603811 (and 9701412)
+
+Shrunk, r4 an alias of 0x26003C04: `mov.l @(pc),r6 (0x26001008) ; mac.l @r6+,@r4+ ; mov.l @(pc),r6 (0x26001000) ; mov.l r0,@(0x20,gbr) ; mov.w @(6,r6),r0 ; mov.l r0,@r4`. The text of the default request is the code's: `xVar1 = *param_1; *(xunknown4 *)(unaff_gbr + 0x20) = in_r0; param_1[1] = (int4)iRam26001006;`. The `mac.l` reads 0x26001008 (the read is folded and its value unused: printed nowhere) and steps r4 by 4: the `[1]`. The line names the `mac.l` for that step, and the oracle took it for the line that prints the read, because the name `iRam26001006` lies within eight bytes below 0x26001008. `iRam26001006` is the word `mov.w @(6,r6),r0` loads, an access of the function whose two bytes end before 0x26001008. Fix: a name `...RamXXXXXXXX` below the read's address belongs to another access when the function has an access at XXXXXXXX that ends before the read's address and none that covers it (`nameIsOthers`, in the search for the read's line and in the search that finds no line; `SE_A7_RULE_OFF=5149`). The sweep's grammar 2 seed 9701412 (`mov.l @(4,r6),r0` of 0x26002384 beside the `iRam26002380` the `tst` reads) is the second search's case and is set right by the same rule.
+
+### 4. A10-18 and A10-19: seed 9606511
+
+Shrunk: `mov.l r0,@r6 (0x26001008) ; mov.l @(r0,r6),r0 (0x2600100C) ; mac.w @r5+,@r6+ ; mov.l r1,@r6` and a word store at 0x0600100E. After the `mac.w` r6 is 0x2600100A: the 4-byte store there is an address error on the SH-2 (the host's own caution says it, and that the access is made at 0x26001008, A5-25), and the engine was handed a store at 0x2600100A. The default request marks the aliased longword 0x2600100C-0x2600100F volatile (0x0600100E and 0x2600100C are one memory under two addresses, A5-52, found in the first pass and used in the retry), and the store straddles its edge. The engine splits it into the pieces its other accesses name; the piece inside the range, 0x2600100C:2, is a volatile variable written by a SUBPIECE and used by the return's copy, and the stock check in `Funcdata::replaceVolatile` throws "Volatile memory was propagated" (a temporary print of the varnode and its use found it). It is the engine's stock check, not one of our patches (patch 0075 only adds a line to that function), so the fix is in the host (area 10's A10-18): the first pass's folded accesses that straddle the edge of a range in force (the aliased ones just found, the user's) are marked whole, outward to longwords, in the same retry (`StraddlingRanges`). An aligned access never straddles a longword-aligned range, so nothing changes for any other program: the corpus dumps below are equal. The text now: the stores as the code makes them, `Ram2600100a = in_r1;` and the caution.
+
+**A10-19 (open).** The same program with the user's own range 0x2600100C-0x2600100F: the first pass already has the range, so the first pass throws the same exception ("`[v:status] status 3`"); the fix works from the first pass's accesses, which the user's range does not wait for. A retry on that one exception that widens the range to the accesses it cuts through is more than this round's change. The code traps on the machine; the request with a range that holds the whole access is fine.
+
+### 5. A7-173: the four `map-store-dead` seeds
+
+9600475 and 9606064 (`n:` and `v:`) are A7-168's shape, 9602179 and 9607450 are A7-169's (`SE_A7_RULE_OFF=168` and `169` bring each back, whole and shrunk). They failed on the reviewer's master `df0ffe31`, which did not have round 22's fixes. The text and the tokens of each are the code's (round 22's reading). Pinned whole and shrunk (`TestArea7Round23Pins`).
+
+### 6. Sweeps (`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`; `sweeps.sh`)
+
+| Run | Master `72a44746`'s generator binary | Final binary |
+|---|---|---|
+| grammar 1, 10,000 from 9,700,001 | 1 failing: 9703317 (A7-174) | `failing seeds=0; findings=0` |
+| grammar 2, 10,000 from 9,700,001 | 1 failing: 9701412 (A5-149) | `failing seeds=0; findings=0` |
+| grammar 1 specials, 5,000 from 9,800,001 | `failing seeds=0; findings=0` | `failing seeds=0; findings=0` |
+
+* **A7-174 (9703317).** Shrunk: `lp: mov.b r1,@r6 ; mov.w @r7,r0 ; tst #1,r0 ; bf lp ; cmp/pl r2 ; bt L ; mov.w r1,@r6 ; L: mov.b r5,@r6 ; rts` with r6 and r7 loaded from two pool words of 0x26001004. The default text, `do { xRam26001004._1_1_ = (uint1)xRam26001004; } while (((uint1)xRam26001004 & 1) != 0); if (in_r2 < 1) { xRam26001004._1_1_ = param_2; } xRam26001004 = CONCAT11(param_2,(uint1)xRam26001004);`, is the code's final state: the loop's byte store of byte 0 is dead before the poll (it reads byte 1 only) and the engine keeps a no-op for byte 1 (the oracle's `text-store` says so, as for earlier seeds; not filed). The name `xRam26001004` is drawn at the pool load of its address; the way back from that load answers the store's line. The oracle took that name for a value materialised there and wanted the condition's line first. Fix: a global's name drawn at a PC-relative longword load of a pointer within 16 bytes of it is no copy (`addressHere`, `SE_A7_RULE_OFF=174`).
+
+### 7. Pins and mutation (`mutation.sh`)
+
+Fixtures `TestArea7Round23` (`Sh2DecompilerTests.cpp`: A7-171, A7-172 with its rule off, A7-174 with its rule off, A10-18) and `TestArea7Round23Pins` (`Sh2GeneratedTests.cpp`: ten seeds whole, eight shrunk programs and two shrunk modules, each replayed from the line the report prints). Mutation: every row's seed whole and shrunk, 0 findings with the fix on and 1 or more with it off (A7-172, A5-149 on two seeds, A7-174, A7-168 and A7-169 for the four pins; the two host rows with a temporary switch of the mutation build, removed before the final build). The default run (every pin) with 172, 174 or the temporary switches off reports 2 CHECK failures, with 5149 off 4; with every rule on, none. The product's fixtures run on master's `Sh2Decompiler.cpp` fail 5 CHECKs (A7-171 two, A10-18 three), the test binary built here for the corpus comparison below.
+
+### 8. Runs after the last code edit
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` | **117 of 117** passed |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (canary on, every pin) | **failing seeds=0; findings=0** |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus, both images, `SE_GAME_LEND=1` | "all passed", every mapping count 0; missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**": unchanged. The two product changes move no text or token of either image: the token dumps (`SE_GAME_TOKEN_DUMP`, alone and lent) of this branch and of the same tests built on master's `Sh2Decompiler.cpp` are equal in all four files (92,929, 197,735, 262,611 and 438,784 lines, 0 differing) |
+| replays of every failing seed (final binary) | grammar 1: 9600475, 9602179, 9603811, 9606064, 9606511, 9607450, 9608430, 9703317; grammar 2: 9606539, 9701412: each `failing seeds=0; findings=0` |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint --tests-dir` ok (no vendored file touched) |
+
+### 9. Routed
+
+* **Area 10:** A10-19 (open, P3; the user-range case of A10-18).
+* **Area 3, area 5:** none. (A5-149 is closed here.)
