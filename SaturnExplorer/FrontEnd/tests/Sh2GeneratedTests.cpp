@@ -17802,6 +17802,19 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         const bool withheld = w.text.find("prototype: withheld: a write after a loop the analysis takes to run for ever is missing") != std::string::npos;
         std::printf("pin '%s': call said %d, store said %d, withheld %d\n", m.name, int(callSaid), int(storeSaid), int(withheld));
         CHECK(callSaid && storeSaid && withheld);
+        // A3-195 (area 3, round 25): A3-191's "holds" read as the final block's first to last address. The hand-shrunk shape with the loop's body
+        // split by a `bra` to its `dt ; bf` and the code after the poll placed between the halves (`tools/a3_round25/fixtures.src` t1): the engine
+        // merges the halves into one block, whose first and last addresses span the removed code, and the SUBPIECE of the store there sits in it.
+        // It was lent `void (xunknown1 *)` with nothing said; now the block's ranges decide, and the store and the call are said.
+        const ModulePin m2 = { "A3-195 t1", "032A 2F36 E301 623C 2430 A008 0009 2720 D113 410B 0009 63F6 432A 000B 0009 4310 8BF1 D710 E001 2701 6071 C801 8BFC "
+                               "AFEE 0009 0009 0009 0009 0009 0009 0009 0009 D109 E27B 2122 000B E07B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                               "0600 9040 0600 1030 2600 3044", "0/0/32,40/40/4a", nullptr, "0,0", nullptr, nullptr };
+        const Report w2 = EvaluateSubject(d, ModuleSubject(m2), true);
+        const bool callSaid2 = w2.text.find("note 06009012 (caution): the call here is missing") != std::string::npos;
+        const bool storeSaid2 = w2.text.find("note 0600900E (caution): the 1-byte write of 0x06001030 here is missing") != std::string::npos;
+        const bool withheld2 = w2.text.find("prototype: withheld: a write after a loop the analysis takes to run for ever is missing") != std::string::npos;
+        std::printf("pin '%s': call said %d, store said %d, withheld %d\n", m2.name, int(callSaid2), int(storeSaid2), int(withheld2));
+        CHECK(callSaid2 && storeSaid2 && withheld2);
     }
     {
         // A3-192 (area 3): a caller holds the address of a local (5) in a register the engine takes a call to kill, the callee may leave it there,

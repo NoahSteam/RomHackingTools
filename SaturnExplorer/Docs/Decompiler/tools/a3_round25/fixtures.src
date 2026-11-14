@@ -1885,3 +1885,180 @@ F2:
 mov #7,r2
 rts
 mov.l r2,@r14
+name t0
+# A3-191 control: round 24's s0j (the loop before the poll writes r2; mov.b r2,@r7 and a call after the poll)
+ret 0,0
+sts pr,r3
+mov.l r3,@-r15
+mov #1,r3
+L:
+extu.b r3,r2
+mov.b r3,@r4
+dt r3
+bf L
+mov.l =0x06001030,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.b r2,@r7
+mov.l =@G,r1
+jsr @r1
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l =0x26003044,r1
+mov #123,r2
+mov.l r2,@r1
+rts
+mov #123,r0
+name t1
+# A3-191 attacked: t0 with the code after the poll placed inside the loop's block, which a bra splits in two (L..bra, M..bf): the engine
+# makes one block of the two, whose first and last addresses span the code after the poll
+ret 0,0
+sts pr,r3
+mov.l r3,@-r15
+mov #1,r3
+L:
+extu.b r3,r2
+mov.b r3,@r4
+bra M
+nop
+A:
+mov.b r2,@r7
+mov.l =@G,r1
+jsr @r1
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+M:
+dt r3
+bf L
+mov.l =0x06001030,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+bra A
+nop
+fn
+G:
+mov.l =0x26003044,r1
+mov #123,r2
+mov.l r2,@r1
+rts
+mov #123,r0
+name u1
+# A3-193 attacked: F ends with mov r4,r0 ; mov.b @(r0,r5),r1 (r0 an index after its last write: the excuse); its caller C passes 3 in r4 and
+# returns what F leaves in r0 (every run returns 3): C must be withheld or say 3
+ret 1,1
+.word 0x4F22
+bsr F
+mov #3,r4
+.word 0x4F26
+rts
+nop
+fn
+F:
+mov r4,r0
+mov.b @(r0,r5),r1
+rts
+nop
+name u2
+# u1 with the index in rts's delay slot and C adding 1 to F's r0 (every run returns 4)
+ret 1,1
+.word 0x4F22
+bsr F
+mov #3,r4
+add #1,r0
+.word 0x4F26
+rts
+nop
+fn
+F:
+mov r4,r0
+rts
+mov.b @(r0,r5),r1
+name u3
+# u1 with C storing F's r0 to a global after the call and returning 0 (the store holds 3)
+ret 1,0
+.word 0x4F22
+bsr F
+mov #3,r4
+mov.l =0x06003010,r1
+mov.l r0,@r1
+mov #0,r0
+.word 0x4F26
+rts
+nop
+fn
+F:
+mov r4,r0
+mov.b @(r0,r5),r1
+rts
+nop
+name t2
+# A3-182's join after a poll with A3-191's op: the code after the poll writes r5 from r2 (`extu.b r2,r5`), r2 made in a loop before the poll; the
+# join J (also reached when r4 == 0) stores r5. Runs with r4 != 0 store 1 (once the poll ends); with r4 == 0, r5 as it came
+ret 0
+mov.l =0x06003060,r6
+tst r4,r4
+bt J
+mov #1,r3
+L:
+extu.b r3,r2
+mov.b r3,@r6
+dt r3
+bf L
+mov.l =0x06001030,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+extu.b r2,r5
+J:
+mov.l r5,@r6
+rts
+nop
+name t3
+# t2 with the loop's body split by a bra (t1's layout) and the code after the poll between the halves
+ret 0
+mov.l =0x06003060,r6
+tst r4,r4
+bt J
+mov #1,r3
+L:
+extu.b r3,r2
+mov.b r3,@r6
+bra M
+nop
+A:
+extu.b r2,r5
+J:
+mov.l r5,@r6
+rts
+nop
+M:
+dt r3
+bf L
+mov.l =0x06001030,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+bra A
+nop
