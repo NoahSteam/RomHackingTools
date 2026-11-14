@@ -1,0 +1,523 @@
+# Area 3 round 24 fixtures. Run: W=<SaturnExplorer> S=<scratch> run24.py <name> [KEY=VAL ...]
+# A3-190 shapes: F keeps a register at one return and changes it at another; callers that hold a frame address there.
+name o0
+# A3-190's caller module as fixtures.src: local 5, &local in r7, bsr F1 (keeps r7 when r4 != 0), F2 (withheld) stores 7+r3 through r7
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r1
+mov.l r1,@r15
+mov r15,r7
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r7
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+add r3,r2
+mov.l r2,@r7
+rts
+nop
+name o1
+# o0 with r1 for r7: F1 changes r1 on one return; the caller stores 7 through r1 itself after the call
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r1
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r1
+rts
+nop
+K1:
+rts
+nop
+name o1c
+# control: o1 with F1 changing r1 on no path (lent, r1 kept): the store through r1 is the local's
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r1
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r2
+rts
+nop
+K1:
+rts
+nop
+name o2
+# o1 with r7 and the caller's own store (not F2's)
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r7
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r7
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r7
+rts
+nop
+K1:
+rts
+nop
+name o3
+# o1 with r3
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r3
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+name o4
+# o1 with r9 (callee-saved by the convention; F1 writes it on one path without saving it)
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r9
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r9
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r9
+rts
+nop
+K1:
+rts
+nop
+name o5
+# r0 holds the frame address across a lent callee that keeps every register; the caller stores 7 through r0
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r0
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r0
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+rts
+nop
+name o6
+# A3-190's caller (o0) whose F1 keeps r7 on one path and tail-jumps to G (mov #0,r7) on the other
+ret 1,0,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r1
+mov.l r1,@r15
+mov r15,r7
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov.l =@G,r2
+jmp @r2
+nop
+K1:
+rts
+nop
+fn
+G:
+mov #0,r7
+rts
+nop
+fn
+F2:
+mov #7,r2
+add r3,r2
+mov.l r2,@r7
+rts
+nop
+name c1
+# r7 pushed; one return pops it back (kept), the other drops the slot and sets r7
+mov.l r7,@-r15
+tst r4,r4
+bt Z
+mov.l @r15+,r7
+rts
+nop
+Z:
+mov #0,r7
+rts
+add #4,r15
+name c2
+# c1 with the pop and the change in the delay slots
+mov.l r7,@-r15
+tst r4,r4
+bt Z
+rts
+mov.l @r15+,r7
+Z:
+add #4,r15
+rts
+mov #0,r7
+name c3
+# kept on one return, a tail call to G (mov #0,r7) on the other
+tst r4,r4
+bf K
+mov.l =@G,r2
+jmp @r2
+nop
+K:
+rts
+nop
+fn
+G:
+mov #0,r7
+rts
+nop
+name c4
+# F moves r4 into r7 and calls G, which keeps r7 when r4 (F's r5) is not 0: F's r7 ends as F's r4
+sts pr,r3
+mov.l r3,@-r15
+mov r4,r7
+mov r5,r4
+bsr G
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+tst r4,r4
+bf K
+mov #0,r7
+rts
+nop
+K:
+rts
+nop
+name c7
+# three returns: r7 kept, set to 0, copied from r6
+tst r4,r4
+bt Z
+tst r5,r5
+bt Y
+rts
+nop
+Z:
+rts
+mov #0,r7
+Y:
+rts
+mov r6,r7
+name c8
+# GBR kept on one return, loaded from r5 on the other (no read of gbr)
+tst r4,r4
+bt Z
+rts
+nop
+Z:
+ldc r5,gbr
+rts
+nop
+name c9
+# r5 kept on one return; on the other r5 is r5 + 4 (from itself)
+tst r4,r4
+bt Z
+rts
+nop
+Z:
+rts
+add #4,r5
+name s0
+# grammar 1 seed 8209018, hand-shrunk: the shrinker's words with the push of PR put back (its fixture had lost it)
+ret 0,0
+sts pr,r3
+mov.l r3,@-r15
+mov #1,r3
+L:
+extu.b r3,r2
+mov.b r3,@r4
+dt r3
+bf L
+mov.l =0x06001030,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.b r2,@r7
+bsr G
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l =0x26003044,r1
+mov #123,r2
+mov.l r2,@r1
+rts
+mov #123,r0
+name s1
+# s0 without the loop before the poll
+ret 0,0
+sts pr,r3
+mov.l r3,@-r15
+mov #1,r2
+mov.l =0x06001030,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.b r2,@r7
+bsr G
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l =0x26003044,r1
+mov #123,r2
+mov.l r2,@r1
+rts
+mov #123,r0
+name s2
+# s1 without the store after the poll
+ret 0,0
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001030,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+bsr G
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l =0x26003044,r1
+mov #123,r2
+mov.l r2,@r1
+rts
+mov #123,r0
+name s3
+# s2 with the poll through r1 (tst r1,r1), as round 23's j0
+ret 0,0
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001030,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+bsr G
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l =0x26003044,r1
+mov #123,r2
+mov.l r2,@r1
+rts
+mov #123,r0
+name s0j
+# s0 with the call made by jsr through a literal (no bsr)
+ret 0,0
+sts pr,r3
+mov.l r3,@-r15
+mov #1,r3
+L:
+extu.b r3,r2
+mov.b r3,@r4
+dt r3
+bf L
+mov.l =0x06001030,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.b r2,@r7
+mov.l =@G,r1
+jsr @r1
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l =0x26003044,r1
+mov #123,r2
+mov.l r2,@r1
+rts
+mov #123,r0
+name o4b
+# o4 with the caller saving r9 (the generator's callee-saved contract): F1 changes r9 on one return only
+ret 1,0
+.word 0x4F22
+mov.l r9,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r9
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r9
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r9
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r9
+rts
+nop
+K1:
+rts
+nop
+name o7
+# o1c with an unlent F1 (it reads r3, no signature passes it): F1 leaves r1 alone
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r1
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bf K1
+mov #0,r2
+rts
+nop
+K1:
+rts
+nop

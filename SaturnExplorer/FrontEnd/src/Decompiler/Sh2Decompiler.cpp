@@ -10092,9 +10092,16 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         {
             // (A3-184: an op the actions made, with no time of the flow (the RETURN of `rts ; nop` the engine rebuilds), is the code of its
             // instruction's block, when that is one block: the text keeps that block.)
-            const std::vector<int>& inst = instancesOf(InstructionOf(o));
+            // (A3-191: ...when the final block it is in holds that instruction. The actions put an op made for an instruction where the value it
+            // takes is made: grammar 1 seed 8209018's SUBPIECE of r2 for the `mov.b r2,@r7` after a poll sits in the loop before the poll that
+            // writes r2, with the store's address, and it kept nothing of the code after the poll, which the engine removed: the store and
+            // the call there went unsaid, and the hand-shrunk form of the seed was lent.)
+            const ghidra::BlockBasic* home = static_cast<const ghidra::BlockBasic*>(o->getParent());
+            const uint32_t insn = InstructionOf(o);
+            const bool inHome = home != nullptr && !home->getStart().isInvalid() && home->getStart().getOffset() <= insn && insn <= home->getStop().getOffset();
+            const std::vector<int>& inst = instancesOf(insn);
             const int fb = inst.size() == 1 ? inst[0] : instanceOf(o).first;
-            if (fb >= 0 && static_cast<size_t>(fb) < nf) keptBlock[static_cast<size_t>(fb)] = 1;
+            if (inHome && fb >= 0 && static_cast<size_t>(fb) < nf) keptBlock[static_cast<size_t>(fb)] = 1;
         }
         const ghidra::Varnode* v = o->getOut();
         if (!v || o->code() == ghidra::CPUI_MULTIEQUAL || o->code() == ghidra::CPUI_INDIRECT) continue;

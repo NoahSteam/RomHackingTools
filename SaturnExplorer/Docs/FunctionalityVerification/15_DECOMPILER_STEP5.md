@@ -20756,3 +20756,99 @@ After the last code edit (the sweeps' binary has the same product and oracle cod
 ### Routed
 
 None.
+## Area 3, round 24 review
+
+Reviewer, branch `review/3-round24`, cut at master `d4fac2e7`. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). One host change (`Sh2Decompiler.cpp`, `StoresBeforeEndlessLoop`) and its pins (`Sh2GeneratedTests.cpp`, `TestA3RoutedPins`); no engine patch, so 0089 stays free. Scripts and fixtures: `Docs/Decompiler/tools/a3_round24/` (`fixtures.src`; `run24.py`, round 23's runner; `sweep.sh`, the outOrigins sweep with this round's first seed).
+
+**Verdict, area 3: not clean.** Two P1 rows, one fixed here (A3-191, the routed seed) and one open (A3-192), and one open P3 (A3-193). The clean count stays 0.
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-191 | P1 | **filed and fixed** (host): the routed seed 8209018. A3-184's rule took an op the engine made for the store after a poll, placed in the loop before the poll, for kept code after the poll; the store and the call there went unsaid, and the seed's hand-shrunk form was lent |
+| A3-192 | P1 | **open**: a frame address the caller holds in a register outside r4-r7 (or in r0 or r1) across a call that may leave it there is lost to the engine; `return 5;` where every run returns 7. A fix that hands every such register out changes 31 and 43 corpus texts and loses 2 lent signatures in each image, so it was taken back out |
+| A3-193 | P3 | **open** (oracle): grammar 2 seed 8602477, `return-dropped` for an r0 that is an indexed load's index on both arms, chosen by a held parameter (A3-41, A3-62) |
+
+### 1. A3-190 attacked
+
+The claim itself held in every shape. Read with a temporary dump of the lent effects (not committed), and checked by the generator's claims oracle against the runs (no finding in any):
+
+| Fixture | Shape | `preserved` / `outOrigins` |
+|---|---|---|
+| c1 | r7 pushed; one return pops it back, the other drops the slot and sets r7 to 0 | r7 not preserved; out names r4, r7 (and SR) |
+| c2 | c1 with the pop and the change in the delay slots | the same |
+| c3 | r7 kept on one return; a tail jump (`jmp @r2`) to G (`mov #0,r7`) on the other | out names r2, r4, r7 |
+| c4 | F: `mov r4,r7 ; mov r5,r4 ; bsr G`, G keeps r7 when r4 is not 0 (A3-190's callee): F's r7 ends as F's r4 | out names r4 and r5 (the callee's r7 mapped to the caller's r4), not r7 |
+| c7 | three returns: r7 kept, set to 0, copied from r6 | out names r4 to r7 |
+| c8 | GBR kept on one return, `ldc r5,gbr` on the other | GBR not preserved; out names r5 and GBR |
+| c9 | r5 kept on one return, `add #4,r5` on the other | out names r5 |
+
+The callers that rely on the claim: A3-190's own module (o0), the same with the caller's own store through r7 (o2) and with the callee's change made by a tail call (o6) all read the local (`return xStack_c;`). The claim is right; what the caller does with it is not, outside r4-r7 (section 2).
+
+### 2. A3-192: the hand-back outside r4-r7
+
+The probe tells the engine of an escape at a lent call when the callee may hand a frame address back (A3-91: `HandOut` for the registers r4-r7 that `outOrigins` or `leaks` name). A3-190 made `outOrigins` name any register one return keeps and another changes, but the hand-out still looks at r4-r7 only. And lent calls kill r0 and r1 whatever the callee keeps (`LendEffects`, A3-2's choice), so a frame address held there is lost to the engine even when the callee does not touch it. Each fixture: a local of 5, its address in the register, `bsr F1` (lent), `mov #7,r2 ; mov.l r2,@reg`, the local returned. Every run returns 7:
+
+| Fixture | Register, callee | Text |
+|---|---|---|
+| o1 | r1, F1 sets r1 on one return | `*extraout_r1 = 7; return 5;` |
+| o1c | r1, F1 never touches r1 | `return 5;` |
+| o3 | r3, F1 sets r3 on one return | `return 5;` |
+| o4b | r9 (the caller saves it), F1 sets r9 on one return | `return 5;` |
+| o5 | r0, F1 keeps r0 | `return 5;` |
+| o7 | r1, F1 not lent (it reads r3) | `return 5;` |
+| o0, o2, o6 (controls) | r7 | `return xStack_c;` |
+
+The callers are withheld ("it uses r1 after calling ..."), and their text is wrong: P1, as A3-190 rated the same consequence (A3-91 rated it P2).
+
+A fix was tried: at a lent call, `HandOut` for every register `outOrigins` names and for r0 and r1 when the callee keeps them. It makes o1 to o5 right and passes the generator's default run. But it hands out every frame address that compiled code leaves in a scratch register at a call, whether or not anything reads it afterwards. The lent corpus (`a7_round2/corpus.sh`, master's binary and this one) gave hwram007 lent **472 (643)** of 999 (master 474 (645)) and hwram008 **722 (968)** of 1,543 (master 724 (975)); "a return not to its caller" went from 50 to 55 and from 111 to 113; and the text of 31 and 43 functions changed (0601EFE6 lost its `bool` return). Not a reviewer's small fix, so it was taken back out and the row is open. The direction: hand out only a register that the code after the call reads before it writes it.
+
+### 3. A3-191: the routed seed 8209018
+
+`n:endless-call-dropped`, grammar 1, replayed as routed. Function 0 runs two counted loops, then polls the mailbox 0x06001030. After the poll it has `cmp/pl r3 ; bt`, a read of 0x0600103A, `mov.b r2,@r7` (a store of the mailbox) and `bsr 0x06009050`; the callee writes 0x26003044 and returns 0x7B. The default request prints `xRam06001030 = 1; do { } while( true );`, and nothing says that the store or the call is missing. The function is withheld for another reason (it reads r1 on entry). The shrinker's fixture loses the push of PR, so it is withheld for "a return not to its caller".
+
+Hand-shrunk (`fixtures.src` s0, s0j, s1): the loop `L: extu.b r3,r2 ; mov.b r3,@r4 ; dt r3 ; bf L` before the poll makes the difference. Without it (s1) the store and the call are said, as on master. With it, made with `jsr` through a literal (s0j), the function was **lent** `void (xunknown1 *)` with nothing said.
+
+The cause: A3-184 counts a flow block as one the text keeps when an op the actions made (no time of the flow) belongs to its instruction. The engine makes the SUBPIECE of r2 for the byte store after the poll, but places it in the loop's final block, where r2 is written; it carries the store's address. So the code after the poll counted as kept, the region of A3-173/175/178 was empty, and nothing was said.
+
+Fix (`StoresBeforeEndlessLoop`): such an op counts only when the final block it is in holds its instruction. `KeptFlowBlocks` (A3-187's reference reading) keeps the old rule, since there it errs towards saying more.
+
+After the fix, the seed says the store at 0x06009032 and the call at 0x06009038. s0 and s0j say the store at 0x0600901A and the call. s0j is withheld ("a write after a loop the analysis takes to run for ever is missing").
+
+Pins are in `TestA3RoutedPins` (the A3-191 block: the seed, and s0j's two notes and its reason). With the new condition switched off, both fail (2 CHECKs). With it on, `TestA3184Fix` (A3-184's pins) and `TestA3182Fix` pass. The corpus token dumps are byte-identical to master's, alone and lent, in both images.
+
+### 4. The other fixes since round 23, read
+
+* A3-184's region rule: section 3.
+* A3-185 (`PostPollUnmade`) and A3-186 (`SavesBeforeCallsDropped`) are oracle exceptions; their pins pass. A3-186's exception drops the register's reads only in the argument list of the first call that may change it, and only when no such call is nested inside it. Its four text controls bound that.
+* A3-187's filter applies only when the reference run's flow graph is the shown run's (successors and block ranges); it can only say less where the reference run removes code too.
+* A3-188 and A3-189 are oracle fixes; their pins pass.
+
+No further finding in these; no fixtures were built beyond the pins.
+
+### 5. Sweep
+
+`sweep.sh`: 10,000 seeds of each grammar from 8,600,001, canary and shrink off. It was run on master's binary first, then again on this branch's binary:
+
+| Run | Failing | Classes and counts (this branch) |
+|---|---|---|
+| grammar 1 | 0 (master's binary: 0) | `endless-call` checked 644, said 642, unmade 2; `endless-join` checked 1,224, said 1,224; `endless-read` checked and withheld 654; `endless-store` checked 143,207, said 9,556; polls 6,569 |
+| grammar 2 | 2 (master's binary: the same 2): 8602477, 8605977 | `n:return-dropped` 8602477 (area 3, A3-193); `n:map-store-after` 8605977 (area 7). `endless-call` checked 8, said 6, unmade 2; `endless-join` 16 and 16; `endless-read` 258 withheld; polls 1,604 |
+
+* **Area 3** (rowed here): 8602477, A3-193.
+* **Area 7** (routed): 8605977, `n:map-store-after`: "line 29 `pxStack_28 = (xunknown4 *)extraout_r3;` is drawn at 06009048 (a call or a return) and names the store at 06009060, which cannot run before it (A7-32)". Not shrunk.
+
+### 6. Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117** (111 and the 6 Live tests) |
+| fault suite | fault matrix: **0 of 94** job(s) failed |
+| 20,000-seed matrix (canary on) | `failing seeds=0; findings=0` |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus, lent (`a7_round2/corpus.sh`, hwram007 and hwram008) | both "all passed", every ledger count 0; missing and said **0** and **4**; "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**"; token dumps identical to master's |
+| routed seed 8209018 | all passed (`endless-call` checked 1, said 1) |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: ok (no vendored file touched) |
+
+### 7. Routed
+
+* **Area 7:** grammar 2 seed 8605977, `n:map-store-after` (replay `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=8605977 SE_GENERATED_CANARY=0`).
