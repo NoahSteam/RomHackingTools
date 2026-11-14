@@ -17686,6 +17686,125 @@ void TestA5FoldedPins4(Sh2Decompiler& d)
     CHECK(rr.findings.size() == r143.findings.size() && count(rr, "order.folded-store.frame-pointer") == count(r143, "order.folded-store.frame-pointer"));
 }
 
+// Area 7 round 22: the routed seeds and the sweep from 9,400,001. Whole seeds, then each shrunk program evaluated and replayed from the replay line
+// the report prints (alias, volatile range, poll and the module's functions, returns, clobbers and reads included). A7-165 (grammar 1 specials seed
+// 9302668), A7-166 (grammar 1 seeds 8901149 and 8909710), A7-167 (grammar 2 seed 8900054), and A5-146 (grammar 1 seed 8902817, which the oracle
+// fix of A5-144 had already set right: pin only). No finding of any kind.
+void TestArea7Round22Pins(Sh2Decompiler& d)
+{
+    const bool savedSpecials = gSpecialReads;
+    struct Whole
+    {
+        int grammar;
+        long seed;
+        bool specials;
+    };
+    for (const Whole& w : { Whole{ 1, 9302668, true }, Whole{ 1, 8901149, false }, Whole{ 1, 8909710, false }, Whole{ 2, 8900054, false }, Whole{ 1, 8902817, false } })
+    {
+        gSpecialReads = w.specials;
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 22: grammar %d seed %ld%s': %zu finding(s)\n", w.grammar, w.seed, w.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    gSpecialReads = savedSpecials;
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* volatileRange;
+        const char* poll;
+    };
+    const Shrunk kShrunk[] = {
+        // A7-165, specials 9302668: `xRam26001030 = Ram26001028;` for a marked-volatile read and the store of it
+        { "A7-165 grammar 1 specials seed 9302668 shrunk", "D706 6071 C801 89FC E186 6071 8174 4115 8901 6041 535C 000B 0009 0009 2600 1028", nullptr,
+          "26001020-2600102f", "26001028:until-set" },
+        // A7-166, 8901149: a slot's word store both paths run, its line `xRam2600208c = 0x3e003e;` and the line after the block
+        { "A7-166 grammar 1 seed 8901149 shrunk", "E33E D607 2528 8901 3550 8D06 2632 D705 6071 C801 8BFC 000B 2631 000B 2631 0009 2600 208C 2600 1034", "4:26003C0C",
+          "26001030-2600103f", "26001034" },
+        // A7-166, 8909710: the same with a comma expression in the condition
+        { "A7-166 grammar 1 seed 8909710 shrunk", "D609 D70A D10A 271B E0E2 2258 8B01 3230 8F07 1716 816F 4215 8900 816F 451B 000B 0009 000B 0009 0009 2600 2184 2600 2188 2000 0000",
+          nullptr, nullptr, nullptr },
+    };
+    const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
+    for (const Shrunk& p : kShrunk)
+    {
+        const char* values[3] = { p.volatileRange, p.poll, p.alias };
+        std::string saved[3];
+        bool had[3];
+        for (int i = 0; i < 3; ++i)
+        {
+            const char* old = std::getenv(names[i]);
+            had[i] = old != nullptr;
+            if (old) saved[i] = old;
+            SetOrClear(names[i], values[i]);
+        }
+        const Subject subject = RawSubject(p.words);
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        const size_t at = rep.text.find("  replay: SE_GENERATED_WORDS=\"");
+        CHECK(at != std::string::npos);
+        if (at == std::string::npos) continue;
+        const std::string line = rep.text.substr(at, rep.text.find('\n', at) - at);
+        auto value = [&](const char* name, bool quoted) {
+            const size_t k = line.find(std::string(name) + "=" + (quoted ? "\"" : ""));
+            if (k == std::string::npos) return std::string();
+            const size_t from = k + std::strlen(name) + 1 + (quoted ? 1 : 0);
+            return line.substr(from, line.find(quoted ? '"' : ' ', from) - from);
+        };
+        const std::string words = value("SE_GENERATED_WORDS", true), vol = value("SE_GENERATED_VOLATILE", false), poll = value("SE_GENERATED_POLL", false),
+                          alias = value("SE_GENERATED_ALIAS", false);
+        CHECK(vol.empty() == (p.volatileRange == nullptr));
+        CHECK(poll.empty() == (p.poll == nullptr));
+        CHECK(alias.empty() == (p.alias == nullptr));
+        const std::string got[3] = { vol, poll, alias };
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], got[i].empty() ? nullptr : got[i].c_str());
+        const Subject again = RawSubject(words.c_str());
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], nullptr);
+        const Report rr = EvaluateSubject(d, again, true);
+        std::printf("  replay line '%s': %zu finding(s)\n", line.c_str(), rr.findings.size());
+        CHECK(rr.findings.size() == rep.findings.size());
+    }
+    // A7-167, grammar 2 seed 8900054 shrunk twice: function 0 calls function 1 (a `bsr`, then a `jsr` through the pool's literal) and runs into it by
+    // a tail jump; the push of r12 in the callee is the store `xStack_10 = unaff_r12;` drawn at the call names
+    static const ModulePin kBsr = { "A7-167 grammar 2 seed 8900054 shrunk (bsr)",
+                                    "2F86 2F96 4F22 6843 6953 63C3 2F36 63F6 B00A 0009 6483 6593 D302 4F26 69F6 68F6 432B 0009 0600 9028 2F86 2F96 2FA6 2FC6 2FD6 0C2A 7FE8 "
+                                    "6843 6953 6A63 62F3 7218 E103 2216 4110 8BFC E200 E05E 7F18 4C2A 6DF6 6CF6 6AF6 69F6 68F6 000B 0009",
+                                    "0/0/24,28/28/5e", nullptr, "1,1", "184000,184000", "1000,100000" };
+    static const ModulePin kJsr = { "A7-167 grammar 2 seed 8900054 shrunk (jsr)",
+                                    "2F86 2F96 4F22 6843 6953 63C3 2F36 63F6 D305 430B 0009 6483 6593 D304 4F26 69F6 68F6 432B 0009 0009 0600 9030 0600 9030 2F86 2F96 2FA6 "
+                                    "2FC6 2FD6 0C2A 7FE8 6843 6953 6A63 62F3 7218 E103 2216 4110 8BFC E200 E05E 7F18 4C2A 6DF6 6CF6 6AF6 69F6 68F6 000B 0009",
+                                    "0/0/26,30/30/66", nullptr, "1,1", "184000,184000", "1000,100000" };
+    for (const ModulePin* m : { &kBsr, &kJsr })
+    {
+        const Report rep = EvaluateSubject(d, ModuleSubject(*m), true);
+        std::printf("pin '%s': %zu finding(s)\n", m->name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        const size_t at = rep.text.find("  replay: SE_GENERATED_WORDS=\"");
+        CHECK(at != std::string::npos);
+        if (at == std::string::npos) continue;
+        const std::string line = rep.text.substr(at, rep.text.find('\n', at) - at);
+        auto value = [&](const char* name) {
+            const size_t k = line.find(std::string(name) + "=\"");
+            if (k == std::string::npos) return std::string();
+            const size_t from = k + std::strlen(name) + 2;
+            return line.substr(from, line.find('"', from) - from);
+        };
+        const std::string w = value("SE_GENERATED_WORDS"), f = value("SE_GENERATED_FUNCS"), r = value("SE_GENERATED_RETURNS"), c = value("SE_GENERATED_CLOBBERS"),
+                          rd = value("SE_GENERATED_READS");
+        CHECK(!w.empty() && !f.empty() && !r.empty() && !c.empty() && !rd.empty());
+        const ModulePin again = { "replay", w.c_str(), f.c_str(), nullptr, r.c_str(), c.c_str(), rd.c_str() };
+        const Report rr = EvaluateSubject(d, ModuleSubject(again), true);
+        std::printf("  replay line '%s': %zu finding(s)\n", line.c_str(), rr.findings.size());
+        CHECK(rr.findings.size() == rep.findings.size());
+    }
+}
+
 void TestA3RoutedPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -18617,6 +18736,7 @@ void TestGenerated()
         RUN(TestA5FoldedPins2(d));
         RUN(TestA5FoldedPins3(d));
         RUN(TestA5FoldedPins4(d));
+        RUN(TestArea7Round22Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

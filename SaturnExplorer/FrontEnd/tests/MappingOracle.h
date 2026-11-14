@@ -2011,6 +2011,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 // (char)in_r3 + (char)param_2;` at `mov.b r3,@r6` -- which is the store's statement: this line's operand
                                 // drawn there, `cRam06001008 = (char)param_2;` with the piece `(char)param_2` the engine made at the first
                                 // store, is a copy materialised there (A7-116's mark); grammar 1 seed 7102553 (specials))
+                                // (A7-166: not for the line's own name drawn at the store, `xRam2600208c = 0x3e003e;` with its name at the slot's word store: the
+                                // store's statement as a line that merges it with the store after it, though another line, of the same store on another
+                                // path, draws the name there too -- a slot's store both paths run; grammar 1 seeds 8901149 and 8909710. Not for a name the
+                                // product marks materialised (the copy), nor when the other line's name there is that copy: this one is its other half)
+                                const bool nameHere = !A7RuleOff(166) && !t.materialised && t.begin == nb && t.end == assign;
                                 for (size_t lj = 0; lj < r.lines.size() && ownStoreHere && !A7RuleOff(129); ++lj)
                                 {
                                     if (lj == li) continue;
@@ -2018,7 +2023,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                     const size_t ob = ot.find_first_not_of(' '), oa = ot.find(" = ");
                                     if (ob == std::string::npos || oa == std::string::npos || oa <= ob || ot.compare(ob, oa - ob, name) != 0) continue;
                                     for (const Token& u : r.lines[lj].tokens)
-                                        if (u.addr == t.addr && u.begin == ob && u.end == oa) ownStoreHere = false;
+                                        if (u.addr == t.addr && u.begin == ob && u.end == oa && (!nameHere || u.materialised)) ownStoreHere = false;
                                 }
                             }
                         }
@@ -2038,6 +2043,12 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             const uint32_t va = static_cast<uint32_t>(std::strtoul(operand.c_str() + operand.size() - 8, nullptr, 16));
                             for (const AccessFate& f : r.accessFates)
                                 readHere = readHere || (f.insn == t.addr && !f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
+                            // (A7-165: a marked-volatile read is no fate -- the engine lists it in the ledger only, `read 2 at 0600900A direct
+                            // 26001028 printed 1x` -- and `xRam26001030 = Ram26001028;` drawn at the `mov.w @r7,r0` that reads it is that load's
+                            // own statement as a folded one is; grammar 1 specials seed 9302668)
+                            if (!A7RuleOff(165))
+                                for (const MemoryAccess& m : r.accesses)
+                                    readHere = readHere || (m.insn == t.addr && !m.write && m.direct && GlobalDelta(va, m.address) < m.size);
                         }
                         // (A7-119: a frame local the line reads, `(int4)iStack_14` at the `mov.w @r14,r3` that loads it, is that load's own
                         // statement as a global is: the copy of what the load read into the store after it; grammar 2 seed 6205642)
@@ -2739,6 +2750,43 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         if (bs == bu && (s < u || s == u + 2)) return true;
                         std::set<int> seen;
                         std::vector<int> todo;
+                        // (A7-167: a store in the code a `bsr` at `u` calls runs before the call returns, and the call is where the engine draws a
+                        // callee-saved register's push, `xStack_10 = unaff_r12;` at the `bsr` naming the `mov.l r12,@-r15` of the callee, which the
+                        // function's own tail jump runs again; the flow reaches the store's block from the call's target; grammar 2 seed 8900054)
+                        if (!A7RuleOff(167))
+                        {
+                            uint16_t cw = 0;
+                            if (word(u, cw))
+                            {
+                                const sfe::DisassembledInstruction cd = sfe::Sh2Decode(u, cw);
+                                uint32_t target = cd.IsCall && cd.HasBranchTarget ? cd.BranchTarget : 0;
+                                if (!target && (cw & 0xF0FF) == 0x400B)   // (`jsr @Rn` with Rn a number the paths agree on)
+                                {
+                                    if (!haveSources)
+                                    {
+                                        sources = BranchSources(r, word);
+                                        haveSources = true;
+                                    }
+                                    const WordValue tv = RegisterBefore(r, word, sources, u, (cw >> 8) & 0xF);
+                                    if (tv.kind == WordValue::Number) target = static_cast<uint32_t>(tv.value);
+                                }
+                                const int bt = target ? blockOf(target) : -1;
+                                if (bt >= 0 && bt == bs) return true;
+                                if (bt >= 0 && static_cast<size_t>(bt) < r.flowSuccessors.size())
+                                {
+                                    std::set<int> reach;
+                                    std::vector<int> work(1, bt);
+                                    while (!work.empty())
+                                    {
+                                        const int b = work.back();
+                                        work.pop_back();
+                                        if (b < 0 || static_cast<size_t>(b) >= r.flowSuccessors.size() || !reach.insert(b).second) continue;
+                                        if (b == bs) return true;
+                                        for (int n : r.flowSuccessors[static_cast<size_t>(b)]) work.push_back(n);
+                                    }
+                                }
+                            }
+                        }
                         if (static_cast<size_t>(bs) < r.flowSuccessors.size())
                             for (int n : r.flowSuccessors[static_cast<size_t>(bs)])
                                 if (seen.insert(n).second) todo.push_back(n);
