@@ -1,0 +1,1887 @@
+# Area 3 round 25: fixtures for run25.py (the syntax of round 24's fixtures.src). Callers: a local of 5, its address in a register, a call,
+# then a store of 7 through the register (or a read); every run returns 7 unless the comment says otherwise.
+name k0
+# A3-192 copy chain: r1 = &local, lent F1 keeps r1, mov r1,r3, store through r3
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+mov r1,r3
+mov #7,r2
+mov.l r2,@r3
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+nop
+name k1
+# the store through r1 in a bra's delay slot after the call
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+mov #7,r2
+bra J
+mov.l r2,@r1
+J:
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+nop
+name k1r
+# the read of the local through r1 in rts's delay slot (every run returns 5; F1 writes nothing)
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+add #8,r15
+.word 0x4F26
+rts
+mov.l @r1,r0
+fn
+F1:
+rts
+nop
+name k2
+# the store on one path only (r5 != 0): returns 7 when r5 != 0, 5 otherwise
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+tst r5,r5
+bt S
+mov #7,r2
+mov.l r2,@r1
+S:
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+nop
+name k3
+# two calls in a row, F1 keeps r1 (the engine kills r1 at both)
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r1
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+nop
+name k3b
+# two calls, r3: F1 sets r3 on one return (outOrigins names r3), then F2 never touches r3 (keeps it: the engine does not kill it at F2)
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+bsr F1
+nop
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r3
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+rts
+nop
+name k4
+# the address handed to a second call in r4: F1 keeps r1, F2 (lent) stores 7 through r4
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+bsr F2
+mov r1,r4
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r4
+name k4b
+# the address handed to a second call in r1: F1 (lent) keeps r1, F2 (not lent: it reads r1) stores 7 through r1
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r1
+name k4c
+# control: k4b without F1
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r1
+name k4d
+# k4b with r3: F1 sets r3 on one return, F2 (not lent) stores 7 through r3
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r3
+name k5
+# a loop around the call: three times F1 then *r1 += 1 (every run returns 8)
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+mov #3,r8
+L:
+bsr F1
+nop
+mov.l @r1,r2
+add #1,r2
+dt r8
+bf/s L
+mov.l r2,@r1
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+nop
+name k5b
+# the read before the call in the loop: r1 = &local; L: *r1 += 1; F1; three times (every run returns 8)
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+mov #3,r8
+L:
+mov.l @r1,r2
+add #1,r2
+mov.l r2,@r1
+bsr F1
+nop
+dt r8
+bf L
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+nop
+name k6
+# r14 the frame pointer; lent F1 sets r14 on one return (keeps it on the other); the store of 7 through r14 after the call
+ret 1,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov r15,r14
+mov #5,r2
+mov.l r2,@r14
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r14
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r14
+rts
+nop
+K1:
+rts
+nop
+name k6b
+# k6 with the store of 7 before the call (through r15) and the read through r14 after it (every run returns 7)
+ret 1,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov r15,r14
+mov #5,r2
+mov.l r2,@r14
+bsr F1
+mov #7,r2
+mov.l r2,@r15
+mov.l @r14,r0
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r14
+rts
+nop
+K1:
+rts
+nop
+name k9
+# control: r1 written (a global's address) before the store after the call: every run returns 5
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+mov.l =0x06003000,r1
+mov #7,r2
+mov.l r2,@r1
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+nop
+name k4e
+# control: k4d without F1 (r3 = &local, F2 not lent stores 7 through r3)
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r3
+name k4f
+# k4d with r1: F1 sets r1 on one return, F2 (not lent) stores 7 through r1
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r1
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r1
+name k4g
+# k4d with r9 (saved by the caller): F1 sets r9 on one return, F2 (not lent) stores 7 through r9
+ret 1,0,0
+.word 0x4F22
+mov.l r9,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r9
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r9
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r9
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r9
+name k4h
+# k4d with r0: F1 (lent) keeps r0, F2 (not lent) stores 7 through r0
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r0
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r0
+name vAr0
+# A3-192 register sweep: r0, vA
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r0
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r0
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r0
+rts
+nop
+K1:
+rts
+nop
+name vBr0
+# A3-192 register sweep: r0, vB
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r0
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r0
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+name vCr0
+# A3-192 register sweep: r0, vC
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r0
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r0
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r0
+rts
+nop
+K1:
+rts
+nop
+name vDr0
+# A3-192 register sweep: r0, vD
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r0
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r0
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r0
+name vEr0
+# A3-192 register sweep: r0, vE
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r0
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r0
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r0
+name vAr1
+# A3-192 register sweep: r1, vA
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r1
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r1
+rts
+nop
+K1:
+rts
+nop
+name vBr1
+# A3-192 register sweep: r1, vB
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r1
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+name vCr1
+# A3-192 register sweep: r1, vC
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r1
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r1
+rts
+nop
+K1:
+rts
+nop
+name vDr1
+# A3-192 register sweep: r1, vD
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r1
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r1
+name vEr1
+# A3-192 register sweep: r1, vE
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r1
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r1
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r1
+name vAr2
+# A3-192 register sweep: r2, vA
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r3
+mov.l r3,@r15
+mov r15,r2
+bsr F1
+nop
+mov #7,r3
+mov.l r3,@r2
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r2
+rts
+nop
+K1:
+rts
+nop
+name vBr2
+# A3-192 register sweep: r2, vB
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r3
+mov.l r3,@r15
+mov r15,r2
+bsr F1
+nop
+mov #7,r3
+mov.l r3,@r2
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+name vCr2
+# A3-192 register sweep: r2, vC
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r3
+mov.l r3,@r15
+mov r15,r2
+bsr F1
+nop
+mov #7,r3
+mov.l r3,@r2
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r2
+rts
+nop
+K1:
+rts
+nop
+name vDr2
+# A3-192 register sweep: r2, vD
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r3
+mov.l r3,@r15
+mov r15,r2
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r2
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r3
+rts
+mov.l r3,@r2
+name vEr2
+# A3-192 register sweep: r2, vE
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r3
+mov.l r3,@r15
+mov r15,r2
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r2
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r3
+rts
+mov.l r3,@r2
+name vAr3
+# A3-192 register sweep: r3, vA
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r3
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+name vBr3
+# A3-192 register sweep: r3, vB
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r3
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r2
+rts
+nop
+K1:
+rts
+nop
+name vCr3
+# A3-192 register sweep: r3, vC
+ret 1,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r3
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r1,r1
+bt K1
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+name vDr3
+# A3-192 register sweep: r3, vD
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r3
+name vEr3
+# A3-192 register sweep: r3, vE
+ret 1,0,0
+.word 0x4F22
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r3
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r1,r1
+bt K1
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r3
+name vAr8
+# A3-192 register sweep: r8, vA
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+name vBr8
+# A3-192 register sweep: r8, vB
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+name vCr8
+# A3-192 register sweep: r8, vC
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+name vDr8
+# A3-192 register sweep: r8, vD
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r8
+name vEr8
+# A3-192 register sweep: r8, vE
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r8
+name vAr10
+# A3-192 register sweep: r10, vA
+ret 1,0
+.word 0x4F22
+mov.l r10,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r10
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r10
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r10
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r10
+rts
+nop
+K1:
+rts
+nop
+name vBr10
+# A3-192 register sweep: r10, vB
+ret 1,0
+.word 0x4F22
+mov.l r10,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r10
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r10
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r10
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+name vCr10
+# A3-192 register sweep: r10, vC
+ret 1,0
+.word 0x4F22
+mov.l r10,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r10
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r10
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r10
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r10
+rts
+nop
+K1:
+rts
+nop
+name vDr10
+# A3-192 register sweep: r10, vD
+ret 1,0,0
+.word 0x4F22
+mov.l r10,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r10
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r10
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r10
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r10
+name vEr10
+# A3-192 register sweep: r10, vE
+ret 1,0,0
+.word 0x4F22
+mov.l r10,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r10
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r10
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r10
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r10
+name vAr12
+# A3-192 register sweep: r12, vA
+ret 1,0
+.word 0x4F22
+mov.l r12,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r12
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r12
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r12
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r12
+rts
+nop
+K1:
+rts
+nop
+name vBr12
+# A3-192 register sweep: r12, vB
+ret 1,0
+.word 0x4F22
+mov.l r12,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r12
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r12
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r12
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+name vCr12
+# A3-192 register sweep: r12, vC
+ret 1,0
+.word 0x4F22
+mov.l r12,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r12
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r12
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r12
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r12
+rts
+nop
+K1:
+rts
+nop
+name vDr12
+# A3-192 register sweep: r12, vD
+ret 1,0,0
+.word 0x4F22
+mov.l r12,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r12
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r12
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r12
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r12
+name vEr12
+# A3-192 register sweep: r12, vE
+ret 1,0,0
+.word 0x4F22
+mov.l r12,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r12
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r12
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r12
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r12
+name vAr13
+# A3-192 register sweep: r13, vA
+ret 1,0
+.word 0x4F22
+mov.l r13,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r13
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r13
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r13
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r13
+rts
+nop
+K1:
+rts
+nop
+name vBr13
+# A3-192 register sweep: r13, vB
+ret 1,0
+.word 0x4F22
+mov.l r13,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r13
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r13
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r13
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+name vCr13
+# A3-192 register sweep: r13, vC
+ret 1,0
+.word 0x4F22
+mov.l r13,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r13
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r13
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r13
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r13
+rts
+nop
+K1:
+rts
+nop
+name vDr13
+# A3-192 register sweep: r13, vD
+ret 1,0,0
+.word 0x4F22
+mov.l r13,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r13
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r13
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r13
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r13
+name vEr13
+# A3-192 register sweep: r13, vE
+ret 1,0,0
+.word 0x4F22
+mov.l r13,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r13
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r13
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r13
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r13
+name vAr14
+# A3-192 register sweep: r14, vA
+ret 1,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r14
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r14
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r14
+rts
+nop
+K1:
+rts
+nop
+name vBr14
+# A3-192 register sweep: r14, vB
+ret 1,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r14
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r14
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r3
+rts
+nop
+K1:
+rts
+nop
+name vCr14
+# A3-192 register sweep: r14, vC
+ret 1,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r14
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r14
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r14
+rts
+nop
+K1:
+rts
+nop
+name vDr14
+# A3-192 register sweep: r14, vD
+ret 1,0,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r14
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov #0,r14
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r14
+name vEr14
+# A3-192 register sweep: r14, vE
+ret 1,0,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r14
+bsr F1
+nop
+bsr F2
+nop
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r14
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #7,r2
+rts
+mov.l r2,@r14
