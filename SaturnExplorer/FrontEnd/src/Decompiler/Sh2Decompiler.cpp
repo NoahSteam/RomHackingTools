@@ -7008,6 +7008,76 @@ std::set<std::pair<size_t, uint32_t>> SharedInstructionLines(const PrintedOperat
 // a click goes to one of them. Otherwise (a load, a call or a computation the engine knew the value of, an input, a temporary) the drawn
 // tokens name nothing: never an instruction that does not make the number. A number put in memory is AddFrameStoreTokens'.
 // Returns how many tokens moved.
+// A7-144: the number a `movt Rn` (Rn = zext(sr & 1), op `w` of the flow) makes when it is the first instruction of its flow block and
+// every way into the block is the edge of a `bt` or `bf` (CBRANCH on sr & 1, or on (sr & 1) == 0) that gives T one value; false otherwise.
+bool MovtNumber(const FlowRecord& flow, const FlowOp& w, uint64_t& value)
+{
+    if (w.code != ghidra::CPUI_INT_ZEXT || w.numIn < 1 || !w.hasOut) return false;
+    int blk = -1;
+    size_t pos = 0;
+    for (size_t k = 0; k < flow.blockOps.size() && blk < 0; ++k)
+    {
+        const std::vector<FlowOp>& ops = flow.blockOps[k];
+        if (!ops.empty() && &w >= &ops.front() && &w <= &ops.back()) blk = static_cast<int>(k), pos = static_cast<size_t>(&w - &ops.front());
+    }
+    if (blk < 0 || static_cast<size_t>(blk) >= flow.predecessors.size()) return false;
+    const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(blk)];
+    // the T bit of sr, read in the instruction: AND(SUBPIECE(sr,0), 1), with no op of another instruction before it in the block
+    const auto tBit = [](const std::vector<FlowOp>& in, size_t at, const FlowVn& v, FlowVn& sr, bool toEnd) {
+        const FlowOp* andOp = nullptr;
+        for (size_t i = at; i-- > 0 && !andOp;)
+            if (in[i].hasOut && SameStorage(in[i].out, v)) andOp = &in[i];
+        if (!andOp || andOp->code != ghidra::CPUI_INT_AND || andOp->numIn < 2 || !andOp->in[1].Constant() || MaskToSize(andOp->in[1].offset, andOp->in[1].size) != 1)
+            return false;
+        const size_t ai = static_cast<size_t>(andOp - &in.front());
+        const FlowOp* piece = nullptr;
+        for (size_t i = ai; i-- > 0 && !piece;)
+            if (in[i].hasOut && SameStorage(in[i].out, andOp->in[0])) piece = &in[i];
+        if (!piece || piece->code != ghidra::CPUI_SUBPIECE || piece->numIn < 2 || !piece->in[1].Constant() || piece->in[1].offset != 0 ||
+            piece->in[0].space == nullptr || piece->in[0].space->getType() != ghidra::IPTR_PROCESSOR)
+            return false;
+        // (for a branch's condition: sr not written between the read and the end of the block)
+        for (size_t i = static_cast<size_t>(piece - &in.front()) + 1; toEnd && i < in.size(); ++i)
+            if (in[i].hasOut && FlowStorageOverlaps(in[i].out, piece->in[0])) return false;
+        sr = piece->in[0];
+        return true;
+    };
+    FlowVn sr;
+    for (size_t i = 0; i < pos; ++i)
+        if (ops[i].insn != w.insn) return false;   // (the movt is the block's first instruction)
+    if (!tBit(ops, pos, w.in[0], sr, false)) return false;
+    const std::vector<int>& preds = flow.predecessors[static_cast<size_t>(blk)];
+    if (preds.empty() || blk == flow.entryBlock) return false;
+    int t = -1;
+    for (int p : preds)
+    {
+        if (p < 0 || static_cast<size_t>(p) >= flow.blockOps.size() || static_cast<size_t>(p) >= flow.successors.size()) return false;
+        const std::vector<FlowOp>& in = flow.blockOps[static_cast<size_t>(p)];
+        const std::vector<int>& next = flow.successors[static_cast<size_t>(p)];
+        if (in.empty() || in.back().code != ghidra::CPUI_CBRANCH || in.back().numIn < 2 || next.size() != 2 || next[0] == next[1]) return false;
+        const bool taken = next[1] == blk;
+        // the condition: T itself (`bt`), or T == 0 (`bf`)
+        FlowVn cond = in.back().in[1], bitSr;
+        bool whenSet = true;
+        const FlowOp* def = nullptr;
+        for (size_t i = in.size() - 1; i-- > 0 && !def;)
+            if (in[i].hasOut && SameStorage(in[i].out, cond)) def = &in[i];
+        if (def && def->code == ghidra::CPUI_INT_EQUAL && def->numIn >= 2 && def->in[1].Constant() && def->in[1].offset == 0)
+        {
+            whenSet = false;
+            if (!tBit(in, static_cast<size_t>(def - &in.front()), def->in[0], bitSr, true)) return false;
+        }
+        else if (!tBit(in, in.size() - 1, cond, bitSr, true))
+            return false;
+        if (!SameStorage(bitSr, sr)) return false;
+        const int edgeT = taken == whenSet ? 1 : 0;
+        if (t >= 0 && t != edgeT) return false;
+        t = edgeT;
+    }
+    value = static_cast<uint64_t>(t);
+    return t >= 0;
+}
+
 int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& printed, const ghidra::Funcdata& fd, const FlowRecord& flow)
 {
     std::vector<const ghidra::PcodeOp*> ordered;
@@ -7056,6 +7126,33 @@ int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& pri
                 regSize = rep->getSize();
             }
         }
+        // (A7-144: a merge copy at the end of the block before the join, of a variable the engine named after the frame word a register
+        // was read from -- `xStack_16 = 0;` for `mov.l @r15,r1` merged with the `movt r1` of a loop's body -- is that register's number,
+        // when the variable is in one register only: no store of the frame put it there. Grammar 2 seed 7407523)
+        if (reg.getSpace()->getType() == ghidra::IPTR_SPACEBASE && out->getSpace()->getType() == ghidra::IPTR_INTERNAL && out->getHigh() &&
+            o->getAddr() != home->getStart())
+        {
+            const ghidra::HighVariable* high = out->getHigh();
+            const ghidra::Varnode* held = nullptr;
+            bool one = true;
+            for (ghidra::int4 i = 0; i < high->numInstances() && one; ++i)
+            {
+                const ghidra::Varnode* v = high->getInstance(i);
+                if (v->getSpace()->getType() != ghidra::IPTR_PROCESSOR) continue;
+                if (held && (held->getAddr() != v->getAddr() || held->getSize() != v->getSize())) one = false;
+                held = v;
+            }
+            bool stored = false;
+            for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+                stored = stored || (rec.store && rec.addr.getSpace() == reg.getSpace() &&
+                                    ((reg.getOffset() - rec.addr.getOffset()) & reg.getSpace()->getHighest()) < static_cast<ghidra::uintb>(rec.size));
+            if (held && one && !stored)
+            {
+                // (the whole register: the instructions write all of it, a half of it is the variable's)
+                reg = ghidra::Address(held->getSpace(), held->getOffset() & ~static_cast<ghidra::uintb>(3));
+                regSize = 4;
+            }
+        }
         // (a number put in memory is AddFrameStoreTokens'; one in a temporary no register holds has no instruction that sets it)
         if (reg.getSpace()->getType() == ghidra::IPTR_SPACEBASE || reg.getSpace() == fd.getArch()->getDefaultDataSpace()) continue;
         const bool registerStorage = reg.getSpace()->getType() == ghidra::IPTR_PROCESSOR;
@@ -7096,7 +7193,10 @@ int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& pri
             for (const FlowOp* w : writers)
             {
                 uint64_t v = 0;
-                if (!FlowNumber(*w, v))
+                // (A7-144: a `movt` at the start of a block every way into which is a `bt` or `bf` edge giving one T makes that T, as a
+                // `mov #imm` makes its number: `movt r1` after `dt r3 ; bf L`, T clear at L)
+                const bool computed = !FlowNumber(*w, v) && MovtNumber(flow, *w, v);
+                if (!computed && !FlowNumber(*w, v))
                 {
                     numbers = false;   // (a load, a call, a computation the engine knew the value of on this path: no instruction makes the number)
                     break;
@@ -7649,6 +7749,26 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 start += size;
             }
         }
+        // A7-147: the same for a zero extension of the variable's own low bytes -- `uRam2600210c = (uint4)uRam2600210c._1_3_;`, the byte
+        // store of 0 over the high byte (the instance of a delay slot's `mov.b r2,@r6` on the path where r2 is 0, A7-136's zero bytes):
+        // the bytes it keeps are the memory's, no later store's value (it named the `mov.l r1,@r6` after the paths join, which made the
+        // line a copy drawn at the slot's store; grammar 1 specials seed 7102142, area 5's A5-137 (c))
+        if (code == ghidra::CPUI_INT_ZEXT && o->numInput() == 1 && space->isBigEndian())
+        {
+            const ghidra::Varnode* part = o->getIn(0);
+            const ghidra::int4 size = part->getSize();
+            for (int hop = 0; hop < 4 && part->isWritten() && part->getDef()->code() == ghidra::CPUI_COPY; ++hop) part = part->getDef()->getIn(0);
+            const ghidra::int4 start = out->getSize() - size;   // (big-endian: the low bytes are the last)
+            bool self = start > 0 && part->getSpace() == space && part->getOffset() == ((base + static_cast<ghidra::uintb>(start)) & space->getHighest()) &&
+                        part->getSize() == size;
+            if (!self && start > 0 && part->isWritten() && part->getDef()->code() == ghidra::CPUI_SUBPIECE)
+            {
+                const ghidra::Varnode* whole = part->getDef()->getIn(0);
+                self = whole->getSpace() == space && whole->getOffset() == base && whole->getSize() == out->getSize() && part->getDef()->getIn(1)->getOffset() == 0;
+            }
+            if (self)
+                for (ghidra::int4 b = start; b < out->getSize(); ++b) kept[static_cast<size_t>(b)] = true;
+        }
         for (ghidra::int4 b = 0; b < out->getSize(); ++b)
         {
             const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(b)) & space->getHighest();
@@ -7727,6 +7847,29 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             }
             const ghidra::AccessRecord* prior = lastIn(home, true);
             if (take(prior)) continue;
+            // A7-141: a statement in a block that accesses the byte nowhere else, which goes on only to a join whose first access of the
+            // byte is a store of it, is the engine's copy of that store's value on this path (`cRam26001018 = 0; if (uVar2 == 1) {
+            // cRam26001018 = (char)param_2; }` for `bf L ; add r5,r2 ; L: mov.b r2,@r7`): that store is the statement's, not the store of
+            // the byte before the paths parted (the poll's store of 2 the walk back finds first; grammar 1 specials seed 7701445)
+            if (!prior && home->sizeOut() == 1 && home->getOut(0)->sizeIn() >= 2 &&
+                home->getOut(0)->getType() == ghidra::FlowBlock::t_basic && home->getType() == ghidra::FlowBlock::t_basic && !nextInHome())
+            {
+                const ghidra::BlockBasic* join = static_cast<const ghidra::BlockBasic*>(home->getOut(0));
+                const ghidra::AccessRecord* first = nullptr;
+                const auto f = blockStores.find(join);
+                if (f != blockStores.end())
+                    for (const ghidra::AccessRecord* r : f->second)
+                        if (writes(r) && (!first || key(r->pc, r->slot) < key(first->pc, first->slot))) first = r;
+                // (a read of the byte in the statement's block, or in the join before that store, reads the statement's value there)
+                bool read = false;
+                if (first)
+                    for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+                        if (!rec.store && !rec.addr.isInvalid() && writes(&rec) &&
+                            (static_cast<const ghidra::BlockBasic*>(home)->contains(rec.pc) ||
+                             (join->contains(rec.pc) && key(rec.pc, rec.slot) < key(first->pc, first->slot))))
+                            read = true;
+                if (first && !read && take(first)) continue;
+            }
             std::set<std::pair<const ghidra::FlowBlock*, const ghidra::FlowBlock*>> seen;
             std::vector<std::pair<const ghidra::FlowBlock*, const ghidra::FlowBlock*>> todo;   // (a block, the block it goes to)
             bool reached = false;
@@ -8527,6 +8670,48 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
             }
             for (Token& t : lines[line].tokens)
                 if (t.addr == own && t.begin < t.end) t.materialised = true;
+        }
+    }
+    // A7-145: a copy the engine made of the stores of a variable that join into one value -- `uRam06001000 = 0;` for a word store of
+    // `in_r2 & 0x80000000` and the byte store of 0 over its high byte, `xRam06001020 = 0x30009;` for two half-word stores -- drawn at the
+    // first store, whose own statement is another line (the variable's name drawn at that store there: `uRam06001000 = in_r2 &
+    // 0x80000000;`), and naming the later store: its tokens at the first store are a copy materialised there (A7-25), which the way back
+    // offers after that store's own line. Only a line that is a copy (`V = W;`), drawn at a store and naming another (the oracle's
+    // A7-129 rule: grammar 1 seeds 7907547, 8002145 and 8004782, specials for the last two)
+    for (size_t line = 0; line < lines.size(); ++line)
+    {
+        Line& l = lines[line];
+        const std::string& text = l.text;
+        if (!plainCopy(text)) continue;
+        const size_t nb = text.find_first_not_of(' '), eq = text.find(" = ");
+        const std::string name = text.substr(nb, eq - nb);
+        const auto isStore = [&flow](uint32_t a) { return flow.accessesByInsn.find(std::make_pair(a, true)) != flow.accessesByInsn.end(); };
+        bool namesOther = false;
+        std::set<uint32_t> drawnStores;
+        for (const Token& t : l.tokens)
+        {
+            if (!t.addr || !isStore(t.addr)) continue;
+            if (t.begin == t.end) namesOther = true;
+            else drawnStores.insert(t.addr);
+        }
+        if (!namesOther) continue;
+        for (uint32_t at : drawnStores)
+        {
+            bool named = false;   // (an empty token of this store: the line names it, not only draws it)
+            for (const Token& t : l.tokens) named = named || (t.addr == at && t.begin == t.end);
+            if (named) continue;
+            bool own = false;   // (another line, not a copy, whose assigned name is drawn at the store: the store's own statement)
+            for (size_t other = 0; other < lines.size() && !own; ++other)
+            {
+                if (other == line || plainCopy(lines[other].text)) continue;
+                const std::string& ot = lines[other].text;
+                const size_t ob = ot.find_first_not_of(' '), oa = ot.find(" = ");
+                if (ob == std::string::npos || oa == std::string::npos || oa <= ob || ot.compare(ob, oa - ob, name) != 0) continue;
+                for (const Token& u : lines[other].tokens) own = own || (u.addr == at && u.begin == ob && u.end == oa && !u.materialised);
+            }
+            if (!own) continue;
+            for (Token& t : l.tokens)
+                if (t.addr == at && t.begin < t.end) t.materialised = true;
         }
     }
 }

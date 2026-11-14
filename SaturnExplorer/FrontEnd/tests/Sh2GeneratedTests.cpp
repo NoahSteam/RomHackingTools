@@ -16624,6 +16624,29 @@ void TestArea7Round16Pins(Sh2Decompiler& d)
     gSpecialReads = savedSpecials;
 }
 
+// Area 7 round 17: the seeds of A7-141 to A7-146, whole, pinned to no `map-*` finding (the shrunk programs are TestArea7Round17's in
+// Sh2DecompilerTests).
+void TestArea7Round17Pins(Sh2Decompiler& d)
+{
+    struct Pin
+    {
+        int grammar;
+        int seed;
+        bool specials;
+    };
+    const bool savedSpecials = gSpecialReads;
+    for (const Pin& s : { Pin{ 1, 7701445, true }, Pin{ 2, 7607636, false }, Pin{ 2, 7402123, false }, Pin{ 2, 7407523, false }, Pin{ 1, 7907547, false },
+                          Pin{ 1, 8002145, true }, Pin{ 1, 8002899, true }, Pin{ 1, 8004782, true } })
+    {
+        gSpecialReads = s.specials;
+        const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(s.seed) : Generate(s.seed), true);
+        std::printf("pin 'area 7 round 17: grammar %d seed %d%s': %zu finding(s)\n", s.grammar, s.seed, s.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        for (const Finding& f : rep.findings) CHECK(f.sig.find("map-") == std::string::npos);
+    }
+    gSpecialReads = savedSpecials;
+}
+
 // ---- A5-114 to A5-118 (patch 0090): a hardware access is a barrier no read or write of ordinary memory is moved, merged or dropped across ----
 // The area 5 review round's fixtures (A5-114 to A5-117, Sh2DecompilerTests' TestArea5Review), the coordinator's A5-118 (a whole overwrite of a
 // global across a DMA enable), and the seeds that failed on master 43e945b2 with `folded-store-after-access`. Each module pin passes with the
@@ -17002,7 +17025,7 @@ void TestA5FoldedPins(Sh2Decompiler& d)
     for (const Pin& s : { Pin{ 1, 7002991, false, nullptr }, Pin{ 1, 7009698, false, nullptr }, Pin{ 1, 7005221, false, "order.folded-read-before-access.other-path" },
                           Pin{ 1, 7008257, false, "order.folded-read-before-access.other-path" }, Pin{ 1, 7402502, false, "order.folded-store.write-back-piece" },
                           Pin{ 2, 7001880, false, "order.folded-store.frame-between" }, Pin{ 2, 7401819, false, "order.folded-store.frame-between" },
-                          Pin{ 1, 7102142, true, "order.folded-store.instance-assigned" }, Pin{ 1, 7006344, false, "pointer.effect.excused" },
+                          Pin{ 1, 7102142, true, "order.folded-store.read" }, Pin{ 1, 7006344, false, "pointer.effect.excused" },
                           Pin{ 1, 7801382, false, "order.folded-store.unrun-write-back" },
                           // (A5-130's dead-store rule, which no pin reached since A5-124: two seeds of this round's sweep reach it; each passes with
                           // the rule off too, the read printed before the earlier store's line either way, so they keep the rule run, not needed)
@@ -17032,9 +17055,11 @@ void TestA5FoldedPins(Sh2Decompiler& d)
         { "A5-137 (a) grammar 1 seed 7402502 shrunk", "D606 6162 E003 0614 2448 8904 D704 6071 C801 8BFC 7363 2632 000B 0009 8000 2010 2600 1008", "26001000-2600100F",
           "26001008", "order.folded-store.write-back-piece" },
         // A5-137 (c), 7102142 (specials): `mov.b r2,@r6` in the slot of a `bf/s` and the target of a `bra`; the r2 = 0 instance is printed before the
-        // read in the other slot, its line's token at the later `mov.l r3,@r6`
+        // read in the other slot. Area 7's A7-136 (round 16) and A7-147 (round 17) draw that instance's line at the slot's store alone (it named
+        // the later `mov.l r3,@r6`), so the store is judged against the read and passes (`order.folded-store.read`): the `instance-assigned`
+        // set-aside is not reached for this seed any more
         { "A5-137 (c) grammar 1 specials seed 7102142 shrunk", "D609 2228 8B0E C840 8F0A 2620 2448 8904 E362 D706 6071 C801 8BFC 2632 000B 6342 000B 6342 AFF1 "
-                                                               "0009 2600 2100 2600 1008", "26001000-2600100F", "26001008", "order.folded-store.instance-assigned" },
+                                                               "0009 2600 2100 2600 1008", "26001000-2600100F", "26001008", "order.folded-store.read" },
         // A5-138, 7801382: `mov.l @r6,r3 ; tst r3,r2 ; bt L ; mov.l r3,@r6 ; L: <poll>`, the store no run makes a write-back of the word read
         { "A5-138 grammar 1 seed 7801382 shrunk", "D606 6362 2238 8900 2632 D705 2411 6071 C801 8BFB 2660 000B 0009 0009 2600 238C 2600 1020", "26001020-2600102F",
           "26001020", "order.folded-store.unrun-write-back" },
@@ -17837,6 +17862,7 @@ void TestGenerated()
         RUN(TestArea7Round14Pins(d));
         RUN(TestArea7Round15Pins(d));
         RUN(TestArea7Round16Pins(d));
+        RUN(TestArea7Round17Pins(d));
         RUN(TestA5114Pins(d));
         RUN(TestA5119Pins(d));
         RUN(TestA5126Pins(d));

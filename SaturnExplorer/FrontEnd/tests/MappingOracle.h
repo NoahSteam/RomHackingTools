@@ -2366,6 +2366,27 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (shownValue.kind == WordValue::Param)
                     {
                         if (got == shownValue || (got.kind == WordValue::Number && got.byCondition)) return false;
+                        // (A7-146: a parameter the text assigns a number, `param_2 = (xunknown2 *)0x5f;` on one path after `param_2 = param_2 +
+                        // 2;` for the `mac.w @r5+,@r5+` that moves r5 on, is a variable that holds that number there: a store of it shows the
+                        // line; grammar 1 seed 8002899 (specials))
+                        if (got.kind == WordValue::Number && !A7RuleOff(146))
+                            for (const auto& other : r.lines)
+                            {
+                                const size_t s = other.text.find_first_not_of(' ');
+                                if (s == std::string::npos || other.text.compare(s, shownText.size() + 3, shownText + " = ") != 0) continue;
+                                std::string rhs = other.text.substr(s + shownText.size() + 3);
+                                if (!rhs.empty() && rhs[0] == '(' && rhs.find(')') != std::string::npos) rhs = rhs.substr(rhs.find(')') + 1);
+                                if (rhs.empty() || rhs.back() != ';') continue;
+                                rhs.pop_back();
+                                const bool negative = !rhs.empty() && rhs[0] == '-';
+                                if (negative) rhs = rhs.substr(1);
+                                if (rhs.empty() || !std::isdigit(static_cast<unsigned char>(rhs[0])) ||
+                                    rhs.find_first_not_of("0123456789abcdefx") != std::string::npos)
+                                    continue;
+                                uint32_t n = static_cast<uint32_t>(std::strtoull(rhs.c_str(), nullptr, 0));
+                                if (negative) n = 0u - n;
+                                if (n == static_cast<uint32_t>(got.value)) return false;
+                            }
                         // (A7-120: or the store writes only bytes the extension of a narrow unsigned parameter makes 0 -- `(uint4)param_2` of a
                         // `uint2`, the byte store of 0 at the word's high byte -- and its bytes there are 0; grammar 1 seed 6603025)
                         if (got.kind == WordValue::Number && cast && !A7RuleOff(120))
@@ -2501,6 +2522,32 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             if (!name.empty() && rhs.back() == ';' && name.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") == std::string::npos &&
                                 std::find(names.begin(), names.end(), name) == names.end())
                                 names.push_back(name);
+                        }
+                    // (A7-142: a register the engine names after a call's output, `extraout_r9`, is the value that register has when the call
+                    // returns; for r8 to r14, which a callee keeps, the value it had at the call. The variable holds the parameter when it
+                    // is the parameter's after every call of the function -- `pxVar1 = extraout_r9;` for r9 = r5 on entry, stored by
+                    // `mov.b r5,@r6` after `mov r9,r5`; grammar 2 seed 7607636)
+                    if (!A7RuleOff(142))
+                        for (const std::string& name : names)
+                        {
+                            if (name.compare(0, 10, "extraout_r") != 0 || name.size() < 11 || !std::isdigit(static_cast<unsigned char>(name[10]))) continue;
+                            const size_t digits = name.find_first_not_of("0123456789", 10);
+                            if (digits != std::string::npos && name[digits] != '_') continue;
+                            const int kept = std::atoi(name.c_str() + 10);
+                            if (kept < 8 || kept > 14) continue;
+                            int calls = 0;
+                            bool all = true;
+                            for (const auto& range : r.body)
+                                for (uint32_t p = range.first; p < range.second && all; p += 2)
+                                {
+                                    uint16_t cw = 0;
+                                    if (!word(p, cw)) continue;
+                                    const sfe::DisassembledInstruction cd = sfe::Sh2Decode(p, cw);
+                                    if (!cd.IsValid || !cd.IsCall) continue;
+                                    ++calls;
+                                    all = RegisterBefore(r, word, sources, p + (cd.HasDelaySlot ? 4u : 2u), kept) == got;
+                                }
+                            if (calls > 0 && all) return false;
                         }
                     return true;
                 };
@@ -3442,8 +3489,25 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         for (uint32_t pb : in->second)
                             if (r.InBody(pb) && word(pb, pw) && ((pw >> 8) == 0x89 || (pw >> 8) == 0x8B) && sfe::Sh2Decode(pb, pw).BranchTarget == at)
                                 edges.emplace_back(pb, (pw >> 8) == 0x89 ? 1 : 0);
-                    if (r.InBody(at - 2) && word(at - 2, pw) && ((pw >> 8) == 0x89 || (pw >> 8) == 0x8B) && sfe::Sh2Decode(at - 2, pw).BranchTarget != at)
+                    // (A7-143: a `bt` or `bf` to the next instruction is both edges, the taken one and the fall-through: `cmp/pl r6 ; bt L ; L:
+                    // movt r2` makes 0 on the fall-through; grammar 2 seed 7402123)
+                    if (r.InBody(at - 2) && word(at - 2, pw) && ((pw >> 8) == 0x89 || (pw >> 8) == 0x8B) &&
+                        (sfe::Sh2Decode(at - 2, pw).BranchTarget != at || !A7RuleOff(143)))
                         edges.emplace_back(at - 2, (pw >> 8) == 0x89 ? 0 : 1);
+                    // (A7-143: the fall-through from straight code that leaves T as it was, `cmp/pl r6 ; bt L ; mov.l r2,@r5 ; extu.b r2,r2 ;
+                    // L: movt r2`: T there is the T before that instruction, 0 on the `bt`'s fall-through)
+                    else if (!A7RuleOff(143) && r.InBody(at - 2) && word(at - 2, pw) && !edges.empty())
+                    {
+                        const sfe::DisassembledInstruction pd = sfe::Sh2Decode(at - 2, pw);
+                        uint16_t ppw = 0;
+                        const bool inSlot = r.InBody(at - 4) && word(at - 4, ppw) && sfe::Sh2Decode(at - 4, ppw).HasDelaySlot;
+                        if (pd.IsValid && !pd.IsBranch && !pd.IsCall && !pd.HasDelaySlot && !inSlot && pd.Mnemonic != "rte" && !SetsT(pw) &&
+                            TSetBy(r, word, sources, at - 2, pw, 1) == -2)
+                        {
+                            const int t = TBefore(r, word, sources, at - 2, 1);
+                            if (t >= 0) edges.emplace_back(at - 2, t);
+                        }
+                    }
                     for (const auto& edge : edges)
                     {
                         EdgeT().t = edge.second;
