@@ -21558,3 +21558,116 @@ A3-203's off switches (section 1) were run on the first form's build; its code i
 ### 5. Routed
 
 Nothing to another area.
+
+## Area 3, round 27 review
+
+Reviewer, branch `review/3-round27`, cut at master `25ff769b`. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). One host change (`Sh2Decompiler.cpp`: the walk's tail jump through a register, A3-205; r15 in the caution, A3-206; the caution's comment in `Sh2Decompiler.h`) and the pins (`Sh2GeneratedTests.cpp`, `TestA3RoutedPins`). **No engine patch: 0089 stays free.** Scripts and fixtures: `Docs/Decompiler/tools/a3_round27/` (`fixtures.src`; `run.py` and `run.sh`, A3-203's reading this directory; `notes.py`, the cautions and frame notes of a token dump with the line printed after each; `sweep.sh`, round 26's with this round's first seed).
+
+**Verdict, area 3: not clean.** Two P2 rows filed and fixed here (A3-205, A3-206), one P2 filed open (A3-207: A3-197's recorded limit, which no row held), two P3 filed open (A3-208, A3-209), and one P3 for area 11 (A11-33). No P1. The clean count stays 0.
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-205 | P2 | **filed and fixed** (host): the walk of an unlent callee did not carry what a thunk's target (`mov.l @(lit),r1 ; jmp @r1`) changes: no caution where the runs return through a cleared r8 |
+| A3-206 | P2 | **filed and fixed** (host): A3-200's sibling for r15, which the model keeps across an unlent call too: `return 5;` with no caution where the runs read the word above |
+| A3-207 | P2 | **filed open** (host): A3-197's limit w6 (a callee that saves PR and calls an unlent callee proves no return, so shows no change), with a recursive form (rc); not local |
+| A3-208 | P3 | **filed open** (host): the slot note calls a saved register's word "a local" after any earlier unlent call (sw2; 0600526C/007) |
+| A3-209 | P3 | **filed open** (host): the stack-argument note says "in none of the arguments" at a call that shows the word's address as an argument, after a lent call (sa2; 06060F34/008) |
+| A11-33 | P3 | **filed open** (generator, area 11): no oracle holds A3-197's caution against a run |
+
+### 1. The recent fixes attacked
+
+Unless said, a fixture is round 25's vCr8 caller (a local of 5, its address in r8, the calls, 7 stored through r8, the local returned); F1 is vCr8's (clears r8 when r3 != 0 and r4 = 0; not lent). Master is `25ff769b`'s product; "after" this branch's final binary (`a3_round27/run.sh`).
+
+| Fixture | Attacks | Shape | Master | After |
+|---|---|---|---|---|
+| g1a, g2a | A3-203, A3-197 | F2 alone saves r8 in a fixed word of work RAM (g2a: GBR-relative), clears r8, reloads it: a callee that writes r8 on every path from a value made from its entry value | no caution (the frame note: F2 lets &local out) | the same |
+| g1, g2 | A3-203 | F1, then g1a's (g2a's) F2 | the caution at F1's call only | the same |
+| lp, lp2 | A3-201 | F1 steps r8 by 4 and back inside a loop (lp: 3 times; lp2: a count from r5) | no caution | the same |
+| en | A3-197 | the caller never writes r8 and returns it after F1 | the caution | the same |
+| n1 | A3-202, A3-203 | F1, then a lent F2 that keeps everything | the caution at F1's call | the same |
+| lc | A3-202, A3-203 | a loop (3 times) calling F2 (overwrites r8 on every path) then F1; r8 read after the loop | the caution at F2's call, "likewise" (F1's) | the same |
+| t1 | A3-203 | F1, then F2 `mov #0,r8 ; bra F3` (a tail branch; F2 overwrites r8) | the caution at F2's call | the same |
+| tb | A3-203 | F2 returns or `bra F3`, F3 `mov #0,r8 ; rts` | the caution | the same |
+| tj1, tj2 | **A3-205** | F2 a thunk (`mov.l @(lit),r1 ; jmp @r1`) to F1 (tj1); or F2 returns or jumps through a literal to F3 `mov #0,r8 ; rts` (tj2) | **no caution** | the caution (r8) |
+| tjw | A3-203 | F1, then F2 a thunk to F3, which overwrites r8 | the caution at F1's call, "likewise" | the same: the jump ends F2's path (`mPathLost`), so F2's mark is added, not replacing (x4t's reading; F1's r8 is never read: conservative) |
+| js | A3-205's control | F2 pushes r8 and r14, loads r8 and jumps within itself through a constant to its epilogue, which restores them | no caution | the same (with the fix's r15 condition off: r8 and r15) |
+| rc | **A3-207** | F2 recursive, `mov #0,r8` after its own recursive `bsr` | no caution (frame note only) | the same: open |
+| nl | nested calls | F2 saves PR, calls a lent G, restores PR, clears r8 when r5 = 0 | the caution | the same |
+| sp, sp3, spt | **A3-206** | F1 pops its caller's word on one path (sp; behind a thunk: spt) or pushes one (sp3); the caller reads at r15 after the call | **no caution** (`return 5;`; sp's runs with r3 != 0 return 9) | the caution (r15) |
+| spc | A3-206's control | sp's F1; the caller reads its local through r14 and sets r15 from r14 | no caution | the same |
+| sw1, sw2 | **A3-208** | F0 pushes r8 and PR; U2 writes its incoming stack word (the saved PR); sw2 calls U1 (writes nothing) first | "a saved register's word ..." (sw1); **"a local ..."** (sw2) | the same: open |
+| sa0, sa1, sa2 | **A3-209** | &local kept in a frame word; U2 handed that word in r5; sa1 an unlent U1 first, sa2 a lent U1 that stores through r5 | no note (sa0); the note at U1, "likewise at the calls below" (sa1); **the note at U2's call, which shows `pxStack_8`** (sa2) | the same: open |
+
+Every fixture of A3-197 (`a3_a3197/run.sh`: vC and vE, w1 to w9), round 26 (`a3_round26/run.sh`), A3-202 (`a3_a3202/run.sh`) and A3-203/A3-204 (`a3_a3203/run.sh`) gives, with the final binary, what its fixer recorded (w6: no caution, the limit filed as A3-207).
+
+**A3-205.** A3-70 walks a thunk's target for its frame words, stores below and hand-outs (`MapCalleeWords`, `CalleeStoresBelow`, `CalleeHanded`), but A3-197's record of the registers a callee changes (`mChangedAt`) is made at a return only (`Return`), and the jump through the register is none: what the target returns the caller with was not seen. A `bra` to the same code is read as the callee's own (round 26's x3, tb). Fix: at a jump to a constant target in a nested walk, with PR still the caller's and r15 back at the callee's entry, `mChangedAt` takes what the target changes for certain on some path (`CalleeChanged`) and what the path changed for certain that the target does not overwrite on every path (`CalleeWritten`). The path stays lost, so nothing is claimed overwritten through it (tjw). The r15 condition came from the corpus: without it 0601A384/008 (alone) gained "this call may change r8 and r14" at `jsr 0601FA80`, which saves r8 and r14 and restores them on its only return (`mov r14,r15 ; mov.l @r15+,r14 ; rts ; mov.l @r15+,r8` at 0601FB5E); the walk folds the index of its switch (`mova ; mov.w @(r0,r1),r1 ; add r1,r0 ; jmp @r0` at 0601FAB4) from a captured word, took the `jmp @r0` to a case for a tail jump, and the case's code, walked as a callee, ended in the function's epilogue with the frame of the jump. js is that shape.
+
+**A3-206.** The model keeps r15 across a call it knows nothing of (extrapop 0), as it keeps r8-r14, GBR and VBR, and the probe models an unlent call so (`e.preserved` r15, `spDelta` 0); A3-15 and A3-21 settle a lent callee's r15, A3-197 and A3-200 the others' kept registers, nothing an unlent callee's r15. Fix: `SureChanged` takes r15 as changed for certain when the value is a stack address a known nonzero distance from the entry r15 or a constant; it is never overwritten (`SureWritten` stays within `kModelKept`); the walk records, the probe marks and the caution names `kUnkeptRegs` (`kModelKept` and r15). A caller that reads its locals only through a frame pointer and sets r15 from it (spc) reads no moved r15 and has no caution.
+
+**A3-207 (open).** A3-197's fixer recorded w6 as a limit inside the fixed row and round 26 left it; no row held it, and it is a missed caution of A3-197's kind (P2). In the walk, a call to an unlent callee is the convention's (stores through r4-r7, memory, the stack and the frame, every frame word), which writes over F1's saved PR, so F1's `rts` is no proved return. Tried here (a temporary switch, not in the branch): the nested call's frame words from the inner callee's own walk; w6 still had no caution (the convention's stores through the stack and memory reach the word too). The fix is the walked inner callee's own effects as the model of the nested call (the `CallEffects` `CalleeFrameWrites` computes and discards), which moves A3-61/A3-70/A3-86's frame-word results and the notes the corpus rests on: not a reviewer's change.
+
+**A3-203's "surely overwritten".** A callee that writes the register on every path from a value made from its entry value: a step (x4a, `add #4,r8`) names the register among its origins and is not overwritten; a value reloaded from a fixed word it saved r8 in is not taken for a change (g1a, g2a: no caution; their frame note says F2 lets &local out, which its store does), so F2 neither replaces nor adds a mark and F1's stays (g1, g2). A path ended by a jump through a register (x4t, tjw), an instruction that does not decode or a bound is lost (`mPathLost`): never overwritten. A step and a step back inside a loop (lp, a constant count; lp2, a count the walk cannot fold) is no change: no caution, right. A recursive callee (rc) is A3-207. No row.
+
+**A3-204's wording.** f1 and f2 (A3-203's fixer's) say "likewise at other calls of this function", f1r and f2r "likewise at the calls below"; in the corpus 0605FCF0/008 (r14, the note at `jsr @r13` of one arm, the other arms' calls not after it: "other calls"), 06054ABE/008 (r13 = r14 + 18 at `jsr @r1` 0x06054C08: "other calls") and 060554B6/008 (r12 = r14 + 48 at the calls of 06035238 in a row: "below") are right. sa1 (A3-209's control) shows A3-108's "likewise" covering a later call at which the address is shown; filed with A3-209.
+
+### 2. A3-198's fallback
+
+`PostPollUnmade` takes the runs with every poll answered (`RunSpec::answerAll`) when some run of the answered world did not finish and none made the item; its comment names the case where no world answers the poll (seed 9200735). The condition is wider than that case (it is taken for any unfinished answered run), but no wider than its justification: a run of the answered world that made the item ends the gate first (`made` before the fallback); the fallback's runs answer every poll the program declares (`mS.polls`, the generator's mailboxes and hardware), a world the hardware can be in (the other processor writes the mailbox); a run that loops for another reason does not finish there either, and one unfinished fallback run keeps the finding. An item that only the answered poll's value decides is the gate's existing limit, the same in both worlds (the same `Env::Poll` answer). No finding.
+
+### 3. Corpus spot-check
+
+The lent dumps of master (both images, `a7_round2/corpus.sh`), the notes listed with `notes.py` (007: 808 notes, 16 of them cautions in 14 functions; 008: 1,629, 15 cautions in 13 functions), read against the disassembly (`a3_a3197/dis.py`). Fifteen functions, each note at the call it is said at:
+
+| Function | Note | Read |
+|---|---|---|
+| 060200D4/007 | r14 | `mov r15,r14` in the slot at 0x060200E6; `jsr @r0` (06020C38) at 0x06020104 with `mov r14,r4` in its slot: r14 holds &axStack_c and is no argument register (A3-108's reading). Right |
+| 06022A98/007 | r2 | `mov.l @(20,r14),r2` (= r14 + 12, &xStack_24) before `jsr @r8` (060231A0) at 0x06022AE0. Right |
+| 0601C7C0/007 | r14; stack word "may", twice | r14 = r15 after `add #-4`; the first call (0601C2F4) is handed r14 as its stack argument; after the pop the word at r15 is that local, which the callee could write a frame address into: "may" at 0x0601C80C and again at 0x0601C81A, reached by the `param_1 == 0` arm too (neither dominates: said twice). Right |
+| 0600526C/007 | slot | the note at `jsr 0601BF84` (third call); the words read after it are the epilogue's pops of PR, r14 and r8: a saved register's word called "a local" (A3-208) |
+| 0601F558/007 | saved word; stack word "may" | `jsr 0601FFCC` with r9 pushed in the slot, r7 = r14 (&local); the pops of the epilogue read the saved words; after `add #4,r15` the word at r15 is the local the first callee had the address of. Right |
+| 06024A72/007 | caution r10-r13 | `bsr 06024B18` (loads r10-r13 through r8, `mov.w @r8+,r10` ...), then `mov.l @(4,r10),r0` ... `@(4,r13)`. Right |
+| 06026F6A/007 | caution r9-r13 | `bsr 06027018`, then `mov r9,r0 ; mov.l r0,@(41,gbr)`; 06027018 swaps r9 and rotates r10-r13 (the A3-197 fixer's reading). Right |
+| 060554B6/008 | r12, "below" | `mov r14,r12 ; add #48,r12` at 0x060554E8; the calls of 06035238 follow. Right |
+| 06054ABE/008 | r13, "other calls" | `mov #18,r13 ; add r14,r13 ; mov.w @r13,r7` before `jsr @r1` at 0x06054C08. Right |
+| 06060F34/008 | stack word | at `jsr 060626B8` (0x06060F6C) the word r14 + 16 holds &xStack_10, which r5 is loaded from and the text shows (`func_0x060626b8(0,pxStack_8)`): "in none of the arguments" is not so (A3-209) |
+| 0601A384/008 (alone) | caution r8, r14 (A3-205's first form) | 0601FA80 restores r8 and r14 on its only return: false; gone with the r15 condition (section 1) |
+| 06065388/008 | caution r8 | `bsr 060647EC`, which steps r8 (`mov.w @r8+,r1` three times) and keeps no copy; the loop reads r8 again. Right |
+| 0605FCF0/008 | r14, "other calls" | `mov r15,r14` at 0x0605FD00; the note at `jsr @r13` (0x0605FD3E) on one arm of the `== 1`/`== 2`/`== 3` tests, the other arms' calls not after it. Right |
+| 060701C8/008 | slot; stack word "may", "below" | `jsr @r10` (06061084) at 0x060701E6 with `mov r14,r4` in the slot: r15 = r14 = acStack_28, read after (`acStack_28[0]`, `xStack_20`). Right |
+| 06064712/008 | caution r10-r13 | 06024A72/007's code at + 0x3FCA0: `bsr 060647B8`, `mov.l @(4,r10),r0` ... Right |
+
+### 4. Corpus with this branch
+
+`a3_round25/corpus.sh`, both images alone and lent, against master's dumps made here (`a7_round2/corpus.sh` with `25ff769b`'s `Sh2Decompiler.cpp`). Both runs all passed, every ledger count 0; missing and said **0** (007) and **4** (008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**", as master. **Every function text, alone and lent, of both images is master's** (0, 0, 0 and 0 differ): no unlent callee of either image is shown leaving r15 moved with a caller reading r15 after it, and no thunk's target changes a register a caller reads. The first form of A3-205 (no r15 condition) differed in one text, 0601A384/008 alone (section 1); it is not in the branch.
+
+### 5. Sweep
+
+`sweep.sh`: 10,000 seeds of each grammar from 10,100,001, canary and shrink off, this branch's final binary.
+
+| Run | Failing | Classes |
+|---|---|---|
+| grammar 1 | 1: 10105433 | `v:map-const-join` (area 7): "line 18 `iVar1 = 6;` is drawn at 0600901E (swap.b r1,r0), the first instruction of a join, which does not make the number". `endless-after-store` checked 644, said 644; `endless-call` 610, said 610; `endless-join` 1,253, said 1,253; `endless-read` 621, withheld 621; no `unmade` (A3-198's fallback not taken in this range) |
+| grammar 2 | 1: 10107462 | `n:` and `v:map-const-join` (area 7): function 0, "line 16 `iVar2 = 0;` is drawn at 0600903C (extu.w r0,r2), the first instruction of a join" |
+
+No area 3 finding. Routed below.
+
+### 6. Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117** (111 and the 6 Live tests), 362 s |
+| fault suite | fault matrix: **0 of 94** job(s) failed (106 s) |
+| 20,000-seed matrix (canary on, every pin) | 20,000 seeds (10,000 of each grammar), `failing seeds=0; findings=0`, all passed (29.4 ms per seed) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, all passed |
+| game corpus, lent (`a3_round25/corpus.sh`, both images, the final binary, against master's dumps made here) | both all passed, every ledger count 0; missing and said **0** and **4**; lent **474 (645)** and **724 (975)**; every function text, alone and lent, master's (section 4) |
+| fixture scripts (final binary) | `a3_round27/run.sh` as section 1; `a3_a3203/run.sh`, `a3_a3202/run.sh`, `a3_round26/run.sh`, `a3_a3197/run.sh` as their fixers recorded |
+| sweep (final binary) | section 5 |
+| binaries | a comment-only edit (one line's words, no line added) came after the runs above; the rebuilt `SaturnExplorerSh2GeneratedTests`, `SaturnExplorerSh2DecompilerTests` and `SaturnExplorerDecompilerFaultTests` are byte-identical (md5) to the ones run |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: not needed (no vendored file or patch touched) |
+
+No generator change: no seed's program changes.
+
+### 7. Routed
+
+* **Area 7:** grammar 1 seed 10105433 (`v:map-const-join`, `iVar1 = 6;` drawn at 0600901E, `swap.b r1,r0`, the first instruction of a join that does not make the number) and grammar 2 seed 10107462 (`n:` and `v:map-const-join`, function 0, `iVar2 = 0;` drawn at 0600903C, `extu.w r0,r2`). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`. Not shrunk.
+* **Area 11:** A11-33 (no oracle holds A3-197's caution against a run; the grammar makes no thunk to a changer and no callee that moves r15).

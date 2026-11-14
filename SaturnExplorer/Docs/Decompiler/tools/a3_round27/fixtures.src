@@ -1,0 +1,862 @@
+# Area 3 round 27 review. Run with W=<SaturnExplorer> S=<scratch> run.sh (or run.py <name>). Unless said, a fixture is vCr8's caller (a local of 5,
+# its address in r8, the calls, 7 stored through r8, the local returned).
+name g1a
+# F2 alone (not lent: it returns r3) saves r8 in a fixed word of work RAM, clears r8, restores it from that word: it keeps r8 (every run returns 7). Right: no caution
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov.l =0x0600A000,r1
+mov.l r8,@r1
+mov #0,r8
+mov.l r8,@(4,r1)
+mov.l @r1,r8
+rts
+mov r3,r0
+name g1
+# vCr8's F1 (clears r8 when r3 != 0 and r4 = 0), then g1a's F2 (keeps r8): runs return 5 or 7 by F1. Right: the caution at F1's call, none at F2's
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov.l =0x0600A000,r1
+mov.l r8,@r1
+mov #0,r8
+mov.l r8,@(4,r1)
+mov.l @r1,r8
+rts
+mov r3,r0
+name g2a
+# g1a with the save word GBR-relative (`mov.l r0,@(8,gbr)` ... `mov.l @(8,gbr),r0 ; mov r0,r8`): keeps r8. Right: no caution
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov r8,r0
+mov.l r0,@(8,gbr)
+mov #0,r8
+mov.l @(8,gbr),r0
+mov r0,r8
+rts
+mov r3,r0
+name g2
+# F1, then g2a's F2: right: the caution at F1's call only
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov r8,r0
+mov.l r0,@(8,gbr)
+mov #0,r8
+mov.l @(8,gbr),r0
+mov r0,r8
+rts
+mov r3,r0
+name lp
+# F1 (not lent: it returns r3) steps r8 by 4 and back inside a counted loop (`add #4,r8 ; mov.l @r8,r2 ; add #-4,r8 ; dt r1 ; bf`): keeps r8 on every path (A3-201's step-back, in a loop). Right: no caution
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov #3,r1
+L1:
+add #4,r8
+mov.l @r8,r2
+add #-4,r8
+dt r1
+bf L1
+rts
+mov r3,r0
+name sp
+# the model keeps r15 across an unlent call too: F1 (not lent: it reads r3) pops a word (`add #4,r15`) when r3 != 0; the caller (frame in r14) reads its local at @r15 after the call: runs with r3 != 0 read the word above (9). Right: a caution at the call
+ret 1,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov r15,r14
+mov #5,r2
+mov.l r2,@r15
+mov #9,r2
+mov.l r2,@(4,r15)
+bsr F1
+nop
+mov.l @r15,r0
+mov r14,r15
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+add #4,r15
+K1:
+rts
+nop
+name en
+# the caller never writes r8: it returns r8 after F1 (unaff_r8). Right: the caution at F1's call
+ret 1,0
+.word 0x4F22
+bsr F1
+nop
+mov r8,r0
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+name n1
+# F1, then F2 that keeps everything (`rts ; nop`: lent void), then 7 through r8: F1's mark across a lent call. Right: the caution at F1's call
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+rts
+nop
+name t1
+# F1, then F2 `mov #0,r8 ; bra F3 ; nop` with F3 `rts ; mov r3,r0` (a tail branch; F2 overwrites r8 on every path): right: the caution at F2's call (F1's value is never read)
+ret 1,0,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov #0,r8
+bra F3
+nop
+fn
+F3:
+rts
+mov r3,r0
+name tj1
+# F2 a thunk (`mov.l =F3,r1 ; jmp @r1 ; nop`), F3 vCr8's F1 (clears r8 when r3 != 0 and r4 = 0): runs return 5 or 7. Right: the caution at F2's call
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov.l =@F3,r1
+jmp @r1
+nop
+fn
+F3:
+tst r3,r3
+bt K3
+tst r4,r4
+bf K3
+mov #0,r8
+rts
+nop
+K3:
+rts
+nop
+name tj2
+# F2 returns on one path (`tst r3,r3 ; bf R ; ... ; R: rts`) and tail-jumps through a literal to F3 (`mov #0,r8 ; rts ; nop`) on the other: runs with r3 = 0 return 5. Right: the caution at F2's call
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+tst r3,r3
+bf R2
+mov.l =@F3,r1
+jmp @r1
+nop
+R2:
+rts
+nop
+fn
+F3:
+mov #0,r8
+rts
+nop
+name tb
+# tj2 with `bra F3` for the jump through the literal (x3's tail branch): right: the caution
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+tst r3,r3
+bf R2
+bra F3
+nop
+R2:
+rts
+nop
+fn
+F3:
+mov #0,r8
+rts
+nop
+name rc
+# F2 recursive (`tst r4,r4 ; bt E ; sts.l pr,@-r15 ; add #-1,r4 ; bsr F2 ; nop ; lds.l @r15+,pr ; mov #0,r8 ; E: rts ; mov r3,r0`): r8 cleared when r4 != 0. The walk proves no return through the cycle (A3-197's w6 limit)
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+tst r4,r4
+bt E2
+.word 0x4F22
+add #-1,r4
+bsr F2
+nop
+.word 0x4F26
+mov #0,r8
+E2:
+rts
+mov r3,r0
+name nl
+# F2 (not lent: it returns r3) saves PR, calls a lent G (`rts ; nop`), restores PR, clears r8 when r5 = 0: right: the caution at F2's call
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+bsr G
+nop
+.word 0x4F26
+tst r5,r5
+bf R2
+mov #0,r8
+R2:
+rts
+mov r3,r0
+fn
+G:
+rts
+nop
+name spc
+# control for sp: the same F1; the caller reads its local through the frame pointer (`mov.l @r14,r0`) and sets r15 from r14 before it reads r15 again: no caution
+ret 1,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov r15,r14
+mov #5,r2
+mov.l r2,@r15
+mov #9,r2
+mov.l r2,@(4,r15)
+bsr F1
+nop
+mov.l @r14,r0
+mov r14,r15
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+add #4,r15
+K1:
+rts
+nop
+name sp3
+# F1 (not lent: it returns r3) pushes r3 (`mov.l r3,@-r15`) on one path and returns, the caller pops a word (`mov.l @r15+,r0`) and returns it: runs with r4 = 0 return F1's r3, the others the caller's local. Right: a caution (r15)
+ret 1,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov r15,r14
+mov #5,r2
+mov.l r2,@r15
+bsr F1
+nop
+mov.l @r15+,r0
+mov r14,r15
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bf K1
+mov.l r3,@-r15
+K1:
+rts
+mov r3,r0
+name spt
+# sp's F1 behind a thunk (`mov.l =F3,r1 ; jmp @r1 ; nop`; F3 sp's F1): A3-205 and A3-206 together. Right: the caution (r15) at the thunk's call
+ret 1,0,0
+.word 0x4F22
+mov.l r14,@-r15
+add #-8,r15
+mov r15,r14
+mov #5,r2
+mov.l r2,@r15
+mov #9,r2
+mov.l r2,@(4,r15)
+bsr F2
+nop
+mov.l @r15,r0
+mov r14,r15
+add #8,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov.l =@F3,r1
+jmp @r1
+nop
+fn
+F3:
+tst r3,r3
+bt K3
+add #4,r15
+K3:
+rts
+nop
+name tj3
+# tj1 with F3 clearing r8 whenever r3 != 0 (runs 1-3 return 5): the caution at F2's call
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov.l =@F3,r1
+jmp @r1
+nop
+fn
+F3:
+tst r3,r3
+bt K3
+mov #0,r8
+K3:
+rts
+nop
+name tjw
+# A3-203 through a thunk: F1 (vCr8's), then F2 a thunk to F3, which overwrites r8 on every path (`mov #0,r8 ; rts`): F2's path is lost, so its mark is added, not replacing: one caution at F1's call, "likewise" (conservative: F1's r8 is never read)
+ret 1,0,0,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+mov.l =@F3,r1
+jmp @r1
+nop
+fn
+F3:
+mov #0,r8
+rts
+mov r3,r0
+name sw1
+# A3-108's wording: F0 pushes r8 and PR and calls U2, which writes its incoming stack word (`mov.l @r15,r1 ; mov.l r1,@r15`: the word at the call's r15, F0's saved PR); F0 pops PR and r8 after: "a saved register's word ..." (control)
+ret 0,1
+mov.l r8,@-r15
+.word 0x4F22
+bsr U2
+nop
+.word 0x4F26
+mov.l @r15+,r8
+rts
+nop
+fn
+U2:
+mov.l @r15,r1
+mov.l r1,@r15
+rts
+mov r3,r0
+name sw2
+# sw1 with a call of U1 (`rts ; mov r3,r0`: not lent, writes nothing) before U2's: the word U2 may write is still the saved PR's. Right: "a saved register's word ..."
+ret 0,1,1
+mov.l r8,@-r15
+.word 0x4F22
+bsr U1
+nop
+bsr U2
+nop
+.word 0x4F26
+mov.l @r15+,r8
+rts
+nop
+fn
+U2:
+mov.l @r15,r1
+mov.l r1,@r15
+rts
+mov r3,r0
+fn
+U1:
+rts
+mov r3,r0
+name sa1
+# the shape of 06060F34/008 (A3-108's stack-argument note): &local (r14 + 8) kept in the frame word r14 + 16; U1 (not lent, writes nothing), then U2 handed that word in r5 (`mov.l @(16,r14),r5`): the address is shown as an argument
+ret 0,1,1
+.word 0x4F22
+add #-20,r15
+mov r15,r14
+mov r14,r1
+add #8,r1
+mov.l r1,@(16,r14)
+bsr U1
+nop
+mov.l @(16,r14),r5
+bsr U2
+mov #0,r4
+add #20,r15
+.word 0x4F26
+rts
+nop
+fn
+U2:
+rts
+mov r3,r0
+fn
+U1:
+rts
+mov r3,r0
+name sa0
+# control: sa1 without U1's call
+ret 0,1
+.word 0x4F22
+add #-20,r15
+mov r15,r14
+mov r14,r1
+add #8,r1
+mov.l r1,@(16,r14)
+mov.l @(16,r14),r5
+bsr U2
+mov #0,r4
+add #20,r15
+.word 0x4F26
+rts
+nop
+fn
+U2:
+rts
+mov r3,r0
+name sa2
+# 06060F34/008's shape: &local (r14 + 8) kept in the frame word r14 + 16; U1 lent (`mov #1,r1 ; rts ; mov.b r1,@r5`: stores through r5) handed r14 + 9 in r5, then U2 (not lent: it returns r3) handed the word in r5 (`mov.l @(16,r14),r5`): the address the word holds is the argument the text shows (pxStack_8)
+ret 1,0,1
+.word 0x4F22
+add #-20,r15
+mov r15,r14
+mov r14,r1
+add #8,r1
+mov.l r1,@(16,r14)
+mov.l @(16,r14),r5
+bsr U1
+add #1,r5
+mov.l @(16,r14),r5
+bsr U2
+mov #0,r4
+add #20,r15
+.word 0x4F26
+rts
+nop
+fn
+U1:
+mov #1,r1
+rts
+mov.b r1,@r5
+fn
+U2:
+rts
+mov r3,r0
+name js
+# control for A3-205 (0601FA80/008's shape): F2 (not lent: it tests r3) pushes r8 and r14, loads r8, and jumps within itself through a constant (`mov.l =C,r0 ; jmp @r0`, as the walk folds 0601FA80's switch) to its epilogue, which restores r14 and r8: no tail jump (r15 is not back at the entry), no caution
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F2
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F2:
+tst r3,r3
+mov.l r8,@-r15
+mov.l r14,@-r15
+mov r15,r14
+mov.l =0x0600A000,r8
+mov.l =@C2,r0
+jmp @r0
+nop
+C2:
+mov r14,r15
+mov.l @r15+,r14
+rts
+mov.l @r15+,r8
+name lp2
+# lp with a count the walk cannot fold (`extu.b r5,r1 ; add #1,r1`): the loop's join widens r8's offset (Widen: "possibly below")
+ret 1,0
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+extu.b r5,r1
+add #1,r1
+L1:
+add #4,r8
+mov.l @r8,r2
+add #-4,r8
+dt r1
+bf L1
+rts
+mov r3,r0
+name lc
+# A3-202/A3-203 in a loop: the caller's loop (3 times) calls F2 (overwrites r8 on every path: `mov #0,r8` or `mov #4,r8`) then F1 (vCr8's); r8 read after the loop: F1 may keep what F2 wrote, so both calls are marked. Right: the caution at F2's call, "likewise" for F1's
+ret 1,0,0
+.word 0x4F22
+mov.l r8,@-r15
+mov.l r9,@-r15
+add #-8,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+mov #3,r9
+L0:
+bsr F2
+nop
+bsr F1
+nop
+dt r9
+bf L0
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #8,r15
+mov.l @r15+,r9
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r3,r3
+bt K1
+tst r4,r4
+bf K1
+mov #0,r8
+rts
+nop
+K1:
+rts
+nop
+fn
+F2:
+tst r3,r3
+bt K2
+mov #0,r8
+rts
+nop
+K2:
+mov #4,r8
+rts
+nop

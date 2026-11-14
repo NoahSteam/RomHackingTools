@@ -18802,6 +18802,60 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                 CHECK(w.findings.empty() && notes == f.notes && w.text.find(f.ret) != std::string::npos);
             }
         }
+        // Area 3 round 27 (`tools/a3_round27/fixtures.src`). A3-205: the walk of an unlent callee ended a path at a tail jump through a register
+        // (`mov.l @(lit),r1 ; jmp @r1`, A3-70's thunk) without reading what the target returns the caller with, so a thunk to a callee that
+        // clears r8 on one path changed nothing and the caller's `return 7;` had no caution: tj1 (F2 a thunk to vCr8's F1), tj2 (F2 returns on
+        // one path and jumps to F3, `mov #0,r8 ; rts`, on the other). A3-206: the model keeps r15 across an unlent call too (extrapop 0), and a
+        // callee that pops its caller's word (`add #4,r15 ; rts`) on one path left the caller's `mov.l @r15,r0` printed `return 5;` where the
+        // runs that pop return 9, nothing said: sp; sp3 (F1 pushes r3 on one path, the caller pops it); spt (sp's F1 behind a thunk). Control spc:
+        // sp's F1, the caller reads its local through r14 and sets r15 from r14 before it reads r15: no caution. (A3-205's carry needs r15 back
+        // at the callee's entry at the jump: control js, below.)
+        {
+            struct Caution
+            {
+                const char* name;
+                const char* words;
+                const char* funcs;
+                const char* returns;
+                const char* clobbers;   // the registers a function changes on purpose (the generator's own check of its contract)
+                const char* ret;
+                const char* reg;        // the register the caution names, or "" for none
+            };
+            const Caution cautions[] = {
+                { "A3-205 tj1", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 D10F 412B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                "2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0600 9040",
+                  "0/0/20,20/20/26,40/40/52", "1,0,0", nullptr, "return 7;", "r8" },
+                { "A3-205 tj2", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 2338 8B02 D10E 412B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                "E800 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0600 9040",
+                  "0/0/20,20/20/2e,40/40/46", "1,0,0", "0,100,100", "return 7;", "r8" },
+                { "A3-206 sp", "4F22 2FE6 7FF8 6EF3 E205 2F22 E209 1F21 B016 0009 60F2 6FE3 7F08 6EF6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                               "2338 8900 7F04 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/22,40/40/4a", "1,0", "0,8000", "return 5;", "r15" },
+                { "A3-206 sp3", "4F22 2FE6 7FF8 6EF3 E205 2F22 B008 0009 60F6 6FE3 7F08 6EF6 4F26 000B 0009 0009 2448 8B00 2F36 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/1e,20/20/2a", "1,0", nullptr, "return 5;", "r15" },
+                { "A3-206 spt", "4F22 2FE6 7FF8 6EF3 E205 2F22 E209 1F21 B016 0009 60F2 6FE3 7F08 6EF6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                "D10F 412B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2338 8900 7F04 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0600 9060",
+                  "0/0/22,40/40/46,60/60/6a", "1,0,0", "0,8000,8000", "return 5;", "r15" },
+                // control js (A3-205's corpus check, 0601FA80/008's shape): F2 pushes r8 and r14 and jumps within itself through a constant to
+                // the epilogue that restores them (the walk folds 0601FA80's switch index to one case): no tail jump, no caution
+                { "A3-205 control js", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 2338 2F86 2FE6 6EF3 D805 D006 402B 0009 6FE3 6EF6 000B 68F6 0009 0009 0009 0009 "
+                                      "0600 A000 0600 9030",
+                  "0/0/20,20/20/38", "1,0", nullptr, "return 7;", "" },
+                { "A3-206 control spc","4F22 2FE6 7FF8 6EF3 E205 2F22 E209 1F21 B016 0009 60E2 6FE3 7F08 6EF6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                       "2338 8900 7F04 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/22,40/40/4a", "1,0", "0,8000", "return 5;", "" },
+            };
+            for (const Caution& f : cautions)
+            {
+                const ModulePin m = { f.name, f.words, f.funcs, nullptr, f.returns, f.clobbers, nullptr };
+                const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+                const bool any = w.text.find("this call may change ") != std::string::npos;
+                const bool named = *f.reg != '\0' && w.text.find(std::string("this call may change ") + f.reg + ", read after it") != std::string::npos;
+                std::printf("pin '%s': %zu finding(s), caution %s%s\n", f.name, w.findings.size(), any ? "said" : "not said", named ? (std::string(" for ") + f.reg).c_str() : "");
+                for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+                CHECK(w.findings.empty() && w.text.find(f.ret) != std::string::npos && (*f.reg != '\0' ? named : !any));
+            }
+        }
     }
     {
         // A3-198 (routed by area 7 round 21; area 3 round 26, oracle): grammar 1 seed 9200735, `endless-after-store-dropped` (0x26003000) and
