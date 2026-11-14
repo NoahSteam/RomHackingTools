@@ -4568,6 +4568,111 @@ void TestArea7Round18()
     }
 }
 
+void TestArea7Round19()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto snapOf = [&](const std::vector<uint16_t>& w) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        return MakeSnapshot(hw);
+    };
+    const auto changed = [](const DecompileResult& r, const std::string& from, const std::string& to, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+        {
+            const size_t at = l.text.find(from);
+            if (at == std::string::npos) continue;
+            l.text.replace(at, from.size(), to);
+            ++n;
+        }
+        return x;
+    };
+    const auto tokenAt = [](const DecompileResult& r, const char* what, uint32_t insn) {
+        const Line* l = LineWith(r, what);
+        if (!l) return false;
+        for (const Token& t : l->tokens)
+            if (t.addr == insn) return true;
+        return false;
+    };
+    const auto ruleOff = [](const char* rows) {
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", rows ? rows : "");
+#else
+        if (rows) setenv("SE_A7_RULE_OFF", rows, 1);
+        else unsetenv("SE_A7_RULE_OFF");
+#endif
+    };
+    const auto mutated = [&](const DecompileResult& r, const char* row, const char* name) {
+        ruleOff(row);
+        const int v = dts::AuditMapping(r, word, name).Violations();
+        ruleOff(nullptr);
+        return v;
+    };
+    // (the way back's first line for an instruction holds `what`)
+    const auto backFirst = [](const DecompileResult& r, uint32_t insn, const char* what) {
+        const LineLookup at = LineForInstruction(r, insn);
+        return at.kind == LineLookup::Exact && !at.lines.empty() && r.lines[at.lines[0]].text.find(what) != std::string::npos;
+    };
+    // A7-155 (product) `mov.l @(lit),r1 ; shll2 r1` (0xf000), `tas.b @r6`, `mov.l r1,@r6 ; mov.b r2,@r6` (the word store also the target of a
+    // `bt`): the statement `uRam26002108 = CONCAT13((char)uVar2 == '\0',0xf000);` shows the word store's low bytes, the number the `shll2`
+    // computes, and names that store (0x06009016): the walk of r1 found only "another value" at the shift (grammar 1 seed 8203175, A5-141)
+    {
+        const std::vector<uint16_t> w = { 0xD107, 0xD608, 0x4108, 0xD708, 0x461B, 0x0229, 0x854A, 0x2258, 0x8901, 0x3330, 0x8F01, 0x2612, 0x2620, 0x000B,
+                                          0x0009, 0x0009, 0x0600, 0x3C00, 0x2600, 0x2108, 0x2610, 0x2108 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x06009000u));
+        Print("A7-155 a store of a number a shift computes (grammar 1 seed 8203175, A5-141)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "uRam26002108 = CONCAT13(";
+        CHECK(LineWith(r, line) != nullptr && tokenAt(r, line, 0x06009016u) && tokenAt(r, line, 0x06009018u));
+        CHECK(dts::AuditMapping(r, word, "a7_155_8203175").Violations() == 0);
+        // (damaged: the store named nowhere on the line, as master drew it)
+        DecompileResult before = r;
+        int n = 0;
+        for (Line& l : before.lines)
+            if (l.text.find(line) != std::string::npos)
+            {
+                std::vector<Token> kept;
+                for (const Token& t : l.tokens)
+                    if (t.addr == 0x06009016u && t.begin == t.end) ++n;
+                    else kept.push_back(t);
+                l.tokens = kept;
+            }
+        CHECK(n == 1 && !tokenAt(before, line, 0x06009016u));
+    }
+    // A7-156 (oracle) `xRam06001028 = SUB42(param_1,0);` with `SUB42(param_1,0)` at the `extu.w r4,r0` (0x06009006) the store of r0 stores
+    // (named at the store 0x06009010): the extension's own work, as the cast form is, not a copy materialised there; grammar 1 specials seed
+    // 8303997
+    {
+        const std::vector<uint16_t> w = { 0xD605, 0xE000, 0x024D, 0x604D, 0x4015, 0x8901, 0xE006, 0x026C, 0x816A, 0x000B, 0x0009, 0x0009, 0x0600, 0x1014 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x06009000u));
+        Print("A7-156 the piece an extension makes (grammar 1 specials seed 8303997)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "SUB42(param_1,0);") != nullptr && tokenAt(r, "SUB42(param_1,0);", 0x06009006u));
+        CHECK(dts::AuditMapping(r, word, "a7_156_8303997").Violations() == 0);
+        CHECK(mutated(r, "156", "a7_156_8303997 mutated") >= 1);
+    }
+    // A7-157 (oracle) `iRam26001000 = CONCAT11(in_r2,(xunknown1)iRam26001000);` (the byte store `mov.b r2,@r6` merged into its word) drawn at
+    // the literal's load of the pointer the later store goes through (`mov.l @(lit),r7`), beside `iRam26001000 = iRam26001000;` whose value
+    // is drawn there too: the load computes none of it, so neither is its statement; grammar 1 specials seed 8302980
+    {
+        const std::vector<uint16_t> w = { 0xD60A, 0x2018, 0x8B0E, 0x4115, 0x8D0A, 0x2620, 0xD708, 0x6261, 0x2108, 0x8B09, 0x4115, 0x8D01, 0x2621, 0x8178,
+                                          0x000B, 0x0009, 0x000B, 0x0009, 0xAFF1, 0x0009, 0xAFF6, 0x0009, 0x2600, 0x1000, 0xA600, 0x1000 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x06009000u));
+        Print("A7-157 a merged byte store drawn at a pointer's literal load (grammar 1 specials seed 8302980)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(dts::AuditMapping(r, word, "a7_157_8302980").Violations() == 0);
+        CHECK(mutated(r, "157", "a7_157_8302980 mutated") >= 1);
+    }
+}
+
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -19555,6 +19660,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round16());
         RUN(TestArea7Round17());
         RUN(TestArea7Round18());
+        RUN(TestArea7Round19());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());

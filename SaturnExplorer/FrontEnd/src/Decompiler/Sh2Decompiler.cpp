@@ -6696,6 +6696,14 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
                             if (FlowLastWriters(flow, fd, static_cast<int>(b), static_cast<int>(j), sop.in[2], writers) && writers.size() == 1 && writers[0] == &op)
                                 return true;
                         }
+                // A7-155: a number the walk knows the computation gives (`mov.l @(lit),r1 ; shll2 r1`, 0xf000) is the statement's when the
+                // statement shows that number (`uRam26002108 = CONCAT13((char)uVar2 == '\0',0xf000);`, the high byte the byte store after the
+                // word store rewrites): the computation is no other value; grammar 1 seed 8203175, A5-141
+                if (whole && !want.numbers.empty())
+                {
+                    uint64_t known = 0;
+                    if (FlowNumberBefore(flow, fd, st.blk, i + 1, st.vn, known) && want.Has(known, st.vn.size)) return true;
+                }
                 if (computed()) return true;
                 break;
             }

@@ -1936,6 +1936,15 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             // `movt r2` both the store and the return use, grammar 1 seed 2400221)
                             castAtExtension = mnem.compare(0, 4, "exts") == 0 || mnem.compare(0, 4, "extu") == 0 || mnem == "movt";
                         }
+                        // (A7-156: or the piece the engine prints for the conversion, `xRam06001028 = SUB42(param_1,0);` with `SUB42(param_1,0)`
+                        // at the `extu.w r4,r0` the store of r0 stores: the extension's own work as the cast is; grammar 1 specials seed 8303997)
+                        if (!castAtExtension && !A7RuleOff(156) && eq != std::string::npos && eq + 9 < text.size() && text.compare(eq + 3, 3, "SUB") == 0 &&
+                            std::isdigit(static_cast<unsigned char>(text[eq + 6])) && std::isdigit(static_cast<unsigned char>(text[eq + 7])) && text[eq + 8] == '(' &&
+                            t.begin >= eq + 3 && word(t.addr, ew))
+                        {
+                            const std::string mnem = sfe::Sh2Decode(t.addr, ew).Mnemonic;
+                            castAtExtension = mnem.compare(0, 4, "exts") == 0 || mnem.compare(0, 4, "extu") == 0;
+                        }
                     }
                     // (A7-57: or a value drawn at a store, on a line drawn at another store -- `iRam060a51e4 = iRam060a5068;` with its
                     // name at `mov.l r1,@(0x4,r2)` and iRam060a5068 at `mov.l r1,@(0x8,r2)`, which may alias it: a store makes no value
@@ -2044,7 +2053,20 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     }
                     const bool copy = plain && !isBranch(t.addr) && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore || readAtStore) && !castAtExtension &&
                                       !ownStoreHere && !readHere && !inputAtEntry;
-                    (copy ? copyDrawn : ownDrawn)[t.addr].insert(li);
+                    // (A7-157: a merge of a byte store into its word, `iRam26001000 = CONCAT11(in_r2,(xunknown1)iRam26001000);`, drawn at the
+                    // literal's load of the pointer a later store goes through, naming the byte store before it: the engine's copy of the store's
+                    // value put where a store through the pointer may alias it (the copy A7-25 marks); the load computes none of it, so the line
+                    // is no statement of that instruction; grammar 1 specials seed 8302980)
+                    bool pieceAtLoad = false;
+                    if (!A7RuleOff(157) && !plain && !named.empty() && !named.count(t.addr) && !isStore(t.addr) && !isBranch(t.addr))
+                    {
+                        const std::string& lt = r.lines[li].text;
+                        const size_t le = lt.find(" = ");
+                        uint16_t lw = 0;
+                        pieceAtLoad = le != std::string::npos && lt.compare(le + 3, 6, "CONCAT") == 0 && word(t.addr, lw) &&
+                                      sfe::Sh2Decode(t.addr, lw).PcRel != sfe::Sh2PcRel::None;
+                    }
+                    ((copy || pieceAtLoad) ? copyDrawn : ownDrawn)[t.addr].insert(li);
                 }
         }
         const auto copyOnly = [&](uint32_t at, size_t li) {
