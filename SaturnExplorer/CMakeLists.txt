@@ -417,9 +417,12 @@ if(SE_ENABLE_DECOMPILER)
                              SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerFixtureTests
                              PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_60})
         # The decompiler suite grows with every round's pins and timed out at 60 s under load too (A11-19).
-        set_tests_properties(SaturnExplorerDecompilerRunnerTests SaturnExplorerSh2DecompilerEngineTests
-                             SaturnExplorerSh2DecompilerTests
+        set_tests_properties(SaturnExplorerSh2DecompilerEngineTests SaturnExplorerSh2DecompilerTests
                              PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
+        # The runner suite is one thread and about 70 s of CPU (69 s user, RelWithDebInfo, 2026-11-13, measured with the machine busy: the
+        # run is CPU bound, so an idle machine is not much faster), so 120 s left it 1.7x and it timed out whenever several builds shared
+        # four cores (A11-22). 300 s is about 4x: still only a hang catch.
+        set_tests_properties(SaturnExplorerDecompilerRunnerTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_300})
         # Random SH-2 functions against the emulator's access trace (REVIEW_PROGRAM.md, Phase 0), in two
         # grammars: version 1, one function with loads, stores, branches, loops and polls; version 2, modules
         # of functions with a stack, calls with lent prototypes, tail calls, jump tables, shared exits and
@@ -900,6 +903,7 @@ if(BUILD_TESTING)
             SE_DECOMPILER_GUIDE="${CMAKE_CURRENT_SOURCE_DIR}/Docs/DECOMPILER_GUIDE.md")
         add_test(NAME SaturnExplorerDecompilerTrustTests
                  COMMAND SaturnExplorerDecompilerTrustTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_trust_test)
+        # About 30 s of CPU, 60 s of wall clock with the machine busy (2026-11-13): the 300 s ceiling is 5x that of a loaded run (A11-22).
         set_tests_properties(SaturnExplorerDecompilerTrustTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_300})
 
         # Area 9 of the review program: every loader the decompiler's path depends on (savestates and dumps, the BIOS
