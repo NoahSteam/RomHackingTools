@@ -17911,6 +17911,68 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         }
     }
     {
+        // A3-197 (area 3): a callee that is not lent and returns with one of r8-r14 changed on some path, against the SH convention, is taken to
+        // keep it, by the engine's default model and by the probe. vCr8 (`tools/a3_round25/fixtures.src`): a local of 5, its address in r8, `bsr F1`
+        // (it reads r3; `mov #0,r8` on one return), 7 stored through r8, the local returned: `return 7;` where the runs on which F1 clears r8
+        // return 5, and nothing said. Now the walk of F1 shows r8 changed and the caller reads r8 after the call: a caution at the call. vCr10 to
+        // vCr14 the same for r10, r12, r13, r14; vEr8 with the read a later walked callee's store through r8; w3 (`tools/a3_a3197/fixtures.src`) r9
+        // returned; w4 r11 changed one level down by a lent G, w6 by a G not lent (its own walk). Controls, no caution: vCr0 (r0, which the call
+        // kills), w1 (F1 saves and restores r8), w2 (the caller does not read r8 after the call), w5 and w7 (G restores r11).
+        struct Fixture
+        {
+            const char* name;
+            const char* words;
+            const char* funcs;
+            const char* returns;
+            const char* reg;   // the register the caution names, or "" for none
+        };
+        const Fixture fixtures[] = {
+            { "A3-197 vCr8", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/32", "1,0", "r8" },
+            { "A3-197 vCr10", "4F22 2FA6 7FF8 E205 2F22 6AF3 B008 0009 E207 2A22 60F2 7F08 6AF6 4F26 000B 0009 2338 8904 2448 8B02 EA00 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/32", "1,0", "r10" },
+            { "A3-197 vCr12", "4F22 2FC6 7FF8 E205 2F22 6CF3 B008 0009 E207 2C22 60F2 7F08 6CF6 4F26 000B 0009 2338 8904 2448 8B02 EC00 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/32", "1,0", "r12" },
+            { "A3-197 vCr13", "4F22 2FD6 7FF8 E205 2F22 6DF3 B008 0009 E207 2D22 60F2 7F08 6DF6 4F26 000B 0009 2338 8904 2448 8B02 ED00 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/32", "1,0", "r13" },
+            { "A3-197 vCr14", "4F22 2FE6 7FF8 E205 2F22 6EF3 B008 0009 E207 2E22 60F2 7F08 6EF6 4F26 000B 0009 2338 8904 2448 8B02 EE00 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/32", "1,0", "r14" },
+            { "A3-197 vEr8", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 B016 0009 60F2 7F08 68F6 4F26 000B 0009 2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009 "
+                             "E207 000B 2822 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/32,40/40/46", "1,0,0", "r8" },
+            { "A3-197 w3", "4F22 2F96 E905 B00B 0009 6093 69F6 4F26 000B 0009 0009 0009 0009 0009 0009 0009 2338 8904 2448 8B02 E900 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/14,20/20/32", "1,0", "r9" },
+            { "A3-197 w4", "4F22 2FB6 EB05 B00B 0009 60B3 7001 6BF6 4F26 000B 0009 0009 0009 0009 0009 0009 4F22 2338 8901 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                           "2448 8B00 EB00 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/16,20/20/30,40/40/4a", "1,0,0", "r11" },
+            { "A3-197 w6", "4F22 2FB6 EB05 B00B 0009 60B3 7001 6BF6 4F26 000B 0009 0009 0009 0009 0009 0009 4F22 2338 8901 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                           "2338 8902 2448 8B00 EB00 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/16,20/20/30,40/40/4e", "1,0,0", "r11" },
+            { "A3-197 control vCr0", "4F22 7FF8 E205 2F22 60F3 B009 0009 E207 2022 60F2 7F08 4F26 000B 0009 0009 0009 2338 8904 2448 8B02 E000 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/1c,20/20/32", "1,0", "" },
+            { "A3-197 control w1", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F08 68F6 4F26 000B 0009 2F86 6033 2448 8B00 E800 000B 68F6 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/2e", "1,0", "" },
+            { "A3-197 control w2", "4F22 2F86 7FF8 E205 2F22 68F3 B008 0009 60F2 7F08 68F6 4F26 000B 0009 0009 0009 2338 8904 2448 8B02 E800 000B 0009 000B 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/1c,20/20/32", "1,0", "" },
+            { "A3-197 control w5", "4F22 2FB6 EB05 B00B 0009 60B3 7001 6BF6 4F26 000B 0009 0009 0009 0009 0009 0009 4F22 2338 8901 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                   "2FB6 2448 8B00 EB00 000B 6BF6 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/16,20/20/30,40/40/4c", "1,0,0", "" },
+            { "A3-197 control w7", "4F22 2FB6 EB05 B00B 0009 60B3 7001 6BF6 4F26 000B 0009 0009 0009 0009 0009 0009 4F22 2338 8901 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                   "2FB6 2338 8902 2448 8B00 EB00 000B 6BF6 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/16,20/20/30,40/40/50", "1,0,0", "" },
+        };
+        for (const Fixture& f : fixtures)
+        {
+            const ModulePin m = { f.name, f.words, f.funcs, nullptr, f.returns, nullptr, nullptr };
+            const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+            const bool any = w.text.find("this call may change ") != std::string::npos;
+            const bool named = *f.reg != '\0' && w.text.find(std::string("this call may change ") + f.reg + ",") != std::string::npos;
+            std::printf("pin '%s': %zu finding(s), caution %s%s\n", f.name, w.findings.size(), any ? "said" : "not said", named ? (std::string(" for ") + f.reg).c_str() : "");
+            for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(w.findings.empty() && (*f.reg != '\0' ? named : !any));
+        }
+    }
+    {
         // A3-193 (area 3, oracle): grammar 2 seed 8602477, `n:return-dropped`. Each arm of `tst r4,r4 ; bf` ends with `mov #7,r0 ; mov.b @(r0,r4),r1`
         // or `mov #2,r0 ; mov.b @(r0,r5),r3`: r0 is an index the function used after its last write of it, scratch by A3-41's reading. Counted
         // (`excluded.r0-index.return-dropped`), no finding.
