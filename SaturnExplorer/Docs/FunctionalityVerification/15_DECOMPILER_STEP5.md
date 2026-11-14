@@ -21072,7 +21072,7 @@ Fixer, branch `review/7-round21` cut at master `51afd0e9` (patches to 0094; 0091
 | A5-145 | P3 | **filed and fixed, oracle**: grammar 1 seed 9200599 (`n:` and `v:folded-read-after-access`) |
 | A7-164 | P3 | **filed and fixed, oracle**: grammar 1 specials seed 9300913 (`v:map-const-join`) |
 | A7-165 | P3 | **filed open**: grammar 1 specials seed 9302668 (`v:map-way-back` at 0x0600900A), not root-caused |
-| A3-194 | P3 | **filed open, routed to area 3**: grammar 1 seed 9200735 (`endless-after-store-dropped`, `endless-call-dropped`) |
+| A3-198 | P3 | **filed open, routed to area 3**: grammar 1 seed 9200735 (`endless-after-store-dropped`, `endless-call-dropped`) |
 
 ### 1. A7-162: seed 9002796
 
@@ -21086,7 +21086,7 @@ Function 0 runs into function 1: `mov.b @(5,r6),r0` (a read of 0x26002109, dead)
 
 | Run | Failing seeds | Findings |
 |---|---|---|
-| grammar 1, 10,000 from 9,200,001 | 3 | 9200599 (A5-145), 9200735 (A3-194), 9201666 (A5-144) |
+| grammar 1, 10,000 from 9,200,001 | 3 | 9200599 (A5-145), 9200735 (A3-198), 9201666 (A5-144) |
 | grammar 2, 10,000 from 9,200,001 | 1 | 9207077 (A5-143) |
 | grammar 1 specials, 5,000 from 9,300,001 | 2 | 9300913 (A7-164), 9302668 (A7-165) |
 
@@ -21095,7 +21095,7 @@ Function 0 runs into function 1: `mov.b @(5,r6),r0` (a read of 0x26002109, dead)
 * **A5-145 (9200599).** A slot's read the early return does not use, printed only on the other path (`return in_r1 & 0xff; }` then `iVar5 = (int4)cRam26002300;`): the read's line is after a write whose block returns. Set aside when a `return` follows the write at its own block depth before the read's line, with no label or `goto` between (`order.folded-read-before-access.returned`).
 * **A7-164 (9300913).** `tst #8,r0 ; bt` and two `cmp/eq #imm,r0 ; bf` of r0 = 7 before a `rotr r0`: each condition's never-taken edge asks the value of r0, nested once more; six levels gave no number at the `rotr` (any one of the three removed, it passed). The nesting bound is now eight (`OracleDepth()`); the 20,000-seed matrix time is unchanged.
 * **A7-165 (9302668), open.** The marked-volatile request's `xRam26001030 = Ram26001028;` for `mov.w @r7,r0 ; mov.w r0,@(8,r7)` after the poll of r7: the way back from the re-read (0x0600900A) is answered with a copy materialised there before its own statement. Not examined further (the oracle's `readHere` reading of `Ram26001028` as an operand is the first place to look).
-* **A3-194 (9200735), open, area 3.** `endless-after-store-dropped` and `endless-call-dropped` after a poll the text takes to run for ever.
+* **A3-198 (9200735), open, area 3.** `endless-after-store-dropped` and `endless-call-dropped` after a poll the text takes to run for ever.
 
 ### 4. Pins and mutation (`mutation.sh`)
 
@@ -21115,4 +21115,4 @@ Pins: `TestArea7Round21Pins` (A7-162), `TestA5FoldedPins3` (A5-142), `TestA5Fold
 ### 6. Routed
 
 * **Area 7**: A7-165 (open, 9302668).
-* **Area 3**: A3-194 (open, 9200735).
+* **Area 3**: A3-198 (open, 9200735).
