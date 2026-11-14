@@ -18925,6 +18925,57 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                 CHECK(w.findings.empty() && w.text.find(f.ret) != std::string::npos && (*f.reg != '\0' ? placed : any == std::string::npos));
             }
         }
+        // Area 3, A3-208 and A3-209 (`tools/a3_round27/fixtures.src`): the wording of A3-108's notes. A3-208: an unlent call before the one whose
+        // callee may write its incoming stack word wrote over the saved PR's word (Clobber), and the slot note called the word "a local": sw2 (U1,
+        // then U2, which writes the word F0 saved PR in); sw1 (U2 alone) the control. A3-209: after a lent call that stores through the frame
+        // address it is handed, the word holding &local is the callee's write (a value no op made), and r5 loaded from it was not taken for the
+        // word: the stack-argument note ("... in none of the arguments") over `func_0x06009020(0,pxStack_8);` (sa2). Controls: sa0 (no call
+        // before: no note) and sa1 (U1 not lent: the note at U1's call, where the word holds &local and no argument shows it; "likewise" for U2's,
+        // whose saved PR word U1 may have written a frame address into). 'note': the start of the note said before the call 'at', or "" for none.
+        {
+            struct Wording
+            {
+                const char* name;
+                const char* words;
+                const char* funcs;
+                const char* returns;
+                const char* clobbers;
+                const char* note;
+                const char* at;
+            };
+            const Wording wordings[] = {
+                { "A3-208 control sw1", "2F86 4F22 B00C 0009 4F26 68F6 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 61F2 2F12 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/10,20/20/28", "0,1", nullptr, "a saved register's word at or above the stack pointer", "func_0x06009020" },
+                { "A3-208 sw2", "2F86 4F22 B01C 0009 B00A 0009 4F26 68F6 000B 0009 0009 0009 0009 0009 0009 0009 61F2 2F12 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                "000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/14,20/20/28,40/40/44", "0,1,1", nullptr, "a saved register's word at or above the stack pointer", "func_0x06009020" },
+                { "A3-209 control sa0", "4F22 7FEC 6EF3 61E3 7108 1E14 55E4 B007 E400 7F14 4F26 000B 0009 0009 0009 0009 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/1a,20/20/24", "0,1", "4000,0", "", "" },
+                { "A3-209 control sa1", "4F22 7FEC 6EF3 61E3 7108 1E14 B018 0009 55E4 B005 E400 7F14 4F26 000B 0009 0009 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                        "000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/1e,20/20/24,40/40/44", "0,1,1", "4000,0,0", "a frame address is in a stack argument slot here", "func_0x06009040" },
+                { "A3-209 sa2", "4F22 7FEC 6EF3 61E3 7108 1E14 55E4 B007 7501 55E4 B014 E400 7F14 4F26 000B 0009 E101 000B 2510 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 "
+                                "000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                  "0/0/20,20/20/26,40/40/44", "1,0,1", "4000,0,0", "", "" },
+            };
+            for (const Wording& f : wordings)
+            {
+                const ModulePin m = { f.name, f.words, f.funcs, nullptr, f.returns, f.clobbers, nullptr };
+                const Report w = EvaluateSubject(d, ModuleSubject(m), true);
+                const size_t fn0 = w.text.find("function 0 at");
+                const std::string body = fn0 != std::string::npos ? w.text.substr(fn0) : w.text;
+                const size_t open = body.find("/*");
+                std::string said;   // the first note of function 0, its line breaks and indentation taken as one space
+                if (open != std::string::npos)
+                    for (size_t k = open + 3; k < body.size() && body.compare(k, 2, "*/") != 0; ++k)
+                        if (!std::isspace(static_cast<unsigned char>(body[k])) || (!said.empty() && said.back() != ' ')) said += std::isspace(static_cast<unsigned char>(body[k])) ? ' ' : body[k];
+                const size_t call = open != std::string::npos ? body.find("func_0x", open) : std::string::npos;
+                const bool placed = call != std::string::npos && body.compare(call, std::strlen(f.at), f.at) == 0;
+                std::printf("pin '%s': %zu finding(s), note [%s]%s\n", f.name, w.findings.size(), said.c_str(), placed ? (std::string(" at ") + f.at).c_str() : "");
+                for (const Finding& x : w.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+                CHECK(w.findings.empty() && (*f.note != '\0' ? said.compare(0, std::strlen(f.note), f.note) == 0 && placed : open == std::string::npos));
+            }
+        }
     }
     {
         // A3-198 (routed by area 7 round 21; area 3 round 26, oracle): grammar 1 seed 9200735, `endless-after-store-dropped` (0x26003000) and

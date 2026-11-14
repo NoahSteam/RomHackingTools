@@ -1669,13 +1669,15 @@ private:
             if (slot.first < first) continue;
             // The same exact address in r4-r7 is an argument the call shows (a pointer to a local kept in a local, passed too): the engine
             // declares the alias from it, and the note would say it is in none of the arguments.
+            // (area 3, A3-209) ...and so is the word's own value loaded into r4-r7 when a callee has written over the word (a lent one handed
+            // a frame address, or an unlent one: the word holds a value no op of this function made, Clobber's), when no other word holds the
+            // same: sa2 (`mov.l @(16,r14),r5` after a lent call that stores through r5) printed the note over `func(0,pxStack_8)`.
             bool shown = false;
-            if (slot.second.kind == Value::Sp)
-                for (int r = 4; r < 8; ++r)
-                {
-                    const Value x = Get(s, mReg[r]);
-                    shown = shown || (x.kind == Value::Sp && x.v == slot.second.v);
-                }
+            for (int r = 4; r < 8; ++r)
+            {
+                const Value x = Get(s, mReg[r]);
+                shown = shown || (slot.second.kind == Value::Sp && x.kind == Value::Sp && x.v == slot.second.v) || LoadedFromWord(s, x, slot.first);
+            }
             if (!shown)
             {
                 NoteFrameEscapeOf(s, slot.second, kR15, true, at);
@@ -1689,6 +1691,25 @@ private:
         }
     }
 
+    // (area 3, A3-209) Whether 'x' is the value the word at 'offset' holds, read whole into a register (Load gives the slot's value, which Set
+    // marks with the load's op): a frame address no op of this function made (def 0: what a callee's write over the word left), held by no
+    // other word, so that a register equal to it was loaded from this one.
+    static bool LoadedFromWord(const State& s, const Value& x, int64_t offset)
+    {
+        const auto w = s.slots.find(offset);
+        if (w == s.slots.end() || w->second.kind != Value::Fuzzy || w->second.def != 0 || !w->second.Frame() || x.kind != Value::Fuzzy) return false;
+        auto same = [&x](const Value& word) {
+            Value y = x;
+            y.def = word.def;
+            y.hole = word.hole;
+            y.exposedAt = word.exposedAt;
+            return y == word;
+        };
+        if (!same(w->second)) return false;
+        for (const auto& slot : s.slots)
+            if (slot.first != offset && same(slot.second)) return false;
+        return true;
+    }
     // A callee that is not lent may write the words of this function's frame from the call's r15 up through its own r15: they are its incoming
     // stack arguments, and a hand-written one hands a value back in its argument slot (A3-21's channel, which withholds the callee). The engine
     // takes the call to write none of them and folds this function's read of the word after the call to what it stored before (A3-61). Each word
@@ -1709,7 +1730,9 @@ private:
                 if ((words & CallEffects::kFrameAny) || (k >= 0 && k < 31 && ((words >> k) & 1u)))
                 {
                     slot.second.exposedAt = at;
-                    if (SavedRegister(slot.second)) mExposedSaved.insert(std::make_pair(at, slot.first));   // (A3-108)
+                    // (A3-108) ...and (area 3, A3-208) a saved register's word an earlier unlent call may have written over (Clobber's
+                    // mayEntry: r8-r14, GBR, VBR and PR), which is still that word, not a local: sw2 (a call of U1 before U2's) called it one
+                    if (SavedRegister(slot.second) || slot.second.mayEntry != 0) mExposedSaved.insert(std::make_pair(at, slot.first));
                 }
             }
     }
