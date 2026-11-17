@@ -19,14 +19,15 @@ you step through the SH-2 code behind it. See [`SaturnExplorer/`](SaturnExplorer
 Plain-English guides to the Saturn's audio and video hardware and how Saturn Explorer's
 tools map onto it — no prior hardware knowledge assumed:
 
-- **[Saturn Audio](SaturnExplorer/web/guides/audio.html)** — the
+- **[Saturn Audio](https://noahsteam.github.io/RomHackingTools/audio.html)** — the
   SCSP sound chip, sound RAM, streaming vs. CD audio, tracing a sound to its file on disc.
-- **[VDP1](SaturnExplorer/web/guides/vdp1.html)** — the drawing
+- **[VDP1](https://noahsteam.github.io/RomHackingTools/vdp1.html)** — the drawing
   engine: sprites, quads, textures, palettes, the command table, the 3D view.
-- **[VDP2](SaturnExplorer/web/guides/vdp2.html)** — the layer
+- **[VDP2](https://noahsteam.github.io/RomHackingTools/vdp2.html)** — the layer
   engine: scrolling backgrounds, the shared palette, priority, and color math.
 
-  → [All guides](SaturnExplorer/web/guides/)
+  → [All guides](https://noahsteam.github.io/RomHackingTools/)
 
 The guide pages are self-contained HTML in
-[`SaturnExplorer/web/guides/`](SaturnExplorer/web/guides/): download one and open it in a browser.
+[`SaturnExplorer/web/guides/`](SaturnExplorer/web/guides/) and are published to GitHub Pages
+on every push to `master`.
