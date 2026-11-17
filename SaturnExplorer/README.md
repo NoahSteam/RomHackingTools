@@ -1,6 +1,6 @@
 # Saturn Explorer
 
-### See how a Sega Saturn game works, from the picture to the code.
+### Inspect, debug, and modify Sega Saturn games.
 
 Saturn Explorer lets you look inside Sega Saturn games. Open a saved game state or connect to a running emulator to explore the sprites, backgrounds, colors, memory, and instructions behind the screen.
 
@@ -14,17 +14,13 @@ Built for **fan translators, ROM hackers, and curious developers**, it helps ans
 
 ## What can you do with it?
 
-| You want to… | Saturn Explorer helps you… |
-| --- | --- |
-| **Find artwork** | Select an object in the reconstructed screen and inspect its texture, colors, and drawing command. Search game data for matching texture or palette bytes. |
-| **Export textures** | Save any texture you are inspecting as an image (BMP). When it uses a palette, the file keeps the game’s own palette, so you can recolor it later. Whole background layers and tile sheets can be exported too. |
-| **Understand a scene** | Toggle background layers, inspect sprites, or explore the scene geometry in an exploded 3D view. |
-| **Rewind and resume** | Scrub back through recent frames, then continue playing from any of them: the emulator is restored to that exact moment. Retry a fight, or see what a change did. Turn on **Rewind** in Settings; it needs a patched Mednafen. |
-| **Find changing values** | Inspect memory and watch addresses while the game runs, helping investigate dialogue, game logic, and other changing data. |
-| **Follow the code** | Pause, set breakpoints, and step through the Saturn’s SH-2 processor instructions. |
-| **Read code as C** | The built-in decompiler turns an SH-2 function into C-like pseudocode next to the assembly. It runs inside the app, so there is nothing else to install. Desktop builds. |
-| **Log without pausing** | Set tracepoints to record register or memory values whenever an instruction runs, while the game keeps playing. |
-| **Listen to sounds and export them** | Play the sample behind any sound voice, or hear what a frame is playing, and save a voice as a `.wav`. The audio tools help trace a sound back to its data on the disc. Desktop builds. |
+- **Graphics & assets:** Select a sprite on screen to find its drawing command, texture, and palette. Inspect background layers or export textures, layers, and tiles.
+- **Memory & rewind:** Compare two frames to see which bytes changed, export the differences as CSV, or open the snapshots in an external diff tool. Search RAM, watch values, and rewind with patched Mednafen.
+- **Live debugging & SH-2 code:** Set breakpoints and tracepoints, inspect registers and the call stack, and read C-like pseudocode alongside assembly.
+- **Patches & disc rebuilding:** Find where edited bytes belong in game files, save your mappings in a patch project, and rebuild a supported disc image to test your changes.
+- **Audio:** Inspect Saturn sound voices, audition samples, and export them as WAV files.
+
+**[Explore all features](https://noahsteam.github.io/RomHackingTools/SaturnExplorer/web/guides/features.html)**
 
 ## From a game screen to an explanation
 
@@ -48,9 +44,9 @@ Live debugging requires an emulator with the Saturn Explorer integration patch. 
 
 You don’t need to know the Saturn’s hardware terminology to begin. These guides explain the chips and the panels used to inspect them:
 
-- **[Sprites and textures (VDP1)](web/guides/vdp1.html)** — how the Saturn draws objects and how to inspect them.
-- **[Backgrounds and layers (VDP2)](web/guides/vdp2.html)** — how scrolling layers and colors combine into a scene.
-- **[Sound and music](web/guides/audio.html)** — the audio hardware and tracing sounds to game data.
+- **[Sprites and textures (VDP1)](https://noahsteam.github.io/RomHackingTools/SaturnExplorer/web/guides/vdp1.html)** — how the Saturn draws objects and how to inspect them.
+- **[Backgrounds and layers (VDP2)](https://noahsteam.github.io/RomHackingTools/SaturnExplorer/web/guides/vdp2.html)** — how scrolling layers and colors combine into a scene.
+- **[Sound and music](https://noahsteam.github.io/RomHackingTools/SaturnExplorer/web/guides/audio.html)** — the audio hardware and tracing sounds to game data.
 - **[Reading SH-2 pseudocode](Docs/DECOMPILER_GUIDE.md)** — using the desktop decompiler.
 
 For detailed setup and feature reference, see [ReadMe.txt](ReadMe.txt). For the implementation, start with the [codebase guide](Docs/Codebase/README.md).
