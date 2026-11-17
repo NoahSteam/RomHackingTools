@@ -1,0 +1,345 @@
+# Area 3, A3-214 fix: fixtures (run with run.sh / run.py: W=<SaturnExplorer> S=<scratch>). The caller is vCr8's (a local of 5, its address in r8,
+# the call, 7 stored through r8, the local returned); F1 is U, not lent (it returns r3), so input mode 0 (r3 = 0) takes case 0.
+# `.rel A,B` is one word, A - B (a table of half-word offsets); the assembler spells `braf rN` `braf @rN`.
+# tb (a3_round28's): U dispatches on r3 & 3 (`and #3,r0`) through a table of addresses; case 0 clears r8 (A3-214)
+name tb
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r3,r0
+and #3,r0
+mov r0,r1
+shll2 r1
+mova @(T1,pc),r0
+mov.l @(r0,r1),r1
+jmp @r1
+nop
+T1:
+.addr C0
+.addr C1
+.addr C1
+.addr C1
+C0:
+mov #0,r8
+C1:
+rts
+mov r3,r0
+# tbc (control): tb with case 0 `mov #0,r1`: no case changes r8, no caution
+name tbc
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r3,r0
+and #3,r0
+mov r0,r1
+shll2 r1
+mova @(T1,pc),r0
+mov.l @(r0,r1),r1
+jmp @r1
+nop
+T1:
+.addr C0
+.addr C1
+.addr C1
+.addr C1
+C0:
+mov #0,r1
+C1:
+rts
+mov r3,r0
+# tbm: the mask an `and` with a constant in another register (`mov #3,r1 ; and r0,r1`, 06024E70/007's form)
+name tbm
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r3,r0
+mov #3,r1
+and r0,r1
+shll2 r1
+mova @(T1,pc),r0
+mov.l @(r0,r1),r1
+jmp @r1
+nop
+T1:
+.addr C0
+.addr C1
+.addr C1
+.addr C1
+C0:
+mov #0,r8
+C1:
+rts
+mov r3,r0
+# tbg: compiled code's guard (06016B60/007): `mov #3,r1 ; cmp/hi r1,r3 ; bf/s L ; nop ; bra default ; nop ; L:`, a table of half-word offsets
+# from the table (`mov.w @(r0,r1),r1 ; add r1,r0 ; jmp @r0`); case 0 clears r8
+name tbg
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov #3,r1
+cmp/hi r1,r3
+bf/s L1
+nop
+bra C1
+nop
+L1:
+mov r3,r1
+add r1,r1
+mova @(T1,pc),r0
+mov.w @(r0,r1),r1
+add r1,r0
+jmp @r0
+nop
+nop
+T1:
+.rel C0,T1
+.rel C1,T1
+.rel C1,T1
+.rel C1,T1
+C0:
+mov #0,r8
+C1:
+rts
+mov r3,r0
+# tbh: the generator's guard (`mov #4,r1 ; cmp/hs r1,r3 ; bt default`), then `braf` through half-word offsets from the `braf`; case 0 clears r8
+name tbh
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov #4,r1
+cmp/hs r1,r3
+bt C1
+mov r3,r1
+add r1,r1
+mova @(T1,pc),r0
+mov.w @(r0,r1),r1
+braf @r1
+nop
+B1:
+nop
+T1:
+.rel C0,B1
+.rel C1,B1
+.rel C1,B1
+.rel C1,B1
+C0:
+mov #0,r8
+C1:
+rts
+mov r3,r0
+# tbw: the guard's bound set before an earlier branch (0601FA80/008: `mov #15,r5` ... `bt/s` ... `cmp/hi r5,r1 ; bt/s default`): the reader takes the
+# constant the walk holds in r5 at the jump; case 0 clears r8
+name tbw
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov #3,r5
+mov r3,r1
+tst r1,r1
+bf L0
+nop
+L0:
+cmp/hi r5,r1
+bt C1
+shll2 r1
+mova @(T1,pc),r0
+mov.l @(r0,r1),r1
+jmp @r1
+nop
+T1:
+.addr C0
+.addr C1
+.addr C1
+.addr C1
+C0:
+mov #0,r8
+C1:
+rts
+mov r3,r0
+# tbu: the bound lost on the way (the masked index through a stack word, `mov.l r0,@-r15 ; mov.l @r15+,r1`): a table the reader cannot bound;
+# case 0 clears r8. Fail closed: the caution, said for the table
+name tbu
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r3,r0
+and #3,r0
+mov.l r0,@-r15
+mov.l @r15+,r1
+shll2 r1
+mova @(T1,pc),r0
+mov.l @(r0,r1),r1
+jmp @r1
+nop
+nop
+T1:
+.addr C0
+.addr C1
+.addr C1
+.addr C1
+C0:
+mov #0,r8
+C1:
+rts
+mov r3,r0
+# tbuc: tbu with case 0 `mov #0,r1` (no case changes r8): the caution is said all the same (fail closed); the runs do not need it
+name tbuc
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,100
+.word 0x4F22
+mov.l r8,@-r15
+add #-16,r15
+mov #5,r2
+mov.l r2,@r15
+mov r15,r8
+bsr F1
+nop
+mov #7,r2
+mov.l r2,@r8
+mov.l @r15,r0
+add #16,r15
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r3,r0
+and #3,r0
+mov.l r0,@-r15
+mov.l @r15+,r1
+shll2 r1
+mova @(T1,pc),r0
+mov.l @(r0,r1),r1
+jmp @r1
+nop
+nop
+T1:
+.addr C0
+.addr C1
+.addr C1
+.addr C1
+C0:
+mov #0,r1
+C1:
+rts
+mov r3,r0

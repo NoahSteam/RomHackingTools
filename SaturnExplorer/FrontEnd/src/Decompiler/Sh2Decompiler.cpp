@@ -365,6 +365,21 @@ public:
         mOwnCtx.sharedChanged = changed;
         mOwnCtx.sharedWritten = written;
     }
+    // (area 3, A3-214) ...and the walks the cautions read (RecordCtx), which follow the callees' switches, shared the same way
+    struct WalkMaps
+    {
+        std::map<uint32_t, uint32_t> walks, below, handed, changed, written, entryRead, lost;
+    };
+    void ShareCautionWalks(WalkMaps* m)
+    {
+        mCautionCtx.shared = &m->walks;
+        mCautionCtx.sharedBelow = &m->below;
+        mCautionCtx.sharedHanded = &m->handed;
+        mCautionCtx.sharedChanged = &m->changed;
+        mCautionCtx.sharedWritten = &m->written;
+        mCautionCtx.sharedEntryRead = &m->entryRead;
+        mCautionCtx.sharedLost = &m->lost;
+    }
 
     // The calls (by the instruction that makes them) a frame address escapes at in a register the call is shown without, and which (bit 2: r2, bit 7: r7).
     const std::map<uint32_t, uint32_t>& EscapeSites() const { return mEscapeSites; }
@@ -376,6 +391,9 @@ public:
     // (area 3, A3-197) The calls (bit r: rN of r8-r14, 17 GBR, 18 VBR (A3-200), 15 r15 (A3-206)) whose callee is not lent and, as the walk of its code shows, returns on some path with
     // that register not restored, where this function reads the register after the call (UseUnkept).
     const std::map<uint32_t, uint32_t>& UnkeptSites() const { return mUnkeptSites; }
+    // (area 3, A3-214) ...and, of those registers, the ones the callee's record names because its walk met a switch it could not bound
+    // (CalleeLost): the caution says so instead of "does not restore it on every path"
+    const std::map<uint32_t, uint32_t>& LostSites() const { return mLostSites; }
     // ...and the stack words, by their offset from r15 on entry, whose frame address the stack-argument note of a call is for (A3-108).
     const std::map<uint32_t, std::set<int64_t>>& EscapeWords() const { return mEscapeWords; }
     // After Run(): whether r2 held the address of a local at a call whose signature is not lent (A3-4),
@@ -455,6 +473,8 @@ public:
         mOut = 0;
         mKeptAt = 0;
         mChangedAt = 0;
+        mLostAt = 0;
+        mLostSites.clear();
         mWrittenAt = kModelKept;
         mPathLost = false;
         mLeaks = 0;
@@ -1604,6 +1624,7 @@ private:
         if (mNested && haveTarget)
         {
             const uint32_t changed = InnerChanged(target) & kUnkeptRegs & (signatureLent ? ~e.preserved : ~0u);
+            if (mFollowTables) mLostAt |= CalleeLost(target) & changed;   // (A3-214)
             for (int r = 0; r < kTracked; ++r)
             {
                 if (!((changed >> r) & 1u)) continue;
@@ -1650,6 +1671,7 @@ private:
         {
             const uint32_t changed = CalleeChanged(target) & kUnkeptRegs & e.preserved;   // (A3-206: r15 too)
             const uint32_t written = CalleeWritten(target);
+            if ((CalleeLost(target) & changed) != 0) mLostSites[at] |= CalleeLost(target) & changed;   // (A3-214)
             for (int r = 0; r < kTracked; ++r)
             {
                 if (!((changed >> r) & 1u)) continue;
@@ -1841,10 +1863,13 @@ private:
     // kUnwalked: the walk did not descend (the levels or the budget exhausted, or a walk of the target already in progress: a cycle). The
     // walker then treats the call as one to a target it cannot name: it fails closed only when it hands the frame on (MapCalleeWords).
     static constexpr uint32_t kUnwalked = 0x7FFFFFFFu;
-    uint32_t CalleeFrameWrites(uint32_t target)
+    struct NestedContext;
+    uint32_t CalleeFrameWrites(uint32_t target) { return WalkIn(mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx, target); }
+    // (area 3, A3-214) ...the walk of 'target' in the context 'ctx': this walker's own (the frame rules'), or, from the probe itself, the
+    // cautions' (RecordCtx), whose walks follow the switches of the callees' code (NestedContext::tables)
+    uint32_t WalkIn(NestedContext* ctx, uint32_t target)
     {
-        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
-        if (ctx == &mOwnCtx && !ctx->started)
+        if (!ctx->started)
         {
             ctx->started = true;
             ctx->budget = kNestedBudget;
@@ -1862,6 +1887,7 @@ private:
         ReturnCheck callee(mFd, target, mLent, kNoTables);
         callee.mNested = true;
         callee.mNestedCtx = ctx;
+        callee.mFollowTables = ctx->tables;
         callee.mDepth = mDepth + 1;
         callee.mFoldPcLoads = true;
         callee.mMaxSteps = std::min(static_cast<size_t>(kNestedMaxSteps), ctx->budget);   // a copy: std::min binds a reference, which needs a definition in C++14
@@ -1893,6 +1919,8 @@ private:
         // a callee it could not follow. A callee that saves r8-r14, writes its frame through an index the walk cannot bound, and restores them
         // is not shown to change them (06041AA0/008).
         ctx->Changed()[target] = !why.empty() || callee.mEntryUndecodable ? 0u : callee.mChangedAt & kUnkeptRegs;
+        // (area 3, A3-214) ...of which the ones named because a switch was not bounded (in its code or an inner callee's)
+        ctx->Lost()[target] = ctx->Changed()[target] & callee.mLostAt;
         // (area 3, A3-203) ...and the ones it overwrites on every path: only when every path the walk followed ended in a return it read
         // (no path lost) and some return was reached
         ctx->Written()[target] = !why.empty() || callee.mEntryUndecodable || callee.mPathLost || !callee.mSpSeen ? 0u
@@ -1905,6 +1933,7 @@ private:
             if (t->first != target && t->second.erase(target) != 0)
             {
                 ctx->Changed()[t->first] |= ctx->Changed()[target];
+                ctx->Lost()[t->first] |= ctx->Lost()[target];
                 const auto up = ctx->taint.find(target);
                 if (up != ctx->taint.end()) t->second.insert(up->second.begin(), up->second.end());
             }
@@ -1931,11 +1960,11 @@ private:
     // caution's "read after it" takes of a later call (UseUnkept); the frame rules keep CalleeHanded.
     uint32_t CalleeEntryRead(uint32_t target)
     {
-        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
+        NestedContext* ctx = RecordCtx();
         auto f = ctx->EntryRead().find(target);
         if (f == ctx->EntryRead().end())
         {
-            CalleeFrameWrites(target);
+            WalkIn(ctx, target);
             f = ctx->EntryRead().find(target);
         }
         return f != ctx->EntryRead().end() ? f->second : origin::kRegisters;
@@ -1944,11 +1973,11 @@ private:
     // could not be walked (nothing is shown).
     uint32_t CalleeChanged(uint32_t target)
     {
-        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
+        NestedContext* ctx = RecordCtx();
         auto f = ctx->Changed().find(target);
         if (f == ctx->Changed().end())
         {
-            CalleeFrameWrites(target);
+            WalkIn(ctx, target);
             f = ctx->Changed().find(target);
         }
         return f != ctx->Changed().end() ? f->second : 0u;
@@ -1964,7 +1993,7 @@ private:
     // nothing (CalleeChanged's 0), as at the top level.
     uint32_t InnerChanged(uint32_t target)
     {
-        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
+        NestedContext* ctx = RecordCtx();
         if (ctx->walking.count(target) != 0)
         {
             if (target != mExec) ctx->taint[mExec].insert(target);
@@ -1980,14 +2009,26 @@ private:
     // (area 3, A3-203) ...and the ones it overwrites on every path, as its walk shows (CalleeFrameWrites); 0 when nothing is shown.
     uint32_t CalleeWritten(uint32_t target)
     {
-        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
+        NestedContext* ctx = RecordCtx();
         auto f = ctx->Written().find(target);
         if (f == ctx->Written().end())
         {
-            CalleeFrameWrites(target);
+            WalkIn(ctx, target);
             f = ctx->Written().find(target);
         }
         return f != ctx->Written().end() ? f->second : 0u;
+    }
+    // (area 3, A3-214) ...and, of what it changes (CalleeChanged), the registers named because its walk met a switch it could not bound
+    uint32_t CalleeLost(uint32_t target)
+    {
+        NestedContext* ctx = RecordCtx();
+        auto f = ctx->Lost().find(target);
+        if (f == ctx->Lost().end())
+        {
+            WalkIn(ctx, target);
+            f = ctx->Lost().find(target);
+        }
+        return f != ctx->Lost().end() ? f->second : 0u;
     }
     // A3-86 a: the registers a captured, unlent callee may store below the pointer it was handed, from the frame-words walk's
     // record (or that walk, run now). 0x7FFF (every register) when the callee could not be walked: fail closed; kConvention for one whose code
@@ -2044,6 +2085,377 @@ private:
         v = 0;
         for (int i = 0; i < n; ++i) v = (v << 8) | b[i];
         return true;
+    }
+
+    // (area 3, A3-214) A switch in a walked callee's code. The engine's tables (mTables) are this function's only, so at `jmp @rN` or
+    // `braf rN` with a target the walk computed (Value::Fuzzy) the walk of a callee lost the path, and what the cases change was never
+    // recorded: tb (case 0 `mov #0,r8`) was taken to keep r8. The dispatch is read here instead: the straight-line code before the jump, back
+    // to the branch that leads into it (at most kDispatchBack instructions), is run for every index the code lets through, with the table's
+    // words read from the capture. The index is bounded by a `cmp/hs` or `cmp/hi` against a constant just before that code whose conditional
+    // branch leaves on the out-of-range side (the compiled switch's guard, the generator's), or by a mask in it (`and #m,r0`, an `and` with a
+    // constant, `extu.b`: tb's `and #3,r0`); at most 256 indices. A load gives a value only through an address computed from the index (a
+    // table's word) or PC-relative (a literal): a variable the switch reads its index from is not the capture's value.
+    // kDispatchNone: no `mova` before the jump (a jump through a pointer the walk cannot name, A3-61's limit). kDispatchUnbounded: a jump
+    // through a table of the function's own code whose index nothing here bounds, or a step the reader does not model.
+    enum DispatchKind { kDispatchNone, kDispatchBounded, kDispatchUnbounded };
+    static constexpr int kDispatchBack = 16;
+    struct DispatchRegs
+    {
+        uint32_t v[16] = {};
+        uint16_t known = 0;   // bit n: rN's value is v[n]
+        uint16_t index = 0;   // ...and computed from the index being tried (a load through it reads the table)
+        void Set(int n, uint32_t x, bool ix)
+        {
+            v[n] = x;
+            known = static_cast<uint16_t>(known | 1u << n);
+            index = static_cast<uint16_t>(ix ? index | 1u << n : index & ~(1u << n));
+        }
+        void Forget(int n)
+        {
+            known = static_cast<uint16_t>(known & ~(1u << n));
+            index = static_cast<uint16_t>(index & ~(1u << n));
+        }
+        bool K(int n) const { return ((known >> n) & 1u) != 0; }
+        bool I(int n) const { return ((index >> n) & 1u) != 0; }
+    };
+    static bool DelayedBranch(uint16_t w)
+    {
+        const uint16_t lo = w & 0xF0FFu;
+        return (w & 0xF000u) == 0xA000u || (w & 0xF000u) == 0xB000u || lo == 0x402Bu || lo == 0x400Bu || w == 0x000Bu || w == 0x002Bu ||
+               lo == 0x0023u || lo == 0x0003u || (w & 0xFF00u) == 0x8D00u || (w & 0xFF00u) == 0x8F00u;
+    }
+    static bool AnyBranch(uint16_t w)
+    {
+        return DelayedBranch(w) || (w & 0xFF00u) == 0x8900u || (w & 0xFF00u) == 0x8B00u || (w & 0xFF00u) == 0xC300u || w == 0x001Bu;
+    }
+    // One instruction of a dispatch on the registers' known values; false when the reader does not model it. 'writes' gets the registers
+    // it writes, whether their values are known or not.
+    bool DispatchStep(uint32_t pc, uint16_t w, DispatchRegs& r, uint32_t& writes) const
+    {
+        const int n = (w >> 8) & 15, m = (w >> 4) & 15;
+        const uint32_t d8 = w & 0xFFu;
+        const int32_t s8 = static_cast<int8_t>(d8);
+        writes = 0;
+        // a table's word (through an address computed from the index: the value is the index's too) or a literal (PC-relative: 'pool')
+        auto load = [&](uint32_t addr, int size, bool viaIndex, int to, bool pool = false) {
+            uint32_t x = 0;
+            if ((viaIndex || pool) && ReadCode(addr, size, x))
+            {
+                if (size == 1) x = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(x)));
+                if (size == 2) x = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(x)));
+                r.Set(to, x, viaIndex);
+            }
+            else
+                r.Forget(to);
+            writes |= 1u << to;
+        };
+        auto bin = [&](uint32_t x) {   // Rn = f(Rn, Rm)
+            if (r.K(n) && r.K(m)) r.Set(n, x, r.I(n) || r.I(m));
+            else r.Forget(n);
+            writes |= 1u << n;
+        };
+        auto un = [&](uint32_t x) {   // Rn = f(Rm)
+            if (r.K(m)) r.Set(n, x, r.I(m));
+            else r.Forget(n);
+            writes |= 1u << n;
+        };
+        auto self = [&](uint32_t x) {   // Rn = f(Rn)
+            if (r.K(n)) r.Set(n, x, r.I(n));
+            writes |= 1u << n;
+        };
+        const uint32_t vn = r.v[n], vm = r.v[m];
+        switch (w >> 12)
+        {
+        case 0x0:
+            if (w == 0x0009u || w == 0x0008u || w == 0x0018u || w == 0x0019u) return true;   // nop, clrt, sett, div0u
+            switch (w & 0xFu)
+            {
+            case 0x4: case 0x5: case 0x6: return true;   // mov.x Rm,@(r0,Rn)
+            case 0xC: case 0xD: case 0xE:                // mov.x @(r0,Rm),Rn
+                load(r.v[0] + vm, (w & 0xFu) == 0xC ? 1 : (w & 0xFu) == 0xD ? 2 : 4, r.K(0) && r.K(m) && (r.I(0) || r.I(m)), n);
+                return true;
+            default: break;
+            }
+            switch (w & 0xFFu)
+            {
+            case 0x02: case 0x12: case 0x22: case 0x0A: case 0x1A: case 0x2A: case 0x29:   // stc, sts, movt
+                r.Forget(n);
+                writes |= 1u << n;
+                return true;
+            default: return false;
+            }
+        case 0x1: return true;   // mov.l Rm,@(disp,Rn)
+        case 0x2:
+            switch (w & 0xFu)
+            {
+            case 0x0: case 0x1: case 0x2: case 0x8: return true;   // mov.x Rm,@Rn; tst
+            case 0x4: case 0x5: case 0x6:                         // mov.x Rm,@-Rn
+                self(vn - ((w & 0xFu) == 0x4 ? 1u : (w & 0xFu) == 0x5 ? 2u : 4u));
+                return true;
+            case 0x9: bin(vn & vm); return true;
+            case 0xA: bin(vn ^ vm); return true;
+            case 0xB: bin(vn | vm); return true;
+            default: return false;
+            }
+        case 0x3:
+            switch (w & 0xFu)
+            {
+            case 0x0: case 0x2: case 0x3: case 0x6: case 0x7: return true;   // cmp/eq, cmp/hs, cmp/ge, cmp/hi, cmp/gt
+            case 0x8: bin(vn - vm); return true;
+            case 0xC: bin(vn + vm); return true;
+            default: return false;
+            }
+        case 0x4:
+            switch (w & 0xFFu)
+            {
+            case 0x00: case 0x20: self(vn << 1); return true;   // shll, shal
+            case 0x08: self(vn << 2); return true;
+            case 0x18: self(vn << 8); return true;
+            case 0x28: self(vn << 16); return true;
+            case 0x01: self(vn >> 1); return true;
+            case 0x09: self(vn >> 2); return true;
+            case 0x19: self(vn >> 8); return true;
+            case 0x29: self(vn >> 16); return true;
+            case 0x21: self(static_cast<uint32_t>(static_cast<int32_t>(vn) >> 1)); return true;   // shar
+            case 0x10: self(vn - 1u); return true;                                                // dt
+            case 0x11: case 0x15: return true;                                                    // cmp/pz, cmp/pl
+            case 0x02: case 0x12: case 0x22: self(vn - 4u); return true;                          // sts.l mach/macl/pr,@-Rn
+            default: return false;
+            }
+        case 0x5: load(vm + (w & 0xFu) * 4u, 4, r.K(m) && r.I(m), n); return true;   // mov.l @(disp,Rm),Rn
+        case 0x6:
+            switch (w & 0xFu)
+            {
+            case 0x0: case 0x1: case 0x2: load(vm, 1 << (w & 0xFu), r.K(m) && r.I(m), n); return true;
+            case 0x4: case 0x5: case 0x6:   // mov.x @Rm+,Rn
+            {
+                const uint32_t size = 1u << ((w & 0xFu) - 4);
+                const bool k = r.K(m), ix = r.I(m);
+                load(vm, static_cast<int>(size), k && ix, n);
+                if (m != n)
+                {
+                    if (k) r.Set(m, vm + size, ix);
+                    writes |= 1u << m;
+                }
+                return true;
+            }
+            case 0x3: un(vm); return true;
+            case 0x7: un(~vm); return true;
+            case 0xB: un(0u - vm); return true;
+            case 0xC: un(vm & 0xFFu); return true;
+            case 0xD: un(vm & 0xFFFFu); return true;
+            case 0xE: un(static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(vm)))); return true;
+            case 0xF: un(static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(vm)))); return true;
+            case 0x8: case 0x9: r.Forget(n); writes |= 1u << n; return true;   // swap.b, swap.w
+            default: return false;
+            }
+        case 0x7: self(vn + static_cast<uint32_t>(s8)); return true;   // add #imm,Rn
+        case 0x8:
+            switch (n)
+            {
+            case 0x0: case 0x1: case 0x8: return true;   // mov.b/w r0,@(disp,Rm); cmp/eq #imm,r0
+            case 0x4: case 0x5: load(vm + (w & 0xFu) * (n == 4 ? 1u : 2u), n == 4 ? 1 : 2, r.K(m) && r.I(m), 0); return true;
+            default: return false;
+            }
+        case 0x9: load(pc + 4 + d8 * 2, 2, false, n, true); return true;                 // mov.w @(disp,pc),Rn
+        case 0xD: load((pc & ~3u) + 4 + d8 * 4, 4, false, n, true); return true;         // mov.l @(disp,pc),Rn
+        case 0xE: r.Set(n, static_cast<uint32_t>(s8), false); writes |= 1u << n; return true;   // mov #imm,Rn
+        case 0xC:
+            switch (n)
+            {
+            case 0x0: case 0x1: case 0x2: case 0x8: return true;   // mov.x r0,@(disp,gbr); tst #imm,r0
+            case 0x4: case 0x5: case 0x6: r.Forget(0); writes |= 1u; return true;
+            case 0x7: r.Set(0, (pc & ~3u) + 4 + d8 * 4, false); writes |= 1u; return true;   // mova
+            case 0x9: if (r.K(0)) r.Set(0, r.v[0] & d8, r.I(0)); writes |= 1u; return true;
+            case 0xA: if (r.K(0)) r.Set(0, r.v[0] ^ d8, r.I(0)); writes |= 1u; return true;
+            case 0xB: if (r.K(0)) r.Set(0, r.v[0] | d8, r.I(0)); writes |= 1u; return true;
+            default: return false;
+            }
+        default: return false;
+        }
+    }
+    DispatchKind DispatchTargets(uint32_t jump, const State& at, std::set<uint32_t>& dests) const
+    {
+        uint32_t jw = 0;
+        if (!ReadCode(jump, 2, jw)) return kDispatchNone;
+        const bool braf = (jw & 0xF0FFu) == 0x0023u;
+        if (!braf && (jw & 0xF0FFu) != 0x402Bu) return kDispatchNone;
+        const int target = (jw >> 8) & 15;
+        // The straight-line code before the jump, and the branch it starts after (stop: its address, 0 when none was met)
+        std::vector<std::pair<uint32_t, uint16_t>> seg;
+        uint32_t stop = 0, sw = 0;
+        for (int k = 1; k <= kDispatchBack; ++k)
+        {
+            const uint32_t at = jump - 2u * static_cast<uint32_t>(k);
+            uint32_t w = 0;
+            if (!ReadCode(at, 2, w)) break;
+            if (AnyBranch(static_cast<uint16_t>(w)))
+            {
+                stop = at;
+                sw = w;
+                break;
+            }
+            DispatchRegs dry;
+            uint32_t writes = 0;
+            if (!DispatchStep(at, static_cast<uint16_t>(w), dry, writes)) break;
+            seg.insert(seg.begin(), std::make_pair(at, static_cast<uint16_t>(w)));
+        }
+        // the word after a branch that always leaves is its delay slot, not the dispatch's code; a conditional one's runs on both ways
+        const bool condition = stop != 0 && ((sw & 0xFF00u) == 0x8900u || (sw & 0xFF00u) == 0x8B00u || (sw & 0xFF00u) == 0x8D00u ||
+                                             (sw & 0xFF00u) == 0x8F00u);
+        if (stop != 0 && !condition && DelayedBranch(static_cast<uint16_t>(sw)) && !seg.empty()) seg.erase(seg.begin());
+        bool table = false;
+        for (const auto& x : seg) table = table || (x.second & 0xFF00u) == 0xC700u;
+        if (!table) return kDispatchNone;
+        // Run the code from 'from' with 'regs' for each value in 'values' of register 'ix' (after 'pre', the guard's delay slot when the guard
+        // branches into the code); the destinations, or false.
+        auto runAll = [&](size_t from, const DispatchRegs& regs, int ix, const std::vector<uint32_t>& values,
+                          const std::vector<std::pair<uint32_t, uint16_t>>& pre) {
+            std::set<uint32_t> got;
+            for (const uint32_t value : values)
+            {
+                DispatchRegs r = regs;
+                r.Set(ix, value, true);
+                std::vector<std::pair<uint32_t, uint16_t>> code = pre;
+                code.insert(code.end(), seg.begin() + static_cast<std::ptrdiff_t>(from), seg.end());
+                for (const auto& x : code)
+                {
+                    uint32_t writes = 0;
+                    if (!DispatchStep(x.first, x.second, r, writes)) return false;
+                }
+                if (!r.K(target) || !r.I(target)) return false;
+                const uint32_t to = braf ? jump + 4u + r.v[target] : r.v[target];
+                if ((to & 1u) != 0) return false;
+                got.insert(to);
+            }
+            dests = got;
+            return !dests.empty();
+        };
+        // The guard: `cmp/hs` or `cmp/hi` of the index with a constant, then a conditional branch: the code starts after it (the generator's
+        // `bt default`), or at its target, after a `bra` to the default (compiled code's `bf/s L ; ... ; bra default ; nop ; L:`, 06016B78/007)
+        uint32_t cond = 0;
+        bool taken = false;
+        std::vector<std::pair<uint32_t, uint16_t>> pre;   // the guard's delay slot, when it branches into the code
+        auto conditional = [](uint32_t w) { return (w & 0xF900u) == 0x8900u; };   // bt, bf, bt/s, bf/s
+        auto targetOf = [](uint32_t at, uint32_t w) { return at + 4u + static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFFu)) * 2); };
+        if (condition) cond = stop;
+        else if (stop >= 4 && (sw & 0xF000u) == 0xA000u && !seg.empty() && seg.front().first == stop + 4)
+        {
+            uint32_t w = 0;
+            if (ReadCode(stop - 2, 2, w) && conditional(w) && (w & 0x0400u) == 0 && targetOf(stop - 2, w) == stop + 4)
+                cond = stop - 2, taken = true;
+            else if (ReadCode(stop - 4, 2, w) && conditional(w) && (w & 0x0400u) != 0 && targetOf(stop - 4, w) == stop + 4)
+            {
+                uint32_t slot = 0, writes = 0;
+                DispatchRegs dry;
+                if (ReadCode(stop - 2, 2, slot) && !AnyBranch(static_cast<uint16_t>(slot)) && DispatchStep(stop - 2, static_cast<uint16_t>(slot), dry, writes))
+                {
+                    cond = stop - 4, taken = true;
+                    pre.push_back(std::make_pair(stop - 2, static_cast<uint16_t>(slot)));
+                }
+            }
+        }
+        uint32_t cw = 0, bw = 0;
+        if (cond >= 2 && ReadCode(cond, 2, bw) && ReadCode(cond - 2, 2, cw) && (cw >> 12) == 0x3 && ((cw & 0xFu) == 0x2 || (cw & 0xFu) == 0x6))
+        {
+            const int rn = (cw >> 8) & 15, rm = (cw >> 4) & 15;
+            const bool hi = (cw & 0xFu) == 0x6;
+            const bool bt = (bw & 0x0200u) == 0;   // bt, bt/s
+            const bool passOnT = taken ? bt : !bt;   // the T the code is entered with
+            // the constant in rn or rm, from the code just before the compare
+            auto constant = [&](int reg, uint32_t& c) {
+                DispatchRegs r;
+                std::vector<std::pair<uint32_t, uint16_t>> before;
+                for (int k = 2; k <= 9; ++k)
+                {
+                    const uint32_t at = cond - 2u * static_cast<uint32_t>(k);
+                    uint32_t w = 0;
+                    if (!ReadCode(at, 2, w) || AnyBranch(static_cast<uint16_t>(w))) break;
+                    DispatchRegs dry;
+                    uint32_t writes = 0;
+                    if (!DispatchStep(at, static_cast<uint16_t>(w), dry, writes)) break;
+                    before.insert(before.begin(), std::make_pair(at, static_cast<uint16_t>(w)));
+                    if ((writes >> reg) & 1u) break;   // the last write of it: run from here
+                }
+                for (const auto& x : before)
+                {
+                    uint32_t writes = 0;
+                    DispatchStep(x.first, x.second, r, writes);
+                }
+                if (r.K(reg))
+                {
+                    c = r.v[reg];
+                    return true;
+                }
+                // ...or, set further back (0601FA80/008: `mov #15,r5` before an earlier branch), the constant the walk itself holds in it at
+                // the jump, on every path there (Value::Imm), when nothing between the compare and the jump writes it
+                const Value v = Get(at, mReg[reg]);
+                if (v.kind != Value::Imm) return false;
+                uint32_t written = 0;
+                std::vector<std::pair<uint32_t, uint16_t>> code = pre;
+                code.insert(code.end(), seg.begin(), seg.end());
+                for (const auto& x : code)
+                {
+                    DispatchRegs dry;
+                    uint32_t writes = 0;
+                    DispatchStep(x.first, x.second, dry, writes);
+                    written |= writes;
+                }
+                if ((written >> reg) & 1u) return false;
+                c = static_cast<uint32_t>(v.v);
+                return true;
+            };
+            uint32_t c = 0;
+            int ix = -1;
+            int64_t top = -1;   // the highest index let through
+            if (rn != rm && constant(rm, c))
+            {
+                ix = rn;   // T: index >= c (hs), index > c (hi)
+                if (!passOnT) top = hi ? static_cast<int64_t>(c) : static_cast<int64_t>(c) - 1;
+            }
+            else if (rn != rm && constant(rn, c))
+            {
+                ix = rm;   // T: c >= index (hs), c > index (hi)
+                if (passOnT) top = hi ? static_cast<int64_t>(c) - 1 : static_cast<int64_t>(c);
+            }
+            if (ix >= 0 && top >= 0 && top < 256)
+            {
+                std::vector<uint32_t> values;
+                for (int64_t i = 0; i <= top; ++i) values.push_back(static_cast<uint32_t>(i));
+                if (runAll(0, DispatchRegs(), ix, values, pre)) return kDispatchBounded;
+            }
+        }
+        // A mask in the code: the last one first
+        DispatchRegs r;
+        std::vector<std::tuple<size_t, int, uint32_t, DispatchRegs>> masks;   // after seg[i], register, mask, the registers before seg[i]
+        for (size_t i = 0; i < seg.size(); ++i)
+        {
+            const uint16_t w = seg[i].second;
+            const int n = (w >> 8) & 15, m = (w >> 4) & 15;
+            if ((w & 0xFF00u) == 0xC900u && !r.K(0)) masks.emplace_back(i, 0, w & 0xFFu, r);
+            else if ((w & 0xF00Fu) == 0x2009u && r.K(m) != r.K(n)) masks.emplace_back(i, n, r.K(m) ? r.v[m] : r.v[n], r);
+            else if ((w & 0xF00Fu) == 0x600Cu && !r.K(m)) masks.emplace_back(i, n, 0xFFu, r);
+            uint32_t writes = 0;
+            DispatchStep(seg[i].first, w, r, writes);
+        }
+        for (auto it = masks.rbegin(); it != masks.rend(); ++it)
+        {
+            const uint32_t mask = std::get<2>(*it);
+            int bits = 0;
+            for (uint32_t b = mask; b != 0; b &= b - 1) ++bits;
+            if (bits > 8) continue;
+            std::vector<uint32_t> values;
+            for (uint32_t v = mask;; v = (v - 1) & mask)   // every value under the mask
+            {
+                values.push_back(v);
+                if (v == 0) break;
+            }
+            DispatchRegs before = std::get<3>(*it);
+            uint32_t writes = 0;
+            DispatchStep(seg[std::get<0>(*it)].first, seg[std::get<0>(*it)].second, before, writes);
+            if (runAll(std::get<0>(*it) + 1, before, std::get<1>(*it), values, {})) return kDispatchBounded;
+        }
+        return kDispatchUnbounded;
     }
     // ...the read of such a word, after the call that exposed it: the alias from the word up, and the note at that call (bit 16 of its mask).
     // Whether the callee writes it was settled when the word was marked (ExposeStackArguments), so each word points at the call that wrote it.
@@ -2882,11 +3294,25 @@ private:
             case ghidra::CPUI_BRANCHIND:
             {
                 auto table = mTables.find(a);
-                const bool found = table != mTables.end() && !table->second.empty();
+                bool found = table != mTables.end() && !table->second.empty();
+                const std::set<uint32_t>* dests = found ? &table->second : nullptr;
+                // (area 3, A3-214) ...and in a walk of the cautions' (NestedContext::tables), the callee's own switch, read by DispatchTargets;
+                // the probe reads its own switch only to know it for one (below: A3-223), the engine's tables being the ones it follows
+                std::set<uint32_t> read;
+                DispatchKind dispatch = kDispatchNone;
+                if (!found && (mFollowTables || !mNested) && Get(s, op.in[0]).kind == Value::Fuzzy)
+                {
+                    dispatch = DispatchTargets(a, s, read);
+                    if (dispatch == kDispatchBounded && mFollowTables)
+                    {
+                        found = true;
+                        dests = &read;
+                    }
+                }
                 // ...and a jump table's index: the target is loaded through it.
                 if (found) s.ctl |= ChooserInput(Get(s, op.in[0]));
                 if (found)
-                    for (uint32_t to : table->second) succ.emplace_back(to, Leaving(s));
+                    for (uint32_t to : *dests) succ.emplace_back(to, Leaving(s));
                 // A tail call: the engine made the jump a call and a return (its flow says so, and the call specs have it). The
                 // callee's effects apply as at any call -- a value in r0 it keeps is carried across, A3-27 -- and its rts goes
                 // to our caller, so the path ends here with PR as it was, if it was the caller's.
@@ -2917,6 +3343,26 @@ private:
                 {
                     const bool isReturn = Return(s, op.in[0]);
                     if (!isReturn && !mTolerant) return "an indirect jump it does not resolve";
+                    // (area 3, A3-214) A switch of a walked callee's code whose index the reader cannot bound (DispatchTargets): what its cases
+                    // change is not read, so the walk fails closed for the cautions' record -- no register of r8-r14, GBR or VBR is taken as
+                    // kept (mChangedAt), and the caution says why (mLostAt: "jumps through a table the analysis cannot bound"). tbu: the bound
+                    // lost through a stack word. (area 3, A3-223) ...and the probe's own switch, one the engine did not recover (a signed guard
+                    // lets any negative index through: grammar 2 seeds 12033773 and 12027075, "Treating indirect jump as call"): its cases are
+                    // not walked, and a register an earlier unlent call may have changed may be read there, so every value so marked is taken
+                    // as read (UseUnkept) and the caution is said at that call. Before, the cases' read of the changed r11 was never seen.
+                    if (!isReturn && dispatch != kDispatchNone)
+                    {
+                        if (mFollowTables)
+                        {
+                            mChangedAt |= kModelKept;
+                            mLostAt |= kModelKept;
+                        }
+                        else if (mUnkeptSeen)
+                        {
+                            for (const auto& v : s.vars) UseUnkept(v.second);
+                            for (const auto& v : s.slots) UseUnkept(v.second);
+                        }
+                    }
                     // A3-70: in a nested callee walk a tail jump hands this function's caller's frame on when r15 is back at or above the
                     // callee's entry (the target takes its stack arguments there) or an address of it is in a register. A thunk's target (a
                     // folded literal) is walked in turn.
@@ -2959,6 +3405,7 @@ private:
                                     if ((kUnkeptRegs >> r) & 1u) here |= ChangedAtReturn(Get(s, mReg[r]), r);   // (A3-207: an inner call's too)
                                 const uint32_t target = static_cast<uint32_t>(to.v);
                                 mChangedAt |= (InnerChanged(target) | (here & ~CalleeWritten(target))) & kUnkeptRegs;   // (A3-207: a cycle)
+                                if (mFollowTables) mLostAt |= CalleeLost(target);   // (A3-214)
                             }
                         }
                         auto p = mLent.find(static_cast<uint32_t>(to.v));
@@ -3106,6 +3553,7 @@ private:
     uint32_t mPreserved = 0, mStoresThrough = 0, mStoresBelow = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
     uint32_t mKeptAt = 0;   // (A3-190) the registers some return leaves as they began
     uint32_t mChangedAt = 0;   // (A3-197) ...and the ones some return holds another value in, for certain (Value::mayEntry)
+    uint32_t mLostAt = 0;      // (A3-214) ...and the ones named there because a switch was not bounded (DispatchTargets), here or in a callee
     uint32_t mWrittenAt = 0;   // (A3-203) ...and the ones every return overwrites (SureWritten), while no path was lost (mPathLost)
     bool mPathLost = false;    // (A3-203) a path ended other than by a return to the caller (tolerant walk, slots bound)
     std::atomic<bool>* mCancel = nullptr;   // A3-74: checked in Run
@@ -3138,9 +3586,12 @@ private:
         std::map<uint32_t, uint32_t> changedOwn;   // (area 3, A3-197) ...and the registers of r8-r14 it returns with changed on some path
         std::map<uint32_t, uint32_t>* sharedChanged = nullptr;
         std::map<uint32_t, uint32_t> writtenOwn;   // (area 3, A3-203) ...and the ones it overwrites on every path (CalleeWritten)
+        std::map<uint32_t, uint32_t> lostOwn;      // (area 3, A3-214) ...and of its changed ones, those of a switch not bounded (CalleeLost)
+        std::map<uint32_t, uint32_t>* sharedLost = nullptr;
         std::map<uint32_t, uint32_t>* sharedWritten = nullptr;
         size_t budget = 0;
         bool started = false;
+        bool tables = false;   // (area 3, A3-214) the cautions' context: its walks follow the switches they can bound (DispatchTargets)
         std::set<uint32_t> walking;   // (area 3, A3-207) the targets whose walk is in progress (InnerChanged: a cycle)
         std::map<uint32_t, std::set<uint32_t>> taint;   // ...and, by walked target, the ones in progress whose result it took as nothing
         std::map<uint32_t, uint32_t>& Cache() { return shared != nullptr ? *shared : cache; }
@@ -3149,9 +3600,22 @@ private:
         std::map<uint32_t, uint32_t>& EntryRead() { return sharedEntryRead != nullptr ? *sharedEntryRead : entryReadOwn; }
         std::map<uint32_t, uint32_t>& Changed() { return sharedChanged != nullptr ? *sharedChanged : changedOwn; }
         std::map<uint32_t, uint32_t>& Written() { return sharedWritten != nullptr ? *sharedWritten : writtenOwn; }
+        std::map<uint32_t, uint32_t>& Lost() { return sharedLost != nullptr ? *sharedLost : lostOwn; }
     };
     NestedContext mOwnCtx;
     NestedContext* mNestedCtx = nullptr;
+    // (area 3, A3-214) The records the cautions read (CalleeChanged, CalleeWritten, CalleeEntryRead, InnerChanged) come, for the probe itself,
+    // from walks of their own that follow the switches of the callees' code: a change made in a case (tb's `mov #0,r8`) was never recorded
+    // where the walk lost the path at `jmp @r1`. The frame rules keep the walks that follow none (mOwnCtx: the frame words, the hand-outs,
+    // the stores below are read from walks as before); a walk in either context stays in it (a nested walker's records are its context's).
+    NestedContext mCautionCtx;
+    bool mFollowTables = false;   // this walk is one of the cautions' (NestedContext::tables)
+    NestedContext* RecordCtx()
+    {
+        if (mNestedCtx != nullptr) return mNestedCtx;
+        mCautionCtx.tables = true;
+        return &mCautionCtx;
+    }
     int mDepth = 0;                    // 0: the function itself; a walked callee is one more than its walker
     bool mFoldPcLoads = false;         // a walked callee folds its own PC-relative literal loads from the capture
     size_t mStepsUsed = 0;
@@ -3171,6 +3635,7 @@ private:
     bool mUnkeptSeen = false;   // (area 3, A3-197) ...and one of r8-r14 Value::unkept
     bool mInnerSeen = false;    // (area 3, A3-207) a walked callee's inner call marked a register Value::innerChanged
     std::map<uint32_t, uint32_t> mUnkeptSites;   // (A3-197) UnkeptSites
+    std::map<uint32_t, uint32_t> mLostSites;     // (A3-214) LostSites
     uint32_t mHanded = 0;       // ...and, of a walked callee, the registers it lets out or writes through (CalleeHanded)
     uint32_t mEntryRead = 0;    // (area 3, A3-210) ...and the registers whose entry value it reads (CalleeEntryRead)
 
@@ -11996,6 +12461,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     std::map<uint32_t, uint32_t> calleeChanged; // ...and the registers of r8-r14 each returns with changed on some path (area 3, A3-197)
     std::map<uint32_t, uint32_t> calleeWritten; // ...and the ones it overwrites on every path (area 3, A3-203)
     std::map<uint32_t, uint32_t> calleeEntryRead; // ...and the ones whose entry value it reads (area 3, A3-210)
+    ReturnCheck::WalkMaps cautionWalks;           // (area 3, A3-214) ...and the cautions' walks, which follow the callees' switches
     auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
@@ -12164,6 +12630,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         std::map<uint32_t, uint32_t> escapeSure, handSure;   // (A3-120) ...and of those, the registers and words a frame address is in as a fact
         std::map<uint32_t, std::set<int64_t>> escapeWords;   // ...and the stack words of the stack-argument notes (EscapeWords, A3-108)
         std::map<uint32_t, uint32_t> unkeptSites;   // (area 3, A3-197) the calls a register of r8-r14 the callee may change is read after (UnkeptSites)
+        std::map<uint32_t, uint32_t> lostSites;     // (area 3, A3-214) ...and the registers a switch not bounded names there (LostSites)
         if (print && fd->numCalls() > 0)
         {
             ReturnCheck probe(*fd, exec, prototypes, flowTables);
@@ -12171,6 +12638,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             probe.SetLiterals(scan.literalWords, *snapshot);
             probe.SetCancel(cancel);   // the callee walk can be long for an adversarial callee (A3-74)
             probe.ShareWalks(&calleeWalks, &calleeBelow, &calleeHanded, &calleeChanged, &calleeWritten, &calleeEntryRead);
+            probe.ShareCautionWalks(&cautionWalks);
             CallEffects unused;
             probe.Run(unused);
             // (area 3 round 12 fix) An address of the frame went out by a way the engine may not see (a callee that keeps it or hands it back
@@ -12182,6 +12650,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             escapeSure = probe.EscapeSure();
             handSure = probe.HandSure();
             unkeptSites = probe.UnkeptSites();
+            lostSites = probe.LostSites();
             // ...and the text says where: the address is in no argument of the call, so a reader of `f(); return xStack_8;` would take the
             // local for one the callee cannot reach (A3-28). A comment at the call, of a type the function's own flow warnings do not collect;
             // put below, after the actions, when a `jsr @rN` through a literal is known for what it calls.
@@ -12344,7 +12813,15 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                     if (((*it)->code() == ghidra::CPUI_CALL || (*it)->code() == ghidra::CPUI_CALLIND) && (*it)->getParent() != nullptr &&
                         unkeptSites.count(static_cast<uint32_t>((*it)->getAddr().getOffset())))
                         blockOf[static_cast<uint32_t>((*it)->getAddr().getOffset())] = (*it)->getParent();
+            // (area 3, A3-214) a call whose named registers include one its callee's walk names for a switch it could not bound says so (bit 31
+            // here, which names no register): it groups with calls said the same way only
+            std::map<uint32_t, uint32_t> sites;
             for (const auto& u : unkeptSites)
+            {
+                const auto l = lostSites.find(u.first);
+                sites[u.first] = u.second | (l != lostSites.end() && (l->second & u.second) != 0 ? 1u << 31 : 0u);
+            }
+            for (const auto& u : sites)
             {
                 if (u.second == 0) continue;
                 const auto b = blockOf.find(u.first);
@@ -12370,7 +12847,9 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 for (size_t k = 0; k < regs.size(); ++k)
                     names += (k == 0 ? "" : k + 1 == regs.size() ? " and " : ", ") +
                              (regs[k] == 17 ? std::string("gbr") : regs[k] == 18 ? std::string("vbr") : std::string("r") + std::to_string(regs[k]));
-                std::string note = std::string(kUnkeptNoteA) + names + (regs.size() > 1 ? kUnkeptNoteBMany : kUnkeptNoteB);
+                const bool lost = (fs.first >> 31) != 0;
+                std::string note = std::string(kUnkeptNoteA) + names +
+                                   (lost ? (regs.size() > 1 ? kUnkeptNoteLostBMany : kUnkeptNoteLostB) : (regs.size() > 1 ? kUnkeptNoteBMany : kUnkeptNoteB));
                 if (likewise.count(fs.second)) note += kFrameEscapeNoteLikewise;
                 arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, fs.second), note);
             }

@@ -22250,3 +22250,144 @@ After the last code edit (`Sh2Decompiler.cpp`, `MappingOracle.h` and the tests a
 
 * **Area 7 (next fixer):** A7-189's whole seed and A7-190 (P2, open); A7-191, A7-192 and A7-179's rest (P3, open).
 * **Area 3:** grammar 2 seeds 10409168 (`v:kept-read:r13`), 12031425 (`n:kept-read:r9`) and 12033773 (`n:caution-unsaid`, the callee changes r11 with no signature lent), found by this round's sweeps, the same with the round's product changes off; not filed here (area 3's IDs).
+
+## Area 3, A3-214 fix
+
+Fixer, branch `review/3-a3214` from master `7f9645d5`. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). Host changes in `Sh2Decompiler.cpp` (the probe's walk of unlent callees and the caution's wording, `Sh2Decompiler.h`: A3-214, A3-223); oracle changes and pins in `Sh2GeneratedTests.cpp` (A3-224, A3-225; `TestA3RoutedPins`, the A3-214 and A3-224/A3-225 blocks). **No engine patch: 0089 stays free.** No generator change (no seed's program changes). Scripts and fixtures: `Docs/Decompiler/tools/a3_a3214/` (`fixtures.src`, eight fixtures; `run.py`, a3_round28's with `.rel A,B`, a word A - B; `run.sh`, each fixture's returns, notes and caution counts; `fndiff.py`, the unified diff of each function text two token dumps differ in; `counts.py`, a dump's cautions and how many are in the table wording; `sweep.sh`, a3_a3210's). Backups on `backup/review-3-a3214`.
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-214 | P2 | **fixed** (host): the cautions' walks follow the callees' switches they can bound, and fail closed (saying so) at one they cannot |
+| A3-223 | P2 | **filed and fixed** (host): the probe's own switch the engine did not recover hid a read of a changed register in its cases (12033773, routed; 12027075's second half) |
+| A3-224 | P3 | **filed and fixed** (oracle): the kept-read check took a stack argument that is the pushed entry value for a read of the register (10409168, routed) |
+| A3-225 | P3 | **filed and fixed** (oracle): ...and the freed saved word read after its pop (12031425, routed) |
+| A3-226 | P2 | **filed open** (host): 12011728's later-callee miss is not A3-214's: the walk of function 1 proves no return across its call of function 2 |
+
+**Verdict:** the P2 row asked for (A3-214) is fixed, and A3-223 with it; A3-226 (P2) is open.
+
+### 1. A3-214: the walk of an unlent callee and its switches
+
+**Before.** `CalleeFrameWrites` walked a callee with `kNoTables`: at `jmp @rN` / `braf rN` through a table the target is a computed value, `Return` found no PR there, and the tolerant walk lost the path (`mPathLost`); what the cases change was never recorded (tb: `return 7;`, no caution, where the runs with r3 = 0 return 5). The round 28 reviewer's objection to a local fix: the same walk records the frame words, the hand-outs and the stores below that the frame notes rest on, for every callee with a switch.
+
+**The fix, in two parts.**
+
+1. *Two walk contexts.* The probe keeps the walks that follow no switch for the frame rules (`mOwnCtx`, shared across a request's probes as before): the frame words, the hand-outs (`CalleeHanded`), the stores below are master's, by construction. The records the cautions read -- `CalleeChanged`, `CalleeWritten`, `CalleeEntryRead`, `InnerChanged` and the new `CalleeLost` -- come, for the probe itself (depth 0), from a second context (`mCautionCtx`, `NestedContext::tables`, shared through `ReturnCheck::WalkMaps`) whose walks follow the switches; a walk in either context stays in it (a nested walker's records are its context's). Cost: the corpus runs about a quarter longer (hwram007 lent: 36.3 s in the decompiler before lending against master's 28.9 s, on a loaded machine).
+2. *The switch reader* (`DispatchTargets`, in a walk of the cautions' context, at a jump whose target the walk computed, `Value::Fuzzy`). A jump with a `mova` in the straight-line code before it (back to the branch that code starts after, at most 16 instructions; a word the reader does not model ends it) is a switch of the function's own code. That code is run on known values (`DispatchStep`: moves, adds, shifts, masks, extends, `mova`, PC-relative literals, indexed loads) for every index the code lets through:
+   * a guard -- `cmp/hs` or `cmp/hi` of the index with a constant, then a conditional branch that leaves on the out-of-range side -- with the code starting after the branch (the generator's `mov #n,r1 ; cmp/hi r1,Rn ; bt default`) or at its target after a `bra default` (compiled code's `cmp/hi r1,r5 ; bf/s L ; slot ; bra default ; nop ; L:`, 06016B60/007; the delay slot is run first). The constant is the one the code just before the compare makes, or, set before an earlier branch, the one the walk itself holds in that register at the jump on every path (`Value::Imm`; 0601FA80/008's `mov #15,r5`) when nothing between the compare and the jump writes it. A signed guard (`cmp/ge`, `cmp/gt`) lets the negative indices through: not bounded.
+   * a mask in the code: `and #m,r0`, an `and` with a constant in another register (`mov #30,r1 ; ... ; and r0,r1`, 06024E70/007), `extu.b`; every value under the mask, at most 256.
+   A load gives a value only through an address made from the index (a table's word) or PC-relative (a literal): an index read from a variable is not the capture's value. Every index must give an even destination, or the table is not bounded. The destinations are followed as the engine's tables are (`mTables`): the index is a chooser input, each destination a successor.
+3. *A table it cannot bound fails closed* (the brief's "no register proven kept"): the walk's change record takes every register of r8-r14, GBR and VBR (not r15) as changed (`mChangedAt`) and records them as such (`mLostAt`; through inner calls and tail jumps into callees so marked, `CalleeLost`). The caution at such a call says why instead of "does not restore it on every path": "this call may change r8, read after it: its callee jumps through a table the analysis cannot bound and may not restore it, and the text takes the call to keep it" (`kUnkeptNoteLostB`/`BMany`; a call so said groups for "likewise" only with calls said the same way). The register list is the callee's whole kept set the function reads after the call, so these cautions are long (below).
+
+**A3-223 (filed and fixed here).** Found with A3-214's seeds. 12027075 needed two things: function 1's change of r12 before its table (recorded once the table is followed), and function 0's read of it, which is in the cases of function 0's own switch -- a signed guard (`mov #3,r1 ; cmp/ge r1,r7 ; bt`), which the engine does not recover ("Could not recover jumptable ... Too many branches", the jump printed as a call through a pointer). The probe follows the engine's tables only, so the cases were never walked and `mov r12,r2` (a copy) was the last the probe saw of r12. 12033773 (routed by area 7 round 26, `caution-unsaid` r11) is that alone: function 1 sets r11 on one path with no table, function 0 copies it to r3 and its signed-guard switch reads r3 in a case. Fix: at a jump through a table of the function's own code (`DispatchTargets` finds the `mova`) that the engine left unrecovered, every value an earlier unlent call marked (`Value::unkept`, registers and stack words) is taken as read (`UseUnkept`), and the caution is said at that call. No corpus text changes from it.
+
+**Fixtures** (`tools/a3_a3214/fixtures.src`; the caller vCr8's, U not lent, case 0 the change; `W=<SaturnExplorer> S=<scratch> run.sh`):
+
+| Fixture | U's dispatch | Master | This branch |
+|---|---|---|---|
+| tb | `and #3,r0`, a table of addresses (a3_round28's) | `return 7;`, `caution-unsaid` | the caution (r8), required and said |
+| tbm | `mov #3,r1 ; and r0,r1` | `caution-unsaid` | the caution |
+| tbg | `mov #3,r1 ; cmp/hi r1,r3 ; bf/s L ; nop ; bra default ; nop ; L:`, half-word offsets from the table | `caution-unsaid` | the caution |
+| tbh | `mov #4,r1 ; cmp/hs r1,r3 ; bt default`, `braf` | `caution-unsaid` | the caution |
+| tbw | the guard's constant set before an earlier `bf` (0601FA80/008's shape) | `caution-unsaid` | the caution (from the walk's constant) |
+| tbu | `and #3,r0` then the index through a stack word (`mov.l r0,@-r15 ; mov.l @r15+,r1`): not bounded | `caution-unsaid` | the caution, "jumps through a table the analysis cannot bound" |
+| tbc (control) | tb, case 0 `mov #0,r1` | no caution | no caution |
+| tbuc (control) | tbu, case 0 `mov #0,r1` | no caution | the table's caution (fail closed; `caution.unchanged`, no finding) |
+
+### 2. The corpus: every text change
+
+Both images, alone and lent (`a7_round2/corpus.sh`, this branch's final `SaturnExplorerSh2DecompilerTests`), against master's dumps made here (`7f9645d5`'s product built in this tree). Both "all passed", every ledger count 0; missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**", as master. **Only caution comments differ** (`fndiff.py`: no line of code, no frame, slot or hand-out note moves; the mapping's line counts grow by the comment lines alone, 62 and 95 in hwram007). Following the bounded switches adds no caution and changes none in either image (each callee whose switch is bounded restores what its cases change, or the caller reads nothing after it); every change is A3-214's fail-closed reading of a table the reader cannot bound, said in the table wording (`counts.py`):
+
+| Dump | Cautions, master | This branch | of them in the table wording | Texts that differ (`a3_a3210/cautions.py`) |
+|---|---|---|---|---|
+| 007 alone | 21 | 41 | 22 | 12 |
+| 007 lent | 27 | 58 | 33 | 16 |
+| 008 alone | 17 | 39 | 24 | 14 |
+| 008 lent | 21 | 55 | 36 | 19 |
+
+The callees the new cautions are at, each read against the disassembly (`a3_a3197/dis.py`; hwram008's 06064xxx-06067xxx copies are hwram007's at + 0x3FCA0):
+
+| Callee (007 / 008) | Its switch | Why not bounded |
+|---|---|---|
+| 06024CB0 / 06064950 | `and #14,r0 ; mov r0,r1 ; mova ; mov.w @(r0,r1),r0 ; braf r0` (06024CB8) | the index is the caller's r0 & 14 (eight values); the table at 06024D04 holds five offsets (`0000 0010 001E 002C 003A`) and then the padding `nop` (`0009`): index 10 gives an odd destination. GBR state helpers: what the caller leaves in r0 bounds it, not the code |
+| 06024D1C / 060649BC | the same at 06024D2A (table 06024E00: `0002 000E 0026 003A 0054`, then `0009`) | the same |
+| 06024D10 / 060649B0 | a thunk (`mov.l @(lit),r0 ; jmp @r0`) to 0602579C: `mov.b @(128,gbr),r0 ; tst #1,r0 ; bf ; mov #14,r2 ; and r0,r2 ; mova ; mov.w @(r0,r2),r0 ; braf r0` (060257AA) | the table at 06025828 (`0000 002C 0052 0000 0000 0000`, then code `4F22 4F13`): index 14 gives an odd destination |
+| 06024D98 / 06064A38 | `and #14,r0` ... `braf r1` (06024DA4; table 06024E0C, five offsets then `0009`) | as 06024CB0 |
+| 06025040 / 06064CE0 | `mov.b @(128,gbr),r0 ; mov #14,r2 ; and r0,r2` ... `braf r0` (0602505C; table 060250AC, five offsets then `0009`) | as 06024CB0 (the GBR byte) |
+| 060276BC / 0606735C | `and #14,r0` ... `braf r0` (060276C4; table 060276F0, five offsets then `0009`) | as 06024CB0 |
+| 06024BC8, 06024BF4 / 06064868, 06064894 | `bt <out>` on entry (the caller's T), `mov r0,r1 ; mova ; mov.w @(r0,r1),r1 ; braf r1` | the index is the caller's r0, with no guard or mask in the function |
+| 060199FC / 0605A244 | a Duff's-device copy: sixteen `mov.l @(d,r5),r0 ; mov.l r0,@(d,r4)`, `add #-16,r6 ; cmp/pl r6`, back to `add #64,r5 ; mova ; shll2 r6 ; add r6,r0 ; jmp @r0` (060199A4) | the count r6 is the caller's, only `cmp/pl` before the jump |
+| 06026330 / 06065FD0 | calls 06025F58, whose `braf r1` (06025FA0) takes an offset loaded long before, masked `and r3,r0` with r3 = -2 | the mask lets 2^31 values through |
+| 06024A72, 06024ACC, 06026AD4, 06026B68, 06024E70, 0603877C (008) and their copies | no table of their own not bounded (06024E70's `and r0,r1` with 30 is bounded, sixteen cases); they call, or a case branches to (06024E70: `bra 06025040`), a callee above | through the inner call (`CalleeLost`) |
+
+The callers (007: 06015BE6, 0602481C, 06024A3C, 06024A72, 06024ACC, 06024BC8/06024BF4/06024C18/06024C64, 06024F5C, 06024F90, 0602623C, 06026AD4, 06026B68, 06026B6C, 06026BE0, 06027420; 008: 06037F1A, 06038512, 0603877C, 06038788, 060644BC, 060646DC, 06064712, 0606476C, 06064868, 06064894, 060648B8, 06064904, 06064BFC, 06064C30, 06065EDC, 06066774, 06066808, 0606680C, 06066880, 060670C0) each read the named registers after the call (GBR through `@(n,gbr)` loads, the text's `unaff_gbr + 0x80`; r8-r14 as the frame pointer and the state the helpers keep). In 06024A3C/007 and 060646DC/008 the two r8 cautions of master (A3-207's, 06024A72 and 06024ACC step r8) are now the table wording with r14, GBR and VBR beside r8 (their inner calls of 06024D10 and 06024CB0). Fail closed, as the brief asks ("no register is proven kept"): none of these is shown changed by code the walk read, and the wording says so. A tighter reading would take a table to end at its first word that is no destination (each of the five-offset tables above), which is not provable from the code; left as it is.
+
+The corpus's switches (a temporary count, a build of the reader before the walk's constant was read): of the (jump, walked function) pairs the cautions' walks met in hwram007 lent, 115 were bounded and followed and 40 were not -- the tables above, 0602742E's and the top level's own 0600900E and 0600A3D0 (A3-223's reading, no caution there). The guard after a `bra default` (06016B78, 06017E0A, 0601832E, 06018622, 06018856/007) was read by then; a first form without it said the table's caution at their callers too. The walk's constant came last, for 0601FA80/008 (round 27's "a switch whose index the walk folds from a captured word": `mov #15,r5` before an earlier `bt/s`, `cmp/hi r5,r1 ; bt/s default`): without it 0601A384/008 said r8, r9 and r14 at 0601FA80's call in the table wording; now the sixteen cases are followed and restore them (its epilogue), and no caution is said.
+
+### 3. The routed seeds and 12011728
+
+Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`.
+
+| Seed | Finding (master) | Judged | This branch |
+|---|---|---|---|
+| 12027075 | `caution-unsaid` r12 (two calls) | product: A3-214 (function 1 sets r12 before its table: recorded once the table is followed) and A3-223 (function 0 reads it in its own signed-guard switch's case) | no finding, the caution said |
+| 12033773 | `n:caution-unsaid` r11 | product, P2: A3-223 alone (function 1 has no table) | no finding, the caution said |
+| 10409168 | `v:kept-read:r13`, `n:` | oracle: the text's `unaff_r13` is the stack argument both calls read, the push's word (`@(0x24,r15)` after function 1's push and `add #-0x20`), the entry value: A3-224 | no finding, `excluded.saved-word-read.kept-read` 1 |
+| 12031425 | `n:kept-read:r9` | oracle: the freed saved word read after the pop by the tail-jumped function 1 (`mov.l @(8,r15),r1`), `if (unaff_r9 < 1)` right: A3-225 | no finding, excused the same way |
+| 12011728 | counted `caution.unsaid.deep` (r10; a finding with `SE_GENERATED_CAUTION=deep`) | product, P2, **not A3-214**: A3-226 (open) | the same |
+
+**A3-224, A3-225 (the oracle).** A3-186's argument rule (`SavesBeforeCallsDropped`) dropped `unaff_r13` from the arguments of the first call that may change r13 when the call's parentheses close on its own line; 10409168 prints `func_0x0600906c((xunknown2 *)((uint4)param_1 | 0xa0000000),param_2 + 1,uVar7,(int4)param_4,` with `unaff_r13);` on the next. The rule now reads on through the lines that close the list. That alone leaves the second call (`func_0x0600906c(param_1,param_1,param_3,extraout_r7,unaff_r13);`, after a call that may change r13), whose argument is the same word. `SavedWordRead` reads it in the runs instead: a run (unperturbed, finished) that reads the word its own push of the register wrote (`mov.l r13,@-r15` at depth 0, the entry value), by an instruction other than that register's pop and before anything writes the word again, holding the entry value or a part of it, excuses the register's check (counted `excluded.saved-word-read.kept-read`). It covers 12031425 too, A3-212's shape where the refill cannot see the read (the push writes the word in both runs). Limit: a function that both reads its saved word so and reads the changed register itself as its entry value is passed for that register (A3-212's excuse has the same reach).
+
+**A3-226 (12011728, open).** Shrunk (30 evaluations; `SE_GENERATED_CAUTION=deep`):
+
+```
+SE_GENERATED_WORDS="2F86 2F96 2FA6 2FB6 4F22 7FE0 6843 6953 6A63 6B73 B010 0009 6483 6593 66A3 67B3 D304 7F20 4F26 6BF6 6AF6 69F6 68F6 432B 0009 0009 0600 9078 2F86 2F96 2FA6 2FB6 2FE6 4F22 7FD0 6EF3 6843 6953 6A63 6B73 B012 0009 6483 6593 66A3 67B3 6052 7E30 6FE3 4F26 6EF6 6BF6 6AF6 69F6 68F6 2338 8B00 EA18 000B 0009 2FE6 7FE8 6EF3 62F3 7218 E103 2216 4110 8BFC E200 6260 6040 7E18 6FE3 6EF6 000B 0009" SE_GENERATED_FUNCS="0/0/32,38/38/78,78/78/9a" SE_GENERATED_RETURNS="1,1,1" SE_GENERATED_CLOBBERS="1400,400,400" SE_GENERATED_READS="0,8,8"
+```
+
+Function 0 calls function 1, copies r10 to r6 (`mov r10,r6`), pops and tail-jumps into function 2, which the engine shows inline (`xVar1 = *param_3;`, `mov.b @r6,r2`). Function 1 pushes r8-r11, r14 and PR, calls function 2, pops them and after its epilogue sets r10 when r3 = 0 (`tst r3,r3 ; bf ; mov #0x18,r10 ; rts`); the run of input mode 0 reads through r6 = 0x18. The caution at function 1's call is required and not said. There is no table in the shrunk program. A temporary trace of the walk of function 1 (the cautions' context) showed its `rts` reached with PR and r15 both unknown (`Value::Fuzzy`, no `mayEntry`), so no return is proven and nothing is recorded changed; function 2's own walk returns with r15 exact and r14 unknown (its store loop `mov.l r1,@-r2` runs through a copy of r15). Why the walk of function 1 loses r15 across that call is not settled here; the whole seed's table in function 1 is followed now (A3-214) and the miss stays. Not a reviewer's guess: the round 28 record's "function 1 changes r10 behind a jump table" was the whole seed's shape, not the cause.
+
+### 4. Sweeps
+
+Grammar 2, canary, shrink and pins off (`sweep.sh`), this branch's final `SaturnExplorerSh2GeneratedTests`; each failing seed replayed on master's binary (`7f9645d5`):
+
+| Run | Result | Master on the failing seeds |
+|---|---|---|
+| 10,000 from 12,040,001 (the caution range) | **2 failing seeds, 3 findings**: 12044532 (`n:` and `v:map-way-back`, function 1: "the instruction 060090CE is answered with a copy materialised there before its own statement (A7-25)"), 12047405 (`emulator-error`: the emulator stops at 0x06021100, r5's arena, after function 0's `mov.l r5,@-r15` between its calls: A11-35's shape). Notes 1,712, required 790, said 702, likewise 85, deep 3, `caution.unchanged` 575, `caution.call-unrun` 269; productions `caution.change` 6,586, `caution.skip.after-exit` 901, `caution.skip.r15` 1,067, `fn.thunk` 471, `caution.call.read` 2,571 | the same findings (12047405 also `n:generator:no-return`) |
+| the same, `SE_GENERATED_CAUTION=deep` (the deep misses listed) | 12043011, 12043749 (r15: the changer pops or pushes a word of its caller's; the later callee the runs part in stores its own stack address, the round 28 record's 12023080 class: no text wrong, the deep count right); 12049366 (r12: function 1 calls function 2, which sets r12 on one path, and stores r12 through its argument, `*param_2 = extraout_r12;`; function 0 calls function 1 twice and the second call's store differs: function 1's text names the value as function 2's output, which it is; no text of function 0 prints r12: the deep count right, A3-216 (d)'s reading) | |
+| 10,000 from 10,500,001 | **1 failing seed, 1 finding**: 10505656 (`n:map-const-join`, function 1: "line 33 `iVar2 = 0x34;` is drawn at 06009096 (or #0x34,r0), the first instruction of a join, which does not make the number"); notes 158, required 53, said 50, likewise 3, deep 0 | the same |
+
+No P2 of area 3 in either range. Routed: 12044532 and 10505656 to area 7 (A7-191's and A7-192's classes); 12047405 to area 11 (A11-35).
+
+### 5. Pins and mutation
+
+`TestA3RoutedPins` (`Sh2GeneratedTests.cpp`): the A3-214 block -- tb, tbm, tbg, tbh, tbw, tbu as printed (no finding, `caution.required` and `caution.said` > 0, the table wording in tbu's text alone) and with every caution taken out (`SE_GENERATED_MUTATE=caution`: `caution-unsaid`); controls tbc (no caution) and tbuc (the table's caution, no finding); grammar 2 seeds 12027075 and 12033773 (no finding, the caution said). The A3-224/A3-225 block: seeds 10409168 and 12031425 (no finding, `lent.changed.checked` and `excluded.saved-word-read.kept-read` > 0) and two checks of `SavesBeforeCallsDropped` on a call whose argument list is broken over two lines (the argument dropped; a read of `unaff_r13` after the call, on the next line, kept).
+
+Mutation (temporary environment switches in a build of this tree, removed before the final build; pins with `SE_GENERATED_SEEDS=1`, before tbw was added):
+
+| Switched off | CHECKs failing |
+|---|---|
+| the reader (`DispatchTargets` gives "no table": no switch followed, no fail-closed reading, A3-223's included) | **8**: tb, tbm, tbg, tbh, tbu (`caution-unsaid` as printed), tbuc (no caution), seeds 12027075 and 12033773 |
+| the fail-closed readings only (A3-214's at a table not bounded, A3-223's at the probe's own) | **4**: tbu, tbuc, both seeds |
+| A3-224 (a), the argument list over lines | **1**: the two-line `SavesBeforeCallsDropped` check |
+| A3-224 (b), `SavedWordRead` | **2**: seeds 10409168 and 12031425 |
+
+tbw (added after) fails on master's binary (`caution-unsaid`); the walk's constant it pins is the change that took 0601A384/008's caution away (section 2).
+
+### 6. Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest `-j2` | **117 of 117 passed** at the default timeout (339.9 s) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** (84.4 s) |
+| 20,000-seed matrix (canary on, every pin) | **failing seeds=0; findings=0**, all passed (36.6 ms per seed; the canary 240 programs, 0 failing); below the caution range: caution notes 177, required 75, said 71, likewise 4 |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, all passed |
+| game corpus, both images, `SE_GAME_LEND=1` (`a7_round2/corpus.sh`) | both all passed, every ledger count 0; missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**"; text changes: cautions only, section 2 |
+| sweeps | section 4 |
+| fixture scripts (final binary) | `a3_a3214/run.sh` as section 1; `a3_round28`, `a3_a3210`, `a3_a3207`, `a3_round27`, `a3_a3203`, `a3_a3202`, `a3_round26`, `a3_a3197` (`run.sh` of each, against master's binary): the same output but round 28's tb (now the caution, no finding) |
+| binaries | md5 of `SaturnExplorerSh2GeneratedTests` `e8c92c16...`, `SaturnExplorerDecompilerFaultTests` `60780e3d...`, `SaturnExplorerSh2DecompilerTests` `84f1d61a...` (the corpus binary) |
+| lints | `check-literal-size.py`: ok; `check-vendored-tree.py lint`: not needed (no vendored file or patch touched) |
+
+### 7. Routed
+
+* **Area 7:** grammar 2 seeds 12044532 (`n:`/`v:map-way-back`, A7-191's class) and 10505656 (`n:map-const-join`, A7-192's class), both on master too. Replay `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`; not shrunk.
+* **Area 11:** grammar 2 seed 12047405 (`emulator-error` at 0x06021100 after function 0's `mov.l r5,@-r15` between its calls), on master too: A11-35's shape, another instance.
+* **Area 3 (next fixer):** A3-226 (P2, open).
