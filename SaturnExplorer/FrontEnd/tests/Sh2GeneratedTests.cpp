@@ -18735,6 +18735,68 @@ void TestArea7Round26Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7, the P2 fixes (A7-189, A7-190): the whole seeds and their shrunk programs. A7-189: `xRam26001028 = (xunknown2)in_r0;` (r2, the input
+// or the input + 0xb, merged under the input's name) names the `mov.w r2,@r6` that stores that join, not the earlier `mov.w r0,@r6` of the
+// input. A7-190: an operand that is the global as a store that may alias it left it (`SH2_DRCR0 = (char)xRam26002388;` after
+// `mov.w r0,@(0x12,gbr)`) is drawn at the load that read it, not at that store, and so is a register variable's copy of it the engine made
+// at that store (`xVar2 = xRam26002388;`, the request with the mailbox marked volatile, SE_A7_RULE_OFF=190); grammar 1 seed 10300327
+// (routed, the range marked volatile) is the same class. With each product change off (the mutation build of tools/a7_p2fix/mutation.sh) the oracle finds each.
+void TestArea7P2FixPins(Sh2Decompiler& d)
+{
+    // (and three seeds of the sweep from 10,600,001 the oracle's rule 190 found on the first build: a copy at a volatile write, at another
+    // store than the one whose INDIRECT it copies, and of a join of such values; each now marked materialised or drawn at the read)
+    for (long seed : { 10407403L, 10403949L, 10300327L, 10601820L, 10605650L, 10607620L })
+    {
+        const Report rep = Evaluate(d, Generate(static_cast<uint64_t>(seed)), true);
+        std::printf("pin 'area 7 P2 fixes: grammar 1 seed %ld': %zu finding(s)\n", seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* volatileRange;
+        const char* poll;
+    };
+    const Shrunk kShrunk[] = {
+        // A7-189: the second `xRam26001028 = (xunknown2)in_r0;` (at the `bt` 0x06009016) at `mov.w r2,@r6` (0x0600901C)
+        { "A7-189 grammar 1 seed 10407403 shrunk (the whole seed's join)", "D609 4315 8D00 6203 2601 C840 8902 E00B CD81 320C 2108 8901 8802 8D00 2621 E00E 025D 000B 0009 0009 2600 1028",
+          nullptr, "26001020-2600102f", nullptr },
+        // A7-190: `xRam26002388` at `mov.w @r7,r1` (0x0600900A), not at `mov.w r0,@(0x12,gbr)` (0x06009004)
+        { "A7-190 grammar 1 seed 10403949 shrunk", "D70A C10E C109 8802 8D01 6171 6262 D608 2228 8B08 4015 8F00 2610 2558 8900 7370 2632 000B 0009 AFF7 0009 0009 2600 2388 FFFF FE71",
+          nullptr, nullptr, "26001024" },
+        // (A7-190, the request with the mailbox marked volatile: the copy `xVar2 = xRam26002388;` at `mov.w @r7,r1` (0x0600900C), not at
+        // `mov.w r0,@(0x12,gbr)` (0x06009006), whose own line is `*(int2 *)(unaff_gbr + 0x12) = (int2)in_r0;`)
+        { "A7-190 grammar 1 seed 10403949 shrunk (the copy at the store)", "D608 D709 C10E C109 8802 8D01 6171 6262 4015 8F00 2610 2558 8900 7370 2632 000B 0009 0009 0600 1028 2600 2388",
+          nullptr, "26001020-2600102f", "26001024" },
+        // (the same: `xRam26002314` at `mov.l @(r0,r6),r1` (0x0600900C), not at `mov.b r0,@(0x9,r5)` (0x06009008), the range marked volatile)
+        { "A7-190 grammar 1 seed 10300327 shrunk", "D608 D209 2729 C500 8059 E014 016E 2228 8B01 3440 8D00 2611 D704 6072 C801 8BFC 000B 0009 2600 2300 1FFF FFFF 2600 1004",
+          "5:06003C00", "26001000-2600100f", "26001004" },
+    };
+    const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
+    for (const Shrunk& p : kShrunk)
+    {
+        const char* values[3] = { p.volatileRange, p.poll, p.alias };
+        std::string saved[3];
+        bool had[3];
+        for (int i = 0; i < 3; ++i)
+        {
+            const char* old = std::getenv(names[i]);
+            had[i] = old != nullptr;
+            if (old) saved[i] = old;
+            SetOrClear(names[i], values[i]);
+        }
+        const Subject subject = RawSubject(p.words);
+        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -20552,6 +20614,7 @@ void TestGenerated()
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
         RUN(TestArea7Round26Pins(d));
+        RUN(TestArea7P2FixPins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

@@ -2232,7 +2232,40 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             addressHere = GlobalDelta(va, static_cast<uint32_t>(hi) << 16 | lo) < 16;
                         }
                     }
-                    const bool copy = plain && !isBranch(t.addr) && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore || readAtStore) && !castAtExtension &&
+                    // (A7-190: the name and `=` of a register variable's copy of a global, `xVar2 = xRam26002388;`, drawn at a store that does not
+                    // write the global -- `mov.w r0,@(0x12,gbr)`, where the engine keeps the global's value as that store may have left it -- with
+                    // the global drawn there too (A7-69's read at a store): the store makes nothing of the copy, whose value a later load reads; the
+                    // whole line is a copy materialised there, not the store's statement (it was taken for one, the way back answering it before
+                    // `*(int2 *)(unaff_gbr + 0x12) = (int2)iVar4;`); grammar 1 seed 10403949, the request with the mailbox marked volatile)
+                    bool nameOfCopyAtStore = false;
+                    // (a bare value only, as A7-57's: a cast, `xVar1 = (xunknown1)uRam06001034;` at the `mov.b r0,@(0x4,gbr)` that stores the
+                    // byte, is the narrowing the store makes of the value it stores; grammar 1 seed 10600860)
+                    if (!A7RuleOff(190) && plain && assign != std::string::npos && t.end <= assign + 2 && assign + 3 < r.lines[li].text.size() &&
+                        r.lines[li].text[assign + 3] != '(' && isStore(t.addr))
+                    {
+                        const std::string& lt = r.lines[li].text;
+                        const size_t nb = lt.find_first_not_of(' ');
+                        std::string name = nb == std::string::npos || nb >= assign ? std::string() : lt.substr(nb, assign - nb);
+                        // (a piece of a global, `xRam06001030._2_2_`, is the global: a store's statement, A7-57's)
+                        if (name.find("._") != std::string::npos) name.resize(name.find("._"));
+                        const bool global = name.size() >= 11 && name.compare(name.size() - 11, 3, "Ram") == 0 &&
+                                            name.find_first_not_of("0123456789abcdef", name.size() - 8) == std::string::npos;
+                        if (!name.empty() && !global && name.find("Stack") == std::string::npos)
+                            for (const Token& u : r.lines[li].tokens)
+                            {
+                                if (u.addr != t.addr || u.begin <= assign || u.end > lt.size()) continue;
+                                const std::string operand = lt.substr(u.begin, u.end - u.begin);
+                                if (operand.size() < 11 || operand.compare(operand.size() - 11, 3, "Ram") != 0 ||
+                                    operand.find_first_not_of("0123456789abcdef", operand.size() - 8) != std::string::npos)
+                                    continue;
+                                const uint32_t va = static_cast<uint32_t>(std::strtoul(operand.c_str() + operand.size() - 8, nullptr, 16));
+                                bool own = false;
+                                for (const AccessFate& f : r.accessFates)
+                                    own = own || (f.insn == t.addr && f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
+                                nameOfCopyAtStore = nameOfCopyAtStore || !own;
+                            }
+                    }
+                    const bool copy = plain && !isBranch(t.addr) && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore || readAtStore || nameOfCopyAtStore) && !castAtExtension &&
                                       !ownStoreHere && !readHere && !inputAtEntry && !addressHere;
                     // (A7-157: a merge of a byte store into its word, `iRam26001000 = CONCAT11(in_r2,(xunknown1)iRam26001000);`, drawn at the
                     // literal's load of the pointer a later store goes through, naming the byte store before it: the engine's copy of the store's
