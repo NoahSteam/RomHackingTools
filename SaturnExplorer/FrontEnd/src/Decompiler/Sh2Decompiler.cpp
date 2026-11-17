@@ -354,32 +354,25 @@ public:
     // The results of CalleeFrameWrites kept for every probe of one request (A3-81): a walk depends only on the callee's code in the capture and
     // the lent signatures, which no pass of a request changes, and each of the request's probes (two a printing pass, one more pass when a host
     // alias is declared) walked the same callees again, with a budget of its own. Each probe keeps its own budget; a result is reused as found.
-    void ShareWalks(std::map<uint32_t, uint32_t>* walks, std::map<uint32_t, uint32_t>* below = nullptr,
-                    std::map<uint32_t, uint32_t>* handed = nullptr, std::map<uint32_t, uint32_t>* changed = nullptr,
-                    std::map<uint32_t, uint32_t>* written = nullptr, std::map<uint32_t, uint32_t>* entryRead = nullptr)
-    {
-        mOwnCtx.sharedEntryRead = entryRead;
-        mOwnCtx.shared = walks;
-        mOwnCtx.sharedBelow = below;
-        mOwnCtx.sharedHanded = handed;
-        mOwnCtx.sharedChanged = changed;
-        mOwnCtx.sharedWritten = written;
-    }
-    // (area 3, A3-214) ...and the walks the cautions read (RecordCtx), which follow the callees' switches, shared the same way
+    // 'frame': the frame rules' walks (FrameCtx); (area 3, A3-214) 'caution': the walks the cautions read (RecordCtx), which follow the
+    // callees' switches, shared the same way.
     struct WalkMaps
     {
-        std::map<uint32_t, uint32_t> walks, below, handed, changed, written, entryRead, lost;
+        std::map<uint32_t, uint32_t> walks;       // by target; kUnwalked while a walk of it is in progress (a cycle fails closed)
+        std::map<uint32_t, uint32_t> below;       // A3-86 a: the registers each walked callee stores below the pointer it was handed
+        std::map<uint32_t, uint32_t> handed;      // (area 3 round 12 fix) ...and the registers it lets out or writes through (CalleeHanded)
+        std::map<uint32_t, uint32_t> entryRead;   // (area 3, A3-210) ...and the registers whose entry value it reads (CalleeEntryRead)
+        std::map<uint32_t, uint32_t> changed;     // (area 3, A3-197) ...and the registers of r8-r14 it returns with changed on some path
+        std::map<uint32_t, uint32_t> written;     // (area 3, A3-203) ...and the ones it overwrites on every path (CalleeWritten)
+        std::map<uint32_t, uint32_t> lost;        // (area 3, A3-214) ...and of its changed ones, those of a switch not bounded (CalleeLost)
     };
-    void ShareCautionWalks(WalkMaps* m)
+    void ShareWalks(WalkMaps* frame, WalkMaps* caution = nullptr)
     {
-        mCautionCtx.shared = &m->walks;
-        mCautionCtx.sharedBelow = &m->below;
-        mCautionCtx.sharedHanded = &m->handed;
-        mCautionCtx.sharedChanged = &m->changed;
-        mCautionCtx.sharedWritten = &m->written;
-        mCautionCtx.sharedEntryRead = &m->entryRead;
-        mCautionCtx.sharedLost = &m->lost;
+        mOwnCtx.shared = frame;
+        mCautionCtx.shared = caution;
     }
+    // ...or the frame walks' results alone (WithholdReason's check: the records beside them are its own)
+    void ShareWalkResults(std::map<uint32_t, uint32_t>* walks) { mOwnCtx.sharedWalks = walks; }
 
     // The calls (by the instruction that makes them) a frame address escapes at in a register the call is shown without, and which (bit 2: r2, bit 7: r7).
     const std::map<uint32_t, uint32_t>& EscapeSites() const { return mEscapeSites; }
@@ -1624,7 +1617,7 @@ private:
         if (mNested && haveTarget)
         {
             const uint32_t changed = InnerChanged(target) & kUnkeptRegs & (signatureLent ? ~e.preserved : ~0u);
-            if (mFollowTables) mLostAt |= CalleeLost(target) & changed;   // (A3-214)
+            if (FollowTables()) mLostAt |= CalleeLost(target) & changed;   // (A3-214)
             for (int r = 0; r < kTracked; ++r)
             {
                 if (!((changed >> r) & 1u)) continue;
@@ -1671,7 +1664,8 @@ private:
         {
             const uint32_t changed = CalleeChanged(target) & kUnkeptRegs & e.preserved;   // (A3-206: r15 too)
             const uint32_t written = CalleeWritten(target);
-            if ((CalleeLost(target) & changed) != 0) mLostSites[at] |= CalleeLost(target) & changed;   // (A3-214)
+            const uint32_t lost = CalleeLost(target) & changed;   // (A3-214)
+            if (lost != 0) mLostSites[at] |= lost;
             for (int r = 0; r < kTracked; ++r)
             {
                 if (!((changed >> r) & 1u)) continue;
@@ -1864,7 +1858,7 @@ private:
     // walker then treats the call as one to a target it cannot name: it fails closed only when it hands the frame on (MapCalleeWords).
     static constexpr uint32_t kUnwalked = 0x7FFFFFFFu;
     struct NestedContext;
-    uint32_t CalleeFrameWrites(uint32_t target) { return WalkIn(mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx, target); }
+    uint32_t CalleeFrameWrites(uint32_t target) { return WalkIn(FrameCtx(), target); }
     // (area 3, A3-214) ...the walk of 'target' in the context 'ctx': this walker's own (the frame rules'), or, from the probe itself, the
     // cautions' (RecordCtx), whose walks follow the switches of the callees' code (NestedContext::tables)
     uint32_t WalkIn(NestedContext* ctx, uint32_t target)
@@ -1887,7 +1881,6 @@ private:
         ReturnCheck callee(mFd, target, mLent, kNoTables);
         callee.mNested = true;
         callee.mNestedCtx = ctx;
-        callee.mFollowTables = ctx->tables;
         callee.mDepth = mDepth + 1;
         callee.mFoldPcLoads = true;
         callee.mMaxSteps = std::min(static_cast<size_t>(kNestedMaxSteps), ctx->budget);   // a copy: std::min binds a reference, which needs a definition in C++14
@@ -1941,47 +1934,29 @@ private:
         }
         return words;
     }
+    // A walk's record of 'target' in the context 'ctx' (the map 'map' names), the walk run now when it has none (within the shared
+    // budget); 'otherwise' when the walk leaves none (not descended, or in progress: a cycle)
+    uint32_t Record(NestedContext* ctx, std::map<uint32_t, uint32_t>& (NestedContext::*map)(), uint32_t target, uint32_t otherwise)
+    {
+        auto f = (ctx->*map)().find(target);
+        if (f == (ctx->*map)().end())
+        {
+            WalkIn(ctx, target);
+            f = (ctx->*map)().find(target);
+        }
+        return f != (ctx->*map)().end() ? f->second : otherwise;
+    }
     // (area 3 round 12 fix, A3-90) The registers (bit r: rN, GBR, MACH, ...) whose entry values a captured, unlent callee lets out (stores to
     // memory it does not track, returns in any register), stores through, or hands to a callee that does any of that, to any depth: the walk's
     // record (mHanded). Every register when it could not be walked: the levels or the budget exhausted, a cycle, a reason (fail closed).
-    uint32_t CalleeHanded(uint32_t target)
-    {
-        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
-        auto f = ctx->Handed().find(target);
-        if (f == ctx->Handed().end())
-        {
-            CalleeFrameWrites(target);
-            f = ctx->Handed().find(target);
-        }
-        return f != ctx->Handed().end() ? f->second : kHandedRegs;
-    }
+    uint32_t CalleeHanded(uint32_t target) { return Record(FrameCtx(), &NestedContext::Handed, target, kHandedRegs); }
     // (area 3, A3-210) The registers whose entry value a captured, unlent callee reads, as its walk shows (not one an inner call of it
     // overwrites first: Value::stale); every one when it could not be walked, the convention's when its code is not captured. What the
     // caution's "read after it" takes of a later call (UseUnkept); the frame rules keep CalleeHanded.
-    uint32_t CalleeEntryRead(uint32_t target)
-    {
-        NestedContext* ctx = RecordCtx();
-        auto f = ctx->EntryRead().find(target);
-        if (f == ctx->EntryRead().end())
-        {
-            WalkIn(ctx, target);
-            f = ctx->EntryRead().find(target);
-        }
-        return f != ctx->EntryRead().end() ? f->second : origin::kRegisters;
-    }
+    uint32_t CalleeEntryRead(uint32_t target) { return Record(RecordCtx(), &NestedContext::EntryRead, target, origin::kRegisters); }
     // (area 3, A3-197) The registers of r8-r14 a captured, unlent callee returns with changed on some path, as its walk shows; 0 when it
     // could not be walked (nothing is shown).
-    uint32_t CalleeChanged(uint32_t target)
-    {
-        NestedContext* ctx = RecordCtx();
-        auto f = ctx->Changed().find(target);
-        if (f == ctx->Changed().end())
-        {
-            WalkIn(ctx, target);
-            f = ctx->Changed().find(target);
-        }
-        return f != ctx->Changed().end() ? f->second : 0u;
-    }
+    uint32_t CalleeChanged(uint32_t target) { return Record(RecordCtx(), &NestedContext::Changed, target, 0u); }
     // (area 3, A3-207) ...as an inner call of a walked callee takes it. A call of a callee whose walk is in progress (a cycle) has no result
     // yet, and is taken as changing nothing for now. When it is this walk's own function (self-recursion) that is its result: a register the
     // recursion returns changed was changed for certain on its own path by the activation that changed it, a path of this function, so the
@@ -2007,43 +1982,13 @@ private:
         return changed;
     }
     // (area 3, A3-203) ...and the ones it overwrites on every path, as its walk shows (CalleeFrameWrites); 0 when nothing is shown.
-    uint32_t CalleeWritten(uint32_t target)
-    {
-        NestedContext* ctx = RecordCtx();
-        auto f = ctx->Written().find(target);
-        if (f == ctx->Written().end())
-        {
-            WalkIn(ctx, target);
-            f = ctx->Written().find(target);
-        }
-        return f != ctx->Written().end() ? f->second : 0u;
-    }
+    uint32_t CalleeWritten(uint32_t target) { return Record(RecordCtx(), &NestedContext::Written, target, 0u); }
     // (area 3, A3-214) ...and, of what it changes (CalleeChanged), the registers named because its walk met a switch it could not bound
-    uint32_t CalleeLost(uint32_t target)
-    {
-        NestedContext* ctx = RecordCtx();
-        auto f = ctx->Lost().find(target);
-        if (f == ctx->Lost().end())
-        {
-            WalkIn(ctx, target);
-            f = ctx->Lost().find(target);
-        }
-        return f != ctx->Lost().end() ? f->second : 0u;
-    }
+    uint32_t CalleeLost(uint32_t target) { return Record(RecordCtx(), &NestedContext::Lost, target, 0u); }
     // A3-86 a: the registers a captured, unlent callee may store below the pointer it was handed, from the frame-words walk's
     // record (or that walk, run now). 0x7FFF (every register) when the callee could not be walked: fail closed; kConvention for one whose code
     // is not captured (area 3 round 12 fix).
-    uint32_t CalleeStoresBelow(uint32_t target)
-    {
-        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
-        auto f = ctx->Below().find(target);
-        if (f == ctx->Below().end())
-        {
-            CalleeFrameWrites(target);   // fills ctx->below as a side effect, within the shared budget
-            f = ctx->Below().find(target);
-        }
-        return f != ctx->Below().end() ? f->second : 0x7FFFu;
-    }
+    uint32_t CalleeStoresBelow(uint32_t target) { return Record(FrameCtx(), &NestedContext::Below, target, 0x7FFFu); }
     // A walked callee's own callee (or tail-jump target) writes 'words' of its caller's frame, counted from the r15 it was entered with ('sp'):
     // those at or above this walked function's entry r15 are words of the frame being asked about.
     void MapCalleeWords(uint32_t words, const State& s, const Value& sp)
@@ -2118,16 +2063,8 @@ private:
         bool K(int n) const { return ((known >> n) & 1u) != 0; }
         bool I(int n) const { return ((index >> n) & 1u) != 0; }
     };
-    static bool DelayedBranch(uint16_t w)
-    {
-        const uint16_t lo = w & 0xF0FFu;
-        return (w & 0xF000u) == 0xA000u || (w & 0xF000u) == 0xB000u || lo == 0x402Bu || lo == 0x400Bu || w == 0x000Bu || w == 0x002Bu ||
-               lo == 0x0023u || lo == 0x0003u || (w & 0xFF00u) == 0x8D00u || (w & 0xFF00u) == 0x8F00u;
-    }
-    static bool AnyBranch(uint16_t w)
-    {
-        return DelayedBranch(w) || (w & 0xFF00u) == 0x8900u || (w & 0xFF00u) == 0x8B00u || (w & 0xFF00u) == 0xC300u || w == 0x001Bu;
-    }
+    using Code = std::vector<std::pair<uint32_t, uint16_t>>;   // instructions (address, word), in order
+    static bool AnyBranch(uint32_t pc, uint32_t w) { return Sh2Decode(pc, static_cast<uint16_t>(w)).IsBranch || w == 0x001Bu; }   // (sleep too)
     // One instruction of a dispatch on the registers' known values; false when the reader does not model it. 'writes' gets the registers
     // it writes, whether their values are known or not.
     bool DispatchStep(uint32_t pc, uint16_t w, DispatchRegs& r, uint32_t& writes) const
@@ -2274,7 +2211,49 @@ private:
         default: return false;
         }
     }
-    DispatchKind DispatchTargets(uint32_t jump, const State& at, std::set<uint32_t>& dests) const
+    // Whether the reader models the instruction (DispatchStep's answer depends on the word alone, as do the registers it writes: 'writes')
+    bool Modelled(uint32_t pc, uint32_t w, uint32_t& writes) const
+    {
+        DispatchRegs dry;
+        return DispatchStep(pc, static_cast<uint16_t>(w), dry, writes);
+    }
+    // Run 'code' on 'r' (false at a step the reader does not model), the registers it writes added to 'written' when given
+    bool RunDispatch(const Code& code, DispatchRegs& r, uint32_t* written = nullptr) const
+    {
+        for (const auto& x : code)
+        {
+            uint32_t writes = 0;
+            if (!DispatchStep(x.first, x.second, r, writes)) return false;
+            if (written != nullptr) *written |= writes;
+        }
+        return true;
+    }
+    // The straight-line code the reader models before 'from', at most 'max' instructions back: to a branch ('branch' and 'word' get it when
+    // given), or to the last write of 'stopReg' (when >= 0) included
+    Code CollectDispatch(uint32_t from, int max, int stopReg, uint32_t* branch = nullptr, uint32_t* word = nullptr) const
+    {
+        Code code;
+        for (int k = 1; k <= max; ++k)
+        {
+            const uint32_t pc = from - 2u * static_cast<uint32_t>(k);
+            uint32_t w = 0, writes = 0;
+            if (!ReadCode(pc, 2, w)) break;
+            if (!Modelled(pc, w, writes))   // (no branch is modelled)
+            {
+                if (AnyBranch(pc, w))
+                {
+                    if (branch != nullptr) *branch = pc;
+                    if (word != nullptr) *word = w;
+                }
+                break;
+            }
+            code.insert(code.begin(), std::make_pair(pc, static_cast<uint16_t>(w)));
+            if (stopReg >= 0 && ((writes >> stopReg) & 1u)) break;
+        }
+        return code;
+    }
+    // 'classifyOnly' (the probe's own switch, which it reads only to know it for one): kDispatchUnbounded for a table, its bound not read
+    DispatchKind DispatchTargets(uint32_t jump, const State& s, std::set<uint32_t>& dests, bool classifyOnly = false) const
     {
         uint32_t jw = 0;
         if (!ReadCode(jump, 2, jw)) return kDispatchNone;
@@ -2282,73 +2261,56 @@ private:
         if (!braf && (jw & 0xF0FFu) != 0x402Bu) return kDispatchNone;
         const int target = (jw >> 8) & 15;
         // The straight-line code before the jump, and the branch it starts after (stop: its address, 0 when none was met)
-        std::vector<std::pair<uint32_t, uint16_t>> seg;
         uint32_t stop = 0, sw = 0;
-        for (int k = 1; k <= kDispatchBack; ++k)
-        {
-            const uint32_t at = jump - 2u * static_cast<uint32_t>(k);
-            uint32_t w = 0;
-            if (!ReadCode(at, 2, w)) break;
-            if (AnyBranch(static_cast<uint16_t>(w)))
-            {
-                stop = at;
-                sw = w;
-                break;
-            }
-            DispatchRegs dry;
-            uint32_t writes = 0;
-            if (!DispatchStep(at, static_cast<uint16_t>(w), dry, writes)) break;
-            seg.insert(seg.begin(), std::make_pair(at, static_cast<uint16_t>(w)));
-        }
+        Code seg = CollectDispatch(jump, kDispatchBack, -1, &stop, &sw);
         // the word after a branch that always leaves is its delay slot, not the dispatch's code; a conditional one's runs on both ways
-        const bool condition = stop != 0 && ((sw & 0xFF00u) == 0x8900u || (sw & 0xFF00u) == 0x8B00u || (sw & 0xFF00u) == 0x8D00u ||
-                                             (sw & 0xFF00u) == 0x8F00u);
-        if (stop != 0 && !condition && DelayedBranch(static_cast<uint16_t>(sw)) && !seg.empty()) seg.erase(seg.begin());
+        const DisassembledInstruction stopIns = Sh2Decode(stop, static_cast<uint16_t>(sw));
+        const bool condition = stop != 0 && stopIns.IsConditional;
+        if (stop != 0 && !condition && stopIns.HasDelaySlot && !seg.empty()) seg.erase(seg.begin());
         bool table = false;
-        for (const auto& x : seg) table = table || (x.second & 0xFF00u) == 0xC700u;
+        for (const auto& x : seg) table = table || Sh2Decode(x.first, x.second).PcRel == Sh2PcRel::Mova;
         if (!table) return kDispatchNone;
+        if (classifyOnly) return kDispatchUnbounded;
         // Run the code from 'from' with 'regs' for each value in 'values' of register 'ix' (after 'pre', the guard's delay slot when the guard
         // branches into the code); the destinations, or false.
-        auto runAll = [&](size_t from, const DispatchRegs& regs, int ix, const std::vector<uint32_t>& values,
-                          const std::vector<std::pair<uint32_t, uint16_t>>& pre) {
+        auto runAll = [&](size_t from, const DispatchRegs& regs, int ix, const std::vector<uint32_t>& values, const Code& pre) {
+            Code code = pre;
+            code.insert(code.end(), seg.begin() + static_cast<std::ptrdiff_t>(from), seg.end());
             std::set<uint32_t> got;
             for (const uint32_t value : values)
             {
                 DispatchRegs r = regs;
                 r.Set(ix, value, true);
-                std::vector<std::pair<uint32_t, uint16_t>> code = pre;
-                code.insert(code.end(), seg.begin() + static_cast<std::ptrdiff_t>(from), seg.end());
-                for (const auto& x : code)
-                {
-                    uint32_t writes = 0;
-                    if (!DispatchStep(x.first, x.second, r, writes)) return false;
-                }
+                if (!RunDispatch(code, r)) return false;
                 if (!r.K(target) || !r.I(target)) return false;
                 const uint32_t to = braf ? jump + 4u + r.v[target] : r.v[target];
                 if ((to & 1u) != 0) return false;
                 got.insert(to);
             }
-            dests = got;
+            dests.swap(got);
             return !dests.empty();
         };
         // The guard: `cmp/hs` or `cmp/hi` of the index with a constant, then a conditional branch: the code starts after it (the generator's
         // `bt default`), or at its target, after a `bra` to the default (compiled code's `bf/s L ; ... ; bra default ; nop ; L:`, 06016B78/007)
         uint32_t cond = 0;
         bool taken = false;
-        std::vector<std::pair<uint32_t, uint16_t>> pre;   // the guard's delay slot, when it branches into the code
-        auto conditional = [](uint32_t w) { return (w & 0xF900u) == 0x8900u; };   // bt, bf, bt/s, bf/s
-        auto targetOf = [](uint32_t at, uint32_t w) { return at + 4u + static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFFu)) * 2); };
+        Code pre;   // the guard's delay slot, when it branches into the code
+        // (a conditional branch at 'pc', with a delay slot or not, to the code after the `bra`)
+        auto guardAt = [&](uint32_t pc, bool slot) {
+            uint32_t w = 0;
+            if (!ReadCode(pc, 2, w)) return false;
+            const DisassembledInstruction b = Sh2Decode(pc, static_cast<uint16_t>(w));
+            return b.IsConditional && b.HasDelaySlot == slot && b.BranchTarget == stop + 4;
+        };
         if (condition) cond = stop;
         else if (stop >= 4 && (sw & 0xF000u) == 0xA000u && !seg.empty() && seg.front().first == stop + 4)
         {
-            uint32_t w = 0;
-            if (ReadCode(stop - 2, 2, w) && conditional(w) && (w & 0x0400u) == 0 && targetOf(stop - 2, w) == stop + 4)
+            if (guardAt(stop - 2, false))
                 cond = stop - 2, taken = true;
-            else if (ReadCode(stop - 4, 2, w) && conditional(w) && (w & 0x0400u) != 0 && targetOf(stop - 4, w) == stop + 4)
+            else if (guardAt(stop - 4, true))
             {
                 uint32_t slot = 0, writes = 0;
-                DispatchRegs dry;
-                if (ReadCode(stop - 2, 2, slot) && !AnyBranch(static_cast<uint16_t>(slot)) && DispatchStep(stop - 2, static_cast<uint16_t>(slot), dry, writes))
+                if (ReadCode(stop - 2, 2, slot) && Modelled(stop - 2, slot, writes))   // (no branch is modelled)
                 {
                     cond = stop - 4, taken = true;
                     pre.push_back(std::make_pair(stop - 2, static_cast<uint16_t>(slot)));
@@ -2365,23 +2327,7 @@ private:
             // the constant in rn or rm, from the code just before the compare
             auto constant = [&](int reg, uint32_t& c) {
                 DispatchRegs r;
-                std::vector<std::pair<uint32_t, uint16_t>> before;
-                for (int k = 2; k <= 9; ++k)
-                {
-                    const uint32_t at = cond - 2u * static_cast<uint32_t>(k);
-                    uint32_t w = 0;
-                    if (!ReadCode(at, 2, w) || AnyBranch(static_cast<uint16_t>(w))) break;
-                    DispatchRegs dry;
-                    uint32_t writes = 0;
-                    if (!DispatchStep(at, static_cast<uint16_t>(w), dry, writes)) break;
-                    before.insert(before.begin(), std::make_pair(at, static_cast<uint16_t>(w)));
-                    if ((writes >> reg) & 1u) break;   // the last write of it: run from here
-                }
-                for (const auto& x : before)
-                {
-                    uint32_t writes = 0;
-                    DispatchStep(x.first, x.second, r, writes);
-                }
+                RunDispatch(CollectDispatch(cond - 2, 8, reg), r);
                 if (r.K(reg))
                 {
                     c = r.v[reg];
@@ -2389,18 +2335,13 @@ private:
                 }
                 // ...or, set further back (0601FA80/008: `mov #15,r5` before an earlier branch), the constant the walk itself holds in it at
                 // the jump, on every path there (Value::Imm), when nothing between the compare and the jump writes it
-                const Value v = Get(at, mReg[reg]);
+                const Value v = Get(s, mReg[reg]);
                 if (v.kind != Value::Imm) return false;
                 uint32_t written = 0;
-                std::vector<std::pair<uint32_t, uint16_t>> code = pre;
+                Code code = pre;
                 code.insert(code.end(), seg.begin(), seg.end());
-                for (const auto& x : code)
-                {
-                    DispatchRegs dry;
-                    uint32_t writes = 0;
-                    DispatchStep(x.first, x.second, dry, writes);
-                    written |= writes;
-                }
+                DispatchRegs dry;
+                RunDispatch(code, dry, &written);
                 if ((written >> reg) & 1u) return false;
                 c = static_cast<uint32_t>(v.v);
                 return true;
@@ -3300,10 +3241,10 @@ private:
                 // the probe reads its own switch only to know it for one (below: A3-223), the engine's tables being the ones it follows
                 std::set<uint32_t> read;
                 DispatchKind dispatch = kDispatchNone;
-                if (!found && (mFollowTables || !mNested) && Get(s, op.in[0]).kind == Value::Fuzzy)
+                if (!found && (FollowTables() || !mNested) && Get(s, op.in[0]).kind == Value::Fuzzy)
                 {
-                    dispatch = DispatchTargets(a, s, read);
-                    if (dispatch == kDispatchBounded && mFollowTables)
+                    dispatch = DispatchTargets(a, s, read, !FollowTables());
+                    if (dispatch == kDispatchBounded && FollowTables())
                     {
                         found = true;
                         dests = &read;
@@ -3352,7 +3293,7 @@ private:
                     // as read (UseUnkept) and the caution is said at that call. Before, the cases' read of the changed r11 was never seen.
                     if (!isReturn && dispatch != kDispatchNone)
                     {
-                        if (mFollowTables)
+                        if (FollowTables())
                         {
                             mChangedAt |= kModelKept;
                             mLostAt |= kModelKept;
@@ -3405,7 +3346,7 @@ private:
                                     if ((kUnkeptRegs >> r) & 1u) here |= ChangedAtReturn(Get(s, mReg[r]), r);   // (A3-207: an inner call's too)
                                 const uint32_t target = static_cast<uint32_t>(to.v);
                                 mChangedAt |= (InnerChanged(target) | (here & ~CalleeWritten(target))) & kUnkeptRegs;   // (A3-207: a cycle)
-                                if (mFollowTables) mLostAt |= CalleeLost(target);   // (A3-214)
+                                if (FollowTables()) mLostAt |= CalleeLost(target);   // (A3-214)
                             }
                         }
                         auto p = mLent.find(static_cast<uint32_t>(to.v));
@@ -3575,32 +3516,23 @@ private:
     // probe owns it, each nested walk points at it.
     struct NestedContext
     {
-        std::map<uint32_t, uint32_t> cache;   // by target; kUnwalked while a walk of it is in progress (a cycle fails closed)
-        std::map<uint32_t, uint32_t> belowOwn;   // A3-86 a: the registers each walked callee stores below the pointer it was handed
-        std::map<uint32_t, uint32_t>* shared = nullptr;   // the request's, when the probe was given it (ShareWalks)
-        std::map<uint32_t, uint32_t>* sharedBelow = nullptr;
-        std::map<uint32_t, uint32_t> handedOwn;   // (area 3 round 12 fix) ...and the registers it lets out or writes through (CalleeHanded)
-        std::map<uint32_t, uint32_t>* sharedHanded = nullptr;
-        std::map<uint32_t, uint32_t> entryReadOwn;   // (area 3, A3-210) ...and the registers whose entry value it reads (CalleeEntryRead)
-        std::map<uint32_t, uint32_t>* sharedEntryRead = nullptr;
-        std::map<uint32_t, uint32_t> changedOwn;   // (area 3, A3-197) ...and the registers of r8-r14 it returns with changed on some path
-        std::map<uint32_t, uint32_t>* sharedChanged = nullptr;
-        std::map<uint32_t, uint32_t> writtenOwn;   // (area 3, A3-203) ...and the ones it overwrites on every path (CalleeWritten)
-        std::map<uint32_t, uint32_t> lostOwn;      // (area 3, A3-214) ...and of its changed ones, those of a switch not bounded (CalleeLost)
-        std::map<uint32_t, uint32_t>* sharedLost = nullptr;
-        std::map<uint32_t, uint32_t>* sharedWritten = nullptr;
+        explicit NestedContext(bool followTables = false) : tables(followTables) {}
+        WalkMaps own;
+        WalkMaps* shared = nullptr;   // the request's, when the probe was given it (ShareWalks)
+        std::map<uint32_t, uint32_t>* sharedWalks = nullptr;   // ...or its walks' results alone (ShareWalkResults)
         size_t budget = 0;
         bool started = false;
-        bool tables = false;   // (area 3, A3-214) the cautions' context: its walks follow the switches they can bound (DispatchTargets)
+        bool tables;   // (area 3, A3-214) the cautions' context: its walks follow the switches they can bound (DispatchTargets)
         std::set<uint32_t> walking;   // (area 3, A3-207) the targets whose walk is in progress (InnerChanged: a cycle)
         std::map<uint32_t, std::set<uint32_t>> taint;   // ...and, by walked target, the ones in progress whose result it took as nothing
-        std::map<uint32_t, uint32_t>& Cache() { return shared != nullptr ? *shared : cache; }
-        std::map<uint32_t, uint32_t>& Below() { return sharedBelow != nullptr ? *sharedBelow : belowOwn; }
-        std::map<uint32_t, uint32_t>& Handed() { return sharedHanded != nullptr ? *sharedHanded : handedOwn; }
-        std::map<uint32_t, uint32_t>& EntryRead() { return sharedEntryRead != nullptr ? *sharedEntryRead : entryReadOwn; }
-        std::map<uint32_t, uint32_t>& Changed() { return sharedChanged != nullptr ? *sharedChanged : changedOwn; }
-        std::map<uint32_t, uint32_t>& Written() { return sharedWritten != nullptr ? *sharedWritten : writtenOwn; }
-        std::map<uint32_t, uint32_t>& Lost() { return sharedLost != nullptr ? *sharedLost : lostOwn; }
+        WalkMaps& Maps() { return shared != nullptr ? *shared : own; }
+        std::map<uint32_t, uint32_t>& Cache() { return sharedWalks != nullptr ? *sharedWalks : Maps().walks; }
+        std::map<uint32_t, uint32_t>& Below() { return Maps().below; }
+        std::map<uint32_t, uint32_t>& Handed() { return Maps().handed; }
+        std::map<uint32_t, uint32_t>& EntryRead() { return Maps().entryRead; }
+        std::map<uint32_t, uint32_t>& Changed() { return Maps().changed; }
+        std::map<uint32_t, uint32_t>& Written() { return Maps().written; }
+        std::map<uint32_t, uint32_t>& Lost() { return Maps().lost; }
     };
     NestedContext mOwnCtx;
     NestedContext* mNestedCtx = nullptr;
@@ -3608,14 +3540,10 @@ private:
     // from walks of their own that follow the switches of the callees' code: a change made in a case (tb's `mov #0,r8`) was never recorded
     // where the walk lost the path at `jmp @r1`. The frame rules keep the walks that follow none (mOwnCtx: the frame words, the hand-outs,
     // the stores below are read from walks as before); a walk in either context stays in it (a nested walker's records are its context's).
-    NestedContext mCautionCtx;
-    bool mFollowTables = false;   // this walk is one of the cautions' (NestedContext::tables)
-    NestedContext* RecordCtx()
-    {
-        if (mNestedCtx != nullptr) return mNestedCtx;
-        mCautionCtx.tables = true;
-        return &mCautionCtx;
-    }
+    NestedContext mCautionCtx{ true };
+    bool FollowTables() const { return mNestedCtx != nullptr && mNestedCtx->tables; }   // this walk is one of the cautions' (NestedContext::tables)
+    NestedContext* RecordCtx() { return mNestedCtx != nullptr ? mNestedCtx : &mCautionCtx; }
+    NestedContext* FrameCtx() { return mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx; }   // ...and the frame rules'
     int mDepth = 0;                    // 0: the function itself; a walked callee is one more than its walker
     bool mFoldPcLoads = false;         // a walked callee folds its own PC-relative literal loads from the capture
     size_t mStepsUsed = 0;
@@ -3873,7 +3801,7 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
     // Fold the literal-pool loads the probe folds, so an ordinary stack access whose offset is a pool word (`mov.w =20,r2 ; add r15,r2 ;
     // mov.l @r2,r0`) is seen as the stack argument it is, not a "nothing-known" address (A3-66 c, A3-67 b).
     if (literals != nullptr && literalMemory != nullptr) check.SetLiterals(*literals, *literalMemory);
-    check.ShareWalks(walks);
+    check.ShareWalkResults(walks);
     const std::string why = check.Run(effects);
     if (!why.empty()) return why;
     // The return rule (A3-5, A3-13, A3-14, A3-20, A3-45, A3-49, A3-50, A3-55 to A3-59, A3-62). A function the engine made `void` is lent only
@@ -4281,6 +4209,12 @@ uint32_t InstructionOf(const ghidra::PcodeOp* op)
 uint32_t InstructionOf(const ghidra::AccessRecord& rec)
 {
     return static_cast<uint32_t>(rec.pc.getOffset()) + (rec.slot ? 2u : 0u);
+}
+// An address through any mirror as the canonical one (CanonicalAddress), or itself
+uint32_t CanonicalOf(uint32_t a)
+{
+    uint32_t c = 0;
+    return CanonicalAddress(a, c) ? c : a;
 }
 
 // Turns the emitter's markup into lines of tokens. Each token's opref names the p-code op it
@@ -9452,10 +9386,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                              v->getDef()->code() == ghidra::CPUI_INDIRECT)
                         known = false;
                     else
-                    {
-                        uint32_t m = InstructionOf(v->getDef()), c = 0;
-                        joinMakers.insert(CanonicalAddress(m, c) ? c : m);
-                    }
+                        joinMakers.insert(CanonicalOf(InstructionOf(v->getDef())));
                 }
                 if (known && !joinInputs.empty() && !joinMakers.empty())
                 {
@@ -9486,9 +9417,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                         for (const FlowOp* w : writers)
                         {
                             if (!exactly) break;
-                            uint32_t wi = w->insn, c = 0;
-                            if (CanonicalAddress(wi, c)) wi = c;
-                            if (w->code != ghidra::CPUI_COPY && joinMakers.count(wi)) continue;
+                            if (w->code != ghidra::CPUI_COPY && joinMakers.count(CanonicalOf(w->insn))) continue;
                             // (a whole copy of an input register, the input unwritten before it)
                             bool copiesInput = false;
                             const auto wf = flow.insnFirst.find(w->insn);
@@ -10338,6 +10267,37 @@ int RetargetTwinExtensions(std::vector<Line>& lines, const PrintedOperations& pr
 // is when the value comes from anything else (a number, a value the engine computed at a branch). At a branch, a conversion printed inside
 // another statement too (`Ram26001008 = (char)in_r2;` with `in_r2` at the `bf` before the store's block: a click on the line went to the
 // branch, and the way back from the branch answered the store's line before its own `if`).
+// (A7-179, A7-190) A line's drawn tokens at 'from' moved to the lowest of 'makers' (0 when there is none), with an empty token at each other
+// maker the line does not carry, and the line's first address made again; false when the line draws nothing at 'from'
+bool MoveDrawnTokens(Line& l, uint32_t from, const std::set<uint32_t>& makers)
+{
+    const uint32_t lowest = makers.empty() ? 0 : *makers.begin();
+    bool any = false;
+    for (Token& t : l.tokens)
+        if (t.addr == from && t.begin < t.end)
+        {
+            t.addr = lowest;
+            t.materialised = false;
+            any = true;
+        }
+    if (!any) return false;
+    for (uint32_t m : makers)
+    {
+        bool carried = false;
+        for (const Token& t : l.tokens) carried = carried || t.addr == m;
+        if (carried) continue;
+        Token t;
+        t.begin = t.end = static_cast<uint16_t>(std::min<size_t>(l.text.size(), 0xFFFF));
+        t.kind = TokenKind::Plain;
+        t.addr = m;
+        l.tokens.push_back(t);
+    }
+    l.firstAddr = 0;
+    for (const Token& t : l.tokens)
+        if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+    return true;
+}
+
 int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations& printed, const ghidra::Funcdata& fd, const FlowRecord& flow)
 {
     std::vector<const ghidra::PcodeOp*> ordered;
@@ -10355,6 +10315,11 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
         }
     const ghidra::AddrSpace* data = fd.getArch()->getDefaultDataSpace();
     const auto inMemory = [data](const ghidra::AddrSpace* s) { return s && (s->getType() == ghidra::IPTR_SPACEBASE || s == data); };
+    // (two ranges of the data space overlap, the mirrors folded)
+    const auto dataOverlaps = [](ghidra::uintb a, int aSize, ghidra::uintb b, int bSize) {
+        const auto norm = [](ghidra::uintb x) { return (x >> 29) <= 1 ? x & 0x07FFFFFFu : x; };
+        return norm(a) < norm(b) + static_cast<ghidra::uintb>(bSize) && norm(b) < norm(a) + static_cast<ghidra::uintb>(aSize);
+    };
     // (the instruction's last op, as A7-171's test: a delayed branch's own ops are split by its slot's, `bf/s` negates T, runs the slot, branches)
     const auto isBranch = [&flow](uint32_t insn) {
         const auto ib = flow.insnBlock.find(insn);
@@ -10381,10 +10346,65 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
         const ghidra::PcodeOp* by = ghidra::PcodeOp::getOpFromConst(ind->getIn(1)->getAddr());
         // (a volatile write is a CALLOTHER the engine makes where the STORE was: `Ram20100083 = -(char)param_1;`; grammar 1 seed 10601820)
         if (!by || (by->isCall() && by->code() != ghidra::CPUI_CALLOTHER)) return nullptr;
-        uint32_t insn = InstructionOf(by), c = 0;
-        if (CanonicalAddress(insn, c)) insn = c;
-        if (by->code() != ghidra::CPUI_STORE && flow.accessesByInsn.find(std::make_pair(insn, true)) == flow.accessesByInsn.end()) return nullptr;
+        if (by->code() != ghidra::CPUI_STORE && flow.accessesByInsn.find(std::make_pair(CanonicalOf(InstructionOf(by)), true)) == flow.accessesByInsn.end())
+            return nullptr;
         return by;
+    };
+    // (A7-179, A7-190) The instructions that last wrote the register each store drawn on the lines of 'o' stores -- a drawn token other than
+    // at 'from' or in 'skip', its store's flow ops as 'locate' gives them -- added to 'out' (canonical). True when some store's were found,
+    // every store's could be, and 'accept' took each writer; a flow op that is no store of a register fails it when 'strict', else it is
+    // passed over.
+    using FlowAt = std::pair<int, uint32_t>;
+    const auto storedRegisterWriters = [&](const ghidra::PcodeOp* o, uint32_t from, const std::set<uint32_t>& skip, bool strict,
+                                           const std::function<void(uint32_t, std::vector<FlowAt>&)>& locate,
+                                           const std::function<bool(const FlowOp*, uint32_t)>& accept, std::set<uint32_t>& out) {
+        bool all = true, any = false;
+        for (size_t line : printed.at(o).first)
+        {
+            if (line >= lines.size()) continue;
+            std::set<uint32_t> storesOn;
+            for (const Token& t : lines[line].tokens)
+                if (t.addr && t.begin < t.end && t.addr != from && !skip.count(t.addr)) storesOn.insert(t.addr);
+            for (uint32_t s : storesOn)
+            {
+                std::vector<FlowAt> ats;
+                locate(s, ats);
+                for (const FlowAt& inst : ats)
+                {
+                    if (inst.first < 0 || static_cast<size_t>(inst.first) >= flow.blockOps.size() ||
+                        inst.second >= flow.blockOps[static_cast<size_t>(inst.first)].size())
+                        continue;
+                    const FlowOp& st = flow.blockOps[static_cast<size_t>(inst.first)][inst.second];
+                    if (st.code != ghidra::CPUI_STORE || st.numIn < 3 || st.in[2].Constant() || !st.in[2].space ||
+                        st.in[2].space->getType() != ghidra::IPTR_PROCESSOR)
+                    {
+                        all = all && !strict;
+                        continue;
+                    }
+                    FlowVn whole = st.in[2];
+                    if (whole.size < 4)
+                    {
+                        whole.offset &= ~static_cast<ghidra::uintb>(3);
+                        whole.size = 4;
+                    }
+                    std::vector<const FlowOp*> writers;
+                    bool entry = false;
+                    if (!FlowLastWriters(flow, fd, inst.first, static_cast<int>(inst.second), whole, writers, &entry) || entry || writers.empty())
+                    {
+                        all = false;
+                        continue;
+                    }
+                    any = true;
+                    for (const FlowOp* w : writers)
+                    {
+                        const uint32_t wi = CanonicalOf(w->insn);
+                        if (!accept(w, wi)) all = false;
+                        out.insert(wi);
+                    }
+                }
+            }
+        }
+        return any && all;
     };
     int moved = 0;
     for (const ghidra::PcodeOp* o : ordered)
@@ -10402,32 +10422,12 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             const ghidra::Varnode* in = o->getIn(0);
             if (!out || out->isImplied() || o->isFromDelaySlot() || inMemory(out->getSpace()) || in->getSpace() != data) continue;
             const uint32_t at = InstructionOf(o);
-            uint32_t from = at, c = 0;
-            if (CanonicalAddress(from, c)) from = c;
+            const uint32_t from = CanonicalOf(at);
             if (flow.callInsns.count(at) || flow.accessesByInsn.find(std::make_pair(from, true)) == flow.accessesByInsn.end()) continue;
             // (not the value the store itself writes into the global: that copy is the store's)
-            if (in->isWritten() && in->getDef()->code() != ghidra::CPUI_INDIRECT && in->getDef()->code() != ghidra::CPUI_MULTIEQUAL)
-            {
-                uint32_t d = InstructionOf(in->getDef()), dc = 0;
-                if (CanonicalAddress(d, dc)) d = dc;
-                if (d == from) continue;
-            }
-            // (nor a copy at a store of the global itself, `uVar3 = uRam26001020;` at `mov.b r3,@r6` into its first byte: the engine's copy of
-            // the value the store writes over, which the store's line names as its own, as before; grammar 1 seed 10605046)
-            bool writesIt = false;
-            {
-                const auto norm = [](ghidra::uintb a) { return (a >> 29) <= 1 ? a & 0x07FFFFFFu : a; };
-                for (const ghidra::AccessRecord& rec : fd.getAccessFates())
-                {
-                    if (!rec.store || rec.addr.isInvalid() || rec.addr.getSpace() != data || rec.size <= 0) continue;
-                    uint32_t ri = InstructionOf(rec), rc = 0;
-                    if (CanonicalAddress(ri, rc)) ri = rc;
-                    writesIt = writesIt || (ri == from && norm(rec.addr.getOffset()) < norm(in->getOffset()) + static_cast<ghidra::uintb>(in->getSize()) &&
-                                            norm(in->getOffset()) < norm(rec.addr.getOffset()) + static_cast<ghidra::uintb>(rec.size));
-                }
-            }
-            if (writesIt) continue;
-            const ghidra::PcodeOp* by = in->isWritten() ? storeIndirect(in->getDef()) : nullptr;
+            if (in->isWritten() && in->getDef()->code() != ghidra::CPUI_INDIRECT && in->getDef()->code() != ghidra::CPUI_MULTIEQUAL &&
+                CanonicalOf(InstructionOf(in->getDef())) == from)
+                continue;
             if (out->getHigh())
             {
                 // (a register variable's line only: a copy into a global or a frame word is a store's statement, AddFrameStoreTokens')
@@ -10438,13 +10438,22 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             }
             const auto ib = flow.insnBlock.find(at);
             if (ib == flow.insnBlock.end()) continue;
+            // (nor a copy at a store of the global itself, `uVar3 = uRam26001020;` at `mov.b r3,@r6` into its first byte: the engine's copy of
+            // the value the store writes over, which the store's line names as its own, as before; grammar 1 seed 10605046)
+            bool writesIt = false;
+            for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+            {
+                if (!rec.store || rec.addr.isInvalid() || rec.addr.getSpace() != data || rec.size <= 0) continue;
+                writesIt = writesIt || (CanonicalOf(InstructionOf(rec)) == from && dataOverlaps(rec.addr.getOffset(), rec.size, in->getOffset(), in->getSize()));
+            }
+            if (writesIt) continue;
+            const ghidra::PcodeOp* by = in->isWritten() ? storeIndirect(in->getDef()) : nullptr;
             FlowVn mem;
             mem.space = in->getSpace();
             mem.offset = in->getOffset();
             mem.size = in->getSize();
             std::set<uint32_t> reads;
-            uint32_t byInsn = by ? InstructionOf(by) : 0, c3 = 0;
-            if (by && CanonicalAddress(byInsn, c3)) byInsn = c3;
+            const uint32_t byInsn = by ? CanonicalOf(InstructionOf(by)) : 0;
             if (byInsn != from || !FlowNextReads(flow, fd, ib->second.first, static_cast<int>(ib->second.second) + 1, mem, reads) || reads.empty())
             {
                 // (no read on some path -- `uVar3 = uRam2600103e;` at `mov.b r2,@(r0,r5)`, read by `mov.w @(r0,r7),r2` past a `bt` the engine
@@ -10462,42 +10471,12 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
                 continue;
             }
             std::set<uint32_t> makers;
-            for (uint32_t m : reads)
-            {
-                uint32_t c2 = 0;
-                makers.insert(CanonicalAddress(m, c2) ? c2 : m);
-            }
+            for (uint32_t m : reads) makers.insert(CanonicalOf(m));
             if (makers.count(from)) continue;
-            const uint32_t lowest = *makers.begin();
             for (size_t line : printed.at(o).first)
-            {
-                if (line >= lines.size() || shared.count(std::make_pair(line, from)) || control.count(std::make_pair(line, from))) continue;
-                Line& l = lines[line];
-                bool any = false;
-                for (Token& t : l.tokens)
-                    if (t.addr == from && t.begin < t.end)
-                    {
-                        t.addr = lowest;
-                        t.materialised = false;
-                        any = true;
-                    }
-                if (!any) continue;
-                ++moved;
-                for (uint32_t m : makers)
-                {
-                    bool carried = false;
-                    for (const Token& t : l.tokens) carried = carried || t.addr == m;
-                    if (carried) continue;
-                    Token t;
-                    t.begin = t.end = static_cast<uint16_t>(std::min<size_t>(l.text.size(), 0xFFFF));
-                    t.kind = TokenKind::Plain;
-                    t.addr = m;
-                    l.tokens.push_back(t);
-                }
-                l.firstAddr = 0;
-                for (const Token& t : l.tokens)
-                    if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
-            }
+                if (line < lines.size() && !shared.count(std::make_pair(line, from)) && !control.count(std::make_pair(line, from)) &&
+                    MoveDrawnTokens(lines[line], from, makers))
+                    ++moved;
             continue;
         }
         if (code != ghidra::CPUI_INT_SEXT && code != ghidra::CPUI_INT_ZEXT && code != ghidra::CPUI_SUBPIECE && code != ghidra::CPUI_CAST) continue;
@@ -10537,7 +10516,6 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
                         InstructionOf(rec) == at)
                         atStores.push_back(&rec);
                 if (atStores.empty()) continue;
-                const auto norm = [](ghidra::uintb a) { return (a >> 29) <= 1 ? a & 0x07FFFFFFu : a; };
                 for (size_t line : printed.at(o).first)
                 {
                     bool assignsOther = false, assignsStore = false;
@@ -10547,8 +10525,7 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
                         if (p == o || !po || po->isImplied() || po->getSpace() != data || !printed.at(p).first.count(line)) continue;
                         bool overlaps = false;
                         for (const ghidra::AccessRecord* st : atStores)
-                            overlaps = overlaps || (norm(st->addr.getOffset()) < norm(po->getOffset()) + static_cast<ghidra::uintb>(po->getSize()) &&
-                                                    norm(po->getOffset()) < norm(st->addr.getOffset()) + static_cast<ghidra::uintb>(st->size));
+                            overlaps = overlaps || dataOverlaps(st->addr.getOffset(), st->size, po->getOffset(), po->getSize());
                         (overlaps ? assignsStore : assignsOther) = true;
                     }
                     if (assignsOther && !assignsStore) otherLines.insert(line);
@@ -10585,8 +10562,7 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             else if (inMemory(v->getSpace()) && storeIndirect(v->getDef()))
             {
                 // (A7-190: the global as a store that may alias it left it, below)
-                uint32_t m = InstructionOf(v->getDef()), c = 0;
-                aliasStores.insert(CanonicalAddress(m, c) ? c : m);
+                aliasStores.insert(CanonicalOf(InstructionOf(v->getDef())));
                 aliased.push_back(v);
             }
             else if (!isBranch(InstructionOf(v->getDef())) && flow.insnFirst.count(InstructionOf(v->getDef())))
@@ -10608,88 +10584,47 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
         // global's value as the read took it: the instructions that last wrote the register each store drawn on the line stores, when each
         // is a load of that global (one on each path; the lowest drawn and an empty token at each other, as above). Else as before (the
         // store's instruction). Grammar 1 seed 10403949
-        uint32_t from = at, c = 0;
-        if (CanonicalAddress(from, c)) from = c;
+        const uint32_t from = CanonicalOf(at);
         if (!aliasStores.empty() && !unknown && makers.empty() && !input && !numbers && !memoryOperand)
         {
-            std::set<uint32_t> reads;
-            bool all = true, any = false;
-            for (size_t line : printed.at(o).first)
-            {
-                if (line >= lines.size()) continue;
-                std::set<uint32_t> storesOn;
-                for (const Token& t : lines[line].tokens)
-                    if (t.addr && t.begin < t.end && t.addr != from && !aliasStores.count(t.addr)) storesOn.insert(t.addr);
-                for (uint32_t s : storesOn)
-                {
-                    const auto acc = flow.accessesByInsn.find(std::make_pair(s, true));
-                    if (acc == flow.accessesByInsn.end()) continue;
-                    for (const auto& inst : acc->second)
+            // (a load of the global, or the extension `mov.w @r7,r1` makes of what it loaded: the instruction's load, whose pointer at its own
+            // place in the flow is the global's address)
+            const auto readsGlobal = [&](const FlowOp* w, uint32_t wi) {
+                bool reads = false;
+                const bool loadOrExtension = w->code == ghidra::CPUI_LOAD || w->code == ghidra::CPUI_INT_SEXT || w->code == ghidra::CPUI_INT_ZEXT;
+                const auto la = loadOrExtension ? flow.accessesByInsn.find(std::make_pair(wi, false)) : flow.accessesByInsn.end();
+                if (la != flow.accessesByInsn.end())
+                    for (const auto& li : la->second)
                     {
-                        if (inst.first < 0 || static_cast<size_t>(inst.first) >= flow.blockOps.size() ||
-                            inst.second >= flow.blockOps[static_cast<size_t>(inst.first)].size())
+                        if (reads || li.first < 0 || static_cast<size_t>(li.first) >= flow.blockOps.size() ||
+                            li.second >= flow.blockOps[static_cast<size_t>(li.first)].size())
                             continue;
-                        const FlowOp& st = flow.blockOps[static_cast<size_t>(inst.first)][inst.second];
-                        if (st.code != ghidra::CPUI_STORE || st.numIn < 3 || st.in[2].Constant() || !st.in[2].space ||
-                            st.in[2].space->getType() != ghidra::IPTR_PROCESSOR)
-                        {
-                            all = false;
+                        const FlowOp& ld = flow.blockOps[static_cast<size_t>(li.first)][li.second];
+                        bool stack = false;
+                        ghidra::uintb offset = 0;
+                        if (ld.code != ghidra::CPUI_LOAD || ld.numIn < 2 || !FlowPointer(flow, fd, li.first, static_cast<int>(li.second), ld.in[1], stack, offset))
                             continue;
-                        }
-                        FlowVn whole = st.in[2];
-                        if (whole.size < 4)
+                        FlowVn m;
+                        m.space = stack ? fd.getArch()->getStackSpace() : data;
+                        m.offset = offset & m.space->getHighest();
+                        m.size = ld.out.size;
+                        for (const ghidra::Varnode* g : aliased)
                         {
-                            whole.offset &= ~static_cast<ghidra::uintb>(3);
-                            whole.size = 4;
-                        }
-                        std::vector<const FlowOp*> writers;
-                        bool entry = false;
-                        if (!FlowLastWriters(flow, fd, inst.first, static_cast<int>(inst.second), whole, writers, &entry) || entry || writers.empty())
-                        {
-                            all = false;
-                            continue;
-                        }
-                        any = true;
-                        for (const FlowOp* w : writers)
-                        {
-                            // (a load of the global, or the extension `mov.w @r7,r1` makes of what it loaded: the instruction's load, whose pointer at
-                            // its own place in the flow is the global's address)
-                            bool readsGlobal = false;
-                            const bool loadOrExtension = w->code == ghidra::CPUI_LOAD || w->code == ghidra::CPUI_INT_SEXT || w->code == ghidra::CPUI_INT_ZEXT;
-                            uint32_t wi = w->insn, wc = 0;
-                            if (CanonicalAddress(wi, wc)) wi = wc;
-                            const auto la = loadOrExtension ? flow.accessesByInsn.find(std::make_pair(wi, false)) : flow.accessesByInsn.end();
-                            if (la != flow.accessesByInsn.end())
-                                for (const auto& li : la->second)
-                                {
-                                    if (readsGlobal || li.first < 0 || static_cast<size_t>(li.first) >= flow.blockOps.size() ||
-                                        li.second >= flow.blockOps[static_cast<size_t>(li.first)].size())
-                                        continue;
-                                    const FlowOp& ld = flow.blockOps[static_cast<size_t>(li.first)][li.second];
-                                    bool stack = false;
-                                    ghidra::uintb offset = 0;
-                                    if (ld.code != ghidra::CPUI_LOAD || ld.numIn < 2 || !FlowPointer(flow, fd, li.first, static_cast<int>(li.second), ld.in[1], stack, offset))
-                                        continue;
-                                    FlowVn m;
-                                    m.space = stack ? fd.getArch()->getStackSpace() : data;
-                                    m.offset = offset & m.space->getHighest();
-                                    m.size = ld.out.size;
-                                    for (const ghidra::Varnode* g : aliased)
-                                    {
-                                        FlowVn gv;
-                                        gv.space = g->getSpace();
-                                        gv.offset = g->getOffset();
-                                        gv.size = g->getSize();
-                                        readsGlobal = readsGlobal || FlowStorageOverlaps(m, gv);
-                                    }
-                                }
-                            if (!readsGlobal) all = false;
-                            reads.insert(wi);
+                            FlowVn gv;
+                            gv.space = g->getSpace();
+                            gv.offset = g->getOffset();
+                            gv.size = g->getSize();
+                            reads = reads || FlowStorageOverlaps(m, gv);
                         }
                     }
-                }
-            }
-            makers = any && all ? reads : aliasStores;
+                return reads;
+            };
+            const auto storesAt = [&flow](uint32_t s, std::vector<FlowAt>& ats) {
+                const auto acc = flow.accessesByInsn.find(std::make_pair(s, true));
+                if (acc != flow.accessesByInsn.end()) ats = acc->second;
+            };
+            std::set<uint32_t> reads;
+            makers = storedRegisterWriters(o, from, aliasStores, true, storesAt, readsGlobal, reads) ? reads : aliasStores;
         }
         // A7-179: an operand that is a global the engine read, or the global as a call left it (a folded read, no op of its own;
         // `iRam0603ad32 = (int2)uRam0603a9d0;`, a store's value the `mov.w @r1,r1` read, drawn at the `bf/s` after it). On a path that brings
@@ -10698,46 +10633,17 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
         // nothing (as an input's does).
         if (memoryOperand && !unknown && makers.empty() && !input && !numbers)
         {
-            std::set<uint32_t> viaStore;
-            bool all = true, any = false;
-            for (size_t line : printed.at(o).first)
-            {
-                if (line >= lines.size()) continue;
-                for (const Token& t : lines[line].tokens)
+            const auto foldedStoresAt = [&](uint32_t s, std::vector<FlowAt>& ats) {
+                for (const ghidra::AccessRecord& rec : fd.getAccessFates())
                 {
-                    if (!t.addr || t.begin >= t.end || t.addr == from) continue;
-                    for (const ghidra::AccessRecord& rec : fd.getAccessFates())
-                    {
-                        if (!rec.store || rec.fate != ghidra::fate_folded_ordinary || InstructionOf(rec) != t.addr) continue;
-                        const auto pos = flow.ops.find(rec.time);
-                        if (pos == flow.ops.end() || pos->second.first < 0 || static_cast<size_t>(pos->second.first) >= flow.blockOps.size() ||
-                            pos->second.second >= flow.blockOps[static_cast<size_t>(pos->second.first)].size())
-                            continue;
-                        const FlowOp& st = flow.blockOps[static_cast<size_t>(pos->second.first)][pos->second.second];
-                        if (st.code != ghidra::CPUI_STORE || st.numIn < 3 || st.in[2].Constant() || !st.in[2].space || st.in[2].space->getType() != ghidra::IPTR_PROCESSOR) continue;
-                        FlowVn whole = st.in[2];
-                        if (whole.size < 4)
-                        {
-                            whole.offset &= ~static_cast<ghidra::uintb>(3);
-                            whole.size = 4;
-                        }
-                        std::vector<const FlowOp*> writers;
-                        bool entry = false;
-                        if (!FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), whole, writers, &entry) || entry || writers.empty())
-                        {
-                            all = false;
-                            continue;
-                        }
-                        any = true;
-                        for (const FlowOp* w : writers)
-                        {
-                            uint32_t m = w->insn, c2 = 0;
-                            viaStore.insert(CanonicalAddress(m, c2) ? c2 : m);
-                        }
-                    }
+                    if (!rec.store || rec.fate != ghidra::fate_folded_ordinary || InstructionOf(rec) != s) continue;
+                    const auto pos = flow.ops.find(rec.time);
+                    if (pos != flow.ops.end()) ats.push_back(pos->second);
                 }
-            }
-            if (!any || !all) continue;
+            };
+            std::set<uint32_t> viaStore;
+            if (!storedRegisterWriters(o, from, std::set<uint32_t>(), false, foldedStoresAt, [](const FlowOp*, uint32_t) { return true; }, viaStore))
+                continue;
             makers = viaStore;
         }
         // (a global among other paths' values: those paths' makers stand, the one that is the global as the call left it names nothing)
@@ -10747,7 +10653,6 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
         if (unknown || (makers.empty() && !input)) continue;
         if (input) makers.clear();   // (a path with no maker: the line names nothing, as A7-21's)
         if (makers.count(from)) continue;
-        const uint32_t lowest = makers.empty() ? 0 : *makers.begin();
         for (size_t line : printed.at(o).first)
         {
             // (another op of the instruction on the line: at a branch, the engine's copy of the conversion's value, `pxStack_24 = (xunknown4 *)
@@ -10756,31 +10661,7 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             if (line >= lines.size() || control.count(std::make_pair(line, from)) || (!branch && shared.count(std::make_pair(line, from))) ||
                 (otherOnly && !otherLines.count(line)))
                 continue;
-            Line& l = lines[line];
-            bool any = false;
-            for (Token& t : l.tokens)
-                if (t.addr == from && t.begin < t.end)
-                {
-                    t.addr = lowest;
-                    t.materialised = false;
-                    any = true;
-                }
-            if (!any) continue;
-            ++moved;
-            for (uint32_t m : makers)
-            {
-                bool carried = false;
-                for (const Token& t : l.tokens) carried = carried || t.addr == m;
-                if (carried) continue;
-                Token t;
-                t.begin = t.end = static_cast<uint16_t>(std::min<size_t>(l.text.size(), 0xFFFF));
-                t.kind = TokenKind::Plain;
-                t.addr = m;
-                l.tokens.push_back(t);
-            }
-            l.firstAddr = 0;
-            for (const Token& t : l.tokens)
-                if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+            if (MoveDrawnTokens(lines[line], from, makers)) ++moved;
         }
     }
     return moved;
@@ -12700,10 +12581,6 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     // the same, but PC-derived values are not -- a mova through the cache-through mirror yields a
     // 0x2xxxxxxx pointer. Its identity (name, prototype, what the result reports) stays canonical.
     const uint32_t exec = request.entry;
-    auto canonicalOf = [](uint32_t a) {
-        uint32_t c = 0;
-        return CanonicalAddress(a, c) ? c : a;
-    };
 
     if (gEngineDamaged)
     {
@@ -12790,13 +12667,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     // One pass: a fresh Architecture, every function registered, flow followed, read-only
     // literals applied, actions run. 'print' adds the markup output; 'mayRetry' lets a print pass stop, before it prints, when the
     // actions showed memory with two names that is not yet volatile ('aliasRetry').
-    std::map<uint32_t, uint32_t> calleeWalks;   // CalleeFrameWrites' results, for every probe of this request's passes (ShareWalks, A3-81)
-    std::map<uint32_t, uint32_t> calleeBelow;   // ...and each walked callee's storesBelow (A3-86 a), shared the same way
-    std::map<uint32_t, uint32_t> calleeHanded;  // ...and the registers each lets out or writes through (area 3 round 12 fix, A3-90)
-    std::map<uint32_t, uint32_t> calleeChanged; // ...and the registers of r8-r14 each returns with changed on some path (area 3, A3-197)
-    std::map<uint32_t, uint32_t> calleeWritten; // ...and the ones it overwrites on every path (area 3, A3-203)
-    std::map<uint32_t, uint32_t> calleeEntryRead; // ...and the ones whose entry value it reads (area 3, A3-210)
-    ReturnCheck::WalkMaps cautionWalks;           // (area 3, A3-214) ...and the cautions' walks, which follow the callees' switches
+    ReturnCheck::WalkMaps calleeWalks;    // CalleeFrameWrites' results and records, for every probe of this request's passes (ShareWalks, A3-81)
+    ReturnCheck::WalkMaps cautionWalks;   // (area 3, A3-214) ...and the cautions' walks, which follow the callees' switches
     auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
@@ -12945,7 +12817,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         Enter(DecompilePhase::Flow);
         fd->followFlow(ghidra::Address(ram, 0), ghidra::Address(ram, ram->getHighest()));
         if (fd->hasNoCode()) return std::string();
-        const FlowRecord flow = RecordFlow(*fd, canonicalOf, *snapshot);
+        const FlowRecord flow = RecordFlow(*fd, CanonicalOf, *snapshot);
 
         const RawScan scan = [&] {
             RawScan raw = ScanRawPcode(*fd, *snapshot);
@@ -12972,8 +12844,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             probe.SetTolerant();
             probe.SetLiterals(scan.literalWords, *snapshot);
             probe.SetCancel(cancel);   // the callee walk can be long for an adversarial callee (A3-74)
-            probe.ShareWalks(&calleeWalks, &calleeBelow, &calleeHanded, &calleeChanged, &calleeWritten, &calleeEntryRead);
-            probe.ShareCautionWalks(&cautionWalks);
+            probe.ShareWalks(&calleeWalks, &cautionWalks);
             CallEffects unused;
             probe.Run(unused);
             // (area 3 round 12 fix) An address of the frame went out by a way the engine may not see (a callee that keeps it or hands it back
@@ -13150,13 +13021,12 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                         blockOf[static_cast<uint32_t>((*it)->getAddr().getOffset())] = (*it)->getParent();
             // (area 3, A3-214) a call whose named registers include one its callee's walk names for a switch it could not bound says so (bit 31
             // here, which names no register): it groups with calls said the same way only
-            std::map<uint32_t, uint32_t> sites;
-            for (const auto& u : unkeptSites)
+            for (auto& u : unkeptSites)
             {
                 const auto l = lostSites.find(u.first);
-                sites[u.first] = u.second | (l != lostSites.end() && (l->second & u.second) != 0 ? 1u << 31 : 0u);
+                u.second |= l != lostSites.end() && (l->second & u.second) != 0 ? 1u << 31 : 0u;
             }
-            for (const auto& u : sites)
+            for (const auto& u : unkeptSites)
             {
                 if (u.second == 0) continue;
                 const auto b = blockOf.find(u.first);
@@ -13219,7 +13089,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 {
                     const uint32_t rlo = ro.first, rhi = ro.first + static_cast<uint32_t>(ro.second);
                     if (lo >= rhi || rlo >= hi || writtenLiteral(rlo, ro.second)) continue;
-                    writtenLiterals.push_back(WrittenLiteral{ rlo, ro.second, canonicalOf(InstructionOf(o)) });
+                    writtenLiterals.push_back(WrittenLiteral{ rlo, ro.second, CanonicalOf(InstructionOf(o)) });
                     freshWritten = true;
                 }
             }
@@ -13294,7 +13164,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.bodyBytes = static_cast<uint32_t>(fd->getSize());
         r.unimplemented = fd->hasUnimplemented();
         r.unsupported = scan.unsupported;
-        r.unsupportedAt = canonicalOf(scan.unsupportedAt);
+        r.unsupportedAt = CanonicalOf(scan.unsupportedAt);
         // The body: what the function's last flow translated, before any action removed what it found
         // dead (patch 0021). A restart in the actions follows the flow again and can reach further
         // than the scan above did (a jump into a second function is only resolved then), and what
@@ -13304,7 +13174,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         for (const ghidra::FlowInsn& fi : fd->getFlowInsns())
             if (!fi.halted) insns.insert(static_cast<uint32_t>(fi.addr.getOffset()));
         r.body = BodyRanges(insns, *snapshot);
-        for (uint32_t w : scan.literalWords) r.literalPools.push_back(canonicalOf(w));
+        for (uint32_t w : scan.literalWords) r.literalPools.push_back(CanonicalOf(w));
         std::sort(r.literalPools.begin(), r.literalPools.end());
         r.literalPools.erase(std::unique(r.literalPools.begin(), r.literalPools.end()), r.literalPools.end());
         r.literalLoads = scan.literalLoads;
@@ -13355,7 +13225,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 continue;
             const uint32_t at = static_cast<uint32_t>(c->getAddr().getOffset());
             FlowWarning w;
-            w.address = header ? 0 : canonicalOf(at);
+            w.address = header ? 0 : CanonicalOf(at);
             if (!header && text == "Bad instruction - Truncating control flow here")
             {
                 // Memory that is not there (the instruction, or the delay slot decoded with it), or
@@ -13380,13 +13250,13 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                     // halt in it; it is said, as the removal is, and the function is not truncated by it. (Bytes that do not decode in
                     // such a block are still reported as bad data: nothing has shown that they are harmless.)
                     w.kind = FlowWarning::Engine;
-                    w.address = canonicalOf(at);
+                    w.address = CanonicalOf(at);
                     w.text = "flow followed a path into " + why + ", which the analysis proved cannot be taken and removed: the function is not cut "
                              "off there";
                 }
                 else if (cutHere)
                 {
-                    const uint32_t cut = canonicalOf(gone);
+                    const uint32_t cut = CanonicalOf(gone);
                     if (!r.truncated || cut < r.truncatedAt)
                     {
                         r.truncatedAt = cut;
@@ -13433,7 +13303,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             bool settled = false;
             for (ghidra::int4 t = 0; t < fd->numJumpTables() && !settled; ++t)
                 settled = fd->getJumpTable(t)->getOpAddress().getOffset() == a;
-            for (const FlowWarning& w : r.flowWarnings) settled |= w.address == canonicalOf(a) && w.kind == FlowWarning::Engine;
+            for (const FlowWarning& w : r.flowWarnings) settled |= w.address == CanonicalOf(a) && w.kind == FlowWarning::Engine;
             if (settled) continue;
             // Only a jump that is now a call: one the engine turned into a goto within the function
             // (a table of one destination) or removed as dead is not a tail call.
@@ -13455,7 +13325,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 if (missing(static_cast<uint32_t>(t), why)) where += " (" + why + ": what runs there is not shown)";
             }
             if (!call) continue;
-            r.flowWarnings.push_back(FlowWarning{ FlowWarning::TailJump, canonicalOf(a),
+            r.flowWarnings.push_back(FlowWarning{ FlowWarning::TailJump, CanonicalOf(a),
                                                   std::string(jmp ? "jmp" : "braf") + " is taken for a tail call to " + where +
                                                       ", assumed to return to this function's caller" +
                                                       // Said whether or not the destination is captured: it is a call here, the code there
@@ -13485,7 +13355,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             for (const auto& t : *targets) entries.insert(t.first);
         for (uint32_t a : entries)
         {
-            const uint32_t c = canonicalOf(a);
+            const uint32_t c = CanonicalOf(a);
             if (c == entry || !r.InBody(c)) continue;
             auto f = named.find(c);
             r.flowWarnings.push_back(FlowWarning{ FlowWarning::IntoFunction, c, "flow runs into " + (f != named.end() ? f->second + " at " : std::string()) +
@@ -13496,7 +13366,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                          [](const FlowWarning& x, const FlowWarning& y) { return x.address < y.address; });
         for (const FlowWarning& w : r.flowWarnings)
             r.warnings.push_back(w.address ? Hex8(w.address) + ": " + w.text : w.text);
-        r.hardwareNotes = HardwareNotes(*fd, canonicalOf);
+        r.hardwareNotes = HardwareNotes(*fd, CanonicalOf);
         for (const HardwareNote& n : r.hardwareNotes)
             if (n.caution) r.warnings.push_back(Hex8(n.address) + ": " + n.text);
         if (r.truncated) r.prototypeWithheld = "truncated";
@@ -13510,7 +13380,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         {
             AddJumpTables(*fd, flowTables);
             AddFlowTables(*fd, flowTables);
-            r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry, flowTables, effects, &scan.literalWords, snapshot.get(), &calleeWalks);
+            r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry, flowTables, effects, &scan.literalWords, snapshot.get(), &calleeWalks.walks);
         }
         if (r.prototypeWithheld.empty())
         {
@@ -13551,7 +13421,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 r.prototypeWithheld = "its text names a raw stack register (no local is mapped to the storage a walk down reaches)";
             }
         }
-        r.accesses = Accesses(*fd, printed, canonicalOf, flow);
+        r.accesses = Accesses(*fd, printed, CanonicalOf, flow);
         AddJoinConstantTokens(r.lines, printed, *fd, flow);
         AddFrameStoreTokens(r.lines, printed, *fd, flow);
         RetargetTwinExtensions(r.lines, printed, flow);
@@ -13577,7 +13447,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         for (const ghidra::AccessRecord& rec : fd->getAccessFates())
         {
             AccessFate f;
-            f.insn = canonicalOf(InstructionOf(rec));
+            f.insn = CanonicalOf(InstructionOf(rec));
             f.write = rec.store;
             f.size = static_cast<uint8_t>(rec.size);
             switch (rec.fate)
@@ -13608,11 +13478,11 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             }
             r.accessFates.push_back(f);
         }
-        r.calls = Calls(*fd, flow, canonicalOf);
+        r.calls = Calls(*fd, flow, CanonicalOf);
         r.flowSuccessors = flow.successors;
         r.flowBlockRanges = flow.ranges;
         if (request.allMemoryVolatile) r.flowKept = KeptFlowBlocks(*fd, flow);   // A3-187
-        r.storesBeforeEndlessLoop = StoresBeforeEndlessLoop(*fd, flow, removedBlocks, printed, r.lines, canonicalOf, r.readsAfterEndlessLoop);   // A3-167 to A3-169
+        r.storesBeforeEndlessLoop = StoresBeforeEndlessLoop(*fd, flow, removedBlocks, printed, r.lines, CanonicalOf, r.readsAfterEndlessLoop);   // A3-167 to A3-169
         r.frameLedgerCapped = fd->isFrameLedgerCapped();   // (A3-133, patch 0072) the frame records hide any loss: unchecked
         for (const ghidra::FrameCallRecord& c : fd->getFrameCalls())
         {
