@@ -2064,7 +2064,19 @@ private:
         bool I(int n) const { return ((index >> n) & 1u) != 0; }
     };
     using Code = std::vector<std::pair<uint32_t, uint16_t>>;   // instructions (address, word), in order
-    static bool AnyBranch(uint32_t pc, uint32_t w) { return Sh2Decode(pc, static_cast<uint16_t>(w)).IsBranch || w == 0x001Bu; }   // (sleep too)
+    // Branch classes by opcode mask, not Sh2Decode: the dispatch reader runs at every indirect jump the walks meet, and Sh2Decode formats
+    // the instruction's text, which in a Debug build cost the decompiler suites enough to time out on CI's Windows runner
+    static bool DelayedBranch(uint16_t w)
+    {
+        const uint16_t lo = w & 0xF0FFu;
+        return (w & 0xF000u) == 0xA000u || (w & 0xF000u) == 0xB000u || lo == 0x402Bu || lo == 0x400Bu || w == 0x000Bu || w == 0x002Bu ||
+               lo == 0x0023u || lo == 0x0003u || (w & 0xFF00u) == 0x8D00u || (w & 0xFF00u) == 0x8F00u;
+    }
+    static bool ConditionalBranch(uint32_t w) { return (w & 0xF900u) == 0x8900u; }   // bt, bf, bt/s, bf/s
+    static bool AnyBranch(uint16_t w)   // (sleep too)
+    {
+        return DelayedBranch(w) || (w & 0xFF00u) == 0x8900u || (w & 0xFF00u) == 0x8B00u || (w & 0xFF00u) == 0xC300u || w == 0x001Bu;
+    }
     // One instruction of a dispatch on the registers' known values; false when the reader does not model it. 'writes' gets the registers
     // it writes, whether their values are known or not.
     bool DispatchStep(uint32_t pc, uint16_t w, DispatchRegs& r, uint32_t& writes) const
@@ -2240,7 +2252,7 @@ private:
             if (!ReadCode(pc, 2, w)) break;
             if (!Modelled(pc, w, writes))   // (no branch is modelled)
             {
-                if (AnyBranch(pc, w))
+                if (AnyBranch(static_cast<uint16_t>(w)))
                 {
                     if (branch != nullptr) *branch = pc;
                     if (word != nullptr) *word = w;
@@ -2264,11 +2276,10 @@ private:
         uint32_t stop = 0, sw = 0;
         Code seg = CollectDispatch(jump, kDispatchBack, -1, &stop, &sw);
         // the word after a branch that always leaves is its delay slot, not the dispatch's code; a conditional one's runs on both ways
-        const DisassembledInstruction stopIns = Sh2Decode(stop, static_cast<uint16_t>(sw));
-        const bool condition = stop != 0 && stopIns.IsConditional;
-        if (stop != 0 && !condition && stopIns.HasDelaySlot && !seg.empty()) seg.erase(seg.begin());
+        const bool condition = stop != 0 && ConditionalBranch(sw);
+        if (stop != 0 && !condition && DelayedBranch(static_cast<uint16_t>(sw)) && !seg.empty()) seg.erase(seg.begin());
         bool table = false;
-        for (const auto& x : seg) table = table || Sh2Decode(x.first, x.second).PcRel == Sh2PcRel::Mova;
+        for (const auto& x : seg) table = table || (x.second & 0xFF00u) == 0xC700u;   // mova
         if (!table) return kDispatchNone;
         if (classifyOnly) return kDispatchUnbounded;
         // Run the code from 'from' with 'regs' for each value in 'values' of register 'ix' (after 'pre', the guard's delay slot when the guard
@@ -2299,8 +2310,8 @@ private:
         auto guardAt = [&](uint32_t pc, bool slot) {
             uint32_t w = 0;
             if (!ReadCode(pc, 2, w)) return false;
-            const DisassembledInstruction b = Sh2Decode(pc, static_cast<uint16_t>(w));
-            return b.IsConditional && b.HasDelaySlot == slot && b.BranchTarget == stop + 4;
+            const uint32_t to = pc + 4u + static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFFu)) * 2);
+            return ConditionalBranch(w) && ((w & 0x0400u) != 0) == slot && to == stop + 4;
         };
         if (condition) cond = stop;
         else if (stop >= 4 && (sw & 0xF000u) == 0xA000u && !seg.empty() && seg.front().first == stop + 4)

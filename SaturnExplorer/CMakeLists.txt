@@ -417,8 +417,10 @@ if(SE_ENABLE_DECOMPILER)
                              SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerFixtureTests
                              PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_60})
         # The decompiler suite grows with every round's pins and timed out at 60 s under load too (A11-19).
-        set_tests_properties(SaturnExplorerSh2DecompilerEngineTests SaturnExplorerSh2DecompilerTests
-                             PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
+        set_tests_properties(SaturnExplorerSh2DecompilerEngineTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
+        # It and the generated suite each take about 170 s in a Linux Debug build and some 7x that in CI's Windows Debug build, which
+        # passed their 1200 s Debug ceiling on 2026-11-17 (A3-214's walks and the round pins); 300 s (3000 s in Debug) stays a hang catch.
+        set_tests_properties(SaturnExplorerSh2DecompilerTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_300})
         # The runner suite is one thread and about 70 s of CPU (69 s user, RelWithDebInfo, 2026-11-13, measured with the machine busy: the
         # run is CPU bound, so an idle machine is not much faster), so 120 s left it 1.7x and it timed out whenever several builds shared
         # four cores (A11-22). 300 s is about 4x: still only a hang catch.
@@ -433,7 +435,7 @@ if(SE_ENABLE_DECOMPILER)
         # 400 version 2 seeds) by patches 0021 and 0024, so a failure now is a regression or a new class.
         # Version 1 also has mac.l / mac.w, and its "dropped" check spends one ledger entry per access. The
         # nightly CI job runs 20000 seeds.
-        set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
+        set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_300})   # (see the decompiler suite's)
         # The printed-C differential (15_DECOMPILER_STEP5.md, "Area 2, round 3: ..."): register-only generated
         # functions, decompiled, their text compiled with the system C compiler and its return value compared with
         # the emulator's. The same executable, told by the environment to run only that. SE_GENERATED_SEEDS=<n>
