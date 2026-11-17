@@ -101,6 +101,10 @@ constexpr const char* kFrameEscapeNoteMayRegA = "a frame address may be in ";
 constexpr const char* kUnkeptNoteA = "this call may change ";
 constexpr const char* kUnkeptNoteB = ", read after it: its callee does not restore it on every path, and the text takes the call to keep it";
 constexpr const char* kUnkeptNoteBMany = ", read after it: its callee does not restore them on every path, and the text takes the call to keep them";
+// (area 3, A3-214) ...and where the walk of the callee (or of a callee of it) met a jump through a table whose index it could not bound: what the
+// cases do is not read, so no register is taken as kept there (fail closed)
+constexpr const char* kUnkeptNoteLostB = ", read after it: its callee jumps through a table the analysis cannot bound and may not restore it, and the text takes the call to keep it";
+constexpr const char* kUnkeptNoteLostBMany = ", read after it: its callee jumps through a table the analysis cannot bound and may not restore them, and the text takes the call to keep them";
 
 namespace origin
 {

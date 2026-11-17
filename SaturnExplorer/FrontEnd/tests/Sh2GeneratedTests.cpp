@@ -4889,22 +4889,34 @@ std::string SavesBeforeCallsDropped(const std::string& text, const char* reg, co
             {
                 if (!changes(*it)) continue;
                 const size_t open = static_cast<size_t>(it->position(0) + it->length(0)) - 1;   // its '('
-                size_t close = open;
-                int depth = 0;
-                for (size_t c = open; c < line.size(); ++c)
-                {
-                    if (line[c] == '(') ++depth;
-                    else if (line[c] == ')' && --depth == 0)
+                // (area 3, A3-224) ...over as many lines as the text breaks the argument list into: grammar 2 seed 10409168 prints
+                // `func_0x0600906c(...,(int4)param_4,` and `unaff_r13);` on the next line, and the argument was taken for a read after the call
+                std::string full = line;
+                auto closing = [&full, open]() {
+                    int depth = 0;
+                    for (size_t c = open; c < full.size(); ++c)
                     {
-                        close = c;
-                        break;
+                        if (full[c] == '(') ++depth;
+                        else if (full[c] == ')' && --depth == 0) return c;
                     }
+                    return open;
+                };
+                size_t close = closing();
+                std::string more;
+                while (close == open && std::getline(in, more))
+                {
+                    full += "\n" + more;
+                    close = closing();
                 }
-                if (close == open) break;
-                const std::string args = line.substr(open + 1, close - open - 1);
+                if (close == open)
+                {
+                    line = full;
+                    break;
+                }
+                const std::string args = full.substr(open + 1, close - open - 1);
                 bool inner = false;
                 for (std::sregex_iterator jt(args.begin(), args.end(), call); jt != none && !inner; ++jt) inner = changes(*jt);
-                if (!inner) line = line.substr(0, open + 1) + std::regex_replace(args, word, "argument_" + std::string(reg)) + line.substr(close);
+                line = inner ? full : full.substr(0, open + 1) + std::regex_replace(args, word, "argument_" + std::string(reg)) + full.substr(close);
                 break;
             }
         }
@@ -5850,6 +5862,39 @@ bool StaleReadOf(const RunOut& a, const RunOut& b, int bit)
         const auto o = other.find(key);
         if (o == other.end() || n >= o->second.size() || o->second[n] == x.value) continue;
         if (slice(x)) return true;
+    }
+    return false;
+}
+// (area 3, A3-225) ...and whether run 'a' reads the word its own push of register 'bit' (8-14: r8-r14; 17, 18: GBR, VBR) wrote, by an
+// instruction other than that register's pop and before anything writes the word again, holding the entry value or a part of it: the text's
+// `unaff_r13` there is the saved word, rightly the entry value whatever a call changes in the register. Grammar 2 seed 10409168: function 0
+// pushes r13 last and calls a lent changer of r13 twice; each call reads its stack argument `@(0x24,r15)`, the push's word, and the second
+// call's `unaff_r13` comes after a call that may change r13 (A3-186's rule takes the first call's arguments only). Seed 12031425: function 0
+// pushes r9, calls a lent changer of r9, pops r9 and tail-jumps into that function, whose `mov.l @(8,r15),r1` reads the freed word (A3-212's
+// shape, where the refill of StaleReadOf cannot see it: the push wrote the word in both runs). The limit: a function that both reads its
+// saved word so and reads the changed register as its entry value is passed for that register.
+bool SavedWordRead(const Subject& subject, const RunOut& a, int bit)
+{
+    const uint32_t e = bit >= 8 && bit <= 14 ? a.init[bit] : bit == 17 ? a.initState[0] : bit == 18 ? a.initState[1] : 0u;
+    const uint16_t push = bit == 17 ? 0x4F13u : bit == 18 ? 0x4F23u : static_cast<uint16_t>(0x2F06u | bit << 4);
+    const uint16_t pop = bit == 17 ? 0x4F17u : bit == 18 ? 0x4F27u : static_cast<uint16_t>(0x60F6u | bit << 8);
+    auto slice = [e](const TraceRec& x) {
+        const uint32_t v = static_cast<uint32_t>(x.value);
+        return x.size == 4 ? v == e : x.size == 2 ? v == (e >> 16) || v == (e & 0xFFFFu)
+                                                  : v == (e >> 24) || v == ((e >> 16) & 0xFFu) || v == ((e >> 8) & 0xFFu) || v == (e & 0xFFu);
+    };
+    for (size_t i = 0; i < a.trace.size(); ++i)
+    {
+        const TraceRec& w = a.trace[i];
+        if (!w.write || w.depth != 0 || w.size != 4 || !InStack(w.addr) || static_cast<uint32_t>(w.value) != e || subject.WordAt(w.insn) != push)
+            continue;
+        for (size_t j = i + 1; j < a.trace.size(); ++j)
+        {
+            const TraceRec& x = a.trace[j];
+            if (x.addr + static_cast<uint32_t>(x.size) <= w.addr || x.addr >= w.addr + 4u) continue;
+            if (x.write) break;
+            if (subject.WordAt(x.insn) != pop && slice(x)) return true;
+        }
     }
     return false;
 }
@@ -8998,6 +9043,13 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (stale)
                     {
                         count("excluded.stale-stack-read.kept-read");
+                        continue;
+                    }
+                    bool saved = false;   // (A3-225)
+                    for (const RunOut& base : runs) saved = saved || (base.finished && base.perturbed < 0 && SavedWordRead(subject, base, k.bit));
+                    if (saved)
+                    {
+                        count("excluded.saved-word-read.kept-read");
                         continue;
                     }
                     add(std::string("kept-read:") + k.name, std::string("a function it calls was lent a signature that changes ") + k.name +
@@ -20140,6 +20192,102 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
             CHECK(rep.findings.empty() && (!sd.said || count(rep, "caution.said") > 0));
         }
+    }
+    // Area 3, A3-214 fix (`tools/a3_a3214/fixtures.src`). The caller is vCr8's (a local of 5, its address in r8, the call, 7 stored through r8,
+    // the local returned) and U (not lent) dispatches on r3 through a table whose case 0 clears r8: the walk of an unlent callee followed no
+    // switch (`jmp @r1` was a lost path), so the change was never recorded and `return 7;` had no caution where the runs with r3 = 0 return
+    // 5. tb: `and #3,r0` (a3_round28's); tbm: `mov #3,r1 ; and r0,r1`; tbg: compiled code's guard, `cmp/hi ; bf/s L ; nop ; bra default`,
+    // with half-word offsets (`mov.w @(r0,r1),r1 ; add r1,r0 ; jmp @r0`); tbh: the generator's guard, `cmp/hs ; bt default`, and `braf`;
+    // tbw: the guard's bound set before an earlier branch, read from the walk's own constant (0601FA80/008's shape); tbu: a bound lost
+    // through a stack word, so the table is not bounded and the walk fails closed (the caution says the table). Each as
+    // printed: no finding, the caution required and said; with every caution taken out, `caution-unsaid`. Controls: tbc (no case changes r8)
+    // says no caution; tbuc (tbu's, no case changes r8) says the table's caution though the runs do not need it (fail closed, no finding).
+    // A3-223: the caller's own switch the engine does not recover (a signed guard), whose cases read the register the callee changed (grammar
+    // 2 seeds 12033773 and 12027075, which also needs A3-214's reading of function 1's table): the caution, no finding.
+    {
+        const ModulePin cases[] = {
+            { "A3-214 tb", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+                           "6033 C903 6103 4108 C701 011E 412B 0009 0600 9040 0600 9042 0600 9042 0600 9042 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/46", nullptr, "1,0", "0,100", nullptr },
+            { "A3-214 tbm", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+                           "6033 E103 2109 4108 C701 011E 412B 0009 0600 9040 0600 9042 0600 9042 0600 9042 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/46", nullptr, "1,0", "0,100", nullptr },
+            { "A3-214 tbg", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+                           "E103 3316 8F02 0009 A00D 0009 6133 311C C702 011D 301C 402B 0009 0009 0008 000A 000A 000A E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/4a", nullptr, "1,0", "0,100", nullptr },
+            { "A3-214 tbh", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+                           "E104 3312 890B 6133 311C C702 011D 0123 0009 0009 000A 000C 000C 000C E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/42", nullptr, "1,0", "0,100", nullptr },
+            { "A3-214 tbw", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+                           "E503 6133 2118 8B00 0009 3156 890D 4108 C701 011E 412B 0009 0600 9048 0600 904A 0600 904A 0600 904A E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/4e", nullptr, "1,0", "0,100", nullptr },
+            { "A3-214 tbu", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+                           "6033 C903 2F06 61F6 4108 C702 011E 412B 0009 0009 0600 9044 0600 9046 0600 9046 0600 9046 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/4a", nullptr, "1,0", "0,100", nullptr },
+        };
+        for (const ModulePin& m : cases)
+        {
+            const Report clean = EvaluateSubject(d, ModuleSubject(m), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(m), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            const std::string flat = std::regex_replace(clean.text, std::regex("\\s+"), " ");   // (the comment is broken over lines)
+            const bool table = flat.find("jumps through a table the analysis cannot bound") != std::string::npos;
+            std::printf("pin '%s': as printed %zu finding(s), required %d, said %d (for the table %d); cautions taken out: caution-unsaid %d\n", m.name,
+                        clean.findings.size(), count(clean, "caution.required"), count(clean, "caution.said"), int(table), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged &&
+                  table == (std::string(m.name) == "A3-214 tbu"));
+        }
+        const ModulePin controls[] = {
+            { "A3-214 tbc", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+                           "6033 C903 6103 4108 C701 011E 412B 0009 0600 9040 0600 9042 0600 9042 0600 9042 E100 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/46", nullptr, "1,0", "0,100", nullptr },
+            { "A3-214 tbuc", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+                           "6033 C903 2F06 61F6 4108 C702 011E 412B 0009 0009 0600 9044 0600 9046 0600 9046 0600 9046 E100 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+              "0/0/20,20/20/4a", nullptr, "1,0", "0,100", nullptr },
+        };
+        for (const ModulePin& m : controls)
+        {
+            const Report clean = EvaluateSubject(d, ModuleSubject(m), true);
+            const bool said = clean.text.find("this call may change r8") != std::string::npos;
+            std::printf("pin '%s': %zu finding(s), caution %s\n", m.name, clean.findings.size(), said ? "said" : "not said");
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && said == (std::string(m.name) == "A3-214 tbuc"));
+        }
+        for (const uint64_t seed : { 12027075ull, 12033773ull })
+        {
+            const Report rep = Evaluate(d, MakeV2(seed), false);
+            std::printf("pin 'A3-214/A3-223 grammar 2 seed %llu': %zu finding(s), caution said %d\n", static_cast<unsigned long long>(seed), rep.findings.size(),
+                        count(rep, "caution.said"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(rep.findings.empty() && count(rep, "caution.said") > 0);
+        }
+    }
+    // A3-224 and A3-225 (the kept-read check, A3-3's): a lent callee that may change r13 (r9) and a text that reads the register's saved word
+    // as its entry value, rightly. Grammar 2 seed 10409168: function 0 pushes r13 last and calls the changer twice, each call handed the push's
+    // word as its stack argument (`unaff_r13`), the first call's argument list broken over two lines (A3-186's rule read one line). Seed
+    // 12031425: function 0 pushes r9, calls the changer, pops r9 and tail-jumps into it, whose `mov.l @(8,r15),r1` reads the freed word. Both
+    // excused by the runs' reads of the push's word (SavedWordRead), no finding; and the argument rule over lines.
+    {
+        for (const uint64_t seed : { 10409168ull, 12031425ull })
+        {
+            const Report rep = Evaluate(d, MakeV2(seed), false);
+            std::printf("pin 'A3-224/A3-225 grammar 2 seed %llu': %zu finding(s), lent.changed checked %d, excused %d\n", static_cast<unsigned long long>(seed),
+                        rep.findings.size(), count(rep, "lent.changed.checked"), count(rep, "excluded.saved-word-read.kept-read"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(rep.findings.empty() && count(rep, "lent.changed.checked") > 0 && count(rep, "excluded.saved-word-read.kept-read") > 0);
+        }
+        const std::set<uint32_t> changers = { 0x0600906Cu };
+        const std::string head = "xunknown4 func_0x06009000(void)\n{\n  int4 unaff_r13;\n";
+        // the first changer call's argument list over two lines: dropped
+        CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  func_0x0600906c(param_1,param_2,\n                  unaff_r13);\n  return 0;\n}\n", "r13", &changers),
+                         "unaff_r13"));
+        // ...a read after it on the next line is still found
+        CHECK(WholeWord(SavesBeforeCallsDropped(head + "  func_0x0600906c(param_1,\n                  param_2);\n  return unaff_r13;\n}\n", "r13", &changers),
+                        "unaff_r13"));
     }
 }
 
