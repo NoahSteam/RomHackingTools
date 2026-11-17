@@ -1464,6 +1464,12 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
         {
             const WordValue pn = before(n), pm = before(m);
             if (pn.kind == WordValue::Param && pm.kind == WordValue::Param && pn.value == pm.value) return NumberValue(0);
+            // (A7-193: `xor r4,r1` with r1 0, a `dt` loop's exit, is a copy of the input in r4: `sub r4,r1` after it is 0; grammar 2 seed 10609398)
+            if (!A7RuleOff(193))
+            {
+                if (pn.kind == WordValue::Param && number(pm, b) && b == 0) return pn;
+                if (pm.kind == WordValue::Param && number(pn, a) && a == 0) return pm;
+            }
             // (A7-121: `xor Rm,Rn` of a register and its complement -- every maker of Rn a `not Rm,Rn` and Rm made by the same
             // instructions at both -- is all ones; grammar 2 seed 6604995)
             const auto complementOf = [&](int holder, int other) {

@@ -18781,6 +18781,50 @@ void TestArea7P2FixPins(Sh2Decompiler& d)
     }
 }
 
+// Area 7, round 27 (A7-191 to A7-195): the routed and swept seeds, whole. A7-191: a plain statement beside a slot store's (`xRam04000000 =
+// 0x9fffffff;` of the `tas.b` after `mov.l r2,@r6`) is the store's own, the frame local's copy at another store is a copy materialised there
+// (product, grammar 1 10407973 and 10408035, grammar 2 12033005); the oracle takes a frame array's address at the `add -0x10,r15` for the
+// instruction's own work (rule 191, grammar 2 12044532). A7-192: a conversion operand's rest at a dead store; the zero of a chain of
+// shifts and extensions (rule 192: 10404665, 10408801). A7-193: `and`/`or #imm,r0` as a fixed point round a loop, `xor` of a zero and an input
+// (12021967, 10609398, rule 193). A7-194: a dead store's own statement of the input (10602101, rule 194). A7-195: the frame slot an indexed
+// store writes and a store through an input pointer that does not (10505656, rule 195).
+void TestArea7Round27Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 1, 10407973 }, Whole{ 1, 10408035 }, Whole{ 1, 10602101 }, Whole{ 2, 12033005 }, Whole{ 2, 12044532 }, Whole{ 2, 10404665 },
+                            Whole{ 2, 10408801 }, Whole{ 2, 10505656 }, Whole{ 2, 12021967 }, Whole{ 2, 10609398 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 27: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* volatileRange;
+        const char* poll;
+    };
+    const Shrunk kShrunk[] = {
+        { "A7-194 grammar 1 seed 10602101 shrunk", "D608 2218 8B0C 8802 8F08 2620 2620 1507 2640 D605 E118 2612 000B 0009 000B 0009 AFF3 0009 C000 0010 0600 3004", nullptr,
+          nullptr, nullptr },
+    };
+    for (const Shrunk& p : kShrunk)
+    {
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -20675,6 +20719,7 @@ void TestGenerated()
         RUN(TestArea7Round25Pins(d));
         RUN(TestArea7Round26Pins(d));
         RUN(TestArea7P2FixPins(d));
+        RUN(TestArea7Round27Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
