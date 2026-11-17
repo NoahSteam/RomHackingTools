@@ -10210,6 +10210,43 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
                 if (t.addr == at && t.begin < t.end) t.materialised = true;
         }
     }
+    // A7-191: the same for a frame local. `iStack_18 = extraout_r3;`, the statement of the frame store `mov.l r3,@(0,r15)` (named by an empty
+    // token there), has the engine's copy drawn at the store before it, `mov.l r1,@(0x30,r2)` through a pointer, whose own statement is
+    // another line (`*(uint4 *)(param_3 + 0x30) = (uint4)uVar1;`): its tokens at that store are a copy materialised there (A7-25), which
+    // the way back offers after the store's own line (the oracle's A7-30 reading); grammar 2 seed 12033005
+    for (size_t line = 0; line < lines.size(); ++line)
+    {
+        Line& l = lines[line];
+        const std::string& text = l.text;
+        if (!plainCopy(text)) continue;
+        const size_t nb = text.find_first_not_of(' '), eq = text.find(" = ");
+        if (text.find("Stack_", nb) == std::string::npos || text.find("Stack_", nb) > eq) continue;
+        const auto isStore = [&flow](uint32_t a) { return flow.accessesByInsn.find(std::make_pair(a, true)) != flow.accessesByInsn.end(); };
+        bool namesOther = false;
+        std::set<uint32_t> drawnStores;
+        for (const Token& t : l.tokens)
+        {
+            if (!t.addr || !isStore(t.addr)) continue;
+            if (t.begin == t.end) namesOther = true;
+            else drawnStores.insert(t.addr);
+        }
+        if (!namesOther) continue;
+        for (uint32_t at : drawnStores)
+        {
+            bool named = false;
+            for (const Token& t : l.tokens) named = named || (t.addr == at && t.begin == t.end);
+            if (named) continue;
+            bool own = false;   // (another line draws the store as its own statement)
+            for (size_t other = 0; other < lines.size() && !own; ++other)
+            {
+                if (other == line) continue;
+                for (const Token& u : lines[other].tokens) own = own || (u.addr == at && u.begin < u.end && !u.materialised);
+            }
+            if (!own) continue;
+            for (Token& t : l.tokens)
+                if (t.addr == at && t.begin < t.end) t.materialised = true;
+        }
+    }
 }
 
 // A7-135: a sign or zero extension the engine made itself -- after the flow, at the first address of a block -- as the twin of one the

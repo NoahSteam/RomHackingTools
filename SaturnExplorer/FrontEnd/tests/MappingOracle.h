@@ -848,7 +848,32 @@ inline WordValue SlotBefore(const sfe::decomp::DecompileResult& r, const std::fu
                 todo.push_back(p);
                 continue;
             }
-            if (reg < 0 || !BasedAccess(w, true, sbase, soff, ssize) || sbase != base) return WordValue();
+            bool based = reg >= 0 && BasedAccess(w, true, sbase, soff, ssize);
+            // (A7-195: `mov.w r0,@(r0,r15)`, the indexed store of a slot whose offset r0 holds as a number the words give: `mov #2,r0 ; mov.w
+            // r0,@(r0,r15) ; ... ; mov.b @(2,r15),r0`; grammar 2 seed 10505656)
+            if (!based && reg >= 0 && !A7RuleOff(195) && (w >> 12) == 0x0 && (w & 0xF) >= 4 && (w & 0xF) <= 6)
+            {
+                const WordValue ix = RegisterBefore(r, word, into, p, 0, depth + 1);
+                if (ix.kind == WordValue::Number)
+                {
+                    sbase = static_cast<int>((w >> 8) & 0xF);
+                    soff = static_cast<int64_t>(static_cast<int32_t>(ix.value));
+                    ssize = 1 << ((w & 0xF) - 4);
+                    based = true;
+                }
+            }
+            // (A7-195: a store through a pointer that is a parameter of the function -- `mov.l r0,@(r0,r6)` with r6 the input -- does not write
+            // the frame: the engine keeps the stack's slots apart from what an input points to, as the GBR stores above; grammar 2 seed 10505656)
+            if (!A7RuleOff(195) && base == 15 && reg >= 0)
+            {
+                const int other = based ? sbase : ((w >> 12) == 0x0 && (w & 0xF) >= 4 && (w & 0xF) <= 6) ? static_cast<int>((w >> 8) & 0xF) : -1;
+                if (other >= 0 && other != 15 && RegisterBefore(r, word, into, p, other, depth + 1).kind == WordValue::Param)
+                {
+                    todo.push_back(p);
+                    continue;
+                }
+            }
+            if (!based || sbase != base) return WordValue();
             if (soff + ssize <= offset || offset + size <= soff)
             {
                 todo.push_back(p);
@@ -2269,7 +2294,16 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 nameOfCopyAtStore = nameOfCopyAtStore || !own;
                             }
                     }
-                    const bool copy = plain && !isBranch(t.addr) && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore || readAtStore || nameOfCopyAtStore) && !castAtExtension &&
+                    // (A7-191: a frame array's address, `pxStack_24 = axStack_20;` with `axStack_20` at the `add -0x10,r15` (or the `mov r15,Rn`) that makes
+                    // it, is that instruction's own work, as the load of a pointer to a global is (A7-174); grammar 2 seed 12044532)
+                    bool frameAddressHere = false;
+                    if (!A7RuleOff(191) && plain && assign != std::string::npos && t.begin > assign && t.end <= r.lines[li].text.size() && word(t.addr, aw))
+                    {
+                        const std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
+                        frameAddressHere = operand.size() > 8 && operand[0] == 'a' && operand.find("Stack_") != std::string::npos &&
+                                           ((aw >> 8) == 0x7F || ((aw & 0xF00F) == 0x6003 && ((aw >> 4) & 0xF) == 15));
+                    }
+                    const bool copy = plain && !isBranch(t.addr) && !frameAddressHere && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore || readAtStore || nameOfCopyAtStore) && !castAtExtension &&
                                       !ownStoreHere && !readHere && !inputAtEntry && !addressHere;
                     // (A7-157: a merge of a byte store into its word, `iRam26001000 = CONCAT11(in_r2,(xunknown1)iRam26001000);`, drawn at the
                     // literal's load of the pointer a later store goes through, naming the byte store before it: the engine's copy of the store's
@@ -2565,9 +2599,13 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 }
             for (uint32_t x : named)
                 if (valued.count(x)) ownName.insert(x);
+            std::set<uint32_t> castOperandAt;   // (A7-192: the stores a conversion's operand was excused at, A7-169)
             for (const Token& t : r.lines[li].tokens)
                 if (t.addr && dead.count(t.addr) && !ownName.count(t.addr))
                 {
+                    // (A7-192: the rest of that operand -- `(uint4)(uint1)((uint8)xVar2 >> 0x20)` with `xVar2`, `>>` and `0x20` drawn at the byte store
+                    // that narrows the call's output: the narrowing's work as a whole; grammar 2 seed 10404665)
+                    if (!A7RuleOff(192) && castOperandAt.count(t.addr) && t.begin >= eq + 3) continue;
                     // (A7-169: the operand of a conversion the line prints, `(int2)param_1` with `param_1` at `mov.w r1,@(r0,r6)`, is the work of the
                     // store that narrows the value, not the statement of that store: the conversion is made at the first store of the word, which
                     // the second writes over; grammar 1 seed 9406270)
@@ -2629,7 +2667,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         bool cast = open != std::string::npos && open + 1 < t.begin - 1;
                         for (size_t k = open == std::string::npos ? 0 : open + 1; cast && k + 1 < t.begin; ++k)
                             cast = std::isalnum(static_cast<unsigned char>(lt[k])) || lt[k] == '_' || lt[k] == ' ' || lt[k] == '*';
-                        if (cast) continue;
+                        if (cast)
+                        {
+                            castOperandAt.insert(t.addr);
+                            continue;
+                        }
                     }
                     ++a.storeDead;
                     problem("store-dead", "line " + std::to_string(li) + " '" + r.lines[li].text + "' names the store at " + MappingHex(t.addr) +
@@ -4233,6 +4275,58 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         all = sameNumber((w >> 8) == 0xCB ? (v | (w & 0xFFu)) : (v & (w & 0xFFu)));
                     }
                     if (all) computes = true;
+                }
+                // (A7-192: an instruction that maps 0 to 0 -- an extension, a shift, a move, `neg`, a swap -- of a register every maker of which is a
+                // 0 (a number the words make, `xor Rn,Rn`) or such an instruction of the same chain, round a loop: `mov #0,r2 ; L: shll2 r2 ;
+                // extu.b r2,r2 ; dt r3 ; bt X ; bra L ; X: extu.b r2,r1` is 0 whichever way r2 comes; the engine prints the `iVar1 = 0;` at the
+                // join's first instruction; grammar 2 seed 10408801)
+                if (!computes && want == 0 && !A7RuleOff(192))
+                {
+                    const auto zeroMap = [](uint16_t x, int& src) {
+                        const unsigned lo = x & 0xFu;
+                        if ((x >> 12) == 0x6 && (lo == 0x3 || lo == 0x8 || lo == 0x9 || lo == 0xB || lo == 0xC || lo == 0xD || lo == 0xE || lo == 0xF))
+                        {
+                            src = static_cast<int>((x >> 4) & 0xF);
+                            return true;
+                        }
+                        const unsigned f = x & 0xF0FFu;
+                        if (f == 0x4000 || f == 0x4001 || f == 0x4020 || f == 0x4021 || f == 0x4004 || f == 0x4005 || f == 0x4008 || f == 0x4009 ||
+                            f == 0x4018 || f == 0x4019 || f == 0x4028 || f == 0x4029)
+                        {
+                            src = static_cast<int>((x >> 8) & 0xF);
+                            return true;
+                        }
+                        return false;
+                    };
+                    int srcReg = 0;
+                    if (zeroMap(w, srcReg))
+                    {
+                        std::set<std::pair<uint32_t, int>> active;
+                        std::function<bool(uint32_t, int, int)> zeroFixed = [&](uint32_t before, int reg, int depth) -> bool {
+                            std::set<uint32_t> makers;
+                            if (depth > OracleDepth() || !RegisterMakers(r, word, sources, before, reg, makers) || makers.empty() || makers.count(0)) return false;
+                            if (!active.insert(std::make_pair(before, reg)).second) return true;
+                            bool all = true;
+                            for (uint32_t m : makers)
+                            {
+                                uint16_t mw = 0;
+                                uint32_t v = 0;
+                                int ms = 0;
+                                if (!word(m, mw)) all = false;
+                                else if (made(m, mw, v)) all = v == 0;
+                                else if (((mw >> 12) == 0x2 || (mw >> 12) == 0x3) && (mw & 0xF) == ((mw >> 12) == 0x2 ? 0xA : 0x8) && ((mw >> 8) & 0xF) == ((mw >> 4) & 0xF) &&
+                                         static_cast<int>((mw >> 8) & 0xF) == reg)
+                                    all = true;
+                                else if (zeroMap(mw, ms) && !((mw >> 12) == 0x6 && static_cast<int>((mw >> 8) & 0xF) != reg) && (((mw >> 12) == 0x6) || ms == reg))
+                                    all = zeroFixed(m, ms, depth + 1);
+                                else all = false;
+                                if (!all) break;
+                            }
+                            active.erase(std::make_pair(before, reg));
+                            return all;
+                        };
+                        if (zeroFixed(at, srcReg, 0)) computes = true;
+                    }
                 }
                 // (A7-139: `mov.b @Rk,Rn` or `mov.w @Rk,Rn` of the first bytes of the word `mov.l Rs,@Rk` stored before it, when every maker of Rs is
                 // a `movt` (0 or 1): the high bytes are 0, whatever the T. Up to 10 instructions back, the conditional branches among them forward
