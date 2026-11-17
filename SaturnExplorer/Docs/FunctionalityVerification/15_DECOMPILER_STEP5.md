@@ -22391,3 +22391,96 @@ tbw (added after) fails on master's binary (`caution-unsaid`); the walk's consta
 * **Area 7:** grammar 2 seeds 12044532 (`n:`/`v:map-way-back`, A7-191's class) and 10505656 (`n:map-const-join`, A7-192's class), both on master too. Replay `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`; not shrunk.
 * **Area 11:** grammar 2 seed 12047405 (`emulator-error` at 0x06021100 after function 0's `mov.l r5,@-r15` between its calls), on master too: A11-35's shape, another instance.
 * **Area 3 (next fixer):** A3-226 (P2, open).
+## Area 7, P2 fixes (A7-189, A7-190)
+
+Fixer, branch `review/7-p2fix` from master `7f9645d5` (area 7's round 26 merged). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). The brief: area 7's open P2 rows, A7-189's whole seed and A7-190, and the two routed seeds (grammar 2 12021967 `map-const-join`, grammar 1 10300327 `v:map-way-back`); then sweeps of grammars 1 and 2 from 10,600,001. Host changes in `Sh2Decompiler.cpp` (`AddFrameStoreTokens`: A7-189; `RetargetHoistedConversions`: A7-190), an oracle rule in `MappingOracle.h` (`SE_A7_RULE_OFF=190`), pins in `Sh2GeneratedTests.cpp`. **No engine patch: 0091 and 0095 stay free.** Scripts: `Docs/Decompiler/tools/a7_p2fix/` (`sweep.sh`, `mutation.sh`, `corpus.sh`, `verify_tokens.py`, `final.sh`). Backups on `backup/review-7-p2fix`; the mutation build was this tree with a temporary switch of each product change (`SE_P2_OFF189`, `SE_P2_OFF190` the operand, `SE_P2_OFF190c` the copy; all three set is master's behaviour), not in the final tree and not kept as a commit.
+
+| Row | P | Outcome |
+|---|---|---|
+| A7-189 | P2 | **fixed, product** (the whole seed): a statement of the engine's join of the input and values computed from it shows the store of the register that holds exactly that join |
+| A7-190 | P2 | **fixed, product and oracle**: an operand that is a global as a store that may alias it left it is drawn at the load that read it; a register variable's copy of such a global made at a store is drawn at the next read, or marked a copy materialised there; the oracle's way-back rule now sees such a copy (rule 190) |
+| 10300327 (routed) | P2 | **fixed** with A7-190: the same class (in A7-190's row) |
+| 12021967 (routed) | P3 | **filed open, oracle** as A7-193: `and #0xe2,r0` at a join makes the 0 the line shows; the oracle does not evaluate it |
+| A7-193 | P3 | **filed open** (routed seed and sweep, grammar 2 10609398): the oracle's `const-join` at a join it does not evaluate |
+| A7-194 | P3 | **filed open** (sweep, grammar 1 10602101): the oracle's `store-dead` on a kept dead store's own statement of the input |
+
+Both P2 rows are fixed. The sweeps found no P2: one area 3 seed (routed) and two P3 oracle rows (filed).
+
+### 1. A7-189: the join of the input (grammar 1 seed 10407403)
+
+Round 26 made a store of a whole copy of the input a store of the input; the whole seed stayed open. The shrinker, run again on master, gives a program of the whole seed's shape: `mov.l lit,r6 (0x26001028) ; cmp/pl r3 ; bt/s L ; mov r0,r2 (slot: both ways) ; L: mov.w r0,@r6 ; tst #0x40,r0 ; bt M ; mov #0xb,r0 ; and.b #0x81,@(r0,gbr) ; add r0,r2 ; M: tst r0,r1 ; bt S ; cmp/eq #2,r0 ; bt/s T ; S: mov.w r2,@r6 (slot, entered by the bt too)`. r2 is in_r0, or in_r0 + 0xb when the `if` runs; the engine merges r2 under the input's name (`in_r0 = in_r0 + 0xb;`) and prints the second store as `xRam26001028 = (xunknown2)in_r0;` at the `bt` 0x06009016, before the paths part (the store is on both). The first store's own line is `xRam26001028 = (int2)in_r0;` at 0x06009008. `AddFrameStoreTokens` searched back from the `bt` for a store of the bytes that "may" show the value: `mov.w r0,@r6` stores in_r0, which is one of the join's paths, so it was taken and the line was drawn there; `mov.w r2,@r6` (0x0600901C) was on no line (`map-store-twin`). In the whole seed the same at 0x06009012 and 0x06009026 (r2 = in_r0 by the slot `mov r0,r2` at 0x0600900C, or + 0xb by `add r0,r2` at 0x0600901C).
+
+**Fix**: for a statement (a copy, a cast or a low SUBPIECE) of a MULTIEQUAL in a register whose paths are input registers and flow ops only (no number, memory, call or op of the engine's own), the stores of the variable whose stored register (whole, its low bytes stored) holds exactly that join on every path -- each last writer one of the join's ops, or a whole copy of an input register made before the input was written; a path to the entry keeps the input itself -- are the statement's when the search took none of them. The line is drawn at `mov.w r2,@r6` (0x0600901C shrunk, 0x06009026 whole), the store that writes r2 on both ways; the way back from it answers this line. Read against the disassembly: on the path through the `if`, r2 = in_r0 + 0xb, which `mov.w r0,@r6` never wrote.
+
+### 2. A7-190: the global as a store that may alias it left it (grammar 1 seed 10403949)
+
+Shrunk: `mov.l lit,r7 (0x26002388) ; mov.w r0,@(0x1c,gbr) ; mov.w r0,@(0x12,gbr) ; cmp/eq #2,r0 ; bt/s L ; mov.w @r7,r1 (slot) ; ... ; L: ... mov.b r1,@r6` (r6 0xfffffe71, SH2_DRCR0, in a `bf/s` slot run on both ways). The engine's value of the global at the read is the INDIRECT the GBR store makes (it may alias); the narrowing for the byte store is printed `SH2_DRCR0 = (char)xRam26002388;` (twice, one per path) and was hoisted to the `bf` 0x06009012. `RetargetHoistedConversions` walked the value back to that INDIRECT and took it for "a value the engine computed at that instruction" (the branch that gives the instruction of an op the engine made): the operand was drawn at `mov.w r0,@(0x12,gbr)` (0x06009004), the read `mov.w @r7,r1` (0x0600900A) was on no line, and the way back from the GBR store answered this line before its own `*(int2 *)(unaff_gbr + 0x12) = (int2)in_r0;`.
+
+**Fix (a), the operand**: an INDIRECT of memory caused by a store (a STORE op, or the op the engine made at an instruction the flow stores at: a store to a known address, a volatile write's CALLOTHER) is the global as that store left it. When that is the operand's only value, its drawn tokens go to the instructions that last wrote the register each store drawn on the line stores, when each is a load (or the extension `mov.w` makes of it) of that global, checked by the load's pointer (FlowPointer); one on each path, the lowest drawn and an empty token at each other; else to the store, as before. Among other paths' values the global's path names nothing (A7-179's rule). `xRam26002388` is drawn at `mov.w @r7,r1` (0x0600900A shrunk, 0x06009030 whole).
+
+**Fix (b), the copy** (the whole seed, the request with the mailbox marked volatile): the engine also makes a register variable's copy of the global at the GBR store, `xVar2 = xRam26002388;` drawn wholly at 0x06009024, used by `SH2_DRCR0 = (char)xVar2;`. That store makes nothing of the copy; the way back from it answered the copy first. A copy of a global into a variable that is no memory, at a store that does not write that global: when the value is that store's INDIRECT, its drawn tokens go to the nearest read of the global after the store on every path (FlowNextReads, A7-59's rule for a copy at a call), `mov.w @r7,r1` (0x0600900C shrunk); otherwise they stay, marked a copy materialised there (A7-57's mark), which the way back offers after the store's own line. Not at a store of the global itself (the engine's copy of the value it writes over, `uVar3 = uRam26001020;` at `mov.b r3,@r6` into its first byte, grammar 1 seed 10605046, stays as it was), nor a frame word (the copies of frame locals at a store, hwram007 0x060126DA, are A7-11's and the oracle's rule does not take them).
+
+**The oracle (rule 190)**: the way-back rule took such a copy's name and `=` at the store for the store's own statement (a line that draws an instruction and names no store is its own), so it saw nothing with (b) off. It now takes the whole line of a bare copy (`V = W;`) into a variable that is no global or frame word, whose global operand is drawn at a store that does not write that global, for a copy materialised there. A cast is the store's narrowing (`xVar1 = (xunknown1)uRam06001034;` at `mov.b r0,@(0x4,gbr)`, grammar 1 seed 10600860) and a piece of a global (`xRam06001030._2_2_ = ...`, 10603134) is its global: neither is taken. On the first build, the sweep of grammar 1 from 10,600,001 gave 23 failing seeds, 22 of them this rule's: 11 its own reach (the cast, the piece: narrowed), 11 the product's (a volatile write's CALLOTHER: 10601820 and five more; a copy at a later store of an earlier store's INDIRECT: 10605650, 10607599, 10608280; a join of such INDIRECTs: 10607620, 10608744): (b) as described covers them. The second build's sweep then gave four (10602334, 10602957, 10605046, 10607108): the mark at a store of the global itself, now left alone. Grammar 1 specials seed 6700393 (a round 14 pin) is the class too: `uVar3 = uRam2600103e;` at `mov.b r2,@(r0,r5)`, read by `mov.w @(r0,r7),r2` past a `bt` the engine knows is never taken (r1 = -0x16, `cmp/pl r1`) and the flow does not: no read on every path, so the mark.
+
+### 3. The routed seeds
+
+**10300327** (grammar 1, `v:map-way-back`, the range marked volatile): shrunk `mov.l lit,r6 (0x26002300) ; ... mov.w @(0,gbr),r0 ; mov.b r0,@(9,r5) ; mov #0x14,r0 ; mov.l @(r0,r6),r1 ; ... mov.w r1,@r6`: `xRam26002300 = (int2)xRam26002314;` drew `xRam26002314` at `mov.b r0,@(0x9,r5)` (0x06009008), a store that may alias it, not at `mov.l @(r0,r6),r1` (0x0600900C, r6 + 0x14 = 0x26002314). A7-190's class (P2, the way back from the store answered this line first); fixed by (a): the operand is at 0x0600900C. Filed in A7-190's row.
+
+**12021967** (grammar 2, `map-const-join`, `n:` and `v:`): shrunk `mov #0x14,r0 ; ... ; mov #1,r3 ; bra L ; nop ; M: and #0xe2,r0 ; L: dt r3 ; bf M ; mov.l r0,@(0x1c,gbr)`: the engine's `while (iVar3 = iVar3 + -1, iVar3 != 0) { xVar1 = 0; }` draws `xVar1 = 0;` at `and #0xe2,r0` (0x06009018), the loop's join. It makes 0 on every path: 0x14 & 0xe2 = 0 on the way in, 0 & 0xe2 round the loop. The oracle's `const-join` does not evaluate `and #imm,r0` from the numbers the edges bring. The product is right: P3, filed as A7-193 (open, oracle), with the sweep's 10609398 (`param_1 = 0;` at `sub r4,r1`, r1 = r4 by `xor r4,r1` after a `dt` loop left r1 0).
+
+### 4. The sweeps
+
+`sweep.sh`, canary and shrink off, one after the other, not beside ctest, on the final mutation build (switches unset):
+
+| Run | Result |
+|---|---|
+| grammar 1, 10,000 from 10,600,001 | **1 failing seed, 2 findings**: 10602101 (`n:`/`v:map-store-dead`, A7-194, P3, the same on master) |
+| grammar 2, 10,000 from 10,600,001 | **2 failing seeds, 2 findings**: 10609398 (`n:map-const-join`, A7-193, P3, the same on master); 10605744 (`n:caution-unsaid`, the call at 0x0600906E of 0x06009098 comes back with gbr changed; area 3, the same on master: routed) |
+
+(The first two builds' sweeps, section 2, are the rule 190 seeds now right.) No P2 among them; none is a wrong printed value as far as the mapping goes.
+
+### 5. Pins and mutation
+
+`TestArea7P2FixPins` (`Sh2GeneratedTests.cpp`): grammar 1 seeds 10407403, 10403949, 10300327, 10601820, 10605650, 10607620 whole; the shrunk words of A7-189 (the whole seed's join), A7-190 (the operand), A7-190 (the copy at the store, the mailbox marked volatile) and 10300327. `mutation.sh` on the mutation build (the pins of the default run, 687, and the whole seeds):
+
+| Switch | Pins with a finding |
+|---|---|
+| none (as built) | none: 687 pins, all passed |
+| `SE_P2_OFF189` | 10407403 and the A7-189 shrunk program (`map-store-twin`) |
+| `SE_P2_OFF190` (the operand) | 10403949, 10300327 and their shrunk programs (`map-way-back`) |
+| `SE_P2_OFF190c` (the copy) | 10403949, 10601820, 10605650, 10607620, the copy's shrunk program, and round 14's grammar 1 specials 6700393 (`map-way-back`) |
+| `SE_P2_OFF190c` and `SE_A7_RULE_OFF=190` | none: the oracle's new rule is what finds the copy |
+
+The whole seeds with their change off: 10407403 `n:map-store-twin` (the store 0x06009026 on no line); 10403949 `n:map-way-back` (the operand, 0x06009024) and, with the copy's change off, `v:map-way-back` (0x06009024); 10300327 `v:map-way-back` (0x06009034).
+
+### 6. The corpus
+
+`corpus.sh` ran both images with lending (each run dumps the image alone and lent) on the mutation build with the changes on and off (`SE_P2_OFF189=1 SE_P2_OFF190=1 SE_P2_OFF190c=1`, master's behaviour; the oracle's rule 190 stays on); `token_diff.py` (a7_review20) compares, `verify_tokens.py` checks every changed token against the instruction it now names (a moved token: a load whose pointer, walked back through the code before it, is the global the line names; a mark: a store, on a copy of a global). With the changes off the oracle's rule 190 reports the corpus's copies at stores as way-back violations, and the run fails in both images, alone and lent (it lists the first three of each, e.g. hwram007 0x0601902A: `xVar3 = xRam060572fc;` drawn at `mov.w r1,@r9`, 0x0601905A); with them on, none.
+
+| Image | Changed lines (marked materialised / moved to a read) | Tokens checked |
+|---|---|---|
+| hwram007 alone | 46 (30 / 16) | 136 ok |
+| hwram007 lent | 78 (55 / 23) | 232 ok |
+| hwram008 alone | 77 (43 / 34) | 223 ok, 2 read by hand |
+| hwram008 lent | 132 (77 / 55) | 380 ok, 4 read by hand |
+
+Every change is A7-190's: (b)'s marks are copies of globals the engine made at the push `sts.l pr,@-r15` of a prologue or at another store (`mov.l`, `mov.w`), with no read of the global on every path after it; (b)'s moves put a copy at the load a few instructions on that reads it (hwram007 0x06018C04 `xVar2 = xRam060572fc;` from `mov.w r1,@r10` to `mov.l @(r0,r1),r6`; 0x06020A54 `iVar1 = iRam060583b8;` from `mov.l r2,@r1` to `mov.l @r9,r3`; the verifier walked each load's pointer back to the global's literal); (a)'s moves put an operand at its read (hwram007 0x06006426 `iRam0603ad32 = (int2)uRam0603a9d0;`, A7-179's own example, from the `mov.w r3,@(r0,r14)` before to the two `mov.w @r1,r1` that read it, 0x060066D2 and 0x060066E4). The six read by hand are one change in hwram008 0x06047E2A (and its lent twin 0x06047E1C): `(int2)iVar8` in a loop, r3 the frame word `mov.l @(0x20,r14),r3` (0x06048046) read before the loop or `exts.w r1,r3` (0x060480A8) round it; the entry path was drawn at the store `mov.w r2,@(r0,r3)` (0x0604802E) that may alias the frame word (with an empty token at the other store 0x0604803E) and now names nothing, the loop's `exts.w` drawn: right. No A7-189 change reaches the corpus.
+
+### 7. Runs after the last code edit
+
+After the last code edit (`Sh2Decompiler.cpp`, `MappingOracle.h` and `Sh2GeneratedTests.cpp` as committed in `76a3e243`; only the record and the ledger changed after it), on its build, one run at a time (`final.sh`):
+
+| Run | Result |
+|---|---|
+| full `ctest -j2`, run alone | **117 of 117 passed** at the default timeout (327 s) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** (82 s) |
+| 20,000-seed matrix (canary on, every pin) | **failing seeds=0; findings=0** (the canary: 240 programs, 0 failing) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus, both images, `SE_GAME_LEND=1` | "all passed", every ledger count and mapping violation 0; missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**"; the four token dumps (92,960, 197,772, 262,637 and 438,816 lines) identical to the mutation build's with the changes on (section 6) |
+| sweeps (section 4) | grammar 1: 1 failing seed, 2 findings; grammar 2: 2 and 2 (filed or routed) |
+| lints | `check-literal-size.py` ok; no vendored file touched (the vendored lint not needed) |
+
+### 8. Routed
+
+* **Area 7 (next fixer):** A7-193 and A7-194 (P3, oracle, open); A7-191, A7-192 and A7-179's rest as before.
+* **Area 3:** grammar 2 seed 10605744 (`n:caution-unsaid`: the call at 0x0600906E, of 0x06009098 with no signature lent, comes back with gbr changed in the run of input mode 2), found by this round's sweep, the same with the round's changes off; not filed here.
