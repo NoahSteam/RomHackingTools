@@ -22484,3 +22484,58 @@ After the last code edit (`Sh2Decompiler.cpp`, `MappingOracle.h` and `Sh2Generat
 
 * **Area 7 (next fixer):** A7-193 and A7-194 (P3, oracle, open); A7-191, A7-192 and A7-179's rest as before.
 * **Area 3:** grammar 2 seed 10605744 (`n:caution-unsaid`: the call at 0x0600906E, of 0x06009098 with no signature lent, comes back with gbr changed in the run of input mode 2), found by this round's sweep, the same with the round's changes off; not filed here.
+
+## Area 7, round 27
+
+Fixer, branch `review/7-round27` from master `10aefa40`, RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). The brief: A7-191 to A7-194 and the routed seeds (grammar 2 12044532, 10505656), A7-179's rest if time allowed (not reached: still open, unchanged). Host change in `Sh2Decompiler.cpp` (`MarkMaterialisedReads`' A7-145 pass and a frame-local pass after it), oracle rules in `MappingOracle.h` (`SE_A7_RULE_OFF=191` to `195`), pins `TestArea7Round27Pins` in `Sh2GeneratedTests.cpp`. **No engine patch: 0096 stays free.** Scripts: `Docs/Decompiler/tools/a7_round27/final.sh` (the runs after the last edit, with the sweeps).
+
+| Row | P | Outcome |
+|---|---|---|
+| A7-191 | P3 | **fixed, product** (10407973, 10408035, 12033005) and **oracle** (12044532) |
+| A7-192 | P3 | **fixed, oracle** (10404665 `store-dead`, 10408801 `const-join`) |
+| A7-193 | P3 | **fixed, oracle** (12021967, and 10609398 of the same row) |
+| A7-194 | P3 | **fixed, oracle** (10602101) |
+| A7-195 | P3 | **new, fixed, oracle** (the routed 10505656 `const-join`) |
+| A7-196, 197, 198 | P3 | **filed open** (sweep, the same with the product changes off; not analysed) |
+| A7-179's rest | P3 | open, not reached |
+
+### 1. A7-191 (product, oracle)
+
+* **10407973 / 10408035**: shrunk, `bt/s L ; mov.l r2,@r6 (slot) ; tas.b @r6 ; ...` with the slot's store entered also by a `bra`: the engine prints `xRam04000000 = 0x9fffffff;` (the `tas.b`'s value, which sets bit 7 of the byte the slot stored) beside `xRam04000000 = 0x1fffffff;` (the slot store), both drawn at the slot store, the first naming the `tas.b`'s store with an empty token. The first came first in the way back from the slot store, the oracle wanted the store's own (the second). A7-145's pass marks such a copy (tokens at a store that another line draws as its own) but took "another line" for a non-plain one; it now takes a plain line too when that line names no store itself and the copy names the store of the very next instruction (the `tas.b`). Not further: A7-166's fixture (the slot's store of both paths, `xRam2600208c = 0x3e003e;` naming a store far on) must stay unmarked (`Sh2DecompilerTests` pin, found by the first full ctest).
+* **12033005**: `iStack_18 = extraout_r3;` (the frame word's statement, naming the store `mov.l r3,@(0,r15)` by an empty token) was drawn at the store `mov.l r1,@(0x30,r2)` before it, whose own statement is the line `*(uint4 *)(param_3 + 0x30) = (uint4)uVar1;`. A new pass after A7-145's marks such a frame local's copy at a store another line draws as its own (a copy materialised there, A7-25), so the way back offers the store's own line first.
+* **12044532** (oracle, rule 191): `pxStack_24 = axStack_20;` with `axStack_20`, a frame array's address, drawn at the `add -0x10,r15` (or the `mov r15,Rn`) that makes it: that instruction's own work (as A7-174's pointer load), not a copy materialised there.
+
+### 2. A7-192, A7-193, A7-194, A7-195 (oracle)
+
+* A7-192 (rule 192): 10404665 `store-dead`: `uVar1 = (uint4)(uint1)((uint8)xVar2 >> 0x20);` with `xVar2`, `>>` and `0x20` drawn at the byte store `mov.b r0,@r15` that narrows the call's output, which a later word store covers: A7-169 excused the first token (after the `)` of the cast), not the rest of the operand; it now excuses all tokens of that store after the `=`. 10408801 `const-join`: `iVar1 = 0;` at `extu.b r2,r1`, r2 0 on the way in and `shll2 ; extu.b` of itself round a loop: an instruction that maps 0 to 0 (extension, shift, move, `neg`, swap) of a register every maker of which is a 0 number, `xor Rn,Rn` or such an instruction of the same chain gives 0.
+* A7-193 (rule 193): `and #imm,r0` / `or #imm,r0` (A7-109's rule) counted the instruction itself, a maker of r0 round the loop, as an unknown: it is a fixed point when the line's number is (0 & 0xe2 = 0). And `xor Rm,Rn` of a 0 and an input is the input (as A7-78's `add`): 10609398 `xor r4,r1` after a `dt` loop left r1 0, then `sub r4,r1` is 0.
+* A7-194 (rule 194): A7-184's exception for a kept dead store's own statement when the line's value is the function's input (`xRamc0000010 = (char)in_r2;`) and no valued instruction draws it: the stored register's only maker is the entry (maker 0).
+* A7-195 (rule 195, new): the routed 10505656: `SlotBefore` (the frame slot a store wrote) took based stores only. Now `mov.b/w/l Rm,@(r0,Rn)` with r0 a number the words give is the store at Rn + r0, and a store through a register that is the function's input is no write of the frame (the engine keeps them apart, as the GBR stores). `mov.b @(0x2,r15),r0` after `mov #2,r0 ; mov.w r0,@(r0,r15)` is 0, and `or #0x34,r0` after it makes the line's 0x34.
+
+### 3. Pins and mutation
+
+`TestArea7Round27Pins`: grammar 1 seeds 10407973, 10408035, 10602101 and grammar 2 seeds 12033005, 12044532, 10404665, 10408801, 10505656, 12021967, 10609398 whole, and the shrunk A7-194 program. (The shrunk programs of the others need the shrinker's function table or do not fail as raw words; the whole seeds are the pins.) The default run with each oracle rule off (`SE_A7_RULE_OFF`, `SE_GENERATED_SEEDS=1 SE_GENERATED_CANARY=0`): 191: 12044532; 192: 10404665, 10408801; 193: 12021967, 10609398; 194: 10602101 whole and shrunk; 195: 10505656. The product change (a) and the frame pass have no switch: master's `Sh2Decompiler.cpp` with this round's oracle fails 10407973, 10408035 and 12033005 again (the same pins).
+
+### 4. The corpus
+
+`Sh2DecompilerTests` on both images with lending, token dumps of this build against a build of master's `Sh2Decompiler.cpp` with the round's tests (alone and lent): **no text changes**; the only differences are the `materialised` flag of 12 token lines (4 lines of 3 tokens) in each image alone and 36 (12 lines) lent, 18 flag changes in hwram008 lent by token, all one class: a frame local's copy `pxStack_28 = param_2;` (hwram007 0x06033D62; hwram008 0x0605DB30, 0x06074E28, 0x06074EAA, 0x06074F32) drawn at another frame store `mov.l r1,@(0x10,r14)` whose own statement is another line. The way back from those stores offers the store's own line first now. No other token moved.
+
+### 5. Runs after the last code edit (`final.sh`)
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` | **117 of 117 passed** (292 s; the first run failed `Sh2DecompilerTests`' A7-166 fixture: the adjacency restriction of section 1) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** (77 s) |
+| 20,000-seed matrix | **failing seeds=0; findings=0** (876 s) |
+| printed-C | **agrees=5196** (262 s) |
+| corpus, both images, `SE_GAME_LEND=1` | all passed, every ledger count 0; missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**" |
+| sweep grammar 1, 10,000 from 10,800,001 | **2 failing seeds, 2 findings**: 10802262 `n:map-conversion-branch` (A7-196), 10805383 `v:map-way-back` (A7-197) |
+| sweep grammar 2, 10,000 from 10,800,001 | **1 failing seed**: 10809419 `n:map-conversion-branch` (A7-196) |
+| sweep grammar 2, 10,000 from 12,060,001 | **2 failing seeds, 4 findings**: 12060407 `n:` and `v:map-copy-merge` (A7-198); 12060177 `n:table-case` twice (area 3 or 4, routed) |
+
+All five sweep seeds fail the same with master's `Sh2Decompiler.cpp` (this round's oracle): none is this round's. Lints: `check-literal-size.py` ok; no vendored file touched.
+
+### 6. Routed
+
+* **Area 7 (next fixer):** A7-196, A7-197, A7-198 (open, not analysed), A7-179's rest.
+* **Other area:** grammar 2 seed 12060177 (`n:table-case`: the jump table's indexes 3 and 4 go to 0x06009078, which does something the ledger lists, and the case for it holds no such code, no warning says cases may be missing); found by the sweep from 12,060,001, the same on master.

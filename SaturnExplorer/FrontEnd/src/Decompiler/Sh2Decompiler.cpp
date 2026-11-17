@@ -10196,9 +10196,13 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
                 // not a copy of another's; grammar 1 seed 10407973)
                 if (plainCopy(lines[other].text))
                 {
+                    // (only a line that names the store of the very next instruction, the `tas.b` beside the slot's store: a store's statement on
+                    // another path that names a store further on is its own, as the oracle's A7-166 takes it)
                     bool names = lines[other].text == text;
+                    bool nextStore = false;
                     for (const Token& u : lines[other].tokens) names = names || (u.addr && u.begin == u.end && isStore(u.addr));
-                    if (names) continue;
+                    for (const Token& u : l.tokens) nextStore = nextStore || (u.addr == at + 2 && u.begin == u.end && isStore(u.addr));
+                    if (names || !nextStore) continue;
                 }
                 const std::string& ot = lines[other].text;
                 const size_t ob = ot.find_first_not_of(' '), oa = ot.find(" = ");
