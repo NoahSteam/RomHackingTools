@@ -2611,6 +2611,18 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         }
                         if (same) continue;
                     }
+                    // (A7-194: the same when the value is the function's input, drawn at no instruction -- `xRamc0000010 = (char)in_r2;` named at the
+                    // second of `mov.b r2,@r6 ; mov.b r2,@r6 ; ... ; mov.b r4,@r6` with r2 not written since the entry: the store's own statement the
+                    // engine kept (a write through a pointer before the later store); grammar 1 seed 10602101)
+                    if (!A7RuleOff(194) && foldedStores.count(t.addr) && t.begin >= nb && t.end <= eq + 2 && valued.empty() && eq != std::string::npos &&
+                        (lt.find("in_r", eq) != std::string::npos || lt.find("param_", eq) != std::string::npos))
+                    {
+                        uint16_t sw = 0;
+                        int ssize = 0;
+                        const int reg = word(t.addr, sw) ? StoredRegister(sw, ssize) : -1;
+                        std::set<uint32_t> makers;
+                        if (reg >= 0 && RegisterMakers(r, word, into, t.addr, reg, makers) && makers.size() == 1 && *makers.begin() == 0) continue;
+                    }
                     if (!A7RuleOff(169) && t.begin >= nb && t.begin >= eq + 3 && t.begin >= 3 && lt[t.begin - 1] == ')')
                     {
                         size_t open = lt.rfind('(', t.begin - 1);
@@ -4208,6 +4220,15 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     {
                         uint16_t mw = 0;
                         uint32_t v = 0;
+                        // (A7-193: the instruction itself, a maker of its own r0 round a loop -- `mov #0x14,r0 ; ... ; M: and #0xe2,r0 ; L: dt r3 ; bf M`:
+                        // it makes the line's number again from that number when the line's number is a fixed point of it, 0 & 0xe2 = 0; with the other
+                        // makers each giving the number, the fixed point is what every pass makes; grammar 2 seed 12021967)
+                        if (all && m == at && !A7RuleOff(193))
+                        {
+                            all = sameNumber((w >> 8) == 0xCB ? (want | (w & 0xFFu)) : (want & (w & 0xFFu)));
+                            if (!all) break;
+                            continue;
+                        }
                         if (!all || !word(m, mw) || !made(m, mw, v)) { all = false; break; }
                         all = sameNumber((w >> 8) == 0xCB ? (v | (w & 0xFFu)) : (v & (w & 0xFFu)));
                     }

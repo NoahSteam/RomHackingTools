@@ -10190,7 +10190,16 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
             bool own = false;   // (another line, not a copy, whose assigned name is drawn at the store: the store's own statement)
             for (size_t other = 0; other < lines.size() && !own; ++other)
             {
-                if (other == line || plainCopy(lines[other].text)) continue;
+                if (other == line) continue;
+                // (A7-191: a plain statement of another path counts too when it names no store of its own, `xRam04000000 = 0x1fffffff;`
+                // of the slot's store beside `xRam04000000 = 0x9fffffff;` that the `tas.b` after it makes: the store's own statement,
+                // not a copy of another's; grammar 1 seed 10407973)
+                if (plainCopy(lines[other].text))
+                {
+                    bool names = lines[other].text == text;
+                    for (const Token& u : lines[other].tokens) names = names || (u.addr && u.begin == u.end && isStore(u.addr));
+                    if (names) continue;
+                }
                 const std::string& ot = lines[other].text;
                 const size_t ob = ot.find_first_not_of(' '), oa = ot.find(" = ");
                 if (ob == std::string::npos || oa == std::string::npos || oa <= ob || ot.compare(ob, oa - ob, name) != 0) continue;
