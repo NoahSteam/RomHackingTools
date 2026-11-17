@@ -400,6 +400,16 @@ inline uint32_t GlobalDelta(uint32_t a, uint32_t b)
     return (a >> 29) <= 1 && (b >> 29) <= 1 ? (a - b) & 0x07FFFFFFu : a - b;
 }
 
+// A global's name as the product prints it, `xRam26001030`: "Ram" and the address in eight hex digits at its end ('va' gets it, when given)
+inline bool IsRamGlobal(const std::string& name, uint32_t* va = nullptr)
+{
+    if (name.size() < 11 || name.compare(name.size() - 11, 3, "Ram") != 0 ||
+        name.find_first_not_of("0123456789abcdef", name.size() - 8) != std::string::npos)
+        return false;
+    if (va != nullptr) *va = static_cast<uint32_t>(std::strtoul(name.c_str() + name.size() - 8, nullptr, 16));
+    return true;
+}
+
 inline std::string MappingHex(uint32_t v)
 {
     char b[16];
@@ -2070,10 +2080,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         // (Core and the tests build as C++14, so no `if (init; cond)` here -- MSVC rejects it with C2429.)
                         const size_t piece = operand.find("._");
                         if (piece != std::string::npos) operand.resize(piece);
-                        if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
-                            operand.find_first_not_of("0123456789abcdef", operand.size() - 8) == std::string::npos)
+                        uint32_t va = 0;
+                        if (IsRamGlobal(operand, &va))
                         {
-                            const uint32_t va = static_cast<uint32_t>(std::strtoul(operand.c_str() + operand.size() - 8, nullptr, 16));
                             bool own = false;
                             for (const AccessFate& f : r.accessFates)
                                 own = own || (f.insn == t.addr && f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
@@ -2090,9 +2099,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         if (nb != std::string::npos && assign >= nb + 11)
                         {
                             const std::string name = lt.substr(nb, assign - nb);
-                            if (name.compare(name.size() - 11, 3, "Ram") == 0 && name.find_first_not_of("0123456789abcdef", name.size() - 8) == std::string::npos)
+                            uint32_t va = 0;
+                            if (IsRamGlobal(name, &va))
                             {
-                                const uint32_t va = static_cast<uint32_t>(std::strtoul(name.c_str() + name.size() - 8, nullptr, 16));
                                 for (const AccessFate& f : r.accessFates)
                                     ownStoreHere = ownStoreHere || (f.insn == t.addr && f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
                                 // (A7-129: not when another line assigns the variable with its name drawn at that store -- `cRam06001008 =
@@ -2146,10 +2155,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (plain && t.end <= r.lines[li].text.size() && (A7RuleOff(160) || (assign != std::string::npos && t.begin > assign)))
                     {
                         const std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
-                        if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
-                            operand.find_first_not_of("0123456789abcdef", operand.size() - 8) == std::string::npos)
+                        uint32_t va = 0;
+                        if (IsRamGlobal(operand, &va))
                         {
-                            const uint32_t va = static_cast<uint32_t>(std::strtoul(operand.c_str() + operand.size() - 8, nullptr, 16));
                             // (A7-186: under a narrowing cast, `(xunknown1)uRam26001010` of the half-word the code stores at 0x26001010, the line
                             // reads the global's low bytes, at its end on the SH-2 (big-endian): a `tas.b @r7` of the first byte reads none of them,
                             // and the copy the engine materialised at the `tas.b` is no statement of its read; grammar 1 seed 12006099. The global's
@@ -2225,10 +2233,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         if (piece != std::string::npos) operand.resize(piece);
                         uint16_t hi = 0, lo = 0;
                         const uint32_t q = (t.addr & ~3u) + 4 + (aw & 0xFFu) * 4;
-                        if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
-                            operand.find_first_not_of("0123456789abcdef", operand.size() - 8) == std::string::npos && word(q, hi) && word(q + 2, lo))
+                        uint32_t va = 0;
+                        if (IsRamGlobal(operand, &va) && word(q, hi) && word(q + 2, lo))
                         {
-                            const uint32_t va = static_cast<uint32_t>(std::strtoul(operand.c_str() + operand.size() - 8, nullptr, 16));
                             addressHere = GlobalDelta(va, static_cast<uint32_t>(hi) << 16 | lo) < 16;
                         }
                     }
@@ -2248,17 +2255,14 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         std::string name = nb == std::string::npos || nb >= assign ? std::string() : lt.substr(nb, assign - nb);
                         // (a piece of a global, `xRam06001030._2_2_`, is the global: a store's statement, A7-57's)
                         if (name.find("._") != std::string::npos) name.resize(name.find("._"));
-                        const bool global = name.size() >= 11 && name.compare(name.size() - 11, 3, "Ram") == 0 &&
-                                            name.find_first_not_of("0123456789abcdef", name.size() - 8) == std::string::npos;
+                        const bool global = IsRamGlobal(name);
                         if (!name.empty() && !global && name.find("Stack") == std::string::npos)
                             for (const Token& u : r.lines[li].tokens)
                             {
                                 if (u.addr != t.addr || u.begin <= assign || u.end > lt.size()) continue;
                                 const std::string operand = lt.substr(u.begin, u.end - u.begin);
-                                if (operand.size() < 11 || operand.compare(operand.size() - 11, 3, "Ram") != 0 ||
-                                    operand.find_first_not_of("0123456789abcdef", operand.size() - 8) != std::string::npos)
-                                    continue;
-                                const uint32_t va = static_cast<uint32_t>(std::strtoul(operand.c_str() + operand.size() - 8, nullptr, 16));
+                                uint32_t va = 0;
+                                if (!IsRamGlobal(operand, &va)) continue;
                                 bool own = false;
                                 for (const AccessFate& f : r.accessFates)
                                     own = own || (f.insn == t.addr && f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
@@ -3721,10 +3725,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (v != std::string::npos && text.size() > v + 12 && text.back() == ';')
                     {
                         const std::string operand = text.substr(v, text.size() - 1 - v);
-                        if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
-                            operand.find_first_not_of("0123456789abcdef", operand.size() - 8) == std::string::npos)
+                        uint32_t va = 0;
+                        if (IsRamGlobal(operand, &va))
                         {
-                            const uint32_t va = static_cast<uint32_t>(std::strtoul(operand.c_str() + operand.size() - 8, nullptr, 16));
                             bool folded = false;
                             for (const AccessFate& f : r.accessFates)
                                 folded = folded || (!f.write && !f.frame && f.fate == AccessFate::FoldedOrdinary && GlobalDelta(va, f.address) < f.size);

@@ -5837,18 +5837,25 @@ bool PartAtArgs(const RunOut& a, const RunOut& b, size_t step)
     }
     return false;
 }
+// The entry value of register 'bit' (8-14: r8-r14; 17, 18: GBR, VBR) in run 'a'
+uint32_t EntryValueOf(const RunOut& a, int bit)
+{
+    return bit >= 8 && bit <= 14 ? a.init[bit] : bit == 17 ? a.initState[0] : bit == 18 ? a.initState[1] : 0u;
+}
+// ...and whether the access 'x' moves that value 'e' or a part of it at its width
+bool HoldsEntryPart(const TraceRec& x, uint32_t e)
+{
+    const uint32_t v = static_cast<uint32_t>(x.value);
+    return x.size == 4 ? v == e : x.size == 2 ? v == (e >> 16) || v == (e & 0xFFFFu)
+                                              : v == (e >> 24) || v == ((e >> 16) & 0xFFu) || v == ((e >> 8) & 0xFFu) || v == (e & 0xFFu);
+}
 // (area 3, round 28, A3-217) Whether a stack read that two runs (the same inputs, the stack below the entry r15 refilled in 'b') see
 // otherwise (the n-th read of the address by the instruction in each) read in 'a' the entry value of register 'bit' (8-14: r8-r14; 17, 18: GBR, VBR) or a
 // part of it at its width: the stale word held that register's saved value (A3-212's case), not only some other uninitialised word (12006529
 // and 12003477 read one an earlier callee left before the word of the register, and the traces part after it).
 bool StaleReadOf(const RunOut& a, const RunOut& b, int bit)
 {
-    const uint32_t e = bit >= 8 && bit <= 14 ? a.init[bit] : bit == 17 ? a.initState[0] : bit == 18 ? a.initState[1] : 0u;
-    auto slice = [e](const TraceRec& x) {
-        const uint32_t v = static_cast<uint32_t>(x.value);
-        return x.size == 4 ? v == e : x.size == 2 ? v == (e >> 16) || v == (e & 0xFFFFu)
-                                                  : v == (e >> 24) || v == ((e >> 16) & 0xFFu) || v == ((e >> 8) & 0xFFu) || v == (e & 0xFFu);
-    };
+    const uint32_t e = EntryValueOf(a, bit);
     // the n-th read of a stack address by an instruction in one run against the n-th in the other (a stale value may move the traces apart)
     std::map<std::pair<uint32_t, uint32_t>, std::vector<uint64_t>> other;
     for (const TraceRec& y : b.trace)
@@ -5861,7 +5868,7 @@ bool StaleReadOf(const RunOut& a, const RunOut& b, int bit)
         const size_t n = seen[key]++;
         const auto o = other.find(key);
         if (o == other.end() || n >= o->second.size() || o->second[n] == x.value) continue;
-        if (slice(x)) return true;
+        if (HoldsEntryPart(x, e)) return true;
     }
     return false;
 }
@@ -5875,14 +5882,9 @@ bool StaleReadOf(const RunOut& a, const RunOut& b, int bit)
 // saved word so and reads the changed register as its entry value is passed for that register.
 bool SavedWordRead(const Subject& subject, const RunOut& a, int bit)
 {
-    const uint32_t e = bit >= 8 && bit <= 14 ? a.init[bit] : bit == 17 ? a.initState[0] : bit == 18 ? a.initState[1] : 0u;
+    const uint32_t e = EntryValueOf(a, bit);
     const uint16_t push = bit == 17 ? 0x4F13u : bit == 18 ? 0x4F23u : static_cast<uint16_t>(0x2F06u | bit << 4);
     const uint16_t pop = bit == 17 ? 0x4F17u : bit == 18 ? 0x4F27u : static_cast<uint16_t>(0x60F6u | bit << 8);
-    auto slice = [e](const TraceRec& x) {
-        const uint32_t v = static_cast<uint32_t>(x.value);
-        return x.size == 4 ? v == e : x.size == 2 ? v == (e >> 16) || v == (e & 0xFFFFu)
-                                                  : v == (e >> 24) || v == ((e >> 16) & 0xFFu) || v == ((e >> 8) & 0xFFu) || v == (e & 0xFFu);
-    };
     for (size_t i = 0; i < a.trace.size(); ++i)
     {
         const TraceRec& w = a.trace[i];
@@ -5893,7 +5895,7 @@ bool SavedWordRead(const Subject& subject, const RunOut& a, int bit)
             const TraceRec& x = a.trace[j];
             if (x.addr + static_cast<uint32_t>(x.size) <= w.addr || x.addr >= w.addr + 4u) continue;
             if (x.write) break;
-            if (subject.WordAt(x.insn) != pop && slice(x)) return true;
+            if (subject.WordAt(x.insn) != pop && HoldsEntryPart(x, e)) return true;
         }
     }
     return false;
@@ -16122,6 +16124,27 @@ void SetOrClear(const char* name, const char* value)
     else unsetenv(name);
 #endif
 }
+// RawSubject with SE_GENERATED_VOLATILE, SE_GENERATED_POLL and SE_GENERATED_ALIAS set to 'vol', 'poll' and 'alias' (nullptr: unset) while it
+// reads them, and each put back as it was after
+Subject RawSubjectWithEnv(const char* words, const char* vol, const char* poll, const char* alias)
+{
+    const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
+    const char* values[3] = { vol, poll, alias };
+    std::string wanted[3], saved[3];   // (copies: a value may be the environment's own, which setting another name may move)
+    bool want[3], had[3];
+    for (int i = 0; i < 3; ++i)
+    {
+        want[i] = values[i] != nullptr;
+        if (want[i]) wanted[i] = values[i];
+        const char* old = std::getenv(names[i]);
+        had[i] = old != nullptr;
+        if (had[i]) saved[i] = old;
+    }
+    for (int i = 0; i < 3; ++i) SetOrClear(names[i], want[i] ? wanted[i].c_str() : nullptr);
+    const Subject subject = RawSubject(words);
+    for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+    return subject;
+}
 
 struct ModulePin
 {
@@ -17831,17 +17854,7 @@ void TestA5114Pins(Sh2Decompiler& d)
     };
     for (const Pin& p : kPins)
     {
-        std::string savedV, savedP;
-        const char* oldV = std::getenv("SE_GENERATED_VOLATILE");
-        const char* oldP = std::getenv("SE_GENERATED_POLL");
-        const bool hadV = oldV != nullptr, hadP = oldP != nullptr;
-        if (hadV) savedV = oldV;
-        if (hadP) savedP = oldP;
-        SetOrClear("SE_GENERATED_VOLATILE", p.volatileRange);
-        SetOrClear("SE_GENERATED_POLL", p.poll);
-        const Subject subject = RawSubject(p.words);
-        SetOrClear("SE_GENERATED_VOLATILE", hadV ? savedV.c_str() : nullptr);
-        SetOrClear("SE_GENERATED_POLL", hadP ? savedP.c_str() : nullptr);
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, std::getenv("SE_GENERATED_ALIAS"));   // (the alias as it is)
         const Report rep = EvaluateSubject(d, subject, true);
         const auto it = rep.counts.find(p.count);
         const int n = it == rep.counts.end() ? 0 : it->second;
@@ -17899,19 +17912,7 @@ void TestA5119Pins(Sh2Decompiler& d)
     };
     for (const Pin& p : kPins)
     {
-        const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
-        const char* values[3] = { p.volatileRange, p.poll, p.alias };
-        std::string saved[3];
-        bool had[3];
-        for (int k = 0; k < 3; ++k)
-        {
-            const char* old = std::getenv(names[k]);
-            had[k] = old != nullptr;
-            if (had[k]) saved[k] = old;
-            SetOrClear(names[k], values[k]);
-        }
-        const Subject subject = RawSubject(p.words);
-        for (int k = 0; k < 3; ++k) SetOrClear(names[k], had[k] ? saved[k].c_str() : nullptr);
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
         const Report rep = EvaluateSubject(d, subject, true);
         const auto it = rep.counts.find(p.count);
         const int n = it == rep.counts.end() ? 0 : it->second;
@@ -18236,19 +18237,7 @@ void TestA5FoldedPins(Sh2Decompiler& d)
     };
     for (const Shrunk& p : kShrunk)
     {
-        const char* names[] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL" };
-        const char* values[] = { p.volatileRange, p.poll };
-        std::string saved[2];
-        bool had[2];
-        for (int i = 0; i < 2; ++i)
-        {
-            const char* old = std::getenv(names[i]);
-            had[i] = old != nullptr;
-            if (old) saved[i] = old;
-            SetOrClear(names[i], values[i]);
-        }
-        const Subject subject = RawSubject(p.words);
-        for (int i = 0; i < 2; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, std::getenv("SE_GENERATED_ALIAS"));   // (the alias as it is)
         const Report rep = EvaluateSubject(d, subject, true);
         std::printf("pin '%s': %zu finding(s), %s %d\n", p.name, rep.findings.size(), p.count, count(rep, p.count));
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
@@ -18343,18 +18332,7 @@ void TestA5FoldedPins2(Sh2Decompiler& d)
     const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
     for (const Shrunk& p : kShrunk)
     {
-        const char* values[3] = { p.volatileRange, p.poll, p.alias };
-        std::string saved[3];
-        bool had[3];
-        for (int i = 0; i < 3; ++i)
-        {
-            const char* old = std::getenv(names[i]);
-            had[i] = old != nullptr;
-            if (old) saved[i] = old;
-            SetOrClear(names[i], values[i]);
-        }
-        const Subject subject = RawSubject(p.words);
-        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
         const Report rep = EvaluateSubject(d, subject, true);
         std::printf("pin '%s': %zu finding(s), %s %d\n", p.name, rep.findings.size(), p.count, count(rep, p.count));
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
@@ -18469,18 +18447,7 @@ void TestA5FoldedPins4(Sh2Decompiler& d)
     const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
     for (const Shrunk& p : kShrunk)
     {
-        const char* values[3] = { p.volatileRange, p.poll, p.alias };
-        std::string saved[3];
-        bool had[3];
-        for (int i = 0; i < 3; ++i)
-        {
-            const char* old = std::getenv(names[i]);
-            had[i] = old != nullptr;
-            if (old) saved[i] = old;
-            SetOrClear(names[i], values[i]);
-        }
-        const Subject subject = RawSubject(p.words);
-        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
         const Report rep = EvaluateSubject(d, subject, true);
         std::printf("pin '%s': %zu finding(s), %s %d\n", p.name, rep.findings.size(), p.count ? p.count : "-", p.count ? count(rep, p.count) : 0);
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
@@ -18588,18 +18555,7 @@ void TestArea7Round22Pins(Sh2Decompiler& d)
     const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
     for (const Shrunk& p : kShrunk)
     {
-        const char* values[3] = { p.volatileRange, p.poll, p.alias };
-        std::string saved[3];
-        bool had[3];
-        for (int i = 0; i < 3; ++i)
-        {
-            const char* old = std::getenv(names[i]);
-            had[i] = old != nullptr;
-            if (old) saved[i] = old;
-            SetOrClear(names[i], values[i]);
-        }
-        const Subject subject = RawSubject(p.words);
-        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
         const Report rep = EvaluateSubject(d, subject, true);
         std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
@@ -18765,21 +18721,9 @@ void TestArea7Round26Pins(Sh2Decompiler& d)
         { "A7-189 grammar 1 seed 10407403 shrunk", "D609 4315 8D01 6203 6055 2601 C840 8901 E00B CD81 2108 8901 8802 8D00 2621 E00E 025D 000B 0009 0009 2600 1028",
           nullptr, "26001020-2600102f", nullptr },
     };
-    const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
     for (const Shrunk& p : kShrunk)
     {
-        const char* values[3] = { p.volatileRange, p.poll, p.alias };
-        std::string saved[3];
-        bool had[3];
-        for (int i = 0; i < 3; ++i)
-        {
-            const char* old = std::getenv(names[i]);
-            had[i] = old != nullptr;
-            if (old) saved[i] = old;
-            SetOrClear(names[i], values[i]);
-        }
-        const Subject subject = RawSubject(p.words);
-        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
         const Report rep = EvaluateSubject(d, subject, true);
         std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
@@ -18827,21 +18771,9 @@ void TestArea7P2FixPins(Sh2Decompiler& d)
         { "A7-190 grammar 1 seed 10300327 shrunk", "D608 D209 2729 C500 8059 E014 016E 2228 8B01 3440 8D00 2611 D704 6072 C801 8BFC 000B 0009 2600 2300 1FFF FFFF 2600 1004",
           "5:06003C00", "26001000-2600100f", "26001004" },
     };
-    const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
     for (const Shrunk& p : kShrunk)
     {
-        const char* values[3] = { p.volatileRange, p.poll, p.alias };
-        std::string saved[3];
-        bool had[3];
-        for (int i = 0; i < 3; ++i)
-        {
-            const char* old = std::getenv(names[i]);
-            had[i] = old != nullptr;
-            if (old) saved[i] = old;
-            SetOrClear(names[i], values[i]);
-        }
-        const Subject subject = RawSubject(p.words);
-        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
         const Report rep = EvaluateSubject(d, subject, true);
         std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
@@ -18879,21 +18811,9 @@ void TestArea7Round25Pins(Sh2Decompiler& d)
         { "A7-178 a copy at a bra whose slot makes the number", "D606 2508 8902 6243 A001 E105 E102 2610 6342 3030 8B00 2610 000B 0009 2600 1008", nullptr,
           "26001008-2600100f", nullptr },
     };
-    const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
     for (const Shrunk& p : kShrunk)
     {
-        const char* values[3] = { p.volatileRange, p.poll, p.alias };
-        std::string saved[3];
-        bool had[3];
-        for (int i = 0; i < 3; ++i)
-        {
-            const char* old = std::getenv(names[i]);
-            had[i] = old != nullptr;
-            if (old) saved[i] = old;
-            SetOrClear(names[i], values[i]);
-        }
-        const Subject subject = RawSubject(p.words);
-        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
         const Report rep = EvaluateSubject(d, subject, true);
         std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
@@ -18945,18 +18865,7 @@ void TestArea7Round23Pins(Sh2Decompiler& d)
     const char* names[3] = { "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_ALIAS" };
     for (const Shrunk& p : kShrunk)
     {
-        const char* values[3] = { p.volatileRange, p.poll, p.alias };
-        std::string saved[3];
-        bool had[3];
-        for (int i = 0; i < 3; ++i)
-        {
-            const char* old = std::getenv(names[i]);
-            had[i] = old != nullptr;
-            if (old) saved[i] = old;
-            SetOrClear(names[i], values[i]);
-        }
-        const Subject subject = RawSubject(p.words);
-        for (int i = 0; i < 3; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
         const Report rep = EvaluateSubject(d, subject, true);
         std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
@@ -20267,23 +20176,25 @@ void TestA3RoutedPins(Sh2Decompiler& d)
     // A3-223: the caller's own switch the engine does not recover (a signed guard), whose cases read the register the callee changed (grammar
     // 2 seeds 12033773 and 12027075, which also needs A3-214's reading of function 1's table): the caution, no finding.
     {
+// (the caller's words, every fixture's: vCr8's)
+#define A3214_CALLER "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
         const ModulePin cases[] = {
-            { "A3-214 tb", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+            { "A3-214 tb", A3214_CALLER
                            "6033 C903 6103 4108 C701 011E 412B 0009 0600 9040 0600 9042 0600 9042 0600 9042 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/20,20/20/46", nullptr, "1,0", "0,100", nullptr },
-            { "A3-214 tbm", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+            { "A3-214 tbm", A3214_CALLER
                            "6033 E103 2109 4108 C701 011E 412B 0009 0600 9040 0600 9042 0600 9042 0600 9042 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/20,20/20/46", nullptr, "1,0", "0,100", nullptr },
-            { "A3-214 tbg", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+            { "A3-214 tbg", A3214_CALLER
                            "E103 3316 8F02 0009 A00D 0009 6133 311C C702 011D 301C 402B 0009 0009 0008 000A 000A 000A E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/20,20/20/4a", nullptr, "1,0", "0,100", nullptr },
-            { "A3-214 tbh", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+            { "A3-214 tbh", A3214_CALLER
                            "E104 3312 890B 6133 311C C702 011D 0123 0009 0009 000A 000C 000C 000C E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/20,20/20/42", nullptr, "1,0", "0,100", nullptr },
-            { "A3-214 tbw", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+            { "A3-214 tbw", A3214_CALLER
                            "E503 6133 2118 8B00 0009 3156 890D 4108 C701 011E 412B 0009 0600 9048 0600 904A 0600 904A 0600 904A E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/20,20/20/4e", nullptr, "1,0", "0,100", nullptr },
-            { "A3-214 tbu", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+            { "A3-214 tbu", A3214_CALLER
                            "6033 C903 2F06 61F6 4108 C702 011E 412B 0009 0009 0600 9044 0600 9046 0600 9046 0600 9046 E800 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/20,20/20/4a", nullptr, "1,0", "0,100", nullptr },
         };
@@ -20304,10 +20215,10 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                   table == (std::string(m.name) == "A3-214 tbu"));
         }
         const ModulePin controls[] = {
-            { "A3-214 tbc", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+            { "A3-214 tbc", A3214_CALLER
                            "6033 C903 6103 4108 C701 011E 412B 0009 0600 9040 0600 9042 0600 9042 0600 9042 E100 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/20,20/20/46", nullptr, "1,0", "0,100", nullptr },
-            { "A3-214 tbuc", "4F22 2F86 7FF0 E205 2F22 68F3 B008 0009 E207 2822 60F2 7F10 68F6 4F26 000B 0009 "
+            { "A3-214 tbuc", A3214_CALLER
                            "6033 C903 2F06 61F6 4108 C702 011E 412B 0009 0009 0600 9044 0600 9046 0600 9046 0600 9046 E100 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
               "0/0/20,20/20/4a", nullptr, "1,0", "0,100", nullptr },
         };
@@ -20319,6 +20230,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
             CHECK(clean.findings.empty() && said == (std::string(m.name) == "A3-214 tbuc"));
         }
+#undef A3214_CALLER
         for (const uint64_t seed : { 12027075ull, 12033773ull })
         {
             const Report rep = Evaluate(d, MakeV2(seed), false);
