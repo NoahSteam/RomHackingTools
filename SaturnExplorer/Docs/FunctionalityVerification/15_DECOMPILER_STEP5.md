@@ -23167,4 +23167,20 @@ Not reproduced: grammar 1 11902840, 11904869, 12185736 (A7-264, closed). Reprodu
 
 ### 4. Corpus and runs
 
-RUNS_PLACEHOLDER
+| Run | Result |
+|---|---|
+| `ctest -j1` | 117 of 117 passed (529 s) |
+| fault matrix | `fault matrix: 0 of 94 job(s) failed` |
+| 20,000-seed matrix | `failing seeds=0; findings=0` (654 s) |
+| printed-C | `agrees=5196` |
+| corpus hwram007, lent | 0 check(s) failed; 0 missing and said; "real entries 999: signatures lent 474 (645 parameters)" |
+| corpus hwram008, lent | 0 check(s) failed; 4 missing and said; "1543: 724 (975 parameters)" |
+| sweep grammar 1, 10,000 from 12,220,001 | 1 failing seed: 12222552 (`v:map-const-join`, A7-265) |
+| sweep grammar 2, 10,000 from 12,220,001 | 1 failing seed: 12222510 (`n:map-const-join`, A7-265) |
+
+No product code changed, so the corpus token output and the printed C are those of the merged base (the counts above are unchanged from round 30). Lint `check-literal-size.py` ok; no vendored file touched.
+
+### 5. Routed
+
+* **Area 7 (next fixer):** A7-250's flow-record class (grammar 2 11304044, 11708927, 12020446, 11901051) and its overlap class (grammar 1 11508679, 12133156, 12137810, 11703213); A7-251 (11503597, 12150363, 11602585, A7-260, A7-265: 12222552, 12222510); A7-220 (11102053); A7-253 (+ A7-263), A7-254 (+ A7-261), A7-262.
+
