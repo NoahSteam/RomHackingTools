@@ -4588,6 +4588,23 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         if (!RegisterMakers(r, word, sources, st.first, st.second, makers, true)) known = false;
                         maker = maker || makers.count(at) != 0;
                     }
+                    // Rule 332 (area 7 round 35, A7-272): a counter the engine printed as the global -- `uRam06002308 = 2;` at `mov #2,r3`, then
+                    // `uRam06002308 = uVar2 - 1;` at the loop's `dt r3` (the text-store the report says) -- is that register's number: another line
+                    // of the variable has its token at a `dt` of the register the instruction makes; grammar 1 seed 11503597, volatile request
+                    if (known && !maker && !A7RuleOff(332))
+                    {
+                        const size_t nb = text.find_first_not_of(' ');
+                        const std::string name = text.substr(nb, text.find(" = ", nb) - nb);
+                        for (const Line& l : r.lines)
+                            for (const Token& t : l.tokens)
+                            {
+                                uint16_t tw = 0;
+                                if (!maker && t.addr && t.addr != at && t.begin < t.end && t.end <= l.text.size() &&
+                                    l.text.compare(t.begin, t.end - t.begin, name) == 0 && word(t.addr, tw) && (tw & 0xF0FFu) == 0x4010u &&
+                                    ((tw >> 8) & 0xF) == ((w >> 8) & 0xF))
+                                    maker = true;
+                            }
+                    }
                     if (known && !maker)
                     {
                         ++a.numberStoreOther;
@@ -5545,6 +5562,30 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             if ((tw >> 8) == 0xC8 && ((tw & 0xFFu) & (w & 0xFFu)) == 0) computes = true;
                         }
                 }
+                // Rule 331 (area 7 round 35, A7-272): a `movt Rn` within the next three instructions of the join's head, T there the number the line
+                // shows (T before the head, the instructions between not setting it): the engine draws the number at the head, grammar 2 seed 12150363
+                if (!computes && !A7RuleOff(331) && (want == 0 || want == 1))
+                {
+                    if (!haveSources)
+                    {
+                        sources = BranchSources(r, word);
+                        haveSources = true;
+                    }
+                    for (uint32_t p = at + 2; p <= at + 6 && !computes; p += 2)
+                    {
+                        uint16_t pw = 0;
+                        if (!r.InBody(p) || !word(p, pw) || targets.count(p)) break;
+                        const sfe::DisassembledInstruction pd = sfe::Sh2Decode(p, pw);
+                        if (!pd.IsValid || pd.IsBranch || pd.IsCall || pd.HasDelaySlot) break;
+                        if ((pw & 0xF0FF) == 0x0029)
+                        {
+                            const int t = TBefore(r, word, sources, p, 0);
+                            computes = t >= 0 && static_cast<uint32_t>(t) == want;
+                            break;
+                        }
+                        if (SetsT(pw)) break;
+                    }
+                }
                 if (computes) continue;
             }
             uint32_t got = 0;
@@ -5577,6 +5618,23 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (!storeRegs.empty())
                     {
                         if (storeRegs.count(rm)) continue;
+                        // (rule 332: the register is a `dt` counter the engine printed as the variable, `uRam06002308 = uVar2 - 1;`)
+                        if (!A7RuleOff(332))
+                        {
+                            const size_t nb = text.find_first_not_of(' ');
+                            const std::string cname = text.substr(nb, text.find(" = ", nb) - nb);
+                            bool counter = false;
+                            for (const Line& l : r.lines)
+                                for (const Token& t : l.tokens)
+                                {
+                                    uint16_t tw = 0;
+                                    if (!counter && t.addr && t.addr != at && t.begin < t.end && t.end <= l.text.size() &&
+                                        l.text.compare(t.begin, t.end - t.begin, cname) == 0 && word(t.addr, tw) && (tw & 0xF0FFu) == 0x4010u &&
+                                        static_cast<int>((tw >> 8) & 0xF) == rm)
+                                        counter = true;
+                                }
+                            if (counter) continue;
+                        }
                         if (unreachable()) continue;
                         ++a.constAtJoin;
                         problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " +

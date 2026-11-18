@@ -19463,14 +19463,20 @@ void TestArea7Round34Pins(Sh2Decompiler& d)
     }
 }
 
-// Area 7 round 35. Grammar 2 12268228 (A7-305: clean since the flow record, patch 0096) and 12304053 (A7-309, rule 330: `and #0x4,r0` whose only
-// use is `tst #2,r0` is printed as the 0 the line shows). Fails with SE_A7_RULE_OFF=330.
+// Area 7 round 35. Grammar 2 12268228 (A7-305: clean since the flow record, patch 0096), 12304053 (A7-309, rule 330: `and #0x4,r0` whose only use is
+// `tst #2,r0` is printed as the 0 the line shows), 12150363 (A7-272, rule 331: a `movt` three instructions after the join's head whose T the paths
+// agree on) and grammar 1 11503597 (A7-272, rule 332: a `dt` counter printed as the global). Each fails with SE_A7_RULE_OFF=330, 331, 332.
 void TestArea7Round35Pins(Sh2Decompiler& d)
 {
-    for (const int seed : { 12268228, 12304053 })
+    struct Whole
     {
-        const Report rep = Evaluate(d, MakeV2(seed), true);
-        std::printf("pin 'area 7 round 35: grammar 2 seed %d': %zu finding(s)\n", seed, rep.findings.size());
+        int grammar;
+        int seed;
+    };
+    for (const Whole& w : { Whole{ 2, 12268228 }, Whole{ 2, 12304053 }, Whole{ 2, 12150363 }, Whole{ 1, 11503597 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(w.seed) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 35: grammar %d seed %d': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
     }
