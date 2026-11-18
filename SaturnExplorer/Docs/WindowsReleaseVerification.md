@@ -134,17 +134,20 @@ Back up settings first. Then, with the extracted package (BIOS **not** present u
    and a screenshot. Press OK, quit, start again: it must not reappear.
 2. Open Launch Settings. The Mednafen path should be `<extract dir>\mednafen-se\mednafen.exe`, and the two
    firmware entries (`sega_101.bin`, `mpr-17933.bin`) should show as missing.
-3. Inspect `%APPDATA%\SaturnExplorer\settings.ini`: `[emulators] mednafen` should be **empty** (the bundled path is
-   deliberately not saved).
+3. Inspect `%APPDATA%\SaturnExplorer\settings.ini`: `[emulators] mednafen.release` should be **empty** (the bundled
+   path is deliberately not saved), and `[emulators] mednafen` must be left as it was (it belongs to developer builds).
 4. Move the extracted folder to a different location and start again: Mednafen must still be found.
-5. Put the string `Z:\does\not\exist\mednafen.exe` in `[emulators] mednafen`, start SE: that path must be kept
-   (not replaced by the bundled one) and Launch Settings must show it missing. Then remove that line.
-6. **Only if the person supplied a BIOS and a game:** place the BIOS in `mednafen-se\firmware\`, launch the game
+5. Put the string `Z:\does\not\exist\mednafen.exe` in `[emulators] mednafen`, start SE: it must be **ignored** —
+   Launch Settings shows the bundled path, labelled as the one included with this release. Then remove that line.
+6. In Launch Settings, set the Mednafen executable to `Z:\does\not\exist\mednafen.exe` and Save. Restart SE: that
+   path must be kept and shown missing, with a **Use included** button beside it; pressing it and saving restores the
+   bundled path and clears `[emulators] mednafen.release`.
+7. **Only if the person supplied a BIOS and a game:** place the BIOS in `mednafen-se\firmware\`, launch the game
    from SE, and capture the Mednafen command line
    (`Get-CimInstance Win32_Process -Filter "Name='mednafen.exe'" | Select CommandLine`). It must contain
    `-filesys.path_firmware` followed by an **absolute** path ending in `mednafen-se\firmware`, and Mednafen must start the
    game. Stop only the Mednafen you started.
-7. **Non-ASCII path:** extract a second copy under a folder containing a non-ASCII character (for example
+8. **Non-ASCII path:** extract a second copy under a folder containing a non-ASCII character (for example
    `é` and, separately, a Japanese character). Record whether SE finds the bundled Mednafen in each case and what
    the active code page is. This is a **known limitation** for characters outside the ANSI code page; you are
    measuring it, not fixing it.
@@ -181,7 +184,7 @@ These were never run on Windows. For each, your report should say PASS, FAIL, or
 | W6 | The zip layout is correct, with a single merged `licenses\` folder | 5 |
 | W7 | No undeclared dependencies: the package runs on a machine without Visual Studio or MSYS2 | 6 |
 | W8 | `ExecutablePath`/`BundledMednafenPath` find `mednafen-se\mednafen.exe`, including after the folder is moved | 7 |
-| W9 | A recorded Mednafen path, even a missing one, is never replaced; the bundled path is not written to settings | 7 |
+| W9 | A release uses its bundled Mednafen over a path recorded elsewhere (`[emulators] mednafen`, another install); an override chosen in this install, even a missing one, is kept; the bundled path is not written to settings | 7 |
 | W10 | `-filesys.path_firmware` is passed as an absolute path and Mednafen reads the BIOS from there | 7 |
 | W11 | The first-run notice appears once | 7 |
 | W12 | The release workflow succeeds on both runners | 8 |

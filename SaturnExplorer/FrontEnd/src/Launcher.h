@@ -113,6 +113,8 @@ public:
     // True when Mednafen's path is the copy a release ships beside this program (not one the user
     // or the installer pointed at).
     bool UsesBundledMednafen() const;
+    // The Mednafen shipped beside this program, or "" in a developer build.
+    const std::string& BundledMednafen() const { return mBundledMednafen; }
 
     const std::string& Rom() const { return mRom; }
     void SetRom(const std::string& rom);    // sets current + promotes it in the recent list
