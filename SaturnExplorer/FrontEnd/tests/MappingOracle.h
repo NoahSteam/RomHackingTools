@@ -3594,6 +3594,18 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     const auto numberOf = [&](uint32_t p, uint16_t w, uint32_t& value) {
                         uint16_t hi = 0, lo = 0;
                         if ((w >> 12) == 0xE) return value = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF))), true;
+                        // (A7-232: `movt Rn` makes the T the words give there, 0 or 1 -- `tst r7,r5 ; bf L ; movt r2`: 1 -- as `mov #imm` makes its
+                        // number; grammar 2 seed 11203194)
+                        if ((w & 0xF0FF) == 0x0029 && !A7RuleOff(232))
+                        {
+                            if (!haveSources)
+                            {
+                                sources = BranchSources(r, word);
+                                haveSources = true;
+                            }
+                            const int t = TBefore(r, word, sources, p, 0);
+                            if (t >= 0) return value = static_cast<uint32_t>(t), true;
+                        }
                         if ((w >> 12) == 0x9 && word(p + 4 + (w & 0xFFu) * 2, lo))
                             return value = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(lo))), true;
                         const uint32_t q = (p & ~3u) + 4 + (w & 0xFFu) * 4;
