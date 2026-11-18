@@ -23139,4 +23139,12 @@ Both corpus images, alone and lent, with the token dump (every text and token), 
 
 ### 3. Runs
 
-RUNS_PLACEHOLDER
+* `ctest -j1`: 117 of 117 passed (after correcting the pin: the first run's pin for 12147773 failed, that seed does not reproduce). Fault matrix: 0 of 94 job(s) failed.
+* Generator 20k (`SE_GENERATED_SEEDS=20000`): `failing seeds=0; findings=0`. Printed-C (3000 seeds): agrees=5196.
+* Corpus with lending, both images (code identical to the final product): hwram007 0 missing and said, `[after] real entries 999: signatures lent 474 (645 parameters)`; hwram008 4 missing and said, `1543: 724 (975)`. Token dumps (alone and lent) byte-identical with the two changes switched off, both images.
+* Grammar 2, `SE_GENERATED_CAUTION=deep`, 10,000 seeds from 12,230,001: `failing seeds=1; findings=1`: 12237557 `n:caution-elsewhere`, r15, two calls (A3-240, P3 open; fails the same with both changes off).
+* `check-literal-size.py`: ok.
+
+### 4. Routed
+
+None to other areas. Open in area 3: A3-240 (12237557).
