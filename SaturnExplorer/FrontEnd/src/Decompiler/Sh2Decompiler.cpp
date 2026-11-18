@@ -9364,8 +9364,21 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // (unless the next store stores a register the statement's own instructions made: `extu.w r1,r1 ; mov.l r1,@r14`)
             if (priorZero)
             {
+                // (only when the next store stores a register no instruction wrote, an input that "may be 0")
                 const ghidra::AccessRecord* nx = nextInHome();
-                if (nx && exactStore(nx)) priorZero = false;
+                bool unwritten = false;
+                FlowVn nv;
+                const auto np = nx ? flow.ops.find(nx->time) : flow.ops.end();
+                if (nx && np != flow.ops.end() && np->second.first >= 0 && storedRegister(nx, nv) && !nv.Constant() && nv.space &&
+                    nv.space->getType() == ghidra::IPTR_PROCESSOR)
+                {
+                    nv.offset &= ~static_cast<ghidra::uintb>(3);
+                    nv.size = 4;
+                    std::vector<const FlowOp*> nw;
+                    bool entry = false;
+                    unwritten = FlowLastWriters(flow, fd, np->second.first, static_cast<int>(np->second.second), nv, nw, &entry, false) && entry && nw.empty();
+                }
+                if (!unwritten) priorZero = false;
             }
             if (conversion && !priorZero && !(atLoadOrCall && !flow.callInsns.count(at)) && take(nextInHome())) continue;
             // the emptied stores of the byte on an edge between two blocks
