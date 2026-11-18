@@ -728,6 +728,8 @@ inline EdgeTruth& EdgeT()
 }
 inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                                 const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth = 0, uint32_t ignoreWriter = 0);
+inline uint32_t PossibleBits(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                             const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth = 0);
 inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                               const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int reg, int depth);
 inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
@@ -1010,10 +1012,27 @@ inline WordValue SlotBefore(const sfe::decomp::DecompileResult& r, const std::fu
             }
             // (A7-195: a store through a pointer that is a parameter of the function -- `mov.l r0,@(r0,r6)` with r6 the input -- does not write
             // the frame: the engine keeps the stack's slots apart from what an input points to, as the GBR stores above; grammar 2 seed 10505656)
-            if (!A7RuleOff(195) && base == 15 && reg >= 0)
+            // (A7-231: the base r14, a copy of the stack pointer -- every write of r14 in the function a `mov r15,r14` or a pop -- is the frame as
+            // r15 is: `mov.b r3,@r14 ; mov.l r3,@(0x14,r4) ; mov.b @r14,r2`; grammar 2 seed 12127788)
+            const auto frameBase = [&]() {
+                if (base == 15) return true;
+                if (base != 14 || A7RuleOff(231)) return false;
+                bool copy = false;
+                for (uint32_t q = r.entry, n = 0; n < 512 && r.InBody(q); q += 2, ++n)
+                {
+                    uint16_t qw = 0;
+                    sfe::DisassembledInstruction qd;
+                    if (!word(q, qw) || !(qd = sfe::Sh2Decode(q, qw)).IsValid) continue;
+                    if (!WrittenRegisters(qd).count(14)) continue;
+                    if (qw == 0x6EF3) copy = true;
+                    else if (qw != 0x6EF6) return false;
+                }
+                return copy;
+            };
+            if (!A7RuleOff(195) && reg >= 0)
             {
                 const int other = based ? sbase : ((w >> 12) == 0x0 && (w & 0xF) >= 4 && (w & 0xF) <= 6) ? static_cast<int>((w >> 8) & 0xF) : -1;
-                if (other >= 0 && other != 15 && RegisterBefore(r, word, into, p, other, depth + 1).kind == WordValue::Param)
+                if (other >= 0 && other != 15 && other != base && RegisterBefore(r, word, into, p, other, depth + 1).kind == WordValue::Param && frameBase())
                 {
                     todo.push_back(p);
                     continue;
@@ -1494,7 +1513,7 @@ inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::fun
 // shift, a zero extension; every other maker, or a path in from outside, may set any. Used for an AND whose operands have no bit in common
 // (`and #1` of a value, then `shal` of another: `and r2,r1` is 0; grammar 2 seed 9404185).
 inline uint32_t PossibleBits(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
-                             const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth = 0)
+                             const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth)
 {
     if (depth > 4) return 0xFFFFFFFFu;
     std::set<uint32_t> makers;
@@ -4249,6 +4268,14 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             const bool fallsThrough = (bw >> 8) == 0x8B && pb + 2 == at, branches = (bw >> 8) == 0x89 && pb + 2 != at;
                             if ((fallsThrough || branches) && ((cw & 0xF0FF) == 0x4010 || ((cw & 0xF00F) == 0x2008 && ((cw >> 4) & 0xF) == ((cw >> 8) & 0xF))))
                                 EdgeFacts().push_back(EdgeFact{ static_cast<int>((cw >> 8) & 0xF), 0, pb });
+                            // (A7-230: `cmp/pl Rn ; bf L`, L's edge with T clear, Rn not above 0: with no maker of Rn setting its sign bit -- `mov #4,r0 ;
+                            // and r5,r0` is 4 or 0 -- Rn is 0 on it; grammar 2 seed 12146409)
+                            else if (((bw >> 8) == 0x8B && pb + 2 != at) || ((bw >> 8) == 0x89 && pb + 2 == at))
+                            {
+                                if ((cw & 0xF0FF) == 0x4015 && !A7RuleOff(230) &&
+                                    (PossibleBits(r, word, sources, pb - 2, static_cast<int>((cw >> 8) & 0xF)) & 0x80000000u) == 0)
+                                    EdgeFacts().push_back(EdgeFact{ static_cast<int>((cw >> 8) & 0xF), 0, pb });
+                            }
                             // (A7-78: `tst r4,r3 ; bt L` with r3 a copy of the input r4: both are 0 at L; grammar 2 seed 3629843)
                             else if ((fallsThrough || branches) && (cw & 0xF00F) == 0x2008)
                             {
