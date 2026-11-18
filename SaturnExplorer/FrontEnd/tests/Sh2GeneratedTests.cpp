@@ -20387,6 +20387,26 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                     count(seed, "caution.unsaid.deep"));
         CHECK(seed.findings.empty() && count(seed, "caution.said") > 0 && count(seed, "caution.unsaid.deep") + count(seed, "caution.unsaid.deep.own-effect") == 0);
     }
+    // A3-228 (grammar 2 seed 12055901, shrunk; counted `caution.unsaid.deep`): function 2 (not lent) leaves through `add #4,r15 ; rts` on every
+    // path; function 0 calls it, restores r15 from r14 at its epilogue and calls function 1 (not lent), which stores its own frame address
+    // (`mov r15,r2 ; mov.l r2,@(8,r4)`): the runs with r15 as the first call left it store another word. A later unlent call reads r15, so the
+    // caution naming r15 is required at the first call (it was said only inside function 1).
+    {
+        const ModulePin m = { "A3-228 shrunk",
+                              "2F86 2F96 2FA6 2FC6 2FE6 0C2A 7FF0 6EF3 6843 6953 6A63 B02A 0009 6483 6593 66A3 B00D 0009 6483 6593 66A3 7E10 6FE3 4C2A 6EF6 6CF6 6AF6 69F6 68F6 000B 0009 "
+                              "2F86 2F96 2FC6 2FE6 0C2A 7FF8 6EF3 6843 6953 B00D 6683 6483 6593 62F3 1422 7E08 6FE3 4C2A 6EF6 6CF6 69F6 68F6 000B 0009 "
+                              "E105 3516 8919 4508 C702 015E 412B 0009 0009 0600 90A8 0600 9098 0600 909C 0600 90A8 0600 90A0 0600 90A4 A007 0009 A005 0009 A003 0009 A001 0009 163C 7F04 6053 000B 0009",
+                              "0/0/3e,3e/3e/6e,6e/6e/b2", "7a:5:6:a8:a8,98,9c,a8,a0,a4", "0,0,1", "28800,28800,8000", "8,20008,60000" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s), required %d, said %d, deep %d\n", m.name, rep.findings.size(), count(rep, "caution.required"),
+                    count(rep, "caution.said"), count(rep, "caution.unsaid.deep"));
+        for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "caution.said") > 0 && count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect") == 0);
+        const Report seed = Evaluate(d, MakeV2(12055901), false);
+        std::printf("pin 'A3-228 grammar 2 seed 12055901': %zu finding(s), caution said %d, deep %d\n", seed.findings.size(), count(seed, "caution.said"),
+                    count(seed, "caution.unsaid.deep"));
+        CHECK(seed.findings.empty() && count(seed, "caution.unsaid.deep") + count(seed, "caution.unsaid.deep.own-effect") == 0);
+    }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
     {

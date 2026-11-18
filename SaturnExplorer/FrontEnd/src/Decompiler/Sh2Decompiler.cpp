@@ -1365,6 +1365,12 @@ private:
         if (keepKept && mUnkeptSeen)
             for (int r = 2; r < 8; ++r)
                 if (((kConvention >> r) & 1u)) UseUnkept(Get(s, mReg[r]));
+        // (area 3, A3-228) ...and r15 itself, at a call of an unlent callee: the callee runs with the stack pointer an earlier call left (its own
+        // frame, the stack arguments it reads at r15 and up, the frame addresses it stores or hands on are all made from it), where the text
+        // takes that call to keep r15. Grammar 2 seed 12055901: F2 ends `add #4,r15 ; rts` on every path, the caller restores r15 from r14
+        // and then calls F1, which stores its own frame address (`mov r15,r2 ; mov.l r2,@(8,r4)`): the runs store another word. Only where a
+        // mark is on r15 (an earlier callee changes it for certain on some path, A3-206): a handful of calls, not one per call.
+        if (keepKept && mUnkeptSeen && !signatureLent) UseUnkept(Get(s, mReg[kR15]));
         if (!signatureLent)
         {
             // (area 3, A3-221) The same exact address in an argument the call shows (r4-r7: -O0 code makes it in r2 and copies it,
