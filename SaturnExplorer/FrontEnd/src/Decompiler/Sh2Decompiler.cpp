@@ -13617,6 +13617,14 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 bool any = false;
                 for (const Token& t : l.tokens) any = any || t.addr != 0;
                 if (!any) l.noOrigin = true;
+                if (!any && std::getenv("SE_DBG2"))
+                {
+                    std::fprintf(stderr, "DBG2 line '%s'\n", l.text.c_str());
+                    for (const auto& kv2 : printed)
+                        if (kv2.second.first.count(line))
+                            std::fprintf(stderr, "   op %s time=%u addr=%llx slot=%d out=%d\n", kv2.first->getOpcode()->getName().c_str(), (unsigned)kv2.first->getTime(),
+                                         (unsigned long long)kv2.first->getAddr().getOffset(), (int)kv2.first->isFromDelaySlot(), kv2.first->getOut() ? (int)kv2.first->getOut()->getSize() : -1);
+                }
             }
         // How each flow access that is no longer a LOAD or STORE ended (patch 0017). The engine
         // keeps the records of the last generation of the function (a restart clears them with the
