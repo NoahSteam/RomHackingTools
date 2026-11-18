@@ -8135,6 +8135,38 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         }
                     }
                     count("order.read-before-folded-store.checked");
+                    // (A5-152: a store the engine makes two of, a delay slot also reached by a branch to it, is printed once per instance, and the
+                    // mapping can name one instance at the line of another statement of the global (`mov.w r1,@r6` before it) and no line at the
+                    // instance after the read: the lines naming the store then end before the read, and the statements the text has after the read
+                    // that assign the global are the other instance's, printed on the path with the read before them. The same reading as
+                    // A5-137 (c) for the stores judged against an access. Grammar 1 seed 12052695: `mov.l r1,@r6` in the slot of `bt/s` and the
+                    // target of a `bt`, the read `mov.w @(0xe,r5),r0` before both, printed `uVar3 = *(int2 *)(param_2 + 0xe); if (in_r2 == 0) {
+                    // Ram06001018 = (int4)iVar1; } else { Ram06001018 = (int4)iVar1; ...`.)
+                    if (m.firstLine > last)
+                    {
+                        int instances = 0;
+                        for (const AccessFate& o : r.accessFates) instances += o.write && o.insn == f.insn && o.fate == AccessFate::FoldedOrdinary;
+                        bool assignedAfter = false;
+                        for (size_t li = static_cast<size_t>(m.firstLine) + 1; instances > 1 && li < r.lines.size() && !assignedAfter; ++li)
+                        {
+                            const std::string& text = r.lines[li].text;
+                            const size_t b = text.find_first_not_of(' ');
+                            if (b == std::string::npos) continue;
+                            size_t e = b;
+                            while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_' || text[e] == '.')) ++e;
+                            const size_t at = text.find("Ram", b);
+                            unsigned v = 0;
+                            if (at == std::string::npos || at >= e || at + 11 > text.size() || std::sscanf(text.c_str() + at + 3, "%8x", &v) != 1 ||
+                                v > f.address || f.address >= v + 8u)
+                                continue;
+                            assignedAfter = AssignsAt(text, e);
+                        }
+                        if (assignedAfter)
+                        {
+                            count("order.read-before-folded-store.instance-after");
+                            continue;
+                        }
+                    }
                     if (m.firstLine > last)
                         add("read-after-folded-store", "the read at " + Hex(m.insn) + " through a pointer is printed (line " + std::to_string(m.firstLine) +
                                                            ") after the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) + " (line " +
