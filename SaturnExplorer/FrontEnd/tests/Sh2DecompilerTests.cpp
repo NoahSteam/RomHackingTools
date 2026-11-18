@@ -5156,6 +5156,25 @@ void TestArea7Round23()
         CHECK(said);
         CHECK(dts::AuditMapping(r, word, "a10_18").Violations() == 0);
     }
+    // A10-19 the same program with the user's own range 0x2600100C-0x2600100F: the first pass has the range, so no pass could find the access that
+    // cuts through it, and the request ended in the same exception. A probe pass without the user's range finds the access and marks it whole;
+    // the text is the one A10-18's request gets, with the caution. A range that holds the whole access, as before, is unchanged.
+    {
+        const std::vector<uint16_t> w = { 0xD604, 0xD705, 0x8177, 0x2602, 0xE004, 0x006E, 0x465F, 0x2612, 0x000B, 0x0009, 0x2600, 0x1008, 0x0600, 0x1000 };
+        DecompileRequest q = Request(0x06009000u);
+        q.volatileMemory.emplace_back(0x2600100Cu, 0x2600100Fu);
+        const DecompileResult r = d.Decompile(snapOf(w), q);
+        Print("A10-19 the user's range cut by the misaligned store (A10-18's program)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), "Ram2600100a = in_r1;"));
+        bool said = false;
+        for (const std::string& n : r.warnings) said = said || n.find("a misaligned 4-byte write at 0x2600100A") != std::string::npos;
+        CHECK(said);
+        CHECK(dts::AuditMapping(r, word, "a10_19").Violations() == 0);
+        DecompileRequest whole = Request(0x06009000u);
+        whole.volatileMemory.emplace_back(0x26001008u, 0x2600100Fu);
+        CHECK(d.Decompile(snapOf(w), whole).status == DecompileStatus::Ok);
+    }
 }
 
 // Area 7 review round 24 (A7-175): A7-171's class outside a store's line. The engine merges two identical narrowings of r3 and puts the one it

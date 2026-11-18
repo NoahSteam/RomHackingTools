@@ -22484,3 +22484,41 @@ After the last code edit (`Sh2Decompiler.cpp`, `MappingOracle.h` and `Sh2Generat
 
 * **Area 7 (next fixer):** A7-193 and A7-194 (P3, oracle, open); A7-191, A7-192 and A7-179's rest as before.
 * **Area 3:** grammar 2 seed 10605744 (`n:caution-unsaid`: the call at 0x0600906E, of 0x06009098 with no signature lent, comes back with gbr changed in the run of input mode 2), found by this round's sweep, the same with the round's changes off; not filed here.
+
+## Areas 5 and 10, A5-150/A10-19
+
+Fixer, branch `review/5-a5150` cut at master `10aefa40`; the worktree's RelWithDebInfo build (`-j1`, `ulimit -v 6000000`). **No engine patch** (0097 stays unused). One host change (`Sh2Decompiler.cpp`, A10-19), one oracle change (`Sh2GeneratedTests.cpp`, A5-150), the pins. Backups on `backup/review-5-a5150`.
+
+| Row | Class | Outcome |
+|---|---|---|
+| A10-19 | P3, product (host) | **fixed**: the user's own range cut by a misaligned access no longer ends in "Volatile memory was propagated" |
+| A5-150 | P3, oracle | **fixed in the oracle**: the write-back of the bytes a widened byte store leaves is value-preserving and is counted, not judged; the text is unchanged |
+| A5-112 | P3 | **still open**, looked at again: heritage's own widening, no contained change |
+| A5-151 | P3 | filed, routed to area 7 (grammar 2 seed 10908446, `map-const-join`) |
+
+### 1. A10-19
+
+A10-18's fix (`StraddlingRanges`) works from the accesses a first pass saw, and with the user's range 0x2600100C-0x2600100F the first pass is the one that throws. The pass loop now runs each pass through `guarded`: a pass that fails with the engine's "Volatile memory was propagated" while the request has volatile ranges (and is not the all-memory reference run) runs one probe pass without the user's ranges (the host's own aliased ranges kept), takes from it the ordinary accesses that straddle the user's ranges (`StraddlingRanges` against them), marks each whole outward to longwords as A10-18 does, and runs the pass again. Once per request; a failure that remains (the probe found nothing, or failed too) is reported as before. A request whose pass does not fail does no extra work, so the Windows Debug cost is nil. The text is A10-18's: `Ram2600100a = in_r1;` and the caution. Pins: `TestArea7Round23` (status Ok, the store, the caution, the audit; a range that holds the whole access still Ok) and `TestA5150A1019Pins` (the shrunk program with `SE_GENERATED_VOLATILE=2600100c-2600100f`).
+
+### 2. A5-150 (grammar 1 seed 9902422)
+
+Read at the p-code (`printRaw` before the merge, a temporary line removed): the code's byte store `mov.b r2,@r6` is made by heritage a store of the word (`r384:4 = CONCAT13(r2, old bytes)`, the old bytes a read of the range's input; the range is four bytes because the code also reads the word), and once the word read is dead the flow splits the word back into lanes: `r384:1 = r2` and `r385:3 = (the bytes as read at entry)`. The three-byte lane is the write-back the text shows (`Var2 = xRam26002384._1_3_;` ... `xRam26002384._1_3_ = Var2;`). The return's reaching definition of those bytes is that lane, so removing it in the engine needs the input kept live across the other copies of the widened write (blocks 1 and 2 write the same value), and the merge then copies it back: the same pair of lines. A rule that proves the lane redundant (every other definition of the bytes is a copy of the entry value, none that can reach it is an INDIRECT) was weighed and not written: it touches the SSA of every global for a statement whose value is the code's. Judged: ordinary memory is a variable by design, hardware and shared memory are volatile and never folded, so a write-back of the value read is the A5-112 / A5-140 class (`g._1_3_ = g._1_3_`), value-preserving. The oracle counts `g._o_n_ = V;` where `V = g._o_n_;` is the one line that assigns V as `order.folded-store.piece-restore`. `SE_A7_RULE_OFF=5150` restores the finding (1 finding on the seed, whole and shrunk).
+
+### 3. A5-112
+
+Seeds 366, 1259, 1486 and 3284 pass in the 20,000-seed run (counted as `order.folded-store.piece-split`). The remaining width (the narrow write printed as a store of the whole) is `Heritage::normalizeWriteSize`'s; refining heritage's ranges for every global would change the text of programs that are right. Left open.
+
+### 4. Runs
+
+| Run | Result |
+|---|---|
+| ctest | 117 of 117 passed |
+| fault matrix | 0 of 94 job(s) failed |
+| generator 20,000 seeds | failing seeds=0; findings=0 (`piece-restore` 4 in the run, pins included) |
+| grammar 1, 10,000 from 10,900,001 | failing seeds=0; findings=0 |
+| grammar 2, 10,000 from 10,900,001 | 1 failing seed, 2 findings: 10908446 (A5-151, routed to area 7; not this branch's) |
+| printed-C | agrees=5196 |
+| corpus hwram007 / hwram008, lent | every ledger count 0; missing and said 0 and 4; real entries 999: lent 474 (645 parameters), 1543: 724 (975) |
+| lints | literal size ok; vendored tree lint ok |
+
+The corpus dumps are unchanged: the host change runs only after a failed pass and the oracle change reads text.

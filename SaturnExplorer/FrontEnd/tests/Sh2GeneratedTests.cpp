@@ -7875,6 +7875,39 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 continue;
                             }
                         }
+                        // (A5-150: `g._1_3_ = Var2;` where `Var2 = g._1_3_;` is the one line that assigns Var2: heritage widened a byte store into a
+                        // store of the word (the piece the byte leaves is the word's old bytes, read at entry), and the flow split it back into its
+                        // lanes, so the bytes are written back with the value they were read with. A5-112's class like A5-140's: value-preserving for
+                        // ordinary memory, which is a variable by design (hardware and shared memory are volatile and never folded); counted, not judged)
+                        if (!dts::A7RuleOff(5150))
+                        {
+                            const size_t eq = l.text.find(" = ", e), semi = l.text.find_last_of(';');
+                            if (eq != std::string::npos && semi != std::string::npos && semi > eq + 3 && eq == e)
+                            {
+                                const std::string var = l.text.substr(eq + 3, semi - eq - 3);
+                                bool ident = !var.empty();
+                                for (char c : var) ident = ident && (std::isalnum(static_cast<unsigned char>(c)) || c == '_');
+                                char piece[48];
+                                std::snprintf(piece, sizeof piece, "Ram%08x._%u_%u_;", static_cast<unsigned>(f.address), off, sz);
+                                size_t readLine = r.lines.size(), assigns = 0;
+                                for (size_t lj = 0; ident && lj < r.lines.size(); ++lj)
+                                {
+                                    const std::string& t = r.lines[lj].text;
+                                    const size_t tb = t.find_first_not_of(' ');
+                                    if (tb == std::string::npos || t.compare(tb, var.size() + 3, var + " = ") != 0) continue;
+                                    ++assigns;
+                                    const size_t pa = t.find(piece, tb + var.size() + 3);
+                                    // (the piece's type prefix, `x` or `u`, and nothing else before it)
+                                    if (lj < li && pa != std::string::npos && pa - (tb + var.size() + 3) <= 2 && t.size() == pa + std::strlen(piece))
+                                        readLine = lj;
+                                }
+                                if (ident && assigns == 1 && readLine < li)
+                                {
+                                    count("order.folded-store.piece-restore");
+                                    continue;
+                                }
+                            }
+                        }
                         const uint32_t lo = f.address + off, hi = lo + sz;
                         bool made = false, readNamed = false;
                         for (const AccessFate& o : r.accessFates)
@@ -18821,6 +18854,44 @@ void TestArea7Round25Pins(Sh2Decompiler& d)
     }
 }
 
+// Areas 5 and 10, A5-150 and A10-19. A5-150 (oracle): a byte store the engine widened to the word and split back into lanes writes the bytes
+// the code leaves with the value they were read with (`Var2 = g._1_3_;` ... `g._1_3_ = Var2;`): counted as `order.folded-store.piece-restore`, not
+// judged (grammar 1 seed 9902422, whole and shrunk). A10-19 (product): the user's own volatile range cut by a misaligned access made "Volatile
+// memory was propagated" and no text; the probe pass without the range finds the access and marks it whole (the shrunk program of A10-18 with the
+// user's range 0x2600100C-0x2600100F).
+void TestA5150A1019Pins(Sh2Decompiler& d)
+{
+    {
+        const Report rep = Evaluate(d, Generate(9902422u), true);
+        std::printf("pin 'A5-150 grammar 1 seed 9902422': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        const auto k = rep.counts.find("order.folded-store.piece-restore");
+        CHECK(k != rep.counts.end() && k->second > 0);
+    }
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* volatileRange;
+        const char* poll;
+    };
+    const Shrunk kShrunk[] = {
+        { "A5-150 grammar 1 seed 9902422 shrunk", "D609 2158 8B0D 8803 8F01 2620 6062 6060 3030 8900 6350 D705 6071 C801 8BFC 000B 0009 AFF2 0009 0009 2600 2384 2600 1000",
+          "26001000-2600100f", "26001000" },
+        { "A10-19 the user's own range cut by the misaligned store", "D604 D705 8177 2602 E004 006E 465F 2612 000B 0009 2600 1008 0600 1000", "2600100c-2600100f",
+          nullptr },
+    };
+    for (const Shrunk& p : kShrunk)
+    {
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round23Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -20671,6 +20742,7 @@ void TestGenerated()
         RUN(TestA5FoldedPins4(d));
         RUN(TestArea7Round22Pins(d));
         RUN(TestArea7Round23Pins(d));
+        RUN(TestA5150A1019Pins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
         RUN(TestArea7Round26Pins(d));
