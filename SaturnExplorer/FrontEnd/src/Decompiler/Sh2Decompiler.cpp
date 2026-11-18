@@ -10218,6 +10218,18 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         if (!plainCopy(text)) continue;
         const size_t nb = text.find_first_not_of(' '), eq = text.find(" = ");
         const std::string name = text.substr(nb, eq - nb);
+        // (A7-207: the global the line reads, `xRam06001004 = (int2)uRam26001000;`, is the variable a join of stores made; the operand drawn at
+        // the first store is the same copy as the name of a copy of the variable would be)
+        std::string operand;
+        {
+            size_t v = eq + 3;
+            if (v < text.size() && text[v] == '(')
+            {
+                const size_t close = text.find(')', v);
+                if (close != std::string::npos) v = close + 1;
+            }
+            if (v < text.size() && text.back() == ';') operand = text.substr(v, text.size() - 1 - v);
+        }
         const auto isStore = [&flow](uint32_t a) { return flow.accessesByInsn.find(std::make_pair(a, true)) != flow.accessesByInsn.end(); };
         bool namesOther = false;
         std::set<uint32_t> drawnStores;
@@ -10248,11 +10260,38 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
                     bool nextStore = false;
                     for (const Token& u : lines[other].tokens) names = names || (u.addr && u.begin == u.end && isStore(u.addr));
                     for (const Token& u : l.tokens) nextStore = nextStore || (u.addr == at + 2 && u.begin == u.end && isStore(u.addr));
-                    if (names || !nextStore) continue;
+                    // (A7-200: nor when no return lies between the two lines: a store's statement ahead of the copy on the same path, `iRam26001018 =
+                    // (int4)iRam26002200;` and the write-back `iRam26001018 = iVar1;` after the `if` that ends in a `return`, names no other path's
+                    // store; the oracle's A7-166 reading, a `return` at the block's own depth between the two lines; grammar 1 seed 11002157)
+                    bool returned = false;
+                    if (!names && !nextStore)
+                    {
+                        const size_t za = std::min(line, other), zz = std::max(line, other);
+                        int depth = 0;
+                        bool leaves = false;
+                        for (size_t lk = za + 1; lk < zz && !returned && !leaves; ++lk)
+                        {
+                            const std::string& xt = lines[lk].text;
+                            const size_t xb = xt.find_first_not_of(' ');
+                            if (xb == std::string::npos) continue;
+                            if (xt.find("LAB_") != std::string::npos || xt.find("goto") != std::string::npos) { leaves = true; break; }
+                            if (depth == 0 && xt.compare(xb, 6, "return") == 0) { returned = true; break; }
+                            for (size_t k = xb; k < xt.size() && !leaves; ++k)
+                            {
+                                if (xt[k] == '{') ++depth;
+                                if (xt[k] == '}' && --depth < 0) leaves = true;
+                            }
+                        }
+                    }
+                    if (names || (!nextStore && returned)) continue;
                 }
                 const std::string& ot = lines[other].text;
                 const size_t ob = ot.find_first_not_of(' '), oa = ot.find(" = ");
-                if (ob == std::string::npos || oa == std::string::npos || oa <= ob || ot.compare(ob, oa - ob, name) != 0) continue;
+                if (ob == std::string::npos || oa == std::string::npos || oa <= ob) continue;
+                const bool sameName = ot.compare(ob, oa - ob, name) == 0;
+                // (the operand's own statement, a statement that is no plain copy: `uRam26001000 = CONCAT22(...);`)
+                const bool ofOperand = !sameName && !operand.empty() && operand.find('.') == std::string::npos && !plainCopy(ot) && ot.compare(ob, oa - ob, operand) == 0;
+                if (!sameName && !ofOperand) continue;
                 for (const Token& u : lines[other].tokens) own = own || (u.addr == at && u.begin == ob && u.end == oa && !u.materialised);
             }
             if (!own) continue;
@@ -10530,7 +10569,19 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             if (!out || out->isImplied() || o->isFromDelaySlot() || inMemory(out->getSpace()) || in->getSpace() != data) continue;
             const uint32_t at = InstructionOf(o);
             const uint32_t from = CanonicalOf(at);
-            if (flow.callInsns.count(at) || flow.accessesByInsn.find(std::make_pair(from, true)) == flow.accessesByInsn.end()) continue;
+            // (A7-200: a store the flow has no access record of, through a pointer the engine does not resolve -- `mov.b r2,@r5` -- is a store
+            // as the one with a record is: its STORE op is the instruction's)
+            bool storeOp = flow.accessesByInsn.find(std::make_pair(from, true)) != flow.accessesByInsn.end();
+            if (!storeOp)
+            {
+                const auto fi = flow.insnFirst.find(at);
+                if (fi != flow.insnFirst.end() && fi->second.first >= 0 && static_cast<size_t>(fi->second.first) < flow.blockOps.size())
+                {
+                    const std::vector<FlowOp>& iops = flow.blockOps[static_cast<size_t>(fi->second.first)];
+                    for (size_t i = fi->second.second; i < iops.size() && iops[i].insn == at; ++i) storeOp = storeOp || iops[i].code == ghidra::CPUI_STORE;
+                }
+            }
+            if (flow.callInsns.count(at) || !storeOp) continue;
             // (not the value the store itself writes into the global: that copy is the store's)
             if (in->isWritten() && in->getDef()->code() != ghidra::CPUI_INDIRECT && in->getDef()->code() != ghidra::CPUI_MULTIEQUAL &&
                 CanonicalOf(InstructionOf(in->getDef())) == from)
