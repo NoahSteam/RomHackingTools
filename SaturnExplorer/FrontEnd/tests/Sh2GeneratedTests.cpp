@@ -8066,6 +8066,23 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 }
                             }
                         }
+                        // (A5-167: a piece no run ever writes, nothing of the function or its callees writing any of its bytes, keeps the value it had at
+                        // entry, and a store of it, `g._1_1_ = (xunknown1)g;` after `mov.w @g,r1 ; ... mov.b r2,@g ; tas.b @g`, is the engine's
+                        // write-back of the bytes a narrower store leaves (A5-112's class, A5-150's value-preserving reading), whatever the form of the
+                        // value it holds. Grammar 1 seed 12298693; counted, not judged)
+                        if (!dts::A7RuleOff(5167))
+                        {
+                            const uint32_t plo = f.address + off, phi = plo + sz;
+                            bool written = false;
+                            for (const RunOut& run : runs)
+                                for (const TraceRec& t : run.trace)
+                                    written = written || (t.write && t.addr < phi && plo < t.addr + static_cast<uint32_t>(t.size));
+                            if (!written)
+                            {
+                                count("order.folded-store.piece-untouched");
+                                continue;
+                            }
+                        }
                         const uint32_t lo = f.address + off, hi = lo + sz;
                         bool made = false, readNamed = false;
                         for (const AccessFate& o : r.accessFates)
@@ -8282,6 +8299,33 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             continue;
                         }
                     }
+                    // (A5-165: a store that in every run changes nothing, the latest earlier write that overlaps its bytes (a callee's included)
+                    // being the same size at the same address and the same value, is the store the code made before the read: the engine joins
+                    // the two into one, printed where the first is, and the read sees the value either way. `mov.l r0,@r6 ; mov.w @r7,r1 ;
+                    // mov.l r0,@r6`, the read through a pointer that may hold the global's address, grammar 2 seed 12247189.)
+                    if (!dts::A7RuleOff(5165))
+                    {
+                        size_t made = 0, same = 0;
+                        for (const RunOut& run : runs)
+                            for (size_t k = 0; k < run.trace.size(); ++k)
+                            {
+                                const TraceRec& t = run.trace[k];
+                                if (t.depth != 0 || !t.write || t.insn != f.insn) continue;
+                                ++made;
+                                for (size_t i = k; i-- > 0;)
+                                {
+                                    const TraceRec& w = run.trace[i];
+                                    if (!w.write || !(w.addr < t.addr + static_cast<uint32_t>(t.size) && t.addr < w.addr + static_cast<uint32_t>(w.size))) continue;
+                                    same += w.addr == t.addr && w.size == t.size && w.value == t.value;
+                                    break;
+                                }
+                            }
+                        if (made && same == made)
+                        {
+                            count("order.read-before-folded-store.same-value");
+                            continue;
+                        }
+                    }
                     count("order.read-before-folded-store.checked");
                     // (A5-152: a store the engine makes two of, a delay slot also reached by a branch to it, is printed once per instance, and the
                     // mapping can name one instance at the line of another statement of the global (`mov.w r1,@r6` before it) and no line at the
@@ -8391,6 +8435,27 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 const std::string last = d.Operands.substr(comma + 1);
                 if (last.size() < 2 || last[0] != 'r' || last.find_first_not_of("0123456789", 1) != std::string::npos) return -1;
                 return std::atoi(last.c_str() + 1);
+            };
+            // (A5-164, A5-166: whether the value a folded read loads can never reach `through`. A read in the slot of a delayed branch has its
+            // value carried to the branch's target, to the instruction after the slot, and, when the slot's instruction is also reached by a
+            // branch of its own, to the one after it: all are walked. Grammar 1 seed 12260346, `bf/s L ; mov.w @r7,r0 ; mov.w @(8,r7),r0 ;
+            // and r1,r0 ; mov.l r3,@(0x24,r4)` and a `bra` to the slot's instruction: the value reaches L, which never makes the write.)
+            const auto valueNeverReaches = [&](const AccessFate& rd, uint32_t through) {
+                if (dts::A7RuleOff(5164)) return false;
+                const int reg = loadedRegister(rd);
+                if (reg >= 0) return !dts::ValueMayReach(r, wordAt, rd.insn + 2, reg, through);
+                if (dts::A7RuleOff(5166)) return false;
+                uint16_t w = 0, pw = 0;
+                if (!wordAt(rd.insn, w) || !wordAt(rd.insn - 2, pw)) return false;
+                const sfe::DisassembledInstruction d = sfe::Sh2Decode(rd.insn, w);
+                const sfe::DisassembledInstruction b = sfe::Sh2Decode(rd.insn - 2, pw);
+                const size_t comma = d.Operands.rfind(',');
+                if (!d.IsValid || !b.IsValid || !b.IsBranch || b.IsCall || !b.HasDelaySlot || !b.HasBranchTarget) return false;
+                if (d.Mnemonic.compare(0, 3, "mov") != 0 || !dts::ShapeOf(d).load || comma == std::string::npos || d.Operands[0] != '@') return false;
+                const std::string last = d.Operands.substr(comma + 1);
+                if (last.size() < 2 || last[0] != 'r' || last.find_first_not_of("0123456789", 1) != std::string::npos) return false;
+                const int lr = std::atoi(last.c_str() + 1);
+                return !dts::ValueMayReach(r, wordAt, b.BranchTarget, lr, through) && !dts::ValueMayReach(r, wordAt, rd.insn + 2, lr, through);
             };
             for (const AccessFate& rd : r.accessFates)
             {
@@ -8518,7 +8583,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 count("order.folded-read-before-pointer-write.constant-store");
                                 continue;
                             }
-                            if (!dts::A7RuleOff(5164) && loadedRegister(rd) >= 0 && !dts::ValueMayReach(r, wordAt, rd.insn + 2, loadedRegister(rd), m.insn))
+                            if (valueNeverReaches(rd, m.insn))
                             {
                                 count("order.folded-read-before-pointer-write.value-passes-no-write");
                                 continue;
@@ -8587,8 +8652,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             continue;
                         }
                     }
-                    if (shown > statementEnd(m.firstLine) && !dts::A7RuleOff(5164) && loadedRegister(rd) >= 0 &&
-                        !dts::ValueMayReach(r, wordAt, rd.insn + 2, loadedRegister(rd), m.insn))
+                    if (shown > statementEnd(m.firstLine) && valueNeverReaches(rd, m.insn))
                     {
                         count(m.direct ? "order.folded-read-before-access.value-passes-no-access" : "order.folded-read-before-pointer-write.value-passes-no-write");
                         continue;
@@ -19558,6 +19622,53 @@ void TestA5162Pins(Sh2Decompiler& d)
     CHECK(rep.findings.empty());
 }
 
+// Area 5, round 4 (A5-165, A5-166): two order-class oracle findings whose text is value-correct, each whole and shrunk. A5-165, grammar 2 seed 12247189
+// (`n:read-after-folded-store`): `mov.l r0,@r6 ; mov.w @r7,r1 ; mov.l r0,@r6`, the second store the same value at the same address as the first, which
+// the engine joins into it. A5-166, grammar 1 seed 12260346 (`v:folded-read-after-pointer-write`): a read in the slot of `bf/s` whose register is
+// overwritten on the fall-through path and never reaches the pointer's write on the branch's. A5-167 (below) is the third pin. Each fails with its switch (SE_A7_RULE_OFF=5165, 5166, 5167).
+void TestA5165Pins(Sh2Decompiler& d)
+{
+    {
+        const Report rep = Evaluate(d, MakeV2(12247189), true);
+        std::printf("pin 'A5-165 grammar 2 seed 12247189': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const Report rep = Evaluate(d, Generate(12260346u), true);
+        std::printf("pin 'A5-166 grammar 1 seed 12260346': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const Subject subject = RawSubjectWithEnv("D70A E005 CF71 C801 8B00 D709 2058 890B 8800 8F03 6071 8574 2019 1439 2448 8900 E554 2652 000B 0009 AFF4 0009 2600 2208 2600 1030",
+                                                  "26001030-2600103f", "26001034", "4:06003C1C");
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin 'A5-166 shrunk': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        // A5-167, grammar 1 seed 12298693 (`v:folded-store-after-access`): the engine's write-back of byte 1 of a global no run writes (SE_A7_RULE_OFF=5167)
+        const Report whole = Evaluate(d, Generate(12298693u), true);
+        std::printf("pin 'A5-167 grammar 1 seed 12298693': %zu finding(s)\n", whole.findings.size());
+        for (const Finding& f : whole.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(whole.findings.empty());
+        const Subject subject = RawSubjectWithEnv("D606 D707 6161 2018 8901 8802 8F03 2620 461B E00A 025D 000B 2510 0009 2600 2080 2600 1018", "26001010-2600101f", nullptr, "5:06003C08");
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin 'A5-167 shrunk': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    const ModulePin pin = { "A5-165 grammar 2 seed 12247189 shrunk",
+                            "2F86 2F96 2FD6 2FE6 0D2A 7FF8 6EF3 6843 6953 6052 7E08 6FE3 4D2A 6EF6 6DF6 69F6 68F6 000B 0009 D605 8803 8D01 8464 D704 2602 6171 2602 6040 000B 0009 2600 2100 25F8 00A4",
+                            "0/0/26,26/26/3c", nullptr, "1,1", "188000,188000", "0,208" };
+    const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+    std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+    for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+    CHECK(rep.findings.empty());
+}
+
 void TestArea7Round23Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21608,6 +21719,7 @@ void TestGenerated()
         RUN(TestA5Round2Pins(d));
         RUN(TestA5154Pins(d));
         RUN(TestA5162Pins(d));
+        RUN(TestA5165Pins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
         RUN(TestArea7Round26Pins(d));
