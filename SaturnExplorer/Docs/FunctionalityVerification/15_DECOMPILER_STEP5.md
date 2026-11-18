@@ -23599,3 +23599,60 @@ Branch `review/open-p3`. Scope: grammar 2 seed 12319207 (A7-324) and the long-op
 - **A7-17**, **A7-18**, **A8-45**: still open as a feature (A7-17), an instrument gap (A7-18) and an instrument record (A8-45); rows updated with what each needs; none is a small fix.
 
 Runs (sequential, one heavy binary at a time): build; `ctest -j1` 117 of 117 passed; fault matrix 0 of 94 failed; generator 20,000 seeds `failing seeds=0; findings=0`; printed-C `agrees=5196`; corpus with lending: hwram007 `lent 474 (645)`, 0 missing and said; hwram008 `lent 724 (975)`, 4 missing and said; all ledger counts 0 in both. Lints: `check-literal-size.py` ok (no vendored or patch file touched).
+
+## Area 7, round 34
+
+Branch `review/7-round34` from `merge/a7273` (master with the A7-273 fix). RelWithDebInfo, `-j1`, `ulimit -v 3500000`, one heavy binary at a time. **Five product changes** (`Sh2Decompiler.cpp`: A7-300, A7-301, A7-292's `RetargetInputOperandToStore`, A7-306, A7-308), **oracle rules 302, 304, 306, 307** (`MappingOracle.h`), **no engine patch**. Pins `TestArea7Round34Pins` (ten whole seeds), script `Docs/Decompiler/tools/a7_round34/final.sh`. Ledger: new rows A7-300 to A7-308; A7-220, A7-256, A7-262, A7-271, A7-272, A7-274, A7-292, A7-294 updated.
+
+| Row | Seed | Outcome |
+|---|---|---|
+| A7-294 / A7-274 | grammar 1 12246420 `map-store-twin` | fixed, product (A7-300) |
+| A7-294 | grammar 1 12273194 `map-store-value` | fixed, product (A7-301) |
+| A7-294 | grammar 1 12250922 way-back | fixed, oracle rule 302 |
+| A7-292 | grammar 1 11004012 `map-store-value` | fixed, product (`RetargetInputOperandToStore`) |
+| routed | grammar 1 12261062 `map-const-join` | fixed, oracle rule 304 |
+| routed | grammar 2 12268228 way-back | open: the function runs into other functions' entries and the flow record lacks the instruction (flow-record class, A7-305) |
+| A7-262 | grammar 1 12189580 | no longer reproduces on the merged base (A7-293); closed |
+| A7-262 | grammar 2 12181915 | fixed, oracle rule 306 |
+| A7-271 | grammar 2 12151073 | fixed, product (A7-306) |
+| A7-272 | 11503597, 12150363, 11602585 | replayed, not fixed (12150363: the `movt` is not the block's first instruction, round 31's class; 11503597 and 11602585 as before) |
+| routed (area 5) | grammar 1 12299659 way-back | fixed, product (A7-308) |
+| routed (area 5) | grammar 2 12296264 `map-const-join` | fixed, oracle rule 307 |
+
+### 1. Product changes (each decided from the text and the run values)
+
+* **A7-300** (`AddFrameStoreTokens`, 12246420): `uRam26001008 = (uint2)xVar2;` is the SUBPIECE the engine put at the `bf` for the overlapped slot's `mov.w r1,@r6`; the line was drawn at the polled `mov.w r0,@r6` before it, which only "may" show the value (a poll's load and the statement's load may read one value), and `take(prior)` took it. A prior store that only may show is now not taken when a store ahead in the flow stores a register whose last writers (whole register, `FlowLastWriters`) are the statement's own instructions.
+* **A7-301** (12273194): `uRam06001024 = (uint4)uVar1;`, the zero extension after the half-word store of the `dt` loop's 0, also named the later `mov.b r5,@r6`, an unwritten input that "may be 0" (A7-136). A zero extension is not drawn at the next store of its bytes when an earlier store of them wrote a known 0 and the next stores a register no instruction wrote. (A first form that dropped A7-136's may-be-0 for every unwritten input broke the A7-147 fixture, whose input is 0 by a `tst`; a second form that only required a known-0 store before moved one corpus line, `uStack_40 = (uint4)uRam0608daa0;` of hwram008, drawn then at an older store: the unwritten-input condition is the third and last form, which leaves every corpus token as it was.)
+* **A7-292** (`RetargetInputOperandToStore`, 11004012): `xRam2600210c = (char)param_1;` has its name at the slot store `mov.b r4,@r6` and `param_1` at the instruction after the slot (the engine's one narrowing). The operand of an input is drawn at the store the name is at when that store stores the input unchanged and the store the operand is at stores another register.
+* **A7-306** (`StoreShowsValue`, 12151073): `iStack_28 = -9;` named `mov.b r3,@r15`, the store of the old r3 that `mov.w @r15,r3` read from that very word; such a store writes the word's own value and never a number the line shows.
+* **A7-308** (`MarkMaterialisedReads`, 12299659): A7-124's copy mark (an extension of a load drawn at the load, naming a store elsewhere) also for the extension made in a delay slot (`mov.b @r4,r1` in the slot of `bf/s`).
+
+### 2. Oracle rules
+
+* **302** (12250922): a CONCAT merge of a global's own piece, drawn at a store that writes none of the global (`mov.l r1,@(0x18,r6)`), is a copy there (rules 157 and 290 for a load and a branch).
+* **304** (12261062): `and Rm,Rn` with no high-half bit possible in Rm leaves Rn's low half, as `extu.w` (A7-111): `uVar4 = 0;` for the r2 a loop's `xtrct` keeps the high half of.
+* **306** (12181915): a frame array's element (`aiStack_1c[0] = (int4)cVar1;`) is the name of a copy as a variable is.
+* **307** (12296264): `mova @(disp,pc),r0` is a number in `PossibleBits` (`and r0,r2` with r2 = 2 and r0 = 4 or a table address).
+Mutation: `SE_A7_RULE_OFF=302`, `304`, `306`, `307` reopen 12250922, 12261062, 12181915, 12296264. The product changes were gated by environment switches during development; the corpus runs of hwram007 (before the A7-301 narrowing) and hwram008 with them off and on gave identical token dumps, and they were removed. The A11-40 shrinker pin (`Sh2GeneratedTests.cpp`) took 12246420 and its neighbours, which no longer have a finding, so its list ends with 11503597 and 11102053, still open.
+
+### 3. Not fixed
+
+* **A7-305** (grammar 2 12268228): the way back from `mov.l r0,@-r5` is answered with `puVar1 = puRam0600907c;` before the store's own line; the function runs into the entries of two other functions and `MarkMaterialisedReads` finds no flow entry for the instruction (an attempt to mark such a register variable's copy had no effect, reverted). Flow-record class, A7-270.
+* **A7-272**: 11503597 (`uRam06002308 = 1;` names the last store, of another register), 12150363 (`xStack_c = 0;` at the first instruction of the join; the `movt` is not the block's first), 11602585: no attempt; round 31's `MovtNumber` stands. **A7-220** (11102053): not attempted.
+
+### 4. Runs
+
+One binary at a time, after the last code edit (`final.sh`):
+
+| Run | Result |
+|---|---|
+| `ctest -j1` | 117 of 117 passed (547 s) |
+| fault matrix | `fault matrix: 0 of 94 job(s) failed` |
+| 20,000-seed matrix | `failing seeds=0; findings=0` (652 s) |
+| printed-C | `agrees=5196` |
+| corpus hwram007, lent | 0 check(s) failed; 0 missing and said; "real entries 999: signatures lent 474 (645 parameters)" |
+| corpus hwram008, lent | 0 check(s) failed; 4 missing and said; "1543: 724 (975 parameters)" |
+| sweep grammar 1, 10,000 from 12,300,001 | `failing seeds=0; findings=0` |
+| sweep grammar 2, 10,000 from 12,300,001 | 1 failing seed: 12304053 (`n:map-const-join`, `uVar1 = 0;` at `and #0x4,r0`, the first instruction of a join; shrunk replay has no finding, one guess at an oracle rule tried and reverted; A7-309, open) |
+
+Routed: grammar 2 12304053 (A7-309), 12268228 (A7-305, host: flow-record class), A7-272's seeds, A7-220 to the next area 7 fixer.

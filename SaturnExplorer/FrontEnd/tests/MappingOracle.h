@@ -1640,6 +1640,8 @@ inline uint32_t PossibleBits(const sfe::decomp::DecompileResult& r, const std::f
             const uint32_t pool = (mk & ~3u) + 4 + (w & 0xFFu) * 4;
             if (word(pool, hiw) && word(pool + 2, low)) b = (static_cast<uint32_t>(hiw) << 16) | low;
         }
+        // (rule 307: `mova @(disp,pc),r0` is the address it names: a number)
+        else if ((w >> 8) == 0xC7 && reg == 0 && !A7RuleOff(307)) b = (mk & ~3u) + 4 + (w & 0xFFu) * 4;
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x00) b = PossibleBits(r, word, into, mk, n, depth + 1) << 1;    // shll
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x20) b = PossibleBits(r, word, into, mk, n, depth + 1) << 1;    // shal
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x08) b = PossibleBits(r, word, into, mk, n, depth + 1) << 2;    // shll2
@@ -2336,7 +2338,16 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 return word(text.substr(b, eq - b)) && word(text.substr(v + 6, comma - v - 6)) && !at.empty() &&
                        at.find_first_not_of("0123456789") == std::string::npos;
             }
-            return word(text.substr(b, eq - b)) && v < text.size() && word(text.substr(v, text.size() - 1 - v));
+            // (A7-300 rule 306: a frame array's element, `aiStack_1c[0] = (int4)cVar1;`, is the name of a copy as a variable is: the product
+            // marks the line a copy materialised at the load that made cVar1 (A7-191), naming the frame store; grammar 2 seed 12181915)
+            std::string name = text.substr(b, eq - b);
+            if (!A7RuleOff(306) && name.size() > 3 && name.back() == ']')
+            {
+                const size_t open = name.find('[');
+                if (open != std::string::npos && open > 0 && name.find_first_not_of("0123456789", open + 1) == name.size() - 1 && name.size() - 1 > open + 1)
+                    name.resize(open);
+            }
+            return word(name) && v < text.size() && word(text.substr(v, text.size() - 1 - v));
         };
         std::map<uint32_t, std::set<size_t>> ownDrawn, copyDrawn;
         for (size_t li = 0; li < r.lines.size(); ++li)
@@ -2664,7 +2675,26 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         pieceAtBranch = lb != std::string::npos && le != std::string::npos && le > lb && lt.compare(le + 3, 6, "CONCAT") == 0 &&
                                         IsRamGlobal(lt.substr(lb, le - lb)) && lt.find(lt.substr(lb, le - lb) + "._", le) != std::string::npos && word(t.addr, lw);
                     }
-                    ((copy || pieceAtLoad || pieceAtBranch) ? copyDrawn : ownDrawn)[t.addr].insert(li);
+                    // (A7-300 rule 302: the same merge drawn at a store of another variable -- `iRam2600218c = CONCAT11(xVar4,(xunknown1)iRam2600218c);`
+                    // naming the slot's byte store, drawn at `mov.l r1,@(0x18,r6)` that writes `iRam260021a4`: the product marks it a copy
+                    // materialised there (A7-25), for the store through a pointer that may alias the global; the store writes none of the global,
+                    // so its own statement is the other line, as at a load (rule 157) or a branch (rule 290); grammar 1 seed 12250922)
+                    bool pieceAtOtherStore = false;
+                    if (!A7RuleOff(302) && !plain && !named.empty() && !named.count(t.addr) && isStore(t.addr))
+                    {
+                        const std::string& lt = r.lines[li].text;
+                        const size_t lb = lt.find_first_not_of(' '), le = lt.find(" = ");
+                        uint32_t va = 0;
+                        if (lb != std::string::npos && le != std::string::npos && le > lb && lt.compare(le + 3, 6, "CONCAT") == 0 &&
+                            IsRamGlobal(lt.substr(lb, le - lb), &va) && lt.find(lt.substr(lb, le - lb), le + 3) != std::string::npos)
+                        {
+                            bool own = false;
+                            for (const AccessFate& f : r.accessFates)
+                                own = own || (f.insn == t.addr && f.write && !f.frame && (GlobalDelta(va, f.address) < f.size || storeInside(va, f)));
+                            pieceAtOtherStore = !own;
+                        }
+                    }
+                    ((copy || pieceAtLoad || pieceAtBranch || pieceAtOtherStore) ? copyDrawn : ownDrawn)[t.addr].insert(li);
                 }
         }
         const auto copyOnly = [&](uint32_t at, size_t li) {
@@ -5438,6 +5468,31 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             // with `xtrct r5,r1` after it, printed `in_r1 >> 0x10`; grammar 2 seed 5204684)
                             if ((tw & 0xFF0Fu) == (0x200Du | rn << 8) && ((tw >> 4) & 0xF) != rn) computes = true;
                         }
+                }
+                // (A7-300 rule 304: `and Rm,Rn` with Rm a number below 0x10000 on every path (no bit of the high half possible) -- `and r0,r2` with r0 = 7 or 0x18 -- leaves Rn's low
+                // half only, as `extu.w` does (A7-111): `uVar1 = 0;` for the r2 a loop's `xtrct r5,r2` keeps the high half of; grammar 1 seed 12261062)
+                if (!computes && !A7RuleOff(304) && want == 0 && (w & 0xF00F) == 0x2009)
+                {
+                    if (!haveSources)
+                    {
+                        sources = BranchSources(r, word);
+                        haveSources = true;
+                    }
+                    const unsigned rn = (w >> 8) & 0xF;
+                    if ((PossibleBits(r, word, sources, at, static_cast<int>((w >> 4) & 0xF)) & 0xFFFF0000u) == 0)
+                    {
+                        const size_t nameBegin = text.find_first_not_of(' ');
+                        const std::string name = text.substr(nameBegin, text.find(" = ", nameBegin) - nameBegin);
+                        for (const Line& l : r.lines)
+                            for (const Token& t : l.tokens)
+                            {
+                                uint16_t tw = 0;
+                                if (computes || !t.addr || t.addr == at || t.begin >= t.end || t.end > l.text.size() ||
+                                    l.text.compare(t.begin, t.end - t.begin, name) != 0 || !word(t.addr, tw))
+                                    continue;
+                                if ((tw & 0xFF0Fu) == (0x200Du | rn << 8) && ((tw >> 4) & 0xF) != rn) computes = true;   // xtrct Rm,Rn
+                            }
+                    }
                 }
                 // (A7-251 rule 253: a load the engine folded -- `mov.b @r14,r1` of a frame slot the code stored 0 in, accessFates `read ... folded`
                 // -- gives its register the number the engine knew the memory held: the load is the line's own, as `mov #imm` is; grammar 2
