@@ -10353,6 +10353,42 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
                             }
                         }
                     }
+                    // (A7-273: but a merged statement of the same path is the store's statement before this one. A delay slot's store that
+                    // a `bra` enters too (the decoder's "overlaps" warning) is printed once per way in: `xRam80002010 = 0;` on the `bt/s`
+                    // path, and on the other `xRam80002010 = 0x80000000;` (the slot's store with the `tas.b` after it) and then
+                    // `xRam80002010 = 0x10000000;` (with the byte store further on). The second merged line has the first one ahead of it
+                    // with no `return` between, its name drawn at the slot's store: this line's tokens there are a copy, as the oracle's
+                    // A7-129 reading takes it (A7-166 sets aside only the same text and another path); grammar 1 seed 12133156)
+                    bool mergedAhead = false;
+                    if (names && lines[other].text != text)
+                    {
+                        const std::string& mt = lines[other].text;
+                        const size_t mb = mt.find_first_not_of(' '), ma = mt.find(" = ");
+                        bool nameAtStore = false;
+                        if (mb != std::string::npos && ma != std::string::npos && ma > mb && mt.compare(mb, ma - mb, name) == 0)
+                            for (const Token& u : lines[other].tokens) nameAtStore = nameAtStore || (u.addr == at && u.begin == mb && u.end == ma);
+                        if (nameAtStore)
+                        {
+                            const size_t za = std::min(line, other), zz = std::max(line, other);
+                            int depth = 0;
+                            bool between = false, leaves = false;
+                            for (size_t lk = za + 1; lk < zz && !between && !leaves; ++lk)
+                            {
+                                const std::string& xt = lines[lk].text;
+                                const size_t xb = xt.find_first_not_of(' ');
+                                if (xb == std::string::npos) continue;
+                                if (xt.find("LAB_") != std::string::npos || xt.find("goto") != std::string::npos) { leaves = true; break; }
+                                if (depth == 0 && xt.compare(xb, 6, "return") == 0) { between = true; break; }
+                                for (size_t k = xb; k < xt.size() && !leaves; ++k)
+                                {
+                                    if (xt[k] == '{') ++depth;
+                                    if (xt[k] == '}' && --depth < 0) leaves = true;
+                                }
+                            }
+                            mergedAhead = !between;
+                        }
+                    }
+                    if (mergedAhead) { own = true; break; }
                     if (names || (!nextStore && returned)) continue;
                 }
                 const std::string& ot = lines[other].text;
