@@ -26,7 +26,8 @@ disc, which is the user's to supply.
 Saturn Explorer already **loads Mednafen savestates** (`MDFNSVST`) statically —
 VDP1/VDP2 VRAM, both register files, and CRAM (see
 `Drivers/Savestate/src/SavestateDriver.cpp`). This folder is about the **live tap**:
-attaching to a *running* Mednafen the way `Integration/Yabause/` attaches to Yabause.
+attaching to a *running* Mednafen. Mednafen is the only supported live emulator; the
+Yabause comparisons below are background from the original (now unsupported) Yabause tap.
 
 ## Quickstart
 

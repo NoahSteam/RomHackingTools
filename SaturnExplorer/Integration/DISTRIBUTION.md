@@ -1,6 +1,6 @@
 # Distribution & building the emulator side
 
-The live tap patches a *third-party* emulator (Yabause, Mednafen/Beetle). That raises
+The live tap patches a *third-party* emulator (Mednafen; the old Yabause patch is unsupported). That raises
 two practical questions — how to keep the patcher from breaking when upstream moves,
 and whether you can hand users a prebuilt binary. Short answers below; none of this is
 legal advice.
@@ -28,8 +28,7 @@ they did not choose to start a server. The full statement lives with the protoco
 ## Fork and pin your upstream
 
 `apply.py` injects at specific upstream symbols and code sites (`espec->MasterCycles`,
-the `ss/Makefile.am` source list, `DBG_AddBreakPoint`, `VDP2::RawRegs`, `CheatMemWrite`,
-Yabause's `Vdp2VBlankOUT` / `MappedMemoryWriteByteNocache`, …). If upstream renames or
+the `ss/Makefile.am` source list, `DBG_AddBreakPoint`, `VDP2::RawRegs`, `CheatMemWrite`, …). If upstream renames or
 moves one, the anchor misses. It fails **loudly** — the patcher prints `ANCHOR MISS`
 and the injected accessors become compile errors, never silent corruption — but that's
 still a broken build until someone re-anchors it.
@@ -50,26 +49,24 @@ and hook sites (`retro_run` instead of `Emulate()`), so its accessors would port
 the build wiring + lifecycle hooks need a separate Beetle patcher. Pick one to support
 first; standalone Mednafen is the tested one.
 
-## Prebuilt binaries: Yabause and Mednafen, both with source
+## Prebuilt binaries: Mednafen, with source
 
-Both emulators are GPLv2, so *legally* you may distribute a modified binary **as long as
+Mednafen is GPLv2, so *legally* you may distribute a modified binary **as long as
 you also provide the corresponding modified source** (which you already do — the patch
 is public). But policy and practicality differ:
 
-- **Yabause** — fine to ship a prebuilt patched binary alongside a link to the patched
-  source. Standard GPL compliance.
 - **Mednafen** — GPLv2, so a prebuilt patched binary is fine with the corresponding source. Upstream's
   own `README` ("Distributing a separate patch set or an outright fork, with branding that clearly
   conveys the forkiness, is recommended") is the stance to follow: **do not present the binary as an
   official Mednafen release.** Brand it as a Saturn Explorer build -- a distinct archive/binary name,
   the existing window-title suffix (`apply.py` appends `SaturnExplorer Enabled …`), and a release note
   saying it is a modified fork and that problems with it do not go to upstream.
-- **The blocker that hits both:** a Saturn emulator needs a **Saturn BIOS**, which is
+- **The blocker:** a Saturn emulator needs a **Saturn BIOS**, which is
   copyrighted and **cannot be redistributed**. A "double-click this exe" bundle still
   can't include the one file users must supply themselves (plus disc images). So the
   BIOS step is the real user friction, not the build.
 
-**Recommendation:** ship prebuilt, clearly branded binaries of both (Mednafen is the tested one) so most
+**Recommendation:** ship prebuilt, clearly branded Mednafen binaries so most
 users never need a toolchain, **and** keep the patch + one-command setup below for anyone who would
 rather build. Document the BIOS-is-yours-to-supply step prominently either way, and warn about the
 live endpoint (see "What you are shipping, security-wise") since users did not choose to start a server.
@@ -84,18 +81,14 @@ consent. `install.bat --dry-run` previews the plan. See [`INSTALL.md`](INSTALL.m
 The manual steps it wraps:
 
 ```sh
-# Yabause:
-python3 Integration/Yabause/apply.py  /path/to/yabause     # then build Yabause
 # Mednafen (add --with-pause for the pause/step gate; --enable-debugger for breakpoints):
 python3 Integration/Mednafen/apply.py /path/to/mednafen --with-pause
 cd /path/to/mednafen && ./configure --enable-debugger && make
 ```
 
-Both patchers are idempotent (`--check` to preview, `--revert` to undo). Then launch
+The patcher is idempotent (`--check` to preview, `--revert` to undo). Then launch
 Saturn Explorer and **File → Connect to emulator (live)** (or start it with `--live`).
-For **browser** live viewing, see the "Web (browser) live viewing" section in
-`Integration/Yabause/README.md` (build with `-DSE_WEB_LIVE=ON`, serve cross-origin
-isolated, run a WebSocket→TCP relay).
+Browser live viewing was only ever documented for the Yabause patch, which is unsupported.
 
 ## Shipping Saturn Explorer itself: third-party licences
 

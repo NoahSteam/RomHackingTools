@@ -185,7 +185,3 @@ git push -u origin --all --tags
   [`../install.py`](../install.py).
 - **Nothing else to configure.** The installer already defaults to
   `NoahSteam/mednafen-git`; `--fork-owner` / `--mednafen-repo` override it if needed.
-
-The same pattern works for the Yabause-lineage forks (`NoahSteam/yabause`,
-`yaba-sanshiro`, `Kronos`) — those upstreams *are* on GitHub, so there you can just use
-GitHub's **Fork** button instead of importing a tarball.

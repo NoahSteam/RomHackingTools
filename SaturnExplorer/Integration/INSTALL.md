@@ -12,7 +12,6 @@ touching nothing.
 ## Quick start
 ```bat
 install.bat                       :: Saturn Explorer + Mednafen (default)
-install.bat --with-yabause        :: also build Yabause (Qt)
 install.bat --dry-run             :: show exactly what it would do; change nothing
 install.bat --yes                 :: don't prompt before each install/build
 update.bat                        :: re-run after editing Integration\; rebuilds only what changed
@@ -23,13 +22,6 @@ update.bat                        :: re-run after editing Integration\; rebuilds
 |--------|-----------|-------|
 | Saturn Explorer | CMake + MSVC (Release) | this repo |
 | Mednafen | MSYS2 / MinGW autotools | `./configure --enable-debugger && make`; patched with `--with-pause` (pause/step) + breakpoints |
-| Yabause / Yaba Sanshiro / Kronos | CMake + MSVC + Qt | optional; pick with `--yabause-variant` |
-
-```bat
-install.bat --with-yabause --yabause-variant=kronos --no-mednafen
-```
-`--yabause-variant` is one of `yabause` (default), `sanshiro`, `kronos`. The window-title
-mark auto-detects the fork name (see `Yabause/README.md`).
 
 ## Iterative re-install (rebuild only what changed)
 
@@ -40,7 +32,6 @@ Mednafen glue, `SeLiveProtocol.h`, `apply.py` — you don't need a full reinstal
 ```bat
 update.bat                        :: rebuild only what changed after an Integration\ edit
 update.bat --mednafen-saturn-only :: ...and (re)configure Saturn-only
-update.bat --with-yabause         :: also refresh the Yabause build
 update.bat --dry-run              :: show the plan; change nothing
 ```
 
@@ -72,11 +63,8 @@ The script checks for these and offers to `winget install` any that are missing:
 
 - **git** (`Git.Git`)
 - **CMake** (`Kitware.CMake`)
-- **Visual Studio C++ toolset** (`Microsoft.VisualStudio.2022.BuildTools`, C++ workload) — for Saturn Explorer and Yabause
+- **Visual Studio C++ toolset** (`Microsoft.VisualStudio.2022.BuildTools`, C++ workload) — for Saturn Explorer
 - **MSYS2** (`MSYS2.MSYS2`) — only if building Mednafen; the script then `pacman`-installs `gcc`, `SDL2`, `zlib`, `FLAC`, and the autotools
-
-**Qt** (for a Yabause build) is not auto-installed — install it (`winget`, the Qt online
-installer, or `aqtinstall`) and pass `--qt-path "C:\Qt\6.x\msvc2022_64"`.
 
 If `winget` isn't available, the script names each missing tool and stops so you can
 install it and re-run.
@@ -98,14 +86,10 @@ upstream rename never breaks a build mid-flight.
 | Emulator | Default source (fork) | Upstream (parent) |
 |----------|-----------------------|-------------------|
 | Mednafen | `NoahSteam/mednafen-git` | `libretro-mirrors/mednafen-git` |
-| Yabause | `NoahSteam/yabause` | `Yabause/yabause` |
-| Yaba Sanshiro | `NoahSteam/yaba-sanshiro` | `devmiyax/yabause` |
-| Kronos | `NoahSteam/Kronos` | `FCare/Kronos` |
 
-**These forks must exist and be public** under the owner. The installer clones
-anonymously, so a private repo fails with `404 Not Found`. Create them once, then the
-installer uses them every run. The Yabause-lineage upstreams are on GitHub — just use the **Fork**
-button. Mednafen isn't hosted on GitHub by its author, so import it from the official
+**This fork must exist and be public** under the owner. The installer clones
+anonymously, so a private repo fails with `404 Not Found`. Create it once, then the
+installer uses it every run. Mednafen isn't hosted on GitHub by its author, so import it from the official
 release source: see [`Mednafen/FORK_SETUP.md`](Mednafen/FORK_SETUP.md) for exact steps
 (clean standard-Mednafen provenance, no third-party mirror in the lineage).
 
@@ -115,12 +99,12 @@ or with a `Build from upstream now? [y/N]` prompt otherwise. So you can run it b
 creating any forks; it just falls back to upstream. To choose the source explicitly:
 - `--fork-owner <name>` — use a different account/org that holds the forks.
 - `--upstream` — clone the original upstream repos instead of the forks.
-- `--mednafen-repo <url>` / `--yabause-repo <url>` — an explicit git URL (wins over both).
+- `--mednafen-repo <url>` — an explicit git URL (wins over both).
 
 ## Pinning
 The pinned revisions live in `EMULATORS` in `install.py` (default `master`). For a
 reproducible build, pin a known-good commit in your fork — either edit that table or
-pass `--mednafen-rev <sha>` / `--yabause-rev <sha>`. Re-running `apply.py --check`
+pass `--mednafen-rev <sha>`. Re-running `apply.py --check`
 against fresh upstream tells you if an anchor drifted (see `DISTRIBUTION.md`,
 "Fork and pin your upstream").
 
@@ -128,20 +112,15 @@ against fresh upstream tells you if an anchor drifted (see `DISTRIBUTION.md`,
 ```
 --prefix DIR           where to clone+build emulators (default: <repo>\_emu)
 --no-mednafen          skip Mednafen
---with-yabause         also build a Yabause-lineage fork
---yabause-variant V    yabause | sanshiro | kronos   (default: yabause)
 --mednafen-rev SHA     override the pinned Mednafen revision
---yabause-rev  SHA     override the pinned Yabause-fork revision
 --fork-owner NAME      GitHub owner holding our emulator forks (default: NoahSteam)
 --upstream             clone the original upstream repos instead of our forks
 --mednafen-repo URL    explicit Mednafen git URL (overrides fork/upstream)
---yabause-repo  URL    explicit Yabause-fork git URL (overrides fork/upstream)
 --se-only              build only Saturn Explorer
 --no-demo-menu         build without the Demo menu (what a release does; it is for recording demos)
 --incremental          iterative rebuild: only what changed (alias: --update; see below)
 --mednafen-saturn-only build only the Saturn core (--disable-* every other console; faster)
 --msys2 DIR            use an existing MSYS2 install (e.g. C:\msys64)
---qt-path DIR          Qt dir for the Yabause build (CMAKE_PREFIX_PATH)
 --generator G          CMake generator (default: CMake's own pick, the newest Visual Studio installed; e.g. "Visual Studio 16 2019")
 --dry-run              print the plan; change nothing
 --yes                  don't prompt before installs/builds
@@ -159,7 +138,7 @@ viewer then auto-connects (live) once it's up. Open the menu (the **Launch ▾**
 pick the emulator and the ROM to boot (the ROM **Browse…** picker is filtered to Saturn
 disc images — `.cue/.chd/.iso/.ccd/…`). **Launch Settings…** there lets you edit each
 emulator's executable, launch arguments, and working directory. Put `{rom}` where the
-game path goes — e.g. `"{rom}"` for Mednafen or `-a -i "{rom}"` for Yabause. For the
+game path goes — e.g. `"{rom}"` for Mednafen. For the
 installer's portable Mednafen build, place `sega_101.bin` and `mpr-17933.bin` in the
 `firmware` folder next to `mednafen.exe`; Launch Settings shows a green check or red cross
 for each file. A live preview shows the exact command line. The launch option can also use
