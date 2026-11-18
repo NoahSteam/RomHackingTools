@@ -369,7 +369,8 @@ inline int DeclaredWidth(const sfe::decomp::DecompileResult& r, const std::strin
     if (name.empty()) return 4;
     const auto widthOf = [](const std::string& type) {
         const char last = type.back();
-        if (last == '1' || last == '2' || last == '4' || last == '8') return last - '0';
+        // (rule 261, area 7 round 32: a three-byte type, `unkuint3`, is three; the byte count of a type the engine makes for an odd access)
+        if (last == '1' || last == '2' || last == '4' || last == '8' || (last == '3' && !A7RuleOff(261))) return last - '0';
         if (type == "char" || type == "uchar" || type == "bool" || type == "byte") return 1;
         if (type == "short" || type == "ushort") return 2;
         return 4;
@@ -961,6 +962,15 @@ inline WordValue MemoryBefore(const sfe::decomp::DecompileResult& r, const std::
             word(p, w);
             int ssize = 0;
             const int reg = StoredRegister(w, ssize);
+            // Rule 262 (area 7 round 32, A7-254): a read of a known address that the engine did not fold -- the volatile read of a poll the
+            // request marks (`uVar2 = Ram26001028;` in the loop that stores the word the function reads on) -- is a call the engine keeps
+            // memory's values across no longer: the store's number is not forwarded past it (grammar 1 11703803, volatile request)
+            if (!A7RuleOff(262) && reg < 0 && (w >> 8) != 0xC0 && (w >> 8) != 0xC1 && (w >> 8) != 0xC2 && !FoldedAccess(r, p, false))
+            {
+                uint32_t la = 0;
+                int ls = 0;
+                if (AccessAddress(r, word, into, p, w, false, la, ls, depth + 1)) return WordValue();
+            }
             // (A7-69: `tas.b @Rn` writes the byte it read with bit 7 set; grammar 1 seeds 2702841, 3005842)
             if ((w & 0xF0FF) == 0x401B)
             {
@@ -1620,7 +1630,16 @@ inline uint32_t PossibleBits(const sfe::decomp::DecompileResult& r, const std::f
         uint32_t b = 0xFFFFFFFFu;
         if (hi == 0xE && n == reg) b = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF)));
         else if (hi == 0x2 && lo == 0x9 && n == reg) b = PossibleBits(r, word, into, mk, n, depth + 1) & PossibleBits(r, word, into, mk, m, depth + 1);
-        else if ((w >> 8) == 0xC9 && reg == 0) b = PossibleBits(r, word, into, mk, 0, depth + 1) & (w & 0xFFu);
+        // (rule 265, area 7 round 32: an `and #imm,r0` the query asks at its own place, the head of the loop it is the body of, adds no bit of its
+        // own: its input's bits are the other makers')
+        else if ((w >> 8) == 0xC9 && reg == 0) b = (mk == at && !A7RuleOff(265)) ? 0u : PossibleBits(r, word, into, mk, 0, depth + 1) & (w & 0xFFu);
+        // (rule 265: a literal `mov.l @(disp,pc),Rn` is the pool word's number)
+        else if (hi == 0xD && n == reg && !A7RuleOff(265))
+        {
+            uint16_t hiw = 0, low = 0;
+            const uint32_t pool = (mk & ~3u) + 4 + (w & 0xFFu) * 4;
+            if (word(pool, hiw) && word(pool + 2, low)) b = (static_cast<uint32_t>(hiw) << 16) | low;
+        }
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x00) b = PossibleBits(r, word, into, mk, n, depth + 1) << 1;    // shll
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x20) b = PossibleBits(r, word, into, mk, n, depth + 1) << 1;    // shal
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x08) b = PossibleBits(r, word, into, mk, n, depth + 1) << 2;    // shll2
@@ -2953,6 +2972,30 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         std::set<uint32_t> makers;
                         if (reg >= 0 && RegisterMakers(r, word, into, t.addr, reg, makers) && makers.size() == 1 && *makers.begin() == 0) continue;
                     }
+                    // Rule 263 (area 7 round 32, A7-254): the line is drawn at a second store of the same register, to the same bytes
+                    // (`mov.b r2,@r6 ; mov.b r2,@r6 ; ... ; mov.b r5,@r6`, or with a store of another register between): the engine merged the
+                    // identical stores into one statement and drew it at both, so the line is the pair's statement and no one dead store's.
+                    // Grammar 1 seed 12132326
+                    if (!A7RuleOff(263) && foldedStores.count(t.addr) && t.begin >= nb && t.end <= eq + 2)
+                    {
+                        uint16_t sw = 0;
+                        int ssize = 0;
+                        const int reg = word(t.addr, sw) ? StoredRegister(sw, ssize) : -1;
+                        bool twin = false;
+                        const AccessFate& ft = *foldedStores[t.addr];
+                        std::set<uint32_t> drawn = named;
+                        drawn.insert(valued.begin(), valued.end());
+                        for (uint32_t x : drawn)
+                        {
+                            uint16_t xw = 0;
+                            int xsize = 0;
+                            const auto fx = foldedStores.find(x);
+                            twin = twin || (reg >= 0 && x != t.addr && fx != foldedStores.end() && word(x, xw) &&
+                                            StoredRegister(xw, xsize) == reg && fx->second->address == ft.address && fx->second->size == ft.size &&
+                                            fx->second->frame == ft.frame);
+                        }
+                        if (twin) continue;
+                    }
                     if (!A7RuleOff(169) && t.begin >= nb && t.begin >= eq + 3 && t.begin >= 3 && lt[t.begin - 1] == ')')
                     {
                         size_t open = lt.rfind('(', t.begin - 1);
@@ -3087,6 +3130,22 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     for (size_t k = d0; number && k < operand.size(); ++k)
                         number = hex ? std::isxdigit(static_cast<unsigned char>(operand[k])) != 0 : std::isdigit(static_cast<unsigned char>(operand[k])) != 0;
                     if (number) break;
+                }
+                // Rule 260 (area 7 round 32, A7-253): the branch is a `bt`/`bf` and the operand is the status register or a variable
+                // assigned from it (`uVar5 = in_sr | uVar3 == 0;`, `xVar1 = (xunknown1)in_sr;`): a conditional branch reads T, the register's
+                // low bit, and its own flow op is the narrowing of the register to a byte; the engine merged it with the byte stores' narrowing
+                // of the same register (`stc sr,r0` then `mov.b r0,@r4`) and kept the branch's. The branch makes this conversion
+                // (grammar 1 11703274; grammar 2 specials 11600981)
+                if (!A7RuleOff(260) && (d.Mnemonic.compare(0, 2, "bt") == 0 || d.Mnemonic.compare(0, 2, "bf") == 0))
+                {
+                    bool sr = operand == "in_sr";
+                    for (size_t k = 0; !sr && k < r.lines.size(); ++k)
+                    {
+                        const std::string& dl = r.lines[k].text;
+                        const size_t b0 = dl.find_first_not_of(' ');
+                        sr = b0 != std::string::npos && dl.compare(b0, operand.size() + 3, operand + " = ") == 0 && dl.find("in_sr") != std::string::npos;
+                    }
+                    if (sr) break;
                 }
                 bool whole = lt.compare(lt.size() - 1, 1, ";") == 0 && t.end + 1 == lt.size() && lt.compare(eq, 4, " = (") == 0 && open == eq + 3 &&
                              lt.find_first_of(" ,()", nb) == eq && operand.find("Ram") == std::string::npos && operand.find("Stack") == std::string::npos;
@@ -4416,6 +4475,21 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 }
                 if (named > 0 && named < 4) width = named;
             }
+            // Rule 264 (area 7 round 32, A7-265): a global the text declares nowhere is as wide as the widest access the function makes at its
+            // address when none is a word (`uRam26002004 = 0xffd8;` for `mov #-0x28,r2` stored by `mov.w r2,@r7`, the accesses' own tokens
+            // being elsewhere): the number the sign extension makes of the byte is shown at the variable's width; grammar 2 seed 12222510
+            if (width >= 4 && !A7RuleOff(264))
+            {
+                uint32_t va = 0;
+                const std::string gname = text.substr(nameAt, text.find(" = ", nameAt) - nameAt);
+                if (IsRamGlobal(gname, &va))
+                {
+                    int widest = 0;
+                    for (const AccessFate& f : r.accessFates)
+                        if (f.size > 0 && !f.frame && GlobalDelta(f.address, va) == 0) widest = std::max(widest, static_cast<int>(f.size));
+                    if (widest > 0 && widest < 4) width = widest;
+                }
+            }
             const uint32_t widthMask = width >= 4 ? 0xFFFFFFFFu : (1u << (8 * width)) - 1;
             const auto sameNumber = [&](uint32_t x) { return ((x ^ want) & widthMask) == 0; };
             // (A7-134: code the words' own T makes unreachable is judged by nothing: no path runs the instruction)
@@ -5219,6 +5293,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         const WordValue zero = RegisterBefore(r, word, sources, f.insn, reg);
                         computes = zero.kind == WordValue::Number && zero.value == 0;
                     }
+                }
+                // Rule 265 (area 7 round 32, A7-260): `and #imm,r0` at the head of a join leaves 0 when none of the bits the paths bring into r0
+                // (a literal's, `extu.w` of one, this very `and` round a loop) is in the mask: grammar 1 seed 11901023
+                if (!computes && !A7RuleOff(265) && want == 0 && (w >> 8) == 0xC9)
+                {
+                    if (!haveSources)
+                    {
+                        sources = BranchSources(r, word);
+                        haveSources = true;
+                    }
+                    computes = (PossibleBits(r, word, sources, at, 0) & (w & 0xFFu)) == 0;
                 }
                 if (computes) continue;
             }
