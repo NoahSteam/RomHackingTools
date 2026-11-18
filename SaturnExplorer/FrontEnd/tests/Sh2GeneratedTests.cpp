@@ -20676,6 +20676,12 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         std::printf("pin 'A3-232 grammar 2 seed 12147005': %zu finding(s), clobbered-index runs %d\n", seed.findings.size(), count(seed, "table.index-clobbered"));
         CHECK(seed.findings.empty() && count(seed, "table.index-clobbered") > 0);
     }
+    // A3-233 (grammar 2 seed 12136696, routed `caution-unsaid-deep`, r15, A3-228's class): not reproduced on A3-228's code; the caution is said.
+    {
+        const Report seed = Evaluate(d, MakeV2(12136696), false);
+        std::printf("pin 'A3-233 grammar 2 seed 12136696': %zu finding(s), caution said %d\n", seed.findings.size(), count(seed, "caution.said"));
+        CHECK(seed.findings.empty() && count(seed, "caution.said") > 0 && count(seed, "caution.unsaid.deep") + count(seed, "caution.unsaid.deep.own-effect") == 0);
+    }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
     {
