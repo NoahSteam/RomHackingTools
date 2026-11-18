@@ -7657,6 +7657,15 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             {
                                 const TraceRec& p = run.trace[j];
                                 if (p.depth == 0 && !p.write && r.InBody(p.addr)) continue;   // (a literal of the function)
+                                // (A5-161: a `tas.b` between, its read and its write of one byte of the word, is undone by the write-back, which holds the
+                                // word as the read before it left it: `mov.w @g,r0 ; tas.b @g ; mov.w r0,@g`, grammar 1 seed 11007546; the walk goes on
+                                // to the read, which the stored value is compared with)
+                                if (p.depth == 0 && !dts::A7RuleOff(5161) && r.InBody(p.insn) && (subject.WordAt(p.insn) & 0xF0FFu) == 0x401Bu &&
+                                    p.size == 1 && p.addr >= t.addr && p.addr < t.addr + static_cast<uint32_t>(t.size))
+                                {
+                                    count("order.folded-store.write-back-tas");
+                                    continue;
+                                }
                                 const bool overlaps = p.addr < t.addr + static_cast<uint32_t>(t.size) && t.addr < p.addr + static_cast<uint32_t>(p.size);
                                 if (p.addr == t.addr && p.size == t.size)
                                 {
@@ -8492,8 +8501,37 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     }
                     continue;
                 }
+                // (A5-162: a read whose register nothing reads, every path overwriting it first, has no statement of its own: the engine drops it,
+                // and the line that names its global after a write is another read's, which this check judges on its own. Grammar 1 seed 12183970,
+                // `mov.l @(r0,r7),r0` in a `dt` loop, r0 overwritten by `extu.w r2,r0` after it: the loop's `uVar2 = uRam26001010;` after the loop's
+                // register write is the value of the read at 0x06009016, which the code makes after that write, held in the loop by the merge.)
+                bool deadValue = false;
+                if (!dts::A7RuleOff(5162) && rd.insn >= kCode && (rd.insn - kCode) / 2 < subject.words.size())
+                {
+                    const sfe::DisassembledInstruction d = sfe::Sh2Decode(rd.insn, subject.WordAt(rd.insn));
+                    const bool slot = rd.insn >= kCode + 2 && sfe::Sh2Decode(rd.insn - 2, subject.WordAt(rd.insn - 2)).HasDelaySlot;
+                    const size_t comma = d.Operands.rfind(',');
+                    if (d.IsValid && !slot && d.Mnemonic.compare(0, 3, "mov") == 0 && dts::ShapeOf(d).load && comma != std::string::npos && d.Operands[0] == '@')
+                    {
+                        const std::string last = d.Operands.substr(comma + 1);
+                        if (last.size() >= 2 && last[0] == 'r' && last.find_first_not_of("0123456789", 1) == std::string::npos)
+                        {
+                            std::array<uint32_t, 16> diff;
+                            diff.fill(0);
+                            diff[static_cast<size_t>(std::atoi(last.c_str() + 1))] = 0xFFFFFFFFu;
+                            const auto word = [&](uint32_t pc, uint16_t& w) {
+                                if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                                w = subject.WordAt(pc);
+                                return true;
+                            };
+                            deadValue = dts::IgnoredDiff(r, word, rd.insn + 2, diff);
+                        }
+                    }
+                }
+                if (deadValue) count("order.folded-read-before-access.dead-read");
                 for (const MemoryAccess& m : got)
                 {
+                    if (deadValue) break;
                     // (A5-119: ...and a write through a pointer, which may be the global's address: `x = g; *p = v; g = x + 1` printed `*p = v;
                     // g = g + 1;`, the word read after the store that may have changed it. A read through a pointer changes nothing.)
                     if ((!m.direct && !m.write) || m.firstLine < 0 || m.origBlock < 0) continue;
