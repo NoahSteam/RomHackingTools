@@ -9605,6 +9605,7 @@ struct Shrinker
     int evals = 0;
     int budget = 250;
     std::function<bool(const Program&)> accept;   // a test's stand-in for "the finding is still there" (empty: evaluate the program)
+    int baseStops = -1;   // (A11-40) -1: not asked yet; 1: the program the shrink starts from stops the emulator or breaks the convention itself
 
     // What the generator declared of a function must still be true of the program a shrink step leaves (A2-50). The one declaration an
     // item can carry is `return g(p);` (Func::retIsCall): r0 is what the last call's callee returned, and no instruction of the function
@@ -9682,6 +9683,10 @@ struct Shrinker
         if (!IntentHolds(prog)) return false;
         ++evals;
         if (accept) return accept(prog);
+        // (A11-40) A step that makes a program the emulator stops on (a pop left without its push, PR read back as 0: grammar 1 seed 12212141's
+        // shrunk replay) gives the replay an `emulator-error` the seed's own program does not have, and the finding it reports is no longer
+        // the seed's. Only a program the shrink starts from that itself stops may shrink to one that stops.
+        if (baseStops == 0 && StopsInEmulator(prog)) return false;
         return Has(Evaluate(d, prog, false), sig);
     }
 
@@ -9840,6 +9845,7 @@ struct Shrinker
 
     Program Run()
     {
+        if (!accept) baseStops = StopsInEmulator(prog) ? 1 : 0;   // (A11-40) the program the shrink starts from
         while (evals < budget)
         {
             bool changed = false;
@@ -20508,6 +20514,18 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         CHECK(p.postPollStore == 0x26003000u && p.postPollCall == 1 && holds && noStore && noCall);
         CHECK(Shrinker::IntentHolds(small) && shapes(small, "post_store.store") == 1 && shapes(small, "post_call.jsr") + shapes(small, "post_call.bsr") == 1);
         CHECK(bad == 0);
+    }
+    {
+        // A11-40 (area 11, the shrinker): grammar 1 seed 12212141's own program has one finding (`n:map-copy-store`); its shrunk replay took out the
+        // push of PR and kept the pop (`mov.l @r15+,r3 ; lds r3,pr`), returned to 0 and reported an `emulator-error` the seed does not have. A step
+        // that makes a program stop the emulator is not taken when the program the shrink starts from does not stop.
+        const Program p = Generate(12212141);
+        Shrinker s{ d, p, "n:map-copy-store" };
+        const Program small = s.Run();
+        const Report again = Evaluate(d, small, false);
+        std::printf("pin 'A11-40 grammar 1 seed 12212141': seed stops %d; shrunk in %d evaluations, still %d, emulator-error %d, stops %d\n", int(StopsInEmulator(p)),
+                    s.evals, int(Has(again, "n:map-copy-store")), int(Has(again, "emulator-error")), int(StopsInEmulator(small)));
+        CHECK(!StopsInEmulator(p) && Has(again, "n:map-copy-store") && !Has(again, "emulator-error") && !StopsInEmulator(small));
     }
     {
         // A3-193 (area 3, oracle): grammar 2 seed 8602477, `n:return-dropped`. Each arm of `tst r4,r4 ; bf` ends with `mov #7,r0 ; mov.b @(r0,r4),r1`
