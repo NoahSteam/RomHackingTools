@@ -5458,6 +5458,31 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             if ((tw & 0xFF0Fu) == (0x200Du | rn << 8) && ((tw >> 4) & 0xF) != rn) computes = true;
                         }
                 }
+                // (A7-300 rule 304: `and Rm,Rn` with Rm a number below 0x10000 on every path (no bit of the high half possible) -- `and r0,r2` with r0 = 7 or 0x18 -- leaves Rn's low
+                // half only, as `extu.w` does (A7-111): `uVar1 = 0;` for the r2 a loop's `xtrct r5,r2` keeps the high half of; grammar 1 seed 12261062)
+                if (!computes && !A7RuleOff(304) && want == 0 && (w & 0xF00F) == 0x2009)
+                {
+                    if (!haveSources)
+                    {
+                        sources = BranchSources(r, word);
+                        haveSources = true;
+                    }
+                    const unsigned rn = (w >> 8) & 0xF;
+                    if ((PossibleBits(r, word, sources, at, static_cast<int>((w >> 4) & 0xF)) & 0xFFFF0000u) == 0)
+                    {
+                        const size_t nameBegin = text.find_first_not_of(' ');
+                        const std::string name = text.substr(nameBegin, text.find(" = ", nameBegin) - nameBegin);
+                        for (const Line& l : r.lines)
+                            for (const Token& t : l.tokens)
+                            {
+                                uint16_t tw = 0;
+                                if (computes || !t.addr || t.addr == at || t.begin >= t.end || t.end > l.text.size() ||
+                                    l.text.compare(t.begin, t.end - t.begin, name) != 0 || !word(t.addr, tw))
+                                    continue;
+                                if ((tw & 0xFF0Fu) == (0x200Du | rn << 8) && ((tw >> 4) & 0xF) != rn) computes = true;   // xtrct Rm,Rn
+                            }
+                    }
+                }
                 // (A7-251 rule 253: a load the engine folded -- `mov.b @r14,r1` of a frame slot the code stored 0 in, accessFates `read ... folded`
                 // -- gives its register the number the engine knew the memory held: the load is the line's own, as `mov #imm` is; grammar 2
                 // seed 11802915)
