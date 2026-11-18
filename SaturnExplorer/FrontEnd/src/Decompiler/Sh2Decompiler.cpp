@@ -8809,6 +8809,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             selfCopy = stored;
         }
         std::map<const ghidra::AccessRecord*, bool> shown;
+        const auto shows = [&](const ghidra::AccessRecord* r) {
             if (!valuesFound)
             {
                 values = StatementValues(o, flow.opsEnd);
