@@ -4977,13 +4977,36 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 {
                     std::set<uint32_t> makersN;
                     const uint32_t imm = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF)));
-                    if (RegisterMakers(r, word, sources, at, static_cast<int>((w >> 8) & 0xF), makersN) && !makersN.count(0))
+                    const int rnAdd = static_cast<int>((w >> 8) & 0xF);
+                    if (RegisterMakers(r, word, sources, at, rnAdd, makersN) && !makersN.count(0))
+                    {
+                        // (`or Rn,Rn` and `and Rn,Rn`, the generator's no-ops, make nothing: the makers before them are the register's; grammar 1 seed 12279304)
+                        for (int pass = 0; pass < 4; ++pass)
+                        {
+                            std::set<uint32_t> next;
+                            bool changed = false;
+                            for (uint32_t m : makersN)
+                            {
+                                uint16_t mw = 0;
+                                std::set<uint32_t> before;
+                                if (m && word(m, mw) && ((mw & 0xF00F) == 0x2009 || (mw & 0xF00F) == 0x200B) && static_cast<int>((mw >> 8) & 0xF) == rnAdd &&
+                                    static_cast<int>((mw >> 4) & 0xF) == rnAdd && RegisterMakers(r, word, sources, m, rnAdd, before) && !before.count(0))
+                                {
+                                    next.insert(before.begin(), before.end());
+                                    changed = true;
+                                }
+                                else next.insert(m);
+                            }
+                            makersN = next;
+                            if (!changed) break;
+                        }
                         for (uint32_t m : makersN)
                         {
                             uint16_t mw = 0;
                             uint32_t v = 0;
                             if (word(m, mw) && made(m, mw, v) && sameNumber(v + imm)) computes = true;
                         }
+                    }
                 }
                 // (A7-205: the instruction makes a number that differs from the line's only in bits no instruction after it shows -- `mov #8,r0 ;
                 // L: extu.w r0,r0` where r0 is only shifted left 2 and right 16 or overwritten, the engine's `iVar2 = 0;`; grammar 2 seed 10702729)

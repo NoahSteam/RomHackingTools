@@ -19334,7 +19334,7 @@ void TestArea7Round32Pins(Sh2Decompiler& d)
 // `in_r0` is the register's one variable over the entry's value and the polled one) grammar 1 12212141; the memory walk (A7-281: the low half of a
 // word read is the half of the memory a half-word store wrote) grammar 1 12205947. Oracle: rule 270 (`add #imm,Rn` of a number on one correlated path) grammar 2
 // 12252055; rule 271 (a statement of the input that names no instruction) grammar 2 12255565; rule 272 (`and Rn,Rn` keeps Rn) grammar 1 11905223; rule 273 (a
-// whole global read drawn at a byte read inside it) grammar 1 12188214.
+// whole global read drawn at a byte read inside it) grammar 1 12188214; rule 270 also looks through `or Rn,Rn`/`and Rn,Rn` no-ops, grammar 1 12279304.
 void TestArea7Round33Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -19342,7 +19342,7 @@ void TestArea7Round33Pins(Sh2Decompiler& d)
         int grammar;
         long seed;
     };
-    for (const Whole& w : { Whole{ 1, 12212141 }, Whole{ 1, 12205947 }, Whole{ 2, 12252055 }, Whole{ 2, 12255565 }, Whole{ 1, 11905223 }, Whole{ 1, 12188214 } })
+    for (const Whole& w : { Whole{ 1, 12212141 }, Whole{ 1, 12205947 }, Whole{ 2, 12252055 }, Whole{ 2, 12255565 }, Whole{ 1, 11905223 }, Whole{ 1, 12188214 }, Whole{ 1, 12279304 } })
     {
         const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
         std::printf("pin 'area 7 round 33: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());

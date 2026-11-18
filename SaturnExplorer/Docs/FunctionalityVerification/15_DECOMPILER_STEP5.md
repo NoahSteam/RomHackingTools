@@ -23352,3 +23352,62 @@ The product change moves a conversion's drawn tokens only in the aliased-global 
 * **Host (flow record after the restarts):** A7-253's 12202641, 11900473 (A7-270), A7-250's grammar 2 seeds.
 * **Area 7 (next fixer):** A7-271 (12135074, 12151073, 11905223), A7-272 (11503597, 12150363, 11602585), A7-274's 12246420 (A7-256's class), A7-262, A7-220.
 * **Area 5:** grammar 2 12247189 `read-after-folded-store` (A7-274).
+
+
+## Area 7, round 33
+
+Branch `review/7-round33` from master `8b8eb04e` with `review/7-round32` merged (conflicts in this record only, resolved by keeping both sections; the ledger and `Sh2GeneratedTests.cpp` merged clean). The merged pins passed before any work. RelWithDebInfo, `-j1`, `ulimit -v 3500000`, one heavy binary at a time. **Two product changes** (`Sh2Decompiler.cpp`: A7-280, A7-281), **no engine patch** (0096 stays free). Oracle rules 270 to 273 in `MappingOracle.h`, pins `TestArea7Round33Pins` (seven whole seeds), scripts `Docs/Decompiler/tools/a7_round33/final.sh`. New ledger rows A7-280 to A7-282; A7-251, A7-252, A7-256, A7-262, A7-271, A7-272, A7-274 updated.
+
+| Row | Outcome |
+|---|---|
+| A7-252 copy-store | grammar 1 12212141 fixed (product, A7-280); grammar 2 12255565 fixed (rule 271) |
+| A7-251 const-join | grammar 2 12252055 fixed (rule 270; also grammar 1 12279304 from the final sweep, rule 270 through `or Rn,Rn`). A7-272 (11503597, 12150363, 11602585) replayed, not attempted again |
+| A7-256 / A7-274 store-twin | grammar 1 12205947 fixed (product, A7-281); 12246420 is in the delay-slot overlap class (A7-273) |
+| A7-271 | grammar 1 11905223 fixed (rule 272); grammar 2 12151073 one product attempt, no effect, reverted, open; 12135074 runs into another function (flow-record class), not taken |
+| A7-262 way-back | grammar 1 12188214 fixed (rule 273); 12189580 analysed, open (a product marking); 12181915 does not reproduce shrunk, open |
+| way-back 12250922 (g1) | overlap warning, the coordinator's A7-273 class |
+
+### 1. Product changes
+
+* **A7-280** (`AddFrameStoreTokens`, grammar 1 12212141, shrunk to 32 words): `uRam06001017 = in_r0;` is printed at the call 0x06009030 and named no store. The store is `mov.b r0,@(0x3,r6)` after a poll loop `mov.w @r7,r0 ; tst #1,r0 ; bf`; in the default request the polled memory is not volatile and the engine names r0's one variable `in_r0` over the entry's value and the loaded one. A7-104's `inputStores` takes a store of the statement's input register only when no instruction wrote the register since the entry; this store's register was last written by the load, so `StoreShowsValue` answered "another value" and the fallback for a statement at a call (latest store before it that shows) found nothing. Now, for a statement that copies an input register's low bytes, at a call or a load, with no store chosen, the latest store before it of those bytes whose register (the whole register's last writers, `FlowLastWriters`) was written by loads only is named (`loadedInputStores`). No other change in the corpus or the printed C (below).
+* **A7-281** (`FlowValueMayBe`, grammar 1 12205947, shrunk): `xRam26001024 = CONCAT22(xRam2600200c,xRam2600200c);` is the statement of `mov.w r2,@r7` (0x06009032) after `mov.l @r7,r2` read the word two half-word stores wrote. The value walk of the stored register (the low half of r2) went back through the load to the memory with the load's whole size, met the half-word store of the second half (0x06009022), found it narrower than the read and answered "another value" (`ownOther`), so the line was drawn at the first store. A part of the loaded register is now the same part of the memory (big-endian both), so the half-word store shows the value.
+
+### 2. Oracle rules (each judged from the program text and the run values; none is a product bug)
+
+* **270** (const-join, grammar 2 12252055 shrunk to 30 words): `iVar2 = -0xac;` at `add #0x92,r1`, the first instruction of a join. r1 is -0x3e on one path (`mov #-0x3e,r1` in a `bt/s` slot) and a load (`mov.w @r5,r1`) on the other, but the two paths are correlated by `cmp/pl r6 ; bf` twice (the load runs only when r6 > 0, and then the second `bf` is not taken and the `bra` leaves round the add), so the add runs only on the number: -0x3e + 0x92 = -0xac, the engine's value. The oracle follows no compares. Rule: an `add #imm,Rn` whose Rn has a maker that makes a number and number + imm is the line's number computes it. Round 33's final sweep, grammar 1 12279304 (`uVar6 = 0x26003bb7;` at `add #0xA3,r1`): the generator's `or r1,r1` no-op is a maker of r1; the rule looks through `or`/`and Rn,Rn`.
+* **271** (copy-store, grammar 2 12255565): `pxStack_20 = param_1;` is the pointer r4 a loop advances (`mov.l @r4+,r0`), merged with the frame word r4 is pushed to after the loop; the line says it names no instruction (A7-52) and its folded stores are pushes of r2 (the other input) and of r4 after the loop (the advanced value). Rule: a noOrigin line whose value is the input (`param_N`, `in_rN`, `unaff_rN`) and no candidate store stores that register unchanged (makers exactly the entry) or a register a load fills (which may read the input back from the frame word: the A7-55 fixture's damaged line stays a violation) is not judged.
+* **272** (store-dead, grammar 1 11905223): rule 184 compares the makers of the register at the dead store and at the line's valued store; `and r2,r2` (a no-op) between the entry and the second store was a maker of one only. `and Rn,Rn` keeps Rn: the makers before it are used.
+* **273** (way-back, grammar 1 12188214): `uVar4 = _Ram26001034;` (the whole word, read elsewhere at its address) drawn at `tas.b @r7` with r7 = 0x26001036 after `mac.w @r6+,@r7+`: the tas's own read of a byte inside the variable, not a copy materialised there. Rule: a plain whole-global operand drawn at an instruction that reads a byte or half inside the global (width = the widest access at its address) is read there.
+
+After the first full `ctest`, rule 271 was narrowed (the A7-55 piece fixture: a register a load fills may read the input back). Mutation: `SE_A7_RULE_OFF=<n>` for 270, 271, 272, 273 fails the pin seed of each (grammar 2 12252055, 12255565, grammar 1 11905223, 12188214).
+
+The pin of A11-40 (`Sh2GeneratedTests.cpp`, the shrinker) used seed 12212141's finding; the seed has none now, so the pin takes the first of 12212141, 12133156, 12137810, 11508679, 11703213 that still has a finding of its own.
+
+### 3. Not fixed (analysed or tried)
+
+* **A7-271 12151073** (`iStack_28 = -9;`): one attempt in AddFrameStoreTokens' number block (a number the instruction makes into the register the found stores store, none of whose last writers is that instruction: drop the stores) changed nothing for the seed and was reverted; the line's op is probably taken by another path (`ownOther`/the slot's retarget). Open.
+* **A7-262 12189580**: the way back from `mov.b r2,@(r0,r6)` is answered with `uVar1 = uRam2600230c._0_1_;`, the engine's copy of byte 0 of the global the byte-1 store leaves, drawn at the store without the materialised mark; MarkMaterialisedReads' A7-57 branch needs an implied output. A product decision, not taken. 12181915: the shrunk replay has no finding (the full seed does); not analysed.
+* **A7-272** (11503597, 12150363, 11602585): replayed, still reproduce, no new attempt (round 31's `MovtNumber` stays tried). 11602585 needs the T flag the engine knew at a `movt`.
+* **Overlap class (A7-273, the coordinator's)**: grammar 1 12246420 (store-twin), 12250922 (way-back), and the final sweep's 12273194 (store-value), 12279930 (way-back) all carry `Instruction ... overlaps instruction ...`.
+* **Flow-record class (host)**: grammar 2 12273885 (conversion-branch) and 12274445 (way-back) run into other functions.
+
+### 4. Corpus and runs
+
+| Run | Result |
+|---|---|
+| `ctest -j1` | 117 of 117 passed (after the last product edit; again after the rule 270 `or`/`and` edit, see ledger) |
+| fault matrix | `fault matrix: 0 of 94 job(s) failed` |
+| 20,000-seed matrix | `failing seeds=0; findings=0` (646 s) |
+| printed-C | `agrees=5196` |
+| corpus hwram007, lent | 0 check(s) failed; 0 missing and said; "real entries 999: signatures lent 474 (645 parameters)" |
+| corpus hwram008, lent | 0 check(s) failed; 4 missing and said; "1543: 724 (975 parameters)" |
+| sweep grammar 1, 10,000 from 12,270,001 | 3 failing seeds: 12273194 (`n:map-store-value`, overlap), 12279304 (`n:map-const-join`, fixed by rule 270's `or`/`and` extension), 12279930 (`n:map-way-back`, overlap) |
+| sweep grammar 2, 10,000 from 12,270,001 | 2 failing seeds: 12273885 (`n:map-conversion-branch`, runs into other functions), 12274445 (`n:map-way-back`, runs into other functions) |
+
+The corpus counts, lent counts and printed C are those of the merged base: neither product change moves a token the corpus or the printed C shows. The oracle edit for 12279304 (rule 270 through `or`/`and Rn,Rn` no-ops) was made after the 20,000-seed, printed-C, corpus and sweep runs; it only removes findings, and the full `ctest` ran again after it. Lint `check-literal-size.py` ok; no vendored file touched.
+
+### 5. Routed
+
+* **Coordinator (A7-273/A7-250 overlap):** grammar 1 12246420, 12250922, 12273194, 12279930 (plus A7-273's list).
+* **Host (flow record):** grammar 2 12273885, 12274445, 12135074, A7-250's grammar 2 seeds.
+* **Next area 7 fixer:** A7-271 12151073, A7-262 12189580 and 12181915, A7-272, A7-220.
