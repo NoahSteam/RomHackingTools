@@ -1641,7 +1641,7 @@ private:
             {
                 if (((e.preserved >> r) & 1u) || ((changedFor >> r) & 1u)) continue;
                 const Value v = Get(s, mReg[r]);
-                if (v.kind == Value::Sp) framePointers.emplace_back(r, v);
+                if (v.kind == Value::Sp || (v.kind == Value::Reg && v.v == kPr)) framePointers.emplace_back(r, v);   // (A3-237) ...or the caller's PR saved in a register (`sts pr,r13`)
             }
         }
         Apply(s, e, targetIsR0);
