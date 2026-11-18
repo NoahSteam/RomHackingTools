@@ -20889,6 +20889,22 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         std::printf("pin 'A3-234/235': %zu and %zu finding(s), no-run exclusions %d\n", a.findings.size(), b.findings.size(), count(b, "excluded.no-run.kept-read"));
         CHECK(a.findings.empty() && b.findings.empty() && count(b, "excluded.no-run.kept-read") > 0);
     }
+    // A3-237 and A3-238 (grammar 2 seeds 11904122 `caution-unsaid` r12; 12218480, 12177948 and 12147773 `caution-unsaid-deep`, counted otherwise
+    // `caution.unsaid.deep`): the walk of an unlent callee (F1) that calls a lent callee (F2) the signature of which does not keep a register. 237: F1
+    // keeps the caller's PR in r13 (`sts pr,r13`); F2's store loop through a copy of r15 may write over its saved r13, so its signature does not keep
+    // it, Apply gave r13 a value that is no PR, `lds r13,pr ; rts` proved no return and what F2 changed (r12) was never recorded. 238: F2 sets r13
+    // on one path only and F1 stores r13 (the entry value on the other path): the value after the call may be the entry value (Value::mayEntry).
+    // The caution is said at the call (counted `caution.said`), and nothing is counted deep.
+    {
+        for (const uint64_t seed : { 11904122ull, 12218480ull, 12177948ull, 12147773ull })
+        {
+            const Report rep = Evaluate(d, MakeV2(seed), false);
+            std::printf("pin 'A3-237/238 grammar 2 seed %llu': %zu finding(s), caution said %d, deep %d\n", static_cast<unsigned long long>(seed), rep.findings.size(),
+                        count(rep, "caution.said"), count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect"));
+            CHECK(rep.findings.empty() && count(rep, "caution.required") > 0 && count(rep, "caution.said") + count(rep, "caution.said.likewise") > 0 &&
+                  count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect") == 0);
+        }
+    }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
     {
