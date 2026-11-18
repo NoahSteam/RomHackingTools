@@ -19382,6 +19382,59 @@ void TestA5154Pins(Sh2Decompiler& d)
     CHECK(rep.text.find("xRam06001028 = 4;") == std::string::npos);
 }
 
+// Area 5, round 3 (A5-162 to A5-164): four order-class oracle findings whose text is value-correct, each whole and shrunk. A5-162, grammar 1 seed 12183970:
+// a read whose register is overwritten at once (a `dt` loop's `mov.l @(r0,r7),r0`) has no statement, and the loop's copy of the later read is not its
+// own (`v:folded-read-after-access`). A5-161, 11007546: a `tas.b` between a word's read and its write-back. A5-163, 12128210: a word store of what a
+// longword store left there, joined into a later byte store. A5-164, grammar 2 seed 12147649: the read's value never passes the pointer's store (r0 is
+// set to 0x10 before it on every path that makes it). Each fails with its mutation switch (SE_A7_RULE_OFF=5162, 5161, 5163, 5164).
+void TestA5162Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 1, 12183970 }, Whole{ 1, 11007546 }, Whole{ 1, 12128210 }, Whole{ 2, 12147649 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 5 round 3: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* volatileRange;
+        const char* poll;
+    };
+    const Shrunk kShrunk[] = {
+        { "A5-162 grammar 1 seed 12183970 shrunk",
+          "D60A D70B 6072 C801 89FC E301 E010 007E 2732 4310 8BFA 5274 602D 6262 C802 8B00 C607 D604 E12A 2610 000B 0009 25F8 0034 2600 1000 2600 3010", "4:06003C00",
+          "26001000-2600100f", "26001000:until-set" },
+        { "A5-161 grammar 1 seed 11007546 shrunk", "D606 2611 6061 461B 2601 C810 8D00 8573 2640 D603 E144 2610 000B 0009 2600 1030 0600 3018", nullptr, "26001030-2600103f", nullptr },
+        { "A5-163 grammar 1 seed 12128210 shrunk",
+          "D608 D709 2422 6071 C801 8BFB 2622 E006 014D E002 0625 6144 E00C 0725 2660 000B 0009 0009 0240 0000 2600 1004", nullptr, "26001000-2600100f", "26001004" },
+    };
+    for (const Shrunk& p : kShrunk)
+    {
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    const ModulePin pin = { "A5-164 grammar 2 seed 12147649 shrunk",
+                            "2F86 2F96 2FA6 2FB6 2FC6 0C2A 7FF4 6843 6953 6A63 6B73 607C 7F0C 4C2A 6CF6 6BF6 6AF6 69F6 68F6 000B 0009 2FE6 7FFC 6EF3 D70B 6072 E301 A003 0009 E010 "
+                            "0506 2702 4310 8BFA 2748 8901 A003 0009 1407 A000 0009 6050 7E04 6FE3 6EF6 000B 0009 0009 2600 2384",
+                            "0/0/2a,2a/2a/5e", nullptr, "1,1", "20200,20000", "8,0" };
+    const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+    std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+    for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+    CHECK(rep.findings.empty());
+}
+
 void TestArea7Round23Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21379,6 +21432,7 @@ void TestGenerated()
         RUN(TestA5150A1019Pins(d));
         RUN(TestA5Round2Pins(d));
         RUN(TestA5154Pins(d));
+        RUN(TestA5162Pins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
         RUN(TestArea7Round26Pins(d));
