@@ -16018,6 +16018,30 @@ void TestRoutedSeeds()
         CHECK(!r.prototype.known);       // still withheld: the engine's own flag for the halt it made stays (bad instruction data), the safe side
     }
 
+    // A7-324: seed 12319207 (grammar 2) shrunk. The same shape with a table read at 0xC0000014 << 2: the literal word after the table, 0x26002288, is
+    // work RAM that is there and does not decode. The halt is at the start of a block the actions remove, so it is said as a path removed, not as bad
+    // data in the function; the signature stays withheld (the engine's own flag for the halt).
+    {
+        const CallFixture f = { "a7_324: a table read at a constant index its guard excludes, into bytes that do not decode", 0x06009000u,
+                                { 0xD716, 0xD617, 0xE105, 0x3712, 0x891B, 0x4708, 0xC701, 0x017E, 0x412B, 0x0009, 0x0600, 0x9028, 0x0600, 0x902E, 0x0600, 0x9034,
+                                  0x0600, 0x903A, 0x0600, 0x903A, 0x0029, 0xA00B, 0x0009, 0x6062, 0xA008, 0x0009, 0x6362, 0xA005, 0x0009, 0x855E, 0x601C, 0xA001,
+                                  0x0009, 0x1616, 0x844A, 0xD607, 0x4515, 0x8B01, 0xA002, 0x0009, 0xA000, 0x0009, 0x6041, 0x000B, 0x0009, 0x0009, 0xC000, 0x0014,
+                                  0x2600, 0x2288, 0x2610, 0x2288 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(r.badDataAt.empty());
+        int said = 0;
+        for (const FlowWarning& w : r.flowWarnings)
+        {
+            CHECK(w.kind != FlowWarning::BadData);
+            said += w.kind == FlowWarning::Engine && Has(w.text, "proved cannot be taken and removed");
+        }
+        CHECK(said >= 1);
+        CHECK(!r.prototype.known);
+    }
+
     // ---- A7-6 ----------------------------------------------------------------------------------------------------------------------------
     // An SH-2 instruction starts at an even address. A jump table entry that is odd (here the middle of the table's three destinations; a word of data
     // the bound does not exclude) sent flow into the middle of the instruction at the even address before it: the engine said "Instruction at ...

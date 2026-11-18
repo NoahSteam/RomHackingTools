@@ -23587,3 +23587,15 @@ Pins: `TestA7FlowRecordPins` (seven whole seeds and the shrunk replays of 119004
 | sweep grammar 2, 10,000 from 12,310,001 | 1 failing seed: 12319207 (`baddata`), A7-324, the same on the build before this change |
 
 Lints: `check-literal-size.py` ok; `check-vendored-tree.py lint` ok.
+
+## Open P3 sweep (areas 5, 7-12)
+
+Branch `review/open-p3`. Scope: grammar 2 seed 12319207 (A7-324) and the long-open P3 rows outside area 7's mapping classes.
+
+- **A7-324** (`n:baddata`, `v:baddata`, "bad data at 06002288"). Owner: decoder/flow (area 4), A4-16's class; the generator and the text were right. Function 0 loads 0xC0000014 into r7 and runs on into function 1, a switch on r7 behind `cmp/hs #5`. The guard always branches away, but flow is made before the actions know it: it reads the table at index 0xC0000014 << 2 (the literal word after the table, 0x26002288, work RAM whose bytes do not decode), halts there, and the actions remove that block. A4-16 said such a halt as a path removed only when the memory was missing; bytes that were there stayed in `badDataAt`. Fix: the same rule for bytes that do not decode and for an odd address (a halt at the start of a removed block). The signature stays withheld (the engine's own flag). Pin: `TestRoutedSeeds` `a7_324`; the seed replays with 0 findings.
+- **A8-47** fixed in the model (test code): a Stop ends when the panel discards the cancel; the three scripts moved from `kOpen` to `kPinned`.
+- **A9-32** closed: resolved by A9-41 (checked, `LettersOnlyBiosAddresses` holds).
+- **A5-112** still reproduces on both replays (heritage's pieces; value-preserving); row updated, left open.
+- **A7-17**, **A7-18**, **A8-45**: still open as a feature (A7-17), an instrument gap (A7-18) and an instrument record (A8-45); rows updated with what each needs; none is a small fix.
+
+Runs (sequential, one heavy binary at a time): build; `ctest -j1` 117 of 117 passed; fault matrix 0 of 94 failed; generator 20,000 seeds `failing seeds=0; findings=0`; printed-C `agrees=5196`; corpus with lending: hwram007 `lent 474 (645)`, 0 missing and said; hwram008 `lent 724 (975)`, 4 missing and said; all ledger counts 0 in both. Lints: `check-literal-size.py` ok (no vendored or patch file touched).

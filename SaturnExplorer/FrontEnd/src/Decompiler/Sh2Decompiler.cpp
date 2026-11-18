@@ -13665,7 +13665,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                     // Flow went on to the halt through a branch or a table the analysis then proved cannot be taken (a jump table read at a
                     // constant index its bound check excludes, A4-16), and removed the block the halt stands in. The text has no cut and no
                     // halt in it; it is said, as the removal is, and the function is not truncated by it. (Bytes that do not decode in
-                    // such a block are still reported as bad data: nothing has shown that they are harmless.)
+                    // such a block are said the same way: A7-324.)
                     w.kind = FlowWarning::Engine;
                     w.address = CanonicalOf(at);
                     w.text = "flow followed a path into " + why + ", which the analysis proved cannot be taken and removed: the function is not cut "
@@ -13684,6 +13684,17 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                     w.kind = FlowWarning::Cut;
                     w.address = cut;
                     w.text = "flows into " + why + "; the function is cut off there";
+                }
+                else if (removedBlocks.count(at) != 0)
+                {
+                    // The same for bytes that are there and do not decode (A7-324): a table entry a constant guard excludes names a word of
+                    // the module's own data, the halt stands at the start of a block the actions removed, and nothing of it is in the text.
+                    w.kind = FlowWarning::Engine;
+                    w.address = CanonicalOf(at);
+                    w.text = (at & 1u) != 0 ? "flow followed a path to an odd address, where no SH-2 instruction starts, which the analysis proved cannot "
+                                              "be taken and removed: the function holds no bad data there"
+                                            : "flow followed a path into bytes that do not decode as an instruction, which the analysis proved cannot be "
+                                              "taken and removed: the function holds no bad data there";
                 }
                 else
                 {
