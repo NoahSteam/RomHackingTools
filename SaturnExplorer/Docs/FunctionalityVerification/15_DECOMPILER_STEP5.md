@@ -22605,3 +22605,45 @@ Every changed text loses an r2 note whose address the text shows as an argument.
 * **Area 7:** grammar 1 seeds 10706671 and 10707881 (`map-way-back`), grammar 1 12050176 and grammar 2 10702729 (`map-const-join`), grammar 1 12052695 (`read-after-folded-store`; engine or area 2), grammar 2 12051473 (`map-store-after`): all on master.
 * **Generator (area 11):** grammar 2 seed 12056533 `generator:no-return` (the program's run reads address 0).
 * **Area 3 (next fixer):** A3-228 (P2, open: 12055901, r15 at a call of 060090BC).
+
+## Area 7, joins and stores
+
+Fixer, branch `review/7-joins` from master `5df1678b`, RelWithDebInfo build (`-j1`, `ulimit -v 3500000`). The brief: the routed seeds grammar 2 10702729, 12102661, 10908446 (`map-const-join`; the last also filed by area 5 as A5-151, which is not a row of this branch's ledger), grammar 1 12050176 (`map-const-join`, caution-deep range), grammar 2 12051473 (`map-store-after`) and 12078687 (`map-frame-store`). All six reproduced on this branch before the change. Oracle rules in `MappingOracle.h` (`SE_A7_RULE_OFF=201` to `205`), one product change in `Sh2Decompiler.cpp` (`AddFrameStoreTokens`, A7-206), pins `TestArea7JoinPins` in `Sh2GeneratedTests.cpp`. **No engine patch: 0097 stays free.** Script: `Docs/Decompiler/tools/a7_joins/final.sh`.
+
+| Row | P | Seed | Outcome |
+|---|---|---|---|
+| A7-201 | P3 | grammar 2 12078687 | **fixed, oracle**: `mova` is no load for A7-11's frame-store check |
+| A7-202 | P3 | grammar 1 12050176 | **fixed, oracle**: A7-137 (a store read back) also for `xor`, either register the loaded one |
+| A7-203 | P3 | grammar 2 10908446 (A5-151) | **fixed, oracle**: `xor`/`sub` of a register and its copy |
+| A7-204 | P3 | grammar 2 12102661 | **fixed, oracle**: `add #imm,Rn` of a zero chain |
+| A7-205 | P3 | grammar 2 10702729 | **fixed, oracle**: a number differing from the line's only in bits nothing shows |
+| A7-206 | P3 | grammar 2 12051473 | **fixed, product** (mapping only): the call-output exemption of A7-39 |
+
+### 1. The decisions
+
+* **A7-201** (12078687): `xStack_8._0_2_ = 0x9080;` is drawn at `mova @(disp,pc),r0`, whose operand text has an `@`; `ShapeOf` took it for a load, so the check of A7-11 (a piece of a frame word assigned at a load or a call) wanted a store named. The line is the merged register's address. The check no longer counts `mova` as a load.
+* **A7-202** (12050176): `mov.l r3,@r7 ; mov.b @(0xc,r5),r0 ; mov.l @r7,r0 ; ... ; xor r3,r0` is 0 as `sub` of the same two was (A7-137). The rule takes `xor` and either register as the loaded one.
+* **A7-203** (10908446): `mov.w @r5+,r1 ; mov r1,r0 ; ... ; xor r0,r1`: two registers with the one maker (RegisterMakers goes through moves) that no path runs twice give 0.
+* **A7-204** (12102661): `add -0x6c,r1` with r1 0 after a `dt` loop and `shlr16` round another loop, `xVar6 = 0xffffff94;`: a zero chain (a number 0, a `dt`, `xor Rn,Rn`, a shift, extension or move of the chain) is 0 as A7-192's.
+* **A7-205** (10702729): `mov #8,r0 ; L: extu.w r0,r0` printed `iVar2 = 0;`: r0 is only shifted left 2 and right 16, stored narrow or overwritten afterwards. New `IgnoredDiff` follows the bits in which the instruction's number and the line's differ through moves, extensions, shifts, `xtrct`, narrow stores and overwrites, calls (r4-r7 read), up to 600 states; any other read of a differing register, a compare, a return value (r0 and r1), a jump it cannot follow with a difference left, ends it. It runs only on the path that would report, so passing programs pay nothing. Not for instructions that set T (the existing `a7_58 rotcl other` fixture): the line may be T's. Two of the first version's faults were found by the existing `*_other` fixtures of `Sh2DecompilerTests` (they mutate a number by one bit and want the violation): the 64-bit return in r0:r1 and `rotcl`.
+* **A7-206** (12051473, product): `pxStack_24 = (xunknown2 *)in_r2;` is a CAST the engine put at the `jsr` over the merge of r2 at the push `mov.l r2,@-r15` before it. A7-39's exemption (a statement of the call's own output is shown by a store after the call) took it for a call output because the CAST op is at the call's address, so `useBlock` was off and the next store of the byte in the call's block (the push of r5 after the call) was named. The exemption now holds only when the copies and casts end at the call's own op; a MULTIEQUAL or the input is not a call output, and A7-32's rule (a store that runs before the call) applies. Mapping tokens only: no text changes.
+
+### 2. Pins and mutation
+
+`TestArea7JoinPins`: the six seeds whole (grammar 1 12050176; grammar 2 12078687, 10908446, 12102661, 10702729, 12051473). Each oracle rule is switched by `SE_A7_RULE_OFF` (201 to 205); A7-206 has no switch.
+
+### 3. Runs (after the last code edit, `final.sh`; one binary at a time)
+
+| Run | Result |
+|---|---|
+| `ctest -j1` | **117 of 117 passed** (912 s) |
+| fault matrix | **0 of 94 job(s) failed** |
+| 20,000-seed matrix | **failing seeds=0; findings=0** |
+| printed-C | **agrees=5196** |
+| corpus hwram007, lent | 0 checks failed, missing and said 0; "[after] real entries 999: signatures lent 474 (645 parameters)" |
+| corpus hwram008, lent | 0 checks failed, missing and said 4; "1543: 724 (975)" |
+SWEEPS
+
+### 4. Routed
+
+None new. Row numbers: this section holds A7-201 to A7-206; the round 28 branch holds A7-196 to A7-200 and 207 to 209, and oracle rules 196 to 199.
