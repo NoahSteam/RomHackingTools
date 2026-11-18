@@ -22974,3 +22974,44 @@ Fixer, branch `review/11-round9` from master `be40a4ce`, RelWithDebInfo (`-j1`, 
 **Seeds changed** (`SE_GENERATED_LISTONLY=1 SE_GENERATED_TRACE_A11_35=1`, grammar 2, 12,000,001-12,200,000, with `SE_GENERATED_A11_39=0` (A11-35's rule) and without): A11-35's rule changes 12018405, 12037749, 12047405, 12056533, 12081644, 12152782; the new rule adds 12097940 and nothing else. 12097940 fails as drawn before (`n:generator:callee-saved`). Grammar 1 does not go through `Generate2`.
 
 **Runs** (RelWithDebInfo): ctest 117 of 117 passed; the 20k generator matrix `failing seeds=0; findings=0`; printed-C `agrees=5196`; grammar 2 caution sweep 12,090,001 + 10,000 `failing seeds=0; findings=0` (12097940 passes); 12,150,001 + 10,000: 5 failing seeds, none the generator's (12152782 passes): 12150363 `map-const-join` and 12154848 `map-const-join`, 12151073 `map-number-store`, 12158267 `map-copy-store` (area 7), 12155319 `n:caution-elsewhere` (area 3: the call at 0x0600903A of 0x0600906A, no signature lent, comes back with r9 changed in input mode 1). The fault matrix and the corpus images were not run (no product code changed).
+
+## Area 7, joins round 2
+
+Branch `review/7-joins2` on master `9b207473` plus master `30d8138a` (the A7-206 `passesInput` condition fix, merged before the final runs). Oracle rules 230 to 233 (`MappingOracle.h`); no product change stays in the branch. Ledger A7-210, A7-212 and A7-213 updated, A7-240 to A7-242 filed. Pins: `TestArea7Joins2Pins`.
+
+### 1. A7-212 (rules 230, 231)
+
+* Grammar 2 12146409 (`param_2 = 0;` at `shlr8 r1`, the first instruction of a join): `mov #4,r0 ; and r5,r0 ; extu.b r0,r1 ; cmp/pl r0 ; bf L ; ... L: shlr8 r1`. On L's edge r0 is not above 0, and no maker sets its sign bit (`PossibleBits`: 4 or 0), so r0 is 0 and the `shlr8` of the byte of it is 0. Rule 230 adds that edge fact (an `EdgeFact`, as A7-69's `tst`/`dt` edges) for `cmp/pl`. The text is right.
+* Grammar 2 12127788 (`iVar3 = 0;` at `mov.l @r6,r2`): the read of the global that `mov.l r2,@r6` wrote, r2 the byte `mov.b r3,@r14` stored in the frame slot and `mov.b @r14,r2` read back; `mov.l r3,@(0x14,r4)` sits between. A7-195 passes a store through an input pointer for the base r15 only; r14 was `mov r15,r14`. Rule 231 takes r14 for the frame when every write of r14 in the function is `mov r15,r14` or a pop. The text is right.
+
+### 2. A7-210 (rules 232, 233; grammar 2 seeds 11203194, 11204379)
+
+* 11203194 `iStack_8 = 1;` at `movt r2` (the T `tst r7,r5 ; bf` leaves): A7-45's `numberOf` knew `mov #imm` and literals only; rule 232 lets `movt` make the T the words give (`TBefore`).
+* 11204379 `iStack_8 = iVar5;` drawn at the four instructions that assign `iVar5` (`mov #5,r1` and three loads of r1): a register variable merged under the slot's name. `makersOnly` refused loads. Rule 233: every drawn token of the line is also a token of a line `iVar5 = ...;`.
+* 12123120 is a product defect, A7-240 (below). Round 29 did not take these three seeds (its branch has none of them).
+
+### 3. A7-240 (open, product)
+
+Grammar 2 12123120: `xRam00000000 = (xunknown1)unaff_r9;` carries no token and a click on `mov.b r1,@r4` (0x06009090) goes to `*param_3 = unaff_r9;`. In the code's own function the line names 0x06009090. `RetargetHoistedConversions` moves the narrowing's tokens to the makers of its operand, which is the function's input (r9 through the pushed slot), so to none, although the line is the store's own statement. I tried to keep the tokens when the line assigns the global a folded store at that instruction writes (`input && makers.empty()`); two builds did not change the result, so the assumption about the op that is printed is wrong somewhere, and I reverted it (the diagnosis was cut short by the two-attempt limit).
+
+### 4. Routed and not reproduced
+
+* A7-213, grammar 1 12128210 `folded-store-after-access`: A5-114's class (a word store at 0x02400002 joined with the byte store at 0x02400000 into `uRam02400000 = in_r2 & 0xffffff;`, printed after the read through r4 between them). Not area 7. Shrunk replay in the ledger row. Routed to area 5.
+* A7-241, grammar 2 12147649 `folded-read-after-pointer-write`: a false positive of area 5's check (the pointer store and the later global store write the same 0x10; no value differs). Routed to area 5.
+* A7-242, grammar 2 12148671 `map-frame-store`: does not reproduce (replayed alone, deep, both grammars).
+
+### 5. Runs
+
+| Run | Result |
+|---|---|
+| `ctest -j1` | 117 of 117 passed (606 s) |
+| fault matrix | 0 of 94 job(s) failed |
+| 20,000-seed matrix | no failing seed printed (the log's summary line was not captured; no FINDING) |
+| printed-C | agrees=5196 |
+| corpus hwram007 / hwram008, lent | "real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)" (the missing-and-said counts were not captured) |
+| sweep grammar 1, 10,000 from 11,700,001 | 4 failing seeds, all round 29's classes: 11703213 (`map-way-back`), 11703274 (`map-conversion-branch`), 11703335, 11703803 (`map-store-value`) |
+| sweep grammar 2, 10,000 from 11,700,001 | 1 failing seed: 11708927 (`map-way-back`) |
+| sweep grammar 1, deep, 10,000 from 12,160,001 | 0 failing seeds |
+| sweep grammar 2, deep, 10,000 from 12,160,001 | 5 failing seeds, all `caution-elsewhere` (area 3): 12161411, 12165339, 12165969, 12167636, 12169251 |
+
+Lints: `check-literal-size.py` ok. Routed: the five `caution-elsewhere` seeds to area 3; the way-back, conversion-branch and store-value seeds to the area 7 round 29 branch.

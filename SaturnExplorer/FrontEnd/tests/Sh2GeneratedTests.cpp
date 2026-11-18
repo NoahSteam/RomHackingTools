@@ -19125,6 +19125,25 @@ void TestArea7Round29Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7, joins round 2 (A7-212, A7-210; oracle rules 230 to 233): grammar 2 seeds 12146409 (`cmp/pl Rn ; bf L` with Rn 4 or 0 is 0 on L's edge,
+// rule 230), 12127788 (r14 a copy of the stack pointer: a store through a parameter does not write the frame slot, rule 231), 11203194
+// (`movt` makes the T the words give, rule 232), 11204379 (a register variable's merge drawn at the instructions that assign it, rule 233).
+void TestArea7Joins2Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 2, 12146409 }, Whole{ 2, 12127788 }, Whole{ 2, 11203194 }, Whole{ 2, 11204379 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 joins 2: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21210,6 +21229,7 @@ void TestGenerated()
         RUN(TestArea7JoinPins(d));
         RUN(TestArea4Round3Pins(d));
         RUN(TestArea7Round29Pins(d));
+        RUN(TestArea7Joins2Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
