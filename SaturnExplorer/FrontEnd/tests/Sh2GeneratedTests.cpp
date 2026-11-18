@@ -7657,6 +7657,15 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             {
                                 const TraceRec& p = run.trace[j];
                                 if (p.depth == 0 && !p.write && r.InBody(p.addr)) continue;   // (a literal of the function)
+                                // (A5-161: a `tas.b` between, its read and its write of one byte of the word, is undone by the write-back, which holds the
+                                // word as the read before it left it: `mov.w @g,r0 ; tas.b @g ; mov.w r0,@g`, grammar 1 seed 11007546; the walk goes on
+                                // to the read, which the stored value is compared with)
+                                if (p.depth == 0 && !dts::A7RuleOff(5161) && r.InBody(p.insn) && (subject.WordAt(p.insn) & 0xF0FFu) == 0x401Bu &&
+                                    p.size == 1 && p.addr >= t.addr && p.addr < t.addr + static_cast<uint32_t>(t.size))
+                                {
+                                    count("order.folded-store.write-back-tas");
+                                    continue;
+                                }
                                 const bool overlaps = p.addr < t.addr + static_cast<uint32_t>(t.size) && t.addr < p.addr + static_cast<uint32_t>(p.size);
                                 if (p.addr == t.addr && p.size == t.size)
                                 {
@@ -7668,7 +7677,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 // grammar 1 seed 7402502. The bus is big-endian: the piece's offset from the end of the wider access is its shift. A
                                 // wider write is left to the rules below, which judge where the engine joins the narrow store into it, A5-123's
                                 // `joined-earlier`, grammar 1 seed 5203228.)
-                                if (!p.write && p.addr <= t.addr && t.addr + static_cast<uint32_t>(t.size) <= p.addr + static_cast<uint32_t>(p.size) && p.size <= 8 && t.size < 8)
+                                // (A5-163: ...and a wider write of the bytes, the last access of them, holding the value stored: `mov.l r2,@g ; ... ; mov.w
+                                // r2,@(2,g)` stores what the longword already holds there, so no read or write between sees a difference wherever the text
+                                // puts it, grammar 1 seed 12128210. An access of these bytes between is the walk's stop, as before.)
+                                if ((!p.write || (!dts::A7RuleOff(5163) && p.size > t.size)) && p.addr <= t.addr &&
+                                    t.addr + static_cast<uint32_t>(t.size) <= p.addr + static_cast<uint32_t>(p.size) && p.size <= 8 && t.size < 8)
                                 {
                                     const uint32_t shift = 8u * (p.addr + static_cast<uint32_t>(p.size) - t.addr - static_cast<uint32_t>(t.size));
                                     const uint64_t mask = (uint64_t(1) << (8 * t.size)) - 1;
@@ -8358,6 +8371,24 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }
                 return below && !covers;
             };
+            // (the register a read's own instruction loads, when it is a plain load into a register that nothing before it in a delayed branch's
+            // pair shares: -1 for any other)
+            const auto wordAt = [&](uint32_t pc, uint16_t& w) {
+                if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                w = subject.WordAt(pc);
+                return true;
+            };
+            const auto loadedRegister = [&](const AccessFate& rd) {
+                uint16_t w = 0, pw = 0;
+                if (!wordAt(rd.insn, w)) return -1;
+                const sfe::DisassembledInstruction d = sfe::Sh2Decode(rd.insn, w);
+                if (wordAt(rd.insn - 2, pw) && sfe::Sh2Decode(rd.insn - 2, pw).HasDelaySlot) return -1;
+                const size_t comma = d.Operands.rfind(',');
+                if (!d.IsValid || d.Mnemonic.compare(0, 3, "mov") != 0 || !dts::ShapeOf(d).load || comma == std::string::npos || d.Operands[0] != '@') return -1;
+                const std::string last = d.Operands.substr(comma + 1);
+                if (last.size() < 2 || last[0] != 'r' || last.find_first_not_of("0123456789", 1) != std::string::npos) return -1;
+                return std::atoi(last.c_str() + 1);
+            };
             for (const AccessFate& rd : r.accessFates)
             {
                 if (rd.write || rd.fate != AccessFate::FoldedOrdinary || !rd.constantAddress || rd.frame || rd.origBlock < 0) continue;
@@ -8484,6 +8515,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 count("order.folded-read-before-pointer-write.constant-store");
                                 continue;
                             }
+                            if (!dts::A7RuleOff(5164) && loadedRegister(rd) >= 0 && !dts::ValueMayReach(r, wordAt, rd.insn + 2, loadedRegister(rd), m.insn))
+                            {
+                                count("order.folded-read-before-pointer-write.value-passes-no-write");
+                                continue;
+                            }
                             add("folded-read-after-pointer-write", "the read at " + Hex(rd.insn) + " the engine folded from " + Hex(rd.address) +
                                                                        " is named on no line, and line " + std::to_string(li) + " reads the global after the write through a pointer at " +
                                                                        Hex(m.insn) + " (line " + std::to_string(m.firstLine) + "), which the code makes after the read and before no other read of it");
@@ -8492,8 +8528,23 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     }
                     continue;
                 }
+                // (A5-162: a read whose register nothing reads, every path overwriting it first, has no statement of its own: the engine drops it,
+                // and the line that names its global after a write is another read's, which this check judges on its own. Grammar 1 seed 12183970,
+                // `mov.l @(r0,r7),r0` in a `dt` loop, r0 overwritten by `extu.w r2,r0` after it: the loop's `uVar2 = uRam26001010;` after the loop's
+                // register write is the value of the read at 0x06009016, which the code makes after that write, held in the loop by the merge.)
+                bool deadValue = false;
+                const int loaded = !dts::A7RuleOff(5162) ? loadedRegister(rd) : -1;
+                if (loaded >= 0)
+                {
+                    std::array<uint32_t, 16> diff;
+                    diff.fill(0);
+                    diff[static_cast<size_t>(loaded)] = 0xFFFFFFFFu;
+                    deadValue = dts::IgnoredDiff(r, wordAt, rd.insn + 2, diff);
+                }
+                if (deadValue) count("order.folded-read-before-access.dead-read");
                 for (const MemoryAccess& m : got)
                 {
+                    if (deadValue) break;
                     // (A5-119: ...and a write through a pointer, which may be the global's address: `x = g; *p = v; g = x + 1` printed `*p = v;
                     // g = g + 1;`, the word read after the store that may have changed it. A read through a pointer changes nothing.)
                     if ((!m.direct && !m.write) || m.firstLine < 0 || m.origBlock < 0) continue;
@@ -8532,6 +8583,12 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             count(m.direct ? "order.folded-read-before-access.returned" : "order.folded-read-before-pointer-write.returned");
                             continue;
                         }
+                    }
+                    if (shown > statementEnd(m.firstLine) && !dts::A7RuleOff(5164) && loadedRegister(rd) >= 0 &&
+                        !dts::ValueMayReach(r, wordAt, rd.insn + 2, loadedRegister(rd), m.insn))
+                    {
+                        count(m.direct ? "order.folded-read-before-access.value-passes-no-access" : "order.folded-read-before-pointer-write.value-passes-no-write");
+                        continue;
                     }
                     if (shown > statementEnd(m.firstLine))
                         add(m.direct ? "folded-read-after-access" : "folded-read-after-pointer-write",
@@ -19349,6 +19406,59 @@ void TestA5154Pins(Sh2Decompiler& d)
     CHECK(rep.text.find("xRam06001028 = 4;") == std::string::npos);
 }
 
+// Area 5, round 3 (A5-162 to A5-164): four order-class oracle findings whose text is value-correct, each whole and shrunk. A5-162, grammar 1 seed 12183970:
+// a read whose register is overwritten at once (a `dt` loop's `mov.l @(r0,r7),r0`) has no statement, and the loop's copy of the later read is not its
+// own (`v:folded-read-after-access`). A5-161, 11007546: a `tas.b` between a word's read and its write-back. A5-163, 12128210: a word store of what a
+// longword store left there, joined into a later byte store. A5-164, grammar 2 seed 12147649: the read's value never passes the pointer's store (r0 is
+// set to 0x10 before it on every path that makes it). Each fails with its mutation switch (SE_A7_RULE_OFF=5162, 5161, 5163, 5164).
+void TestA5162Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 1, 12183970 }, Whole{ 1, 11007546 }, Whole{ 1, 12128210 }, Whole{ 2, 12147649 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 5 round 3: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* volatileRange;
+        const char* poll;
+    };
+    const Shrunk kShrunk[] = {
+        { "A5-162 grammar 1 seed 12183970 shrunk",
+          "D60A D70B 6072 C801 89FC E301 E010 007E 2732 4310 8BFA 5274 602D 6262 C802 8B00 C607 D604 E12A 2610 000B 0009 25F8 0034 2600 1000 2600 3010", "4:06003C00",
+          "26001000-2600100f", "26001000:until-set" },
+        { "A5-161 grammar 1 seed 11007546 shrunk", "D606 2611 6061 461B 2601 C810 8D00 8573 2640 D603 E144 2610 000B 0009 2600 1030 0600 3018", nullptr, "26001030-2600103f", nullptr },
+        { "A5-163 grammar 1 seed 12128210 shrunk",
+          "D608 D709 2422 6071 C801 8BFB 2622 E006 014D E002 0625 6144 E00C 0725 2660 000B 0009 0009 0240 0000 2600 1004", nullptr, "26001000-2600100f", "26001004" },
+    };
+    for (const Shrunk& p : kShrunk)
+    {
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    const ModulePin pin = { "A5-164 grammar 2 seed 12147649 shrunk",
+                            "2F86 2F96 2FA6 2FB6 2FC6 0C2A 7FF4 6843 6953 6A63 6B73 607C 7F0C 4C2A 6CF6 6BF6 6AF6 69F6 68F6 000B 0009 2FE6 7FFC 6EF3 D70B 6072 E301 A003 0009 E010 "
+                            "0506 2702 4310 8BFA 2748 8901 A003 0009 1407 A000 0009 6050 7E04 6FE3 6EF6 000B 0009 0009 2600 2384",
+                            "0/0/2a,2a/2a/5e", nullptr, "1,1", "20200,20000", "8,0" };
+    const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+    std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+    for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+    CHECK(rep.findings.empty());
+}
+
 void TestArea7Round23Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21346,6 +21456,7 @@ void TestGenerated()
         RUN(TestA5150A1019Pins(d));
         RUN(TestA5Round2Pins(d));
         RUN(TestA5154Pins(d));
+        RUN(TestA5162Pins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
         RUN(TestArea7Round26Pins(d));

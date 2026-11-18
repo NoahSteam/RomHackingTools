@@ -23120,3 +23120,59 @@ Not fixed (one class needs more than a round each; none was taken): way-back A7-
 | sweep grammar 2, 10,000 from 12,200,001 | 2 failing seeds: 12202641 (`map-conversion-branch`, A7-253), 12204851 (`map-copy-store`, A7-252) |
 
 Lints: `check-literal-size.py` ok. Routed: 12173135 (grammar 2) to area 5 (A7-255).
+## Area 5, round 3
+
+Fixer, branch `review/5-round3` (master `ef8b7461` plus `review/5-a5154`); RelWithDebInfo, `-j1`, `ulimit -v 3500000`. The brief: A5-162 (product), A5-161, the two seeds routed from area 7 (A7-213, A7-241), A5-112 if time remained. No engine patch (0100 unused); every change is in the oracle (`Sh2GeneratedTests.cpp`, `MappingOracle.h`), each with a mutation switch (`SE_A7_RULE_OFF=<n>`) and a pin (`TestA5162Pins`, whole seeds and shrunk replays; with all four switches set every pin fails). Backups on `backup/review-5-round3`.
+
+| Row | Class | Outcome |
+|---|---|---|
+| A5-162 | P2, brief: engine | **not a product bug; oracle, fixed** (rule 5162): grammar 1 seed 12183970 (`v:folded-read-after-access`) |
+| A5-161 | P3, oracle | **fixed** (rule 5161): grammar 1 seed 11007546 |
+| A5-163 (A7-213) | P3, oracle | **fixed** (rule 5163): grammar 1 (not 2) seed 12128210 |
+| A5-164 (A7-241) | P3, oracle | **fixed** (rule 5164): grammar 2 seed 12147649 |
+| A5-112 | P3, engine | looked at, unchanged (heritage's pieces) |
+
+### A5-162
+
+The brief took the text for a read printed after a write the code makes after it. The replay and a temporary dump of the final p-code (`fd->printRaw` after the actions; removed) show otherwise. The shrunk module is `poll ; r3 = 1 ; L: r0 = 0x10 ; r0 = @(r0,r7) [0x26001010] ; *r7 = r3 [mailbox, marked volatile] ; dt r3 ; bf L ; r2 = @(0x10,r7) [the same word] ; r0 = r2 & 0xffff ; r2 = VDP2_PNCN2 [a register read] ; tst #2,r0`. The read at 0600900E is dead (r0 is set again at the head of the loop and by the `extu.w`); the engine drops it. The `tst` reads the word read at 06009016, after the loop's last write, and the register read after it is a second hardware access: the word's version made by the mailbox write's guard is live across the register read's guard, so the merge snips it, a copy made where that version is defined (`u0x10000010 = r0x26001010(0x06009010:5c)`, op address 06009010, in the loop right after the write). The text `do { Ram26001000 = iVar4; uVar2 = uRam26001010; ... } while; ...; if ((uVar2 & 2) == 0)` therefore reads the word after the last write and before the register read, which is where the code reads it; the differential runs agree. The mapping gives that statement the tokens of 0600900E (and an empty one of 06009016), and the oracle named the dead read. Without the register read the dead read is gone and the text is `if ((uRam26001010 & 2) == 0)`.
+
+Fix (oracle): a folded read whose loaded register is overwritten on every path before anything reads it (`IgnoredDiff` from the next instruction, with every bit of the register differing) has no statement of its own and is set aside (`order.folded-read-before-access.dead-read`); a live read that the same line names is judged by its own check. `SE_A7_RULE_OFF=5162` brings the finding back.
+
+### A5-161
+
+`mov.w r1,@g ; mov.w @g,r0 ; tas.b @g ; mov.w r0,@g`: the walk back from the folded store (A5-137's write-back rules) stopped at the `tas.b`'s one-byte write, an overlapping access. The walk now goes on over a `tas.b` of a byte of the stored word (`order.folded-store.write-back-tas`), to the word's read, which the stored value equals. Seed 11007546 had two findings (06009008 and 06009024); both go.
+
+### A5-163 (A7-213)
+
+The routed row says grammar 1 (the brief grammar 2); the seed is 12128210 of grammar 1. `mov.l r2,@0x02400000 ; ... ; mov.w r2,@(2,0x02400000) ; mov.b @r4+,r1 ; ... ; mov.b r6,@0x02400000`: the word store writes bytes 2 and 3 of what the longword store left, so it changes nothing wherever the text puts it; the engine joins it into the byte store (`uRam02400000 = in_r2 & 0xffffff;`), after the read through r4. The text is right. The walk back accepted a wider read holding the stored bytes (A5-137 (a)); it now accepts a wider write whose piece is the value stored, with no access of the bytes between (the same stop as before).
+
+### A5-164 (A7-241)
+
+Grammar 2 seed 12147649 (`n:folded-read-after-pointer-write`, a false positive as A7-241 said). `r0 = *g ; bra L ; M: r0 = 0x10 ; *(r5+r0) = r0 ; *g = r0 ; L: dt r3 ; bf M ; ... *(r4+0x1c) = r0`: the pointer's store is made after `mov #0x10,r0` on every path that makes it, so the read's value never passes it; where it does run the register, and the global the loop writes next, hold 0x10, and the text `xRam26002384` is that. New in `MappingOracle.h`: `ValueMayReach` (follows the register, its copies and what is derived from it through branches and delay slots, a value stored to memory or passed to a call counts as kept; too long a walk says yes). A read whose value reaches the pointer's store on no path is set aside (`order.folded-read-before-pointer-write.value-passes-no-write`, in the named check too). `SE_A7_RULE_OFF=5164` brings the finding back.
+
+### A5-112
+
+Unchanged: the widths of a folded RAM store come from heritage's ranges (`normalizeWriteSize`), as A5-150's record says; nothing was found that removes them without refining the ranges of every global. Still counted (`order.folded-store.piece-split`), 0 findings.
+
+### Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| build, `-j1`; ctest `-j1` | 117 of 117 passed |
+| fault matrix | 0 of 94 job(s) failed |
+| generator, 20,000 seeds (pins included) | failing seeds=0; findings=0 |
+| printed-C, 3,000 seeds | agrees=5196 |
+| corpus hwram007, lent | all passed; every ledger count 0; missing and said 0; real entries 999: signatures lent 474 (645 parameters) |
+| corpus hwram008, lent | all passed; every ledger count 0; missing and said 4; real entries 1543: 724 (975) |
+| grammar 1, 10,000 from 12,210,001, `SE_GENERATED_CAUTION=deep` | failing seeds=6; findings=8: none of area 5's order classes. 12212141 (`map-copy-store`; the second finding `emulator-error`, an uncaptured read at 0x0: generator, area 11), 12215245, 12217684, 12217908 and 12218492 (`map-way-back`), 12217615 (`map-const-join`) |
+| grammar 2, 10,000 from 12,210,001, `SE_GENERATED_CAUTION=deep` | failing seeds=2; findings=5: 12216978 (`map-const-join`), 12218480 (`caution-unsaid-deep`, r13 at a call, no signature lent: area 3) |
+| lints | literal size ok (no `patches/` change, so the vendored lint was not needed) |
+
+No product code changed: the corpus texts and the token output are those of the tree before (the corpus runs above are the same counts as the A5-154 record). The oracle changes can only set findings aside: each switch (`SE_A7_RULE_OFF=5161` to `5164`) restores the findings of its seed, and the 20,000-seed run, every pin, and the two sweeps report no finding of the four classes.
+
+### Routed
+
+* **Area 7:** grammar 1 12212141 (`map-copy-store`), 12215245, 12217684, 12217908, 12218492 (`map-way-back`), 12217615 (`map-const-join`); grammar 2 12216978 (`map-const-join`).
+* **Area 11:** grammar 1 12212141's `emulator-error` (the emulator reads 16 bytes at 0x0, uncaptured BIOS memory).
+* **Area 3:** grammar 2 12218480 (`caution-unsaid-deep`, r13 changed at the call at 06009034 of 0600908C).
+* The mapping gives A5-162's loop statement the tokens of the dead read (0600900E) and not of the read the value comes from (06009016): the oracle is right to set it aside, but a click on the read at 06009016 goes to an empty token on that line. Area 7 may want it (no seed fails on it).

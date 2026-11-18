@@ -632,6 +632,93 @@ inline bool IgnoredDiff(const sfe::decomp::DecompileResult& r, const std::functi
     }
     return true;
 }
+// A5-164: whether the value a register holds from `start` on may reach the instruction `through`: on some path, the register, or one that
+// copies or derives from it (a move, an extension, any instruction that reads it and writes another register), is still holding it there, or
+// the value was stored to memory or passed to a call on the way (it may come back). The walk follows the branches and the delay slots as
+// IgnoredDiff does; a path that overwrites every register holding the value is over; a path that ends at a return is over; too long a walk
+// says true. False says the value never reaches `through`: `r0 = *g ; ... L: r0 = 0x10 ; *p = r0 ; ... bf L ; ... use r0`, where the
+// pointer's store is made after the register was overwritten on every path that passes it.
+inline bool ValueMayReach(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word, uint32_t start, int reg, uint32_t through)
+{
+    const uint32_t kLeaked = 1u << 16;
+    const auto named = [](const std::string& ops, bool skipLast) {
+        std::vector<int> out;
+        const size_t comma = ops.rfind(',');
+        const size_t end = skipLast && comma != std::string::npos ? comma : ops.size();
+        if (skipLast && comma == std::string::npos) return out;
+        for (size_t k = 0; k + 1 < end; ++k)
+            if (ops[k] == 'r' && std::isdigit(static_cast<unsigned char>(ops[k + 1])) && (k == 0 || !std::isalnum(static_cast<unsigned char>(ops[k - 1]))))
+                out.push_back(std::atoi(ops.c_str() + k + 1));
+        return out;
+    };
+    // one instruction's effect on the registers that hold the value (bit n = register n; kLeaked: the value is in memory or a callee's hands)
+    const auto apply = [&](uint32_t p, uint32_t& s) -> bool {
+        uint16_t w = 0;
+        if (!word(p, w)) return false;
+        const sfe::DisassembledInstruction d = sfe::Sh2Decode(p, w);
+        if (!d.IsValid) return false;
+        if (d.IsCall)
+        {
+            if (s & 0xF0u) s |= kLeaked;
+            return true;
+        }
+        const MemoryShape shape = ShapeOf(d);
+        const bool pureDest = d.Mnemonic.compare(0, 3, "mov") == 0 && (shape.load || (!d.Operands.empty() && d.Operands[0] == '#') || d.Mnemonic == "mova" || d.Mnemonic == "movt");
+        const std::set<int> wr = WrittenRegisters(d);
+        bool reads = false;
+        for (int rg : named(d.Operands, pureDest))
+            if (s & (1u << rg)) reads = true;
+        if (shape.store && reads) s |= kLeaked;
+        for (int rg : wr)
+        {
+            if (reads && !(pureDest && shape.load)) s |= 1u << rg;
+            else s &= ~(1u << rg);
+        }
+        return true;
+    };
+    std::set<std::pair<uint32_t, uint32_t>> seen;
+    std::vector<std::pair<uint32_t, uint32_t>> work;
+    work.emplace_back(start, 1u << reg);
+    while (!work.empty())
+    {
+        auto cur = work.back();
+        work.pop_back();
+        if (!cur.second || !seen.insert(cur).second) continue;
+        if (seen.size() > 600) return true;
+        const uint32_t p = cur.first;
+        uint16_t w = 0;
+        if (p == through) return true;
+        if (!r.InBody(p) || !word(p, w)) return true;
+        const sfe::DisassembledInstruction d = sfe::Sh2Decode(p, w);
+        if (!d.IsValid) return true;
+        uint32_t s = cur.second;
+        if (d.Mnemonic == "rts" || d.Mnemonic == "rte")
+        {
+            if (d.HasDelaySlot && p + 2 == through) return true;
+            continue;
+        }
+        if ((d.IsBranch || d.IsCall) && d.HasDelaySlot)
+        {
+            if (p + 2 == through) return true;
+            if (!apply(p + 2, s)) return true;
+            if (d.IsCall) { work.emplace_back(p + 4, s); continue; }
+            if (!d.HasBranchTarget) return true;
+            work.emplace_back(d.BranchTarget, s);
+            if (d.IsConditional) work.emplace_back(p + 4, s);
+            continue;
+        }
+        if (d.IsBranch)
+        {
+            if (!d.HasBranchTarget) return true;
+            work.emplace_back(d.BranchTarget, s);
+            if (d.IsConditional) work.emplace_back(p + 2, s);
+            continue;
+        }
+        if (!apply(p, s)) return true;
+        work.emplace_back(p + 2, s);
+    }
+    return false;
+}
 // The function's own branches, by target (not its calls): the instruction each comes from (a delayed branch's slot).
 // A7-132: the instructions of the blocks the engine says it removed as unreachable ("Removing unreachable block (ram,0x...)": a block
 // that begins there and runs to the first branch, jump or return, its slot with it). The code of such a block is run by no path, so the
