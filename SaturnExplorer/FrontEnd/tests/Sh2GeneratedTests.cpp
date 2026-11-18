@@ -220,8 +220,9 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
-//   SE_GENERATED_BARESPILL=0  A11-35: the spills a pop of r15 would have broken are drawn with their push and pop again (the programs of seeds 12018405,
-//                             12020830, 12047405 before the fix; the first stops the emulator)
+//   SE_GENERATED_BARESPILL=0  A11-35: the spills a pop of r15 breaks are drawn with their push and pop again (the programs of seeds 12018405 and
+//                             12047405 before the fix, which stop the emulator); SE_GENERATED_TRACE_A11_35=1 lists the seeds the fix changes,
+//                             SE_GENERATED_LISTONLY=1 only makes the programs (no run), to list a wide range quickly
 //   SE_GENERATED_MUTATE=1|ledger|caution|cautionlate|second|alias|params|ret|body|cases|warn|preserved|claims|lent|data|honour|kept|tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe|toksilent
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
@@ -3060,16 +3061,37 @@ Program Generate(uint64_t seed)
     return g.Run();
 }
 
+// (A11-35) Defined after the emulator: whether the program fits its layout, and whether the emulator stops on any run of any function.
+bool FitsLayout(const Program& p);
+bool StopsInEmulator(const Program& p);
+
 // A version 2 module. 'attempt' re-draws it when the layout does not fit (a pool out of reach).
 Program Generate2(uint64_t seed, int attempt)
 {
-    Gen g(seed ^ (static_cast<uint64_t>(attempt) << 40));
-    g.modPollOn = seed >= kModPollFirst;
-    g.cautionOn = seed >= kCautionFirst;
-    g.cautionLoopOn = seed >= kCautionLoopFirst;
-    { const char* e = std::getenv("SE_GENERATED_BARESPILL"); g.bareSpillOn = !(e && std::string(e) == "0"); }
-    Program prog = g.Module();
-    if (g.bareSpills && std::getenv("SE_GENERATED_TRACE_A11_35")) std::fprintf(stderr, "A11-35 seed %llu: %d spill(s) bare\n", static_cast<unsigned long long>(seed), g.bareSpills);
+    auto make = [&](bool bare, int& bareSpills) {
+        Gen g(seed ^ (static_cast<uint64_t>(attempt) << 40));
+        g.modPollOn = seed >= kModPollFirst;
+        g.cautionOn = seed >= kCautionFirst;
+        g.cautionLoopOn = seed >= kCautionLoopFirst;
+        g.bareSpillOn = bare;
+        Program prog = g.Module();
+        bareSpills = g.bareSpills;
+        return prog;
+    };
+    const char* e = std::getenv("SE_GENERATED_BARESPILL");
+    const bool off = e && std::string(e) == "0";
+    int bareSpills = 0;
+    Program prog = make(!off, bareSpills);
+    if (!bareSpills) return prog;
+    // (A11-35) A spill after a call of the callee that pops is made bare only when the program as it was made before stops the emulator (its pop
+    // runs and the push lands on a saved word): every other seed keeps the program it always made, a layout that does not fit included.
+    int none = 0;
+    Program old = make(false, none);
+    if (!FitsLayout(old) || !StopsInEmulator(old))
+    {
+        return old;
+    }
+    if (std::getenv("SE_GENERATED_TRACE_A11_35")) std::fprintf(stderr, "A11-35 seed %llu: %d spill(s) bare\n", static_cast<unsigned long long>(seed), bareSpills);
     return prog;
 }
 
@@ -15974,6 +15996,26 @@ void TestPrintedC()
     CHECK(failing == 0);
 }
 
+bool FitsLayout(const Program& p) { return Assemble(p).ok; }
+
+bool StopsInEmulator(const Program& p)
+{
+    const Subject s = MakeSubject(p);
+    if (s.bad) return false;
+    std::vector<uint8_t> hw;
+    for (size_t i = 0; i < s.words.size(); ++i) dts::Put16(hw, kCode - 0x06000000u + 2 * i, s.words[i]);
+    dts::Put16(hw, kSentinel - 0x06000000u, 0x0009);
+    dts::Put16(hw, kSentinel - 0x06000000u + 2, 0x0009);
+    auto snap = dts::MakeSnapshot(hw);
+    Runner runner(s, snap);
+    const int worlds = s.markVolatile ? 2 : 1;
+    for (int world = 0; world < worlds; ++world)
+        for (size_t fi = 0; fi < s.fns.size(); ++fi)
+            for (const RunOut& run : runner.Ordinary(s.fns[fi], world == 1))
+                if (!run.error.empty()) return true;
+    return false;
+}
+
 // A version 2 program that fits: a re-draw when a pool or a branch is out of reach.
 Program MakeV2(uint64_t seed)
 {
@@ -20805,6 +20847,7 @@ void TestGenerated()
     // Grammar 1 is the original (one function, no stack, no calls); grammar 2 is modules. By default
     // the seeds alternate, so the short run covers both inside its time.
     const long grammar = EnvNumber("SE_GENERATED_GRAMMAR", 0);
+    const bool listOnly = EnvNumber("SE_GENERATED_LISTONLY", 0) != 0;
 
     std::map<std::string, int> shapes, classes, counts;
     std::map<std::string, int> mnemonics;
@@ -20819,6 +20862,7 @@ void TestGenerated()
         const bool v2 = grammar == 2 || (grammar == 0 && seed % 2 == 0);
         const Program p = v2 ? MakeV2(static_cast<uint64_t>(seed)) : Generate(static_cast<uint64_t>(seed));
         (v2 ? v2seeds : v1seeds) += 1;
+        if (listOnly) continue;   // SE_GENERATED_LISTONLY=1: only make the programs (with SE_GENERATED_TRACE_A11_35=1, to list what A11-35's fix changes)
         CountProgram(p, shapes);
         if (coverage) CountProgramMnemonics(p, mnemonics);
         const bool detail = verbose || failing < detailLimit;
