@@ -10742,6 +10742,13 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
                 lt0.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_", nb0) != eq0 ||
                 lt0.compare(nb0, 3, "Ram") == 0 || lt0.find("Ram", nb0) < eq0 || lt0.find("Stack", nb0) < eq0)
                 continue;
+            // (a copy, as the oracle takes it: the line names a store without drawing it, `xVar2 = SUB42(pxVar1,0);` with an empty token at
+            // the pre-decrement store that follows; the narrowing of a load's value, `xVar5 = (xunknown1)uRam26001020;`, names none and is
+            // the load's own statement)
+            bool namesStore = false;
+            for (const Token& t : lines[line].tokens)
+                namesStore = namesStore || (t.addr && t.begin >= t.end && flow.accessesByInsn.find(std::make_pair(CanonicalOf(t.addr), true)) != flow.accessesByInsn.end());
+            if (!namesStore) continue;
             bool otherHolds = false;
             for (size_t k = 0; k < lines.size() && !otherHolds; ++k)
             {
