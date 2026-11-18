@@ -22697,6 +22697,48 @@ Seeds 366, 1259, 1486 and 3284 pass in the 20,000-seed run (counted as `order.fo
 | lints | literal size ok; vendored tree lint ok |
 
 The corpus dumps are unchanged: the host change runs only after a failed pass and the oracle change reads text.
+
+## Area 5, round 2
+
+Fixer, branch `review/5-round2` cut at `72496d2d`; RelWithDebInfo, `-j1`, `ulimit -v 3500000`. No engine patch (0098 unused). One host change (`Sh2Decompiler.cpp`, `PointerResolver::Walk`), one oracle change (`Sh2GeneratedTests.cpp`), the pins (`TestA5Round2Pins`). Backups on `backup/review-5-round2`.
+
+| Row | Class | Outcome |
+|---|---|---|
+| A5-152 | P3, product (host) | **fixed**: grammar 2 seed 12105914 (`onchip-span-unsaid`) |
+| A5-153 | P3, oracle | **fixed in the oracle**: grammar 1 seed 12052695 (`read-after-folded-store`); the text was right |
+
+### A5-152
+
+Both seeds reproduced on this tree. The seed's function ORs r4 with 0xA0000000 and 0x60000000 (the text shows `param_1 | 0xe0000000`: partition 7 whatever the value), pushes it, stores through r5, pops it and reads at +4. By hand the finding needs all three of the two ORs, the push/pop and the store through a pointer; a debug print in `Walk` showed the value reaching the read through `INDIRECT` (iop a STORE, input the OR). `Walk`'s default made it an unknown, so the A5-103 partition note (`parts == {7}`) was lost. `Walk` now follows a store's INDIRECT to the value before it when that value has no constants, bases or loop paths and carries a proved span or partition set; any other value stays unknown as before (a wider rule would add "if the pointer holds ..." notes to the corpus). Cost: one extra `Walk` of the INDIRECT's input on a pointer walk, nothing on other code. Corpus: the token dumps of both images, alone and lent, are byte-identical to the base (the same tree without the change).
+
+### A5-153
+
+Read from the text: `uVar3 = *(int2 *)(param_2 + 0xe);` comes before both `Ram06001018 = (int4)iVar1;` statements, so the order is right. `mov.l r1,@r6` at 0600901C is the slot of `bt/s` and the target of `bt` (two instances); the mapping names it at the first arm's `Ram06001018 = iVar1;` and at no later line. The rule judged the read against that line. The same shape as A5-137 (c) for stores judged against an access, now applied to reads: counted `order.read-before-folded-store.instance-after`. The shrunk fixture of the seed drifted to an emulator error (read of address 0) and is not used; the pin is the whole seed. The mapping's naming of the two instances is area 7's.
+
+### Runs
+
+See the report of the fixer; the numbers are in the commit message of the last commit of the branch.
+
+### Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest, `-j1` | 117 of 117 passed |
+| fault matrix | 0 of 94 job(s) failed |
+| generator, 20,000 seeds (pins included) | failing seeds=0; findings=0 |
+| grammar 1, 10,000 from 11,300,001 | 1 failing seed: 11303278 (`map-way-back`, A7-25; emulator error on the shrunk fixture), area 7's |
+| grammar 2, 10,000 from 11,300,001 | 1 failing seed: 11304044 (`map-way-back`, A7-25), area 7's |
+| grammar 1, 10,000 from 12,130,001, `SE_GENERATED_CAUTION=deep` | 4 failing seeds, all area 7 mapping classes: 12132326 (`map-store-dead`, A7-158), 12133156 (`map-way-back`), 12133872 (`map-conversion-branch`), 12137810 (`map-way-back`) |
+| grammar 2, 10,000 from 12,130,001, `SE_GENERATED_CAUTION=deep` | 3 failing seeds: 12130995 (`read-after-folded-store`, **A5-154, open**), 12135074 (`map-store-after`, A7-32's class), 12136696 (`caution-unsaid-deep`, r15 at a call: A3-228's class) |
+| printed-C, 3,000 seeds | agrees=5196 |
+| corpus hwram007 / hwram008, alone and lent | `all passed` (every ledger count 0); token dumps byte-identical to the base tree in all six dumps |
+| lints | literal size ok; the vendored lint not run (no patch, no vendored file) |
+
+### Routed
+
+* **Area 5, next fixer:** A5-154 (P2, open): grammar 2 seed 12130995.
+* **Area 7:** grammar 1 11303278, 12132326, 12133156, 12133872, 12137810; grammar 2 11304044, 12135074; and the mapping of two-instance delay-slot stores (A5-153).
+* **Area 3:** grammar 2 12136696 (A3-228's class).
 ## Area 11, round 8
 
 Fixer, branch `review/11-round8` from master `10aefa40`; RelWithDebInfo build, `-j1`, `ulimit -v 6000000`. Rows A11-35 (fixed) and A11-36 (fixed in part; the rest is A11-37). Only `FrontEnd/tests/Sh2GeneratedTests.cpp`, the ledger and this section changed; no product code, no engine patch.
@@ -22921,26 +22963,28 @@ Branch `review/4-round3` (from f07b0197). No product or engine change, no patch 
 * **Area 7 (next fixer):** A7-200's 12020446, A7-207, A7-220, new sweep seeds 11503597, 11508679 (`mov.b r0,@(3,r6)` at 0x0600902E answered with a copy before its own statement; `iVar2 = uRam06001014;`), 12150363, 12158267; A7-179's rest.
 * **Area 5:** A5-160 (A7-208). **Generator (area 11):** A7-209, seed 12152782.
 
-## Area 5, round 2
+## Area 5, A5-154 fix
 
-Fixer, branch `review/5-round2` cut at `72496d2d`; RelWithDebInfo, `-j1`, `ulimit -v 3500000`. No engine patch (0098 unused). One host change (`Sh2Decompiler.cpp`, `PointerResolver::Walk`), one oracle change (`Sh2GeneratedTests.cpp`), the pins (`TestA5Round2Pins`). Backups on `backup/review-5-round2`.
+Fixer, branch `review/5-a5154` (area 5 round 2 and master `be40a4ce`); RelWithDebInfo, `-j1`, `ulimit -v 3500000`. One engine patch (**0098**, `merge.cc`), one pin (`TestA5154Pins`). Backups on `backup/review-5-a5154`.
 
 | Row | Class | Outcome |
 |---|---|---|
-| A5-152 | P3, product (host) | **fixed**: grammar 2 seed 12105914 (`onchip-span-unsaid`) |
-| A5-153 | P3, oracle | **fixed in the oracle**: grammar 1 seed 12052695 (`read-after-folded-store`); the text was right |
+| A5-154 | P2, engine | **fixed** (patch 0098): grammar 2 seed 12130995 (`read-after-folded-store`) |
+| A5-160 (area 7's A7-208) | P3 | **not the same mechanism**; analysed as A5-161: the text is right, the oracle's write-back set-aside does not see through a `tas.b` |
+| A5-161 | P3, oracle | open (diagnosed) |
+| A5-162 | P2, engine | open, found by the sweep (grammar 1 seed 12183970, `folded-read-after-access`), same without patch 0098 |
 
-### A5-152
+### A5-154
 
-Both seeds reproduced on this tree. The seed's function ORs r4 with 0xA0000000 and 0x60000000 (the text shows `param_1 | 0xe0000000`: partition 7 whatever the value), pushes it, stores through r5, pops it and reads at +4. By hand the finding needs all three of the two ORs, the push/pop and the store through a pointer; a debug print in `Walk` showed the value reaching the read through `INDIRECT` (iop a STORE, input the OR). `Walk`'s default made it an unknown, so the A5-103 partition note (`parts == {7}`) was lost. `Walk` now follows a store's INDIRECT to the value before it when that value has no constants, bases or loop paths and carries a proved span or partition set; any other value stays unknown as before (a wider rule would add "if the pointer holds ..." notes to the corpus). Cost: one extra `Walk` of the INDIRECT's input on a pointer walk, nothing on other code. Corpus: the token dumps of both images, alone and lent, are byte-identical to the base (the same tree without the change).
+Replayed on this tree (the finding is in the default request; the marked request already prints `xVar2 = 4;`). The shrunk module: `r1 = 4; if (r6 < 5) { r1 = table[r6]; switch (r6) { case 3: x = *r9; } } g = r1 (mov.b r1,@r6); call; ...`. A debug print of the merges of the global's high variable showed the order: (1) RulePropagateCopy feeds the store's COPY into the INDIRECT of the call that follows (0085 allows it: no access between the COPY and the call in its block), so the global's write is the INDIRECT's input, the join `m1 = MULTIEQUAL(4, table entry, ...)`; (2) `Merge::mergeIndirect` merges `m1` with the global: `heldAcrossAccess` (0090) looked at the instances of `m1`'s high variable, one MULTIEQUAL whose cover is the join's block, and found no access; (3) `Merge::mergeOp` merges the join's inputs with its output: the table entry's cover holds the read through `param_2` (so the test of the input alone refused), and `trimOpInput` put a COPY at the end of the predecessor block, the switch's block, before the case that reads `*param_2`; that COPY's own cover holds nothing, so it merged with the global and the write was printed there (`xRam06001028 = (xunknown1)*(table...)` before `switch`), and the constant 4's COPY, in the first block, likewise.
 
-### A5-153
+The fix is in the existing walk of `heldAcrossAccess` (an access on a path from one write of the value to the next, `defs.size() > 1`): the inputs of a join are counted as writes (nested joins to 16 of them, a visited list; INDIRECT outputs skipped as before). The walk from the constant's COPY reaches the table read (a load through a pointer) and the merge is refused: the join stays a variable of its own, `xVar2 = 4; if (param_3 < 5) { xVar2 = (xunknown1)*(table); switch ... xVar1 = *param_2; ... } ... xRam06001028 = xVar2;`, the write at the call where the code makes it. Cost: the walk existed; it now runs for a join's inputs too, bounded by the 64 blocks it already stops at, and only for a global's merge with a variable that holds a join.
 
-Read from the text: `uVar3 = *(int2 *)(param_2 + 0xe);` comes before both `Ram06001018 = (int4)iVar1;` statements, so the order is right. `mov.l r1,@r6` at 0600901C is the slot of `bt/s` and the target of `bt` (two instances); the mapping names it at the first arm's `Ram06001018 = iVar1;` and at no later line. The rule judged the read against that line. The same shape as A5-137 (c) for stores judged against an access, now applied to reads: counted `order.read-before-folded-store.instance-after`. The shrunk fixture of the seed drifted to an emulator error (read of address 0) and is not used; the pin is the whole seed. The mapping's naming of the two instances is area 7's.
+Patch 0098 is recorded in `patches/README.md` and `VENDOR.md` (patch numbers 0095 to 0097 listed as reserved), the notice is in `merge.cc`'s header, and the vendored lint passes. Pins: `TestA5154Pins` (the seed whole, the shrunk module, and that `xRam06001028 = 4;` is gone from the text). The pin was run without the patch on the shrunk module before the change (1 finding, the one above).
 
-### Runs
+### A5-160 (A7-208) and A5-161
 
-See the report of the fixer; the numbers are in the commit message of the last commit of the branch.
+Grammar 1 seed 11007546, shrunk: `mov.w r1,@g ; mov.w @g,r0 ; tas.b @g ; mov.w r0,@g ; ... ; mov.w @(6,r7),r0 ; mov.b r4,@g`. The word store at 06009008 writes back the word read at 06009004; it is joined into the byte store after the pointer read. Not A5-154's mechanism (no join, patch 0098 changes nothing: the finding stays), and the printed values are right: the read through the pointer sees the first store's `in_r1` in the code and in the text. The oracle's set-aside of a write-back of what was just read does not see through the `tas.b` between the read and the write-back. Filed as A5-161 (P3, oracle, open); A5-160 on `review/7-round29` is covered by it.
 
 ### Runs (after the last code edit)
 
@@ -22949,13 +22993,15 @@ See the report of the fixer; the numbers are in the commit message of the last c
 | ctest, `-j1` | 117 of 117 passed |
 | fault matrix | 0 of 94 job(s) failed |
 | generator, 20,000 seeds (pins included) | failing seeds=0; findings=0 |
-| grammar 1, 10,000 from 11,300,001 | 1 failing seed: 11303278 (`map-way-back`, A7-25; emulator error on the shrunk fixture), area 7's |
-| grammar 2, 10,000 from 11,300,001 | 1 failing seed: 11304044 (`map-way-back`, A7-25), area 7's |
-| grammar 1, 10,000 from 12,130,001, `SE_GENERATED_CAUTION=deep` | 4 failing seeds, all area 7 mapping classes: 12132326 (`map-store-dead`, A7-158), 12133156 (`map-way-back`), 12133872 (`map-conversion-branch`), 12137810 (`map-way-back`) |
-| grammar 2, 10,000 from 12,130,001, `SE_GENERATED_CAUTION=deep` | 3 failing seeds: 12130995 (`read-after-folded-store`, **A5-154, open**), 12135074 (`map-store-after`, A7-32's class), 12136696 (`caution-unsaid-deep`, r15 at a call: A3-228's class) |
+| grammar 1, 10,000 from 11,900,001 | 4 failing seeds, all area 7 mapping classes: 11901023 (`map-const-join`), 11902840 and 11904869 (`map-way-back`), 11905223 (`map-store-dead`) |
+| grammar 2, 10,000 from 11,900,001 | 3 failing seeds: 11900473 (`map-conversion-branch`), 11901051 (`map-way-back`), 11904122 (`caution-unsaid`, r12 at a call: area 3) |
+| grammar 1, 10,000 from 12,180,001, `SE_GENERATED_CAUTION=deep` | 4 failing seeds: 12183970 (`v:folded-read-after-access`, **A5-162, open**), 12185736 (`map-copy-store`), 12188214 and 12189580 (`map-way-back`) |
+| grammar 2, 10,000 from 12,180,001, `SE_GENERATED_CAUTION=deep` | 1 failing seed: 12181915 (`map-way-back`) |
 | printed-C, 3,000 seeds | agrees=5196 |
-| corpus hwram007 / hwram008, alone and lent | `all passed` (every ledger count 0); token dumps byte-identical to the base tree in all six dumps |
-| lints | literal size ok; the vendored lint not run (no patch, no vendored file) |
+| corpus hwram007 / hwram008, alone and lent | `all passed` (every ledger count 0; missing and said 0 and 4; lent 474 (645) and 724 (975)); the six token dumps byte-identical to the build with the join walk switched off |
+| lints | literal size and vendored tree ok |
+
+Every one of the 12 failing seeds was replayed with the patch's walk switched off (a temporary environment switch, not committed): each fails the same way, so none is caused by 0098.
 
 ### Routed
 
@@ -23043,3 +23089,7 @@ Pins in `TestA3RoutedPins` (A3-231 to A3-235) print 0 findings.
 ### 3. Routed
 
 * Area 7: grammar 1 11806821 `map-copy-store`; grammar 2 11802915 `map-const-join`; grammar 2 12173135 `folded-store-after-access` (area 7 or 5).
+* **Area 5, next fixer:** A5-162 (P2, open), A5-161 (P3, oracle).
+* **Area 7:** grammar 1 11901023, 11902840, 11904869, 11905223, 12185736, 12188214, 12189580; grammar 2 11900473, 11901051, 12181915.
+* **Area 3:** grammar 2 11904122 (`caution-unsaid`, A3-228's class).
+

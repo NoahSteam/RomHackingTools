@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  * Modified for SaturnExplorer: a global is not merged with a value the code holds in a register across a hardware access or an access through a pointer (patches/0090-engine-hardware-access-orders-globals.patch).
+ * Modified for SaturnExplorer: the inputs of a join are counted among the writes of a value held across a hardware access or an access through a pointer (patches/0098-engine-join-inputs-held-across-access.patch).
  */
 #include "merge.hh"
 #include "funcdata.hh"
@@ -166,12 +167,34 @@ bool Merge::heldAcrossAccess(HighVariable *tied,HighVariable *other)
   // then reads what was written when p is the global's address)
   {
     vector<const PcodeOp *> defs;
+    vector<const PcodeOp *> joins;
     for(int4 i=0;i<other->numInstances();++i) {
       Varnode *vn = other->getInstance(i);
       if (!vn->isWritten()) continue;
       const PcodeOp *def = vn->getDef();
-      if (def->code() == CPUI_MULTIEQUAL || def->code() == CPUI_INDIRECT) continue;
-      defs.push_back(def);
+      if (def->code() == CPUI_INDIRECT) continue;
+      if (def->code() == CPUI_MULTIEQUAL) {
+	// (A join's inputs are merged with its output afterwards (Merge::mergeOp), each in place or by a COPY at the end of its predecessor
+	// block, so the global is written where they are: before a read through a pointer on a path to the join that the code makes first,
+	// A5-154: `r1 = 4; if (c) { r1 = table[i]; switch (i) { case 3: x = *p; } } g = r1;` printed `g = 4; if (c) { g = table[i]; switch ... }`.)
+	joins.push_back(def);
+	continue;
+      }
+      if (find(defs.begin(),defs.end(),def) == defs.end()) defs.push_back(def);
+    }
+    for(size_t j=0;j<joins.size() && j<16;++j) {
+      const PcodeOp *mop = joins[j];
+      for(int4 k=0;k<mop->numInput();++k) {
+	const Varnode *ivn = mop->getIn(k);
+	if (!ivn->isWritten()) continue;
+	const PcodeOp *def = ivn->getDef();
+	if (def->code() == CPUI_INDIRECT) continue;
+	if (def->code() == CPUI_MULTIEQUAL) {
+	  if (find(joins.begin(),joins.end(),def) == joins.end()) joins.push_back(def);
+	  continue;
+	}
+	if (find(defs.begin(),defs.end(),def) == defs.end()) defs.push_back(def);
+      }
     }
     if (defs.size() > 1) {
       for(int4 i=0;i<defs.size();++i) {
