@@ -8583,8 +8583,27 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         else defaultPath = true;
                     }
             if (defaultPath) count("table.out-of-range-index");
-            for (const auto& dest : byIndex)
+            for (const auto& destRun : byIndex)
             {
+                // A7-199 (area 7 round 28): the index the run was meant to dispatch with is not the one the jump used when a call between the
+                // register's load and the `jmp` clobbers the register (`mov r9,r5` after a call that sets r9: the jump takes entry 0 whatever
+                // the parameter said). The table's entry for the intended index is then another address than the one the run reached, and the
+                // case the output prints for the index the jump took is the right one: the run is judged by the first index whose entry is
+                // the address it reached. Grammar 2 seed 12060177
+                std::pair<int, uint32_t> dest = destRun;
+                if (dest.first >= 0 && static_cast<size_t>(dest.first) < tl.entry.size() && tl.entry[static_cast<size_t>(dest.first)] != dest.second)
+                {
+                    int real = -2;
+                    for (size_t k = 0; k < tl.entry.size() && real == -2; ++k)
+                        if (tl.entry[k] == dest.second) real = static_cast<int>(k);
+                    if (real == -2)
+                    {
+                        count("table.index-unknown");
+                        continue;
+                    }
+                    count("table.index-clobbered");
+                    dest.first = real;
+                }
                 count("table.destination");
                 // The code the index runs, and whether it does anything the ledger lists: a case that
                 // does nothing may be merged into another or the default.
@@ -18825,6 +18844,26 @@ void TestArea7Round27Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7 round 28 pins (whole seeds). A7-196: a pointer's zero printed with its cast, a merge copy at a branch (10802262, 10809419, rule 196).
+// A7-197: a narrowing at the maker whose own statement begins earlier is a copy there (10805383, product). A7-198: a merged register's copy
+// at a `tas.b` that begins a loop names the register's makers (12060407, product). A7-199: a jump table's index the run did not dispatch
+// with, a callee having clobbered the register (12060177, oracle).
+void TestArea7Round28Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 1, 10802262 }, Whole{ 2, 10809419 }, Whole{ 1, 10805383 }, Whole{ 2, 12060407 }, Whole{ 2, 12060177 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 28: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -20720,6 +20759,7 @@ void TestGenerated()
         RUN(TestArea7Round26Pins(d));
         RUN(TestArea7P2FixPins(d));
         RUN(TestArea7Round27Pins(d));
+        RUN(TestArea7Round28Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
