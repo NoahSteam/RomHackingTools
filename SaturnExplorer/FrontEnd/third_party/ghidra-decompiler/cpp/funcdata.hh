@@ -19,6 +19,7 @@
  * Modified for SaturnExplorer: an op that changes keeps the cached masks around it a superset of the truth (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: a write folded into the stack frame whose value nothing read is recorded when it goes (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: whether a STORE is guarded as pending, for the save slots (patches/0072-engine-frame-chains-and-save-slots.patch).
+ * Modified for SaturnExplorer: a function the host calls back when a flow has been followed, to record the flow a restart follows (patches/0096-engine-flow-done-hook.patch).
  */
 #ifndef __FUNCDATA_HH__
 #define __FUNCDATA_HH__
@@ -26,6 +27,7 @@
 /// \file funcdata.hh
 /// \brief Utilities for processing data structures associated with a single function
 
+#include <functional>
 #include "architecture.hh"
 #include "override.hh"
 #include "heritage.hh"
@@ -153,6 +155,7 @@ class Funcdata {
   vector<AccessRecord> accessFates;	///< How each LOAD and STORE that ended did (SaturnExplorer); cleared with the function
   vector<FlowTable> flowTables;	///< Every indirect jump the last flow recovered, before any action resolves one to a goto (SaturnExplorer); cleared with the function
   vector<FlowInsn> flowInsns;	///< Every instruction the last flow translated, before any action removed code (SaturnExplorer); cleared with the function
+  std::function<void(Funcdata &)> flowDone;	///< SaturnExplorer (0096): called at the end of every followFlow of this function (a restart follows the flow again)
   uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
   bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
   mutable bool frameEscaped = false;	///< SaturnExplorer (0068): a frame address escaped (FrameEscape) in this generation of the function
@@ -255,6 +258,7 @@ public:
   /// \brief SaturnExplorer (0068): is the op a MULTIEQUAL or INDIRECT, or not yet given an op-code
   static bool isMarkerOrUnbuilt(const PcodeOp *op) { return op->getOpcode() == (TypeOp *)0 || op->code() == CPUI_MULTIEQUAL || op->code() == CPUI_INDIRECT; }
   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
+  void setFlowDone(const std::function<void(Funcdata &)> &f) { flowDone = f; }	///< SaturnExplorer (0096): the host's call after each flow
   const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
   void noteFrameEscaped(void) const { frameEscaped = true; }	///< SaturnExplorer (0068): FrameEscape found a frame address escaped

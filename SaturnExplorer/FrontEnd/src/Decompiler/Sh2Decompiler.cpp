@@ -13211,9 +13211,23 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 arch->symboltab->setPropertyRange(ghidra::Varnode::readonly,
                                                   ghidra::Range(ram, ro.first, ro.first + ro.second - 1));
         Enter(DecompilePhase::Flow);
+        // (A7-320, patch 0096) A restart in the actions follows the flow again and can reach code the first flow did not (a `jmp` the
+        // analysis resolves later, a run into another function's code): the engine tells us after each flow, and the record of the last
+        // one is the one the final p-code, the access fates and the printed text belong to (taken below, after the actions).
+        FlowRecord restartedFlow;
+        bool flowRestarted = false;
+        {
+            int flows = 0;
+            const ghidra::Funcdata* const entry = fd;
+            fd->setFlowDone([&, entry](ghidra::Funcdata& f) {
+                if (&f != entry || ++flows < 2) return;
+                restartedFlow = RecordFlow(f, CanonicalOf, *snapshot);
+                flowRestarted = true;
+            });
+        }
         fd->followFlow(ghidra::Address(ram, 0), ghidra::Address(ram, ram->getHighest()));
         if (fd->hasNoCode()) return std::string();
-        const FlowRecord flow = RecordFlow(*fd, CanonicalOf, *snapshot);
+        FlowRecord flow = RecordFlow(*fd, CanonicalOf, *snapshot);
 
         const RawScan scan = [&] {
             RawScan raw = ScanRawPcode(*fd, *snapshot);
@@ -13283,6 +13297,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 r.warnings.push_back(std::string("engine rule ") + rule + " not found: access widths and counts may differ from the code");
         arch->allacts.getCurrent()->reset(*fd);
         arch->allacts.getCurrent()->perform(*fd);
+        if (flowRestarted) flow = std::move(restartedFlow);
         // The note of A3-28, but not at a call to a callee whose signature is lent: its arguments are what it reads, and r2 is no
         // input (the probe, run before the literals fold, took every `jsr @rN` for a callee that may read r2: A3-32).
         for (const auto& h : handSites)
