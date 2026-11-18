@@ -10794,27 +10794,6 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
         if (makers.count(from)) continue;
         for (size_t line : printed.at(o).first)
         {
-            // A7-234 (area 7 joins, round 2): the line is the statement of the store at this very instruction -- it assigns the global a
-            // store folded here writes (`xRam00000000 = (xunknown1)unaff_r9;`, the byte store of r1 whose value the frame slot of the pushed r9
-            // gave) -- and the converted value is the function's input: the line names the store, as the store's own line does, not nothing
-            // (the input is no instruction's, the store is the instruction the line shows). Grammar 2 seed 12123120
-            if (input && makers.empty() && !branch)
-            {
-                bool storeLine = false;
-                for (const ghidra::AccessRecord& rec : fd.getAccessFates())
-                {
-                    if (!rec.store || rec.fate != ghidra::fate_folded_ordinary || rec.addr.isInvalid() || rec.addr.getSpace() != data || rec.size <= 0 ||
-                        InstructionOf(rec) != at)
-                        continue;
-                    for (const ghidra::PcodeOp* p : ordered)
-                    {
-                        const ghidra::Varnode* po = p->getOut();
-                        storeLine = storeLine || (p != o && po && !po->isImplied() && po->getSpace() == data && printed.at(p).first.count(line) &&
-                                                  dataOverlaps(rec.addr.getOffset(), rec.size, po->getOffset(), po->getSize()));
-                    }
-                }
-                if (storeLine) continue;
-            }
             // (another op of the instruction on the line: at a branch, the engine's copy of the conversion's value, `pxStack_24 = (xunknown4 *)
             // extraout_r3;` with the frame's copy and the cast both at the `bf`, which makes neither (grammar 2 specials seed 10000825), or its
             // shift; never the branch's own line)
