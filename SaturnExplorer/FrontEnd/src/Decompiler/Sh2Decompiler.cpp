@@ -10205,7 +10205,11 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         // (A7-116: or the low bytes of a variable that is no memory, `(char)param_1` or `(char)puVar6`, the SUBPIECE the engine made at a
         // store of its own and shares with a later narrow store of the same value; grammar 1 seed 6202214)
         const bool inputPiece = o->code() == ghidra::CPUI_SUBPIECE && !in->isConstant() && in->getSpace() != ram && (!stackSpace || in->getSpace() != stackSpace);
-        if (in->isConstant() || (!inputPiece && in->getSpace() != ram && (!stackSpace || in->getSpace() != stackSpace))) continue;
+        // (A7-293: or the whole of such a variable, the engine's copy of a value it keeps in a temporary -- `iRam06002010 = iVar3;`, the store
+        // `mov.l r1,@(0x4,r7)` of the word `mov.l @r7,r1` read, with `iVar3` drawn at the `mov.b r3,@-r4` between them, a store through a
+        // pointer where the engine took its copy; grammar 1 seed 11703213)
+        const bool inputCopy = o->code() == ghidra::CPUI_COPY && !in->isConstant() && in->getSpace()->getType() == ghidra::IPTR_INTERNAL;
+        if (in->isConstant() || (!inputPiece && !inputCopy && in->getSpace() != ram && (!stackSpace || in->getSpace() != stackSpace))) continue;
         const uint32_t at = InstructionOf(o);
         if (flow.callInsns.count(at)) continue;
         const auto first = flow.insnFirst.find(at);
@@ -10220,7 +10224,7 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         for (size_t i = first->second.second; i < ops.size() && ops[i].insn == at && !reads; ++i)
         {
             if (ops[i].code == ghidra::CPUI_STORE) store = true;
-            if (inputPiece || ops[i].code != ghidra::CPUI_LOAD || ops[i].numIn < 2) continue;
+            if (inputPiece || inputCopy || ops[i].code != ghidra::CPUI_LOAD || ops[i].numIn < 2) continue;
             bool stack = false;
             ghidra::uintb offset = 0;
             if (!FlowPointer(flow, fd, first->second.first, static_cast<int>(i), ops[i].in[1], stack, offset))
@@ -10267,6 +10271,28 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
                                                         flow.accessesByInsn.find(std::make_pair(t.addr, true)) != flow.accessesByInsn.end());
                         if (namesOther) continue;
                     }
+                    for (const Token& t : lines[other].tokens) elsewhere = elsewhere || (t.addr == own && t.begin < t.end && !t.materialised);
+                }
+                if (!elsewhere) continue;
+            }
+            // (a temporary's copy: only on the statement of another store -- the line's name drawn at that store, a later instruction -- and
+            // where another line draws this store as its own statement, `*(char *)((int4)param_1 + -1) = (char)*param_1;`)
+            if (inputCopy)
+            {
+                const std::string& ct = lines[line].text;
+                const size_t cb = ct.find_first_not_of(' ');
+                bool nameAtOtherStore = false, operandOnly = true;
+                for (const Token& t : lines[line].tokens)
+                {
+                    if (!t.addr || t.begin >= t.end) continue;
+                    if (t.begin == cb && t.addr != own && flow.accessesByInsn.find(std::make_pair(t.addr, true)) != flow.accessesByInsn.end())
+                        nameAtOtherStore = true;
+                    if (t.begin == cb && t.addr == own) operandOnly = false;
+                }
+                bool elsewhere = false;
+                for (size_t other = 0; other < lines.size() && !elsewhere && nameAtOtherStore && operandOnly; ++other)
+                {
+                    if (other == line || plainCopy(lines[other].text)) continue;
                     for (const Token& t : lines[other].tokens) elsewhere = elsewhere || (t.addr == own && t.begin < t.end && !t.materialised);
                 }
                 if (!elsewhere) continue;
