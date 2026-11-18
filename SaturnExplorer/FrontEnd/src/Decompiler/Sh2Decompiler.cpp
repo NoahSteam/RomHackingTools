@@ -4962,7 +4962,7 @@ private:
             out = Bitwise(d->code(), Walk(d->getIn(0), depth + 1), Walk(d->getIn(1), depth + 1));
             break;
         default:
-            out.others = true;
+            out.others = true; if (std::getenv("SE_DBGW")) { const ghidra::PcodeOp* io = (d->code()==ghidra::CPUI_INDIRECT && d->getIn(1)->getSpace()->getType() == ghidra::IPTR_IOP) ? ghidra::PcodeOp::getOpFromConst(d->getIn(1)->getAddr()) : nullptr; std::fprintf(stderr, "DBGW default op %d in0 %s def %d iop %d insn %x\n", (int)d->code(), d->getIn(0)->getSpace()->getName().c_str(), d->getIn(0)->isWritten() ? (int)d->getIn(0)->getDef()->code() : -1, io ? (int)io->code() : -1, io ? (unsigned)io->getAddr().getOffset() : 0u); }
             break;
         }
         active_.erase(vn);
