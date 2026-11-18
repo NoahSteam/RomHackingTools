@@ -23094,18 +23094,6 @@ Pins in `TestA3RoutedPins` (A3-231 to A3-235) print 0 findings.
 * **Area 3:** grammar 2 11904122 (`caution-unsaid`, A3-228's class).
 
 
-## Area 11, round 9
-
-Fixer, branch `review/11-round9` from master `be40a4ce`, RelWithDebInfo (`-j1`, `ulimit -v 3500000`). The brief: A7-209 (routed from area 7 round 29) and grammar 2 seed 12152782. Test-side only (`Sh2GeneratedTests.cpp`); no product code, no engine patch.
-
-**A11-39 (A7-209), fixed.** Grammar 2 seed 12097940 `n:generator:callee-saved`: function 2 (`add #4,r15`) takes a word of its caller's stack, so function 1's later push (after two calls) writes over its saved r14 and r14 really ends 0. The emulator does not stop, so A11-35's test `StopsInEmulator` was false and the program was kept. The test now also answers true when a finished run of a function with an intent ends with a callee-saved register (r8-r14), gbr/vbr/mach/macl or PR changed that the function does not list as clobbered (the check of `generator:callee-saved`, `generator:state-saved`, `generator:pr`). `Generate2` is unchanged: it draws the bare spill only when the old program fails this test, so every program that meets the contract keeps its draw. `SE_GENERATED_A11_39=0` restores the A11-35 rule (to list what this changes); `SE_GENERATED_TRACE_A11_35=1` also names the function and register or stop that made the test true.
-
-**A11-38, closed (not reproduced).** Grammar 2 seed 12152782 `emulator-error` (`r0x06021100`, the saved PR overwritten) is A11-35's shape: at this base the seed already takes the bare spill and passes; the sweep that found it ran on a build without A11-35. `SE_GENERATED_BARESPILL=0` replays it.
-
-**Seeds changed** (`SE_GENERATED_LISTONLY=1 SE_GENERATED_TRACE_A11_35=1`, grammar 2, 12,000,001-12,200,000, with `SE_GENERATED_A11_39=0` (A11-35's rule) and without): A11-35's rule changes 12018405, 12037749, 12047405, 12056533, 12081644, 12152782; the new rule adds 12097940 and nothing else. 12097940 fails as drawn before (`n:generator:callee-saved`). Grammar 1 does not go through `Generate2`.
-
-**Runs** (RelWithDebInfo): ctest 117 of 117 passed; the 20k generator matrix `failing seeds=0; findings=0`; printed-C `agrees=5196`; grammar 2 caution sweep 12,090,001 + 10,000 `failing seeds=0; findings=0` (12097940 passes); 12,150,001 + 10,000: 5 failing seeds, none the generator's (12152782 passes): 12150363 `map-const-join` and 12154848 `map-const-join`, 12151073 `map-number-store`, 12158267 `map-copy-store` (area 7), 12155319 `n:caution-elsewhere` (area 3: the call at 0x0600903A of 0x0600906A, no signature lent, comes back with r9 changed in input mode 1). The fault matrix and the corpus images were not run (no product code changed).
-
 ## Area 7, round 30
 
 Branch `review/7-round30` on master `5477b68c`, with `review/7-joins2` and `review/11-round9` merged (conflicts in `Sh2GeneratedTests.cpp`, the ledger and this record resolved by keeping both sides; the ledger's A7-200, A7-207, A7-208 and A7-209 rows are the newer branch's). The merged pins passed before any work. One product change; no oracle rule; no engine patch. Ledger A7-240 fixed, A7-250 to A7-255 filed, A7-200, A7-207 and A7-220 updated. Pins: `TestArea7Round30Pins`.
