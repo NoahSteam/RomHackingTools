@@ -23429,3 +23429,30 @@ The corpus counts, lent counts and printed C are those of the merged base: neith
 * **Coordinator (A7-273/A7-250 overlap):** grammar 1 12246420, 12250922, 12273194, 12279930 (plus A7-273's list).
 * **Host (flow record):** grammar 2 12273885, 12274445, 12135074, A7-250's grammar 2 seeds.
 * **Next area 7 fixer:** A7-271 12151073, A7-262 12189580 and 12181915, A7-272, A7-220.
+
+## Area 5, round 4
+
+Fixer, branch `review/5-round4` (master `bf576e7a`); RelWithDebInfo, `-j1`, `ulimit -v 3500000`. No engine patch (0100 unused); every change is in the oracle (`Sh2GeneratedTests.cpp`), each with a mutation switch (`SE_A7_RULE_OFF=<n>`) and pins (`TestA5165Pins`, whole seeds and shrunk replays). The mapping code was not touched.
+
+| Row | Class | Outcome |
+|---|---|---|
+| A5-165 | P3, oracle | **fixed** (rule 5165): grammar 2 seed 12247189 `n:read-after-folded-store` |
+| A5-166 | P3, oracle | **fixed** (rule 5166): grammar 1 seed 12260346 `v:folded-read-after-pointer-write` |
+| A5-167 | P3, oracle | **fixed** (rule 5167): grammar 1 seed 12298693 `v:folded-store-after-access` (sweep) |
+
+**A5-165.** `mov.l r0,@g ; mov.w @r7,r1 ; mov.l r0,@g` with r7 a pointer that may hold g: the second store repeats the first's value, so the engine's single store before the read is the code's state at the read. The oracle judged the read against the later store. Fix: a store that in every run is the same size, address and value as the latest earlier overlapping write (callees included) is set aside.
+
+**A5-166.** A5-164's rule should have covered it but the read is in the slot of `bf/s`, which `loadedRegister` refuses. The value of a slot read goes to the branch target and to the instruction after the slot (the slot's instruction can also be entered by a `bra`); `valueNeverReaches` walks both with `ValueMayReach`. The text is right: the read is printed in the arm that makes no pointer write.
+
+**A5-167.** The sweep's one area 5 finding: heritage's write-back of a piece a narrower store leaves (A5-112, A5-140, A5-150). A piece store of bytes that no traced write of any run touches is counted (`order.folded-store.piece-untouched`), not judged. The product still prints the widened stores.
+
+### Sweeps from 12,290,001
+
+* Grammar 1, 10,000 seeds: failing seeds=2, findings=2: 12298693 (A5-167, closed), 12299659 (`map-way-back`, routed).
+* Grammar 2, 10,000 seeds, `SE_GENERATED_CAUTION=deep`: failing seeds=1, findings=2: 12296264 (`map-const-join`, routed, two functions).
+
+### Routed
+
+* **Area 7:** grammar 1 12299659 (`map-way-back`, 0600902C, A7-25); grammar 2 12296264 (`map-const-join`, 0600905C).
+
+(Final run numbers are in the report to the coordinator and the commit message.)

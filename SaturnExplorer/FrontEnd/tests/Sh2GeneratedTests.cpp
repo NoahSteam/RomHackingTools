@@ -8066,6 +8066,23 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 }
                             }
                         }
+                        // (A5-167: a piece no run ever writes, nothing of the function or its callees writing any of its bytes, keeps the value it had at
+                        // entry, and a store of it, `g._1_1_ = (xunknown1)g;` after `mov.w @g,r1 ; ... mov.b r2,@g ; tas.b @g`, is the engine's
+                        // write-back of the bytes a narrower store leaves (A5-112's class, A5-150's value-preserving reading), whatever the form of the
+                        // value it holds. Grammar 1 seed 12298693; counted, not judged)
+                        if (!dts::A7RuleOff(5167))
+                        {
+                            const uint32_t plo = f.address + off, phi = plo + sz;
+                            bool written = false;
+                            for (const RunOut& run : runs)
+                                for (const TraceRec& t : run.trace)
+                                    written = written || (t.write && t.addr < phi && plo < t.addr + static_cast<uint32_t>(t.size));
+                            if (!written)
+                            {
+                                count("order.folded-store.piece-untouched");
+                                continue;
+                            }
+                        }
                         const uint32_t lo = f.address + off, hi = lo + sz;
                         bool made = false, readNamed = false;
                         for (const AccessFate& o : r.accessFates)
@@ -19587,7 +19604,7 @@ void TestA5162Pins(Sh2Decompiler& d)
 // Area 5, round 4 (A5-165, A5-166): two order-class oracle findings whose text is value-correct, each whole and shrunk. A5-165, grammar 2 seed 12247189
 // (`n:read-after-folded-store`): `mov.l r0,@r6 ; mov.w @r7,r1 ; mov.l r0,@r6`, the second store the same value at the same address as the first, which
 // the engine joins into it. A5-166, grammar 1 seed 12260346 (`v:folded-read-after-pointer-write`): a read in the slot of `bf/s` whose register is
-// overwritten on the fall-through path and never reaches the pointer's write on the branch's. Each fails with its switch (SE_A7_RULE_OFF=5165, 5166).
+// overwritten on the fall-through path and never reaches the pointer's write on the branch's. A5-167 (below) is the third pin. Each fails with its switch (SE_A7_RULE_OFF=5165, 5166, 5167).
 void TestA5165Pins(Sh2Decompiler& d)
 {
     {
@@ -19607,6 +19624,18 @@ void TestA5165Pins(Sh2Decompiler& d)
                                                   "26001030-2600103f", "26001034", "4:06003C1C");
         const Report rep = EvaluateSubject(d, subject, true);
         std::printf("pin 'A5-166 shrunk': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        // A5-167, grammar 1 seed 12298693 (`v:folded-store-after-access`): the engine's write-back of byte 1 of a global no run writes (SE_A7_RULE_OFF=5167)
+        const Report whole = Evaluate(d, Generate(12298693u), true);
+        std::printf("pin 'A5-167 grammar 1 seed 12298693': %zu finding(s)\n", whole.findings.size());
+        for (const Finding& f : whole.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(whole.findings.empty());
+        const Subject subject = RawSubjectWithEnv("D606 D707 6161 2018 8901 8802 8F03 2620 461B E00A 025D 000B 2510 0009 2600 2080 2600 1018", "26001010-2600101f", nullptr, "5:06003C08");
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin 'A5-167 shrunk': %zu finding(s)\n", rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
     }
