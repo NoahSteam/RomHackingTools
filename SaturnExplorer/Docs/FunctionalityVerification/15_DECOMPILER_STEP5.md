@@ -22642,3 +22642,24 @@ Seeds 366, 1259, 1486 and 3284 pass in the 20,000-seed run (counted as `order.fo
 | lints | literal size ok; vendored tree lint ok |
 
 The corpus dumps are unchanged: the host change runs only after a failed pass and the oracle change reads text.
+
+## Area 5, round 2
+
+Fixer, branch `review/5-round2` cut at `72496d2d`; RelWithDebInfo, `-j1`, `ulimit -v 3500000`. No engine patch (0098 unused). One host change (`Sh2Decompiler.cpp`, `PointerResolver::Walk`), one oracle change (`Sh2GeneratedTests.cpp`), the pins (`TestA5Round2Pins`). Backups on `backup/review-5-round2`.
+
+| Row | Class | Outcome |
+|---|---|---|
+| A5-152 | P3, product (host) | **fixed**: grammar 2 seed 12105914 (`onchip-span-unsaid`) |
+| A5-153 | P3, oracle | **fixed in the oracle**: grammar 1 seed 12052695 (`read-after-folded-store`); the text was right |
+
+### A5-152
+
+Both seeds reproduced on this tree. The seed's function ORs r4 with 0xA0000000 and 0x60000000 (the text shows `param_1 | 0xe0000000`: partition 7 whatever the value), pushes it, stores through r5, pops it and reads at +4. By hand the finding needs all three of the two ORs, the push/pop and the store through a pointer; a debug print in `Walk` showed the value reaching the read through `INDIRECT` (iop a STORE, input the OR). `Walk`'s default made it an unknown, so the A5-103 partition note (`parts == {7}`) was lost. `Walk` now follows a store's INDIRECT to the value before it when that value has no constants, bases or loop paths and carries a proved span or partition set; any other value stays unknown as before (a wider rule would add "if the pointer holds ..." notes to the corpus). Cost: one extra `Walk` of the INDIRECT's input on a pointer walk, nothing on other code. Corpus: the token dumps of both images, alone and lent, are byte-identical to the base (the same tree without the change).
+
+### A5-153
+
+Read from the text: `uVar3 = *(int2 *)(param_2 + 0xe);` comes before both `Ram06001018 = (int4)iVar1;` statements, so the order is right. `mov.l r1,@r6` at 0600901C is the slot of `bt/s` and the target of `bt` (two instances); the mapping names it at the first arm's `Ram06001018 = iVar1;` and at no later line. The rule judged the read against that line. The same shape as A5-137 (c) for stores judged against an access, now applied to reads: counted `order.read-before-folded-store.instance-after`. The shrunk fixture of the seed drifted to an emulator error (read of address 0) and is not used; the pin is the whole seed. The mapping's naming of the two instances is area 7's.
+
+### Runs
+
+See the report of the fixer; the numbers are in the commit message of the last commit of the branch.
