@@ -10360,12 +10360,13 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
                     // with no `return` between, its name drawn at the slot's store: this line's tokens there are a copy, as the oracle's
                     // A7-129 reading takes it (A7-166 sets aside only the same text and another path); grammar 1 seed 12133156)
                     bool mergedAhead = false;
-                    if (names && lines[other].text != text)
+                    // (the same statement at another depth, `xRam260021a0 = 0x2000ffe2;` three times in A7-166's fixture, is no other statement)
+                    const std::string& mt = lines[other].text;
+                    const size_t mb = mt.find_first_not_of(' '), ma = mt.find(" = ");
+                    if (names && mb != std::string::npos && mt.compare(mb, std::string::npos, text, nb, std::string::npos) != 0)
                     {
-                        const std::string& mt = lines[other].text;
-                        const size_t mb = mt.find_first_not_of(' '), ma = mt.find(" = ");
                         bool nameAtStore = false;
-                        if (mb != std::string::npos && ma != std::string::npos && ma > mb && mt.compare(mb, ma - mb, name) == 0)
+                        if (ma != std::string::npos && ma > mb && mt.compare(mb, ma - mb, name) == 0)
                             for (const Token& u : lines[other].tokens) nameAtStore = nameAtStore || (u.addr == at && u.begin == mb && u.end == ma);
                         if (nameAtStore)
                         {
