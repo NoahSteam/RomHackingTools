@@ -1367,7 +1367,28 @@ private:
                 if (((kConvention >> r) & 1u)) UseUnkept(Get(s, mReg[r]));
         if (!signatureLent)
         {
-            NoteFrameEscape(s, 2, true, at);
+            // (area 3, A3-221) The same exact address in an argument the call shows (r4-r7: -O0 code makes it in r2 and copies it,
+            // `mov r2,r4`) is no address "in none of the arguments": no note, as for r4-r7 themselves (060622E0/008). r7 only when it is not
+            // dropped (r4-r6 all unset, A3-48).
+            {
+                const Value a2 = Get(s, mReg[2]);
+                bool shownArg = false;
+                if (a2.kind == Value::Sp)
+                {
+                    bool unsetAll = true;
+                    for (int r = 4; r < 7; ++r)
+                    {
+                        const Value x = Get(s, mReg[r]);
+                        unsetAll = unsetAll && ((x.kind == Value::Reg && x.v == r) || (x.kind == Value::Fuzzy && !x.own));
+                    }
+                    for (int r = 4; r < 8; ++r)
+                    {
+                        const Value x = Get(s, mReg[r]);
+                        shownArg = shownArg || (x.kind == Value::Sp && x.v == a2.v && !(r == 7 && unsetAll));
+                    }
+                }
+                NoteFrameEscape(s, 2, !shownArg, at);
+            }
             if (mTolerant)
             {
                 // The probe's callee is any callee the first flow cannot name, and the engine reads it by the default model: it takes
@@ -1599,7 +1620,26 @@ private:
             for (int r = 0; r < kTracked; ++r)
                 if (((through >> r) & 1u) && !Get(s, mReg[r]).unkept.empty()) carried.emplace_back(r, Get(s, mReg[r]).unkept);
         }
+        // (area 3, A3-226) A walk of the cautions' (FollowTables): a frame pointer (r8-r14 holding an address of this frame, the usual r14) a lent
+        // callee's signature does not keep, though its own walk shows no return changing the register for certain (CalleeChanged): the callee
+        // restores it from a word its own store loop may have written over (the walk cannot bound it: `mov.l r1,@-r2` through a copy of r15),
+        // so the signature takes it as not kept. The value Apply gives it is no stack address, the walk loses r15 at the epilogue's
+        // `mov r14,r15` and proves no return, and what the path changes after the epilogue is never recorded (grammar 2 seed 12011728:
+        // `mov #0x18,r10` after it, read through r6 by the tail-jumped function). The value stays; a register the callee does change for
+        // certain on some path is replaced as before.
+        std::vector<std::pair<int, Value>> framePointers;
+        if (mNested && FollowTables() && signatureLent && haveTarget)
+        {
+            const uint32_t changedFor = CalleeChanged(target);
+            for (int r = 8; r < kR15; ++r)
+            {
+                if (((e.preserved >> r) & 1u) || ((changedFor >> r) & 1u)) continue;
+                const Value v = Get(s, mReg[r]);
+                if (v.kind == Value::Sp) framePointers.emplace_back(r, v);
+            }
+        }
         Apply(s, e, targetIsR0);
+        for (const auto& fp : framePointers) Set(s, mReg[fp.first], fp.second);
         for (const auto& c : carried)
         {
             auto f = s.vars.find(KeyOf(mReg[c.first]));
@@ -12759,6 +12799,10 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     std::vector<HardwareRange> aliasRanges;
     bool aliasRetry = false;
     constexpr int kAliasRounds = 6;
+    // (A10-19) A probe pass, run only after a pass failed with the engine's "Volatile memory was propagated": it is given the ranges that
+    // pass had less the user's, and finds the accesses of the code that straddle the user's range (probeAgainst) into probeFound.
+    const std::vector<HardwareRange>* probeAgainst = nullptr;
+    std::vector<HardwareRange> probeFound;
 
     // One pass: a fresh Architecture, every function registered, flow followed, read-only
     // literals applied, actions run. 'print' adds the markup output; 'mayRetry' lets a print pass stop, before it prints, when the
@@ -13199,6 +13243,11 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (!request.allMemoryVolatile)
         {
             const std::vector<ConstAccess> seenAccesses = ConstantAccesses(*fd, ram);
+            if (probeAgainst)
+            {
+                probeFound = StraddlingRanges(seenAccesses, *probeAgainst);
+                return std::string();
+            }
             std::vector<HardwareRange> fresh = NewAliasedRanges(seenAccesses, aliasKnown);
             for (const HardwareRange& h : fresh)
             {
@@ -13597,6 +13646,50 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         return std::string("ok");
     };
 
+    // (A10-19) A pass that fails with the engine's "Volatile memory was propagated" while the request marks memory volatile: an access of the
+    // code that straddles the edge of the user's range (the A10-18 case, a misaligned store against a range the user gave) is no access the
+    // engine can split. The user's range is not there to find it from in a first pass, so a probe pass without the user's ranges finds the
+    // accesses that cut through them, they are marked whole (as A10-18's are), and the pass runs again. Once: a failure that remains is the
+    // engine's, and the request fails as before.
+    bool probed = false;
+    auto guarded = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) -> std::string {
+        for (;;)
+        {
+            try
+            {
+                return runPass(callees, print, targets, mayRetry);
+            }
+            catch (ghidra::LowlevelError& e)
+            {
+                if (probed || userVolatile.empty() || request.allMemoryVolatile ||
+                    e.explain.find("Volatile memory was propagated") == std::string::npos)
+                    throw;
+                probed = true;
+                const std::vector<HardwareRange> withUser = userVolatile;
+                userVolatile = aliasRanges;
+                probeAgainst = &withUser;
+                probeFound.clear();
+                try
+                {
+                    runPass(CalleeAliases(), false, nullptr, false);
+                }
+                catch (ghidra::LowlevelError&)
+                {
+                    probeFound.clear();
+                }
+                probeAgainst = nullptr;
+                userVolatile = withUser;
+                if (probeFound.empty()) throw;
+                for (const HardwareRange& h : probeFound)
+                {
+                    aliasRanges.push_back(h);
+                    userVolatile.push_back(h);
+                }
+                probeFound.clear();
+            }
+        }
+    };
+
     CalleeAliases callees;
     std::string printed;
     // The callees reported are the printed pass's own: the first pass can take a jump for a call
@@ -13610,7 +13703,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     }
     else if (request.registerCallees)
     {
-        runPass(CalleeAliases(), false, &first, false);
+        guarded(CalleeAliases(), false, &first, false);
         firstPassRan = true;
     }
     if (seedOut)
@@ -13630,7 +13723,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     for (int round = 0;; ++round)
     {
         aliasRetry = false;
-        printed = runPass(first, true, &callees, round < kAliasRounds);
+        printed = guarded(first, true, &callees, round < kAliasRounds);
         if (!aliasRetry) break;
         // The same boundary as the first pass's, for a printing pass that gives way to another (aliasRetry): its locals and Architecture
         // are gone, and a cancel raised in its teardown is honoured here, in Actions, not carried into the next pass's Init (A5-63).
