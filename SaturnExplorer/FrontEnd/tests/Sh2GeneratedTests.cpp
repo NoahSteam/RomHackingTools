@@ -19180,6 +19180,27 @@ void TestA5Round2Pins(Sh2Decompiler& d)
     CHECK(rep.findings.empty());
 }
 
+// A5-154 (patch 0098): `r1 = 4; if (c) { r1 = table[i]; switch (i) { case 3: x = *p; } } g = r1;` printed `g = 4; if (c) { g = table[i]; ...`, the store of
+// the global before the read through a pointer that the code makes first; the join's inputs are writes of the global when it is merged with them
+void TestA5154Pins(Sh2Decompiler& d)
+{
+    {
+        const Report rep = Evaluate(d, MakeV2(12130995), true);
+        std::printf("pin 'A5-154 grammar 2 seed 12130995': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    const ModulePin pin = { "A5-154 a join's inputs written before a read through a pointer",
+                            "2F86 2F96 2FA6 4F22 6843 6953 6A63 E104 3616 8916 4608 C702 016E 412B 0009 0009 0600 9034 0600 9034 0600 9038 0600 903C 0600 9042 A005 0009 A003 0009 "
+                            "6056 A000 0009 D707 2710 B00F 0009 6483 6593 66A3 D104 4F26 6AF6 69F6 68F6 412B 0009 0009 0600 1028 0600 9068 2FE6 7FF0 6EF3 E057 7E10 6FE3 6EF6 000B 0009",
+                            "0/0/5e,68/68/7a", "1a:6:5:42:34,34,38,3c,42", "1,1", "0,0", "20000,20000" };
+    const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+    std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+    for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+    CHECK(rep.findings.empty());
+    CHECK(rep.text.find("xRam06001028 = 4;") == std::string::npos);
+}
+
 void TestArea7Round23Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21147,6 +21168,7 @@ void TestGenerated()
         RUN(TestArea7Round23Pins(d));
         RUN(TestA5150A1019Pins(d));
         RUN(TestA5Round2Pins(d));
+        RUN(TestA5154Pins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
         RUN(TestArea7Round26Pins(d));
