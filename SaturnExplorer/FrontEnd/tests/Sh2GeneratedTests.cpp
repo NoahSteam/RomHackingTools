@@ -8227,6 +8227,38 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         }
                     }
                     count("order.read-before-folded-store.checked");
+                    // (A5-152: a store the engine makes two of, a delay slot also reached by a branch to it, is printed once per instance, and the
+                    // mapping can name one instance at the line of another statement of the global (`mov.w r1,@r6` before it) and no line at the
+                    // instance after the read: the lines naming the store then end before the read, and the statements the text has after the read
+                    // that assign the global are the other instance's, printed on the path with the read before them. The same reading as
+                    // A5-137 (c) for the stores judged against an access. Grammar 1 seed 12052695: `mov.l r1,@r6` in the slot of `bt/s` and the
+                    // target of a `bt`, the read `mov.w @(0xe,r5),r0` before both, printed `uVar3 = *(int2 *)(param_2 + 0xe); if (in_r2 == 0) {
+                    // Ram06001018 = (int4)iVar1; } else { Ram06001018 = (int4)iVar1; ...`.)
+                    if (m.firstLine > last)
+                    {
+                        int instances = 0;
+                        for (const AccessFate& o : r.accessFates) instances += o.write && o.insn == f.insn && o.fate == AccessFate::FoldedOrdinary;
+                        bool assignedAfter = false;
+                        for (size_t li = static_cast<size_t>(m.firstLine) + 1; instances > 1 && li < r.lines.size() && !assignedAfter; ++li)
+                        {
+                            const std::string& text = r.lines[li].text;
+                            const size_t b = text.find_first_not_of(' ');
+                            if (b == std::string::npos) continue;
+                            size_t e = b;
+                            while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_' || text[e] == '.')) ++e;
+                            const size_t at = text.find("Ram", b);
+                            unsigned v = 0;
+                            if (at == std::string::npos || at >= e || at + 11 > text.size() || std::sscanf(text.c_str() + at + 3, "%8x", &v) != 1 ||
+                                v > f.address || f.address >= v + 8u)
+                                continue;
+                            assignedAfter = AssignsAt(text, e);
+                        }
+                        if (assignedAfter)
+                        {
+                            count("order.read-before-folded-store.instance-after");
+                            continue;
+                        }
+                    }
                     if (m.firstLine > last)
                         add("read-after-folded-store", "the read at " + Hex(m.insn) + " through a pointer is printed (line " + std::to_string(m.firstLine) +
                                                            ") after the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) + " (line " +
@@ -19155,6 +19187,37 @@ void TestA5150A1019Pins(Sh2Decompiler& d)
     }
 }
 
+// ---- Area 5, round 2 (A5-152, A5-153) ----
+// A5-152 (product, Sh2Decompiler.cpp PointerResolver): a pointer ORed with two constants that together set the top three bits (`r4 | 0xA0000000 | 0x60000000`),
+// kept on the stack across a store through another pointer, was unknown to the note rule (the store's INDIRECT on the slot): no "may reach on-chip
+// registers" on the read through it. Grammar 2 seed 12105914, shrunk by hand to the module below.
+// A5-153 (oracle): grammar 1 seed 12052695, a read judged against the line the mapping names a two-instance delay-slot store on.
+void TestA5Round2Pins(Sh2Decompiler& d)
+{
+    for (const long seed : { 12105914L })
+    {
+        const Report rep = Evaluate(d, MakeV2(static_cast<int>(seed)), true);
+        std::printf("pin 'A5-152 grammar 2 seed %ld': %zu finding(s)\n", seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const Report rep = Evaluate(d, Generate(12052695u), true);
+        std::printf("pin 'A5-153 grammar 1 seed 12052695': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    const ModulePin pin = { "A5-152 two ORs, pointer kept on the stack across a store",
+                            "2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 D108 241B D108 241B 2F46 2522 64F6 5341 D306 4F26 6BF6 6AF6 69F6 68F6 432B 0009 0009 A000 0000 6000 0000 "
+                            "0600 9040 2F86 2F96 2FA6 2FB6 2FE6 4F22 7FE8 6EF3 6843 6953 6A63 6B73 B00F 0009 6483 6593 66A3 67B3 E05D 7E18 6FE3 4F26 6EF6 6BF6 6AF6 69F6 68F6 000B 0009 "
+                            "2FE6 7FE0 6EF3 62F3 7220 E103 2216 4110 8BFC E200 E087 7E20 6FE3 6EF6 000B 0009",
+                            "0/0/32,40/40/7a,7a/7a/9a", nullptr, "1,1,1", nullptr, nullptr };
+    const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+    std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+    for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+    CHECK(rep.findings.empty());
+}
+
 void TestArea7Round23Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21121,6 +21184,7 @@ void TestGenerated()
         RUN(TestArea7Round22Pins(d));
         RUN(TestArea7Round23Pins(d));
         RUN(TestA5150A1019Pins(d));
+        RUN(TestA5Round2Pins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
         RUN(TestArea7Round26Pins(d));

@@ -22920,3 +22920,45 @@ Branch `review/4-round3` (from f07b0197). No product or engine change, no patch 
 * **Sweeps, grammar 2 from 11,600,001, 10,000 seeds each.** Specials: 3 failing seeds, 5 findings; plain: 2 failing seeds, 3 findings. No table finding in either. All are map-oracle classes (`map-copy-store` seed 11600932, `map-const-join` seed 11602585, `map-conversion-branch` seed 11600981, specials only), routed to area 7.
 * **Area 7 (next fixer):** A7-200's 12020446, A7-207, A7-220, new sweep seeds 11503597, 11508679 (`mov.b r0,@(3,r6)` at 0x0600902E answered with a copy before its own statement; `iVar2 = uRam06001014;`), 12150363, 12158267; A7-179's rest.
 * **Area 5:** A5-160 (A7-208). **Generator (area 11):** A7-209, seed 12152782.
+
+## Area 5, round 2
+
+Fixer, branch `review/5-round2` cut at `72496d2d`; RelWithDebInfo, `-j1`, `ulimit -v 3500000`. No engine patch (0098 unused). One host change (`Sh2Decompiler.cpp`, `PointerResolver::Walk`), one oracle change (`Sh2GeneratedTests.cpp`), the pins (`TestA5Round2Pins`). Backups on `backup/review-5-round2`.
+
+| Row | Class | Outcome |
+|---|---|---|
+| A5-152 | P3, product (host) | **fixed**: grammar 2 seed 12105914 (`onchip-span-unsaid`) |
+| A5-153 | P3, oracle | **fixed in the oracle**: grammar 1 seed 12052695 (`read-after-folded-store`); the text was right |
+
+### A5-152
+
+Both seeds reproduced on this tree. The seed's function ORs r4 with 0xA0000000 and 0x60000000 (the text shows `param_1 | 0xe0000000`: partition 7 whatever the value), pushes it, stores through r5, pops it and reads at +4. By hand the finding needs all three of the two ORs, the push/pop and the store through a pointer; a debug print in `Walk` showed the value reaching the read through `INDIRECT` (iop a STORE, input the OR). `Walk`'s default made it an unknown, so the A5-103 partition note (`parts == {7}`) was lost. `Walk` now follows a store's INDIRECT to the value before it when that value has no constants, bases or loop paths and carries a proved span or partition set; any other value stays unknown as before (a wider rule would add "if the pointer holds ..." notes to the corpus). Cost: one extra `Walk` of the INDIRECT's input on a pointer walk, nothing on other code. Corpus: the token dumps of both images, alone and lent, are byte-identical to the base (the same tree without the change).
+
+### A5-153
+
+Read from the text: `uVar3 = *(int2 *)(param_2 + 0xe);` comes before both `Ram06001018 = (int4)iVar1;` statements, so the order is right. `mov.l r1,@r6` at 0600901C is the slot of `bt/s` and the target of `bt` (two instances); the mapping names it at the first arm's `Ram06001018 = iVar1;` and at no later line. The rule judged the read against that line. The same shape as A5-137 (c) for stores judged against an access, now applied to reads: counted `order.read-before-folded-store.instance-after`. The shrunk fixture of the seed drifted to an emulator error (read of address 0) and is not used; the pin is the whole seed. The mapping's naming of the two instances is area 7's.
+
+### Runs
+
+See the report of the fixer; the numbers are in the commit message of the last commit of the branch.
+
+### Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest, `-j1` | 117 of 117 passed |
+| fault matrix | 0 of 94 job(s) failed |
+| generator, 20,000 seeds (pins included) | failing seeds=0; findings=0 |
+| grammar 1, 10,000 from 11,300,001 | 1 failing seed: 11303278 (`map-way-back`, A7-25; emulator error on the shrunk fixture), area 7's |
+| grammar 2, 10,000 from 11,300,001 | 1 failing seed: 11304044 (`map-way-back`, A7-25), area 7's |
+| grammar 1, 10,000 from 12,130,001, `SE_GENERATED_CAUTION=deep` | 4 failing seeds, all area 7 mapping classes: 12132326 (`map-store-dead`, A7-158), 12133156 (`map-way-back`), 12133872 (`map-conversion-branch`), 12137810 (`map-way-back`) |
+| grammar 2, 10,000 from 12,130,001, `SE_GENERATED_CAUTION=deep` | 3 failing seeds: 12130995 (`read-after-folded-store`, **A5-154, open**), 12135074 (`map-store-after`, A7-32's class), 12136696 (`caution-unsaid-deep`, r15 at a call: A3-228's class) |
+| printed-C, 3,000 seeds | agrees=5196 |
+| corpus hwram007 / hwram008, alone and lent | `all passed` (every ledger count 0); token dumps byte-identical to the base tree in all six dumps |
+| lints | literal size ok; the vendored lint not run (no patch, no vendored file) |
+
+### Routed
+
+* **Area 5, next fixer:** A5-154 (P2, open): grammar 2 seed 12130995.
+* **Area 7:** grammar 1 11303278, 12132326, 12133156, 12133872, 12137810; grammar 2 11304044, 12135074; and the mapping of two-instance delay-slot stores (A5-153).
+* **Area 3:** grammar 2 12136696 (A3-228's class).

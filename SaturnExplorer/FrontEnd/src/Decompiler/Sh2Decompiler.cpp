@@ -4967,6 +4967,25 @@ private:
         case ghidra::CPUI_INT_XOR:
             out = Bitwise(d->code(), Walk(d->getIn(0), depth + 1), Walk(d->getIn(1), depth + 1));
             break;
+        case ghidra::CPUI_INDIRECT:
+        {
+            // (A5-152) The effect of a store through a pointer the engine cannot place on a stack slot the pointer was kept in: the value the text
+            // shows after the store is the one before it, and a span the value was proved to lie in (`p | 0xA0000000 | 0x60000000`, partition 7
+            // whatever p is) is still its own. Only a value that is unknown but for that span or its partitions is carried over; an address the
+            // value may hold stays unknown across the store, as it always was.
+            const ghidra::PcodeOp* effect = d->getIn(1)->getSpace()->getType() == ghidra::IPTR_IOP ? ghidra::PcodeOp::getOpFromConst(d->getIn(1)->getAddr()) : nullptr;
+            if (effect && effect->code() == ghidra::CPUI_STORE && !d->getIn(0)->isConstant())
+            {
+                PointerValues before = Walk(d->getIn(0), depth + 1);
+                if (before.others && before.constants.empty() && before.bases.empty() && before.back.empty() && (before.ranged || before.partsKnown))
+                {
+                    out = before;
+                    break;
+                }
+            }
+            out.others = true;
+            break;
+        }
         default:
             out.others = true;
             break;
