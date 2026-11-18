@@ -22697,3 +22697,61 @@ Seeds 366, 1259, 1486 and 3284 pass in the 20,000-seed run (counted as `order.fo
 | lints | literal size ok; vendored tree lint ok |
 
 The corpus dumps are unchanged: the host change runs only after a failed pass and the oracle change reads text.
+
+## Area 7, round 29
+
+Fixer, branch `review/7-round29` from round 28 + master `72496d2d`, RelWithDebInfo build (`-j1`, `ulimit -v 3500000`). The brief: A7-200 (four grammar 1 seeds and the routed grammar 2 12020446), A7-207, the routed 12106439 and 11102053, triage of A7-208 and A7-209, A7-179's rest if time allowed (not reached, unchanged). Host change in `Sh2Decompiler.cpp` (`MarkMaterialisedReads`' A7-145 pass), oracle rules 210 and 211 in `MappingOracle.h`, pins `TestArea7Round29Pins`. **No engine patch: 0096 stays free.** Scripts: `Docs/Decompiler/tools/a7_round29/final.sh`.
+
+| Row | P | Outcome |
+|---|---|---|
+| A7-200 | P3 | **fixed in part**: 11002157, 11003627 (product), 11003148 (oracle 211), 11007190 (oracle 210); grammar 2 12020446 stays open |
+| A7-207 | P3 | open, analysed (overlapping slot/target instructions) |
+| 12106439 | - | does not reproduce (passes on this tree and on round 28's product, with every env variant tried) |
+| 11102053 | P3 | filed **A7-220**, analysed, open |
+| A7-208 | P3 | routed to area 5 (**A5-152**): a folded store printed after a pointer read, A5-109's class |
+| A7-209 | P3 | routed to the generator (area 11): the generated program itself overwrites the saved r14 |
+| A7-179's rest | P3 | open, not reached |
+
+### 1. A7-200
+
+* 11002157 (product): `iRam26001018 = iVar1;` (the write-back after the `if` that returns, tokens at the store 0x06009010, naming the byte store 0x0600901A) beside `iRam26001018 = (int4)iRam26002200;` (the store's own line, before it on the same path). The A7-145 pass took another plain line for the store's own only when it named the store of the very next instruction (round 27's restriction for A7-166's fixture). It now takes it too when no `return` at the block's depth lies between the two lines (the oracle's A7-166 reading), so A7-166's fixture (a `return` between) stays unmarked.
+* 11003627 (product): `xRam06001004 = (int2)uRam26001000;` with `uRam26001000` drawn at the word store 0x06009022 that wrote it and naming the later store 0x06009028 of the join: the same pass now also takes the line's operand as the variable (the other line `uRam26001000 = CONCAT22(...)`, which is no plain copy, has its name at the store), and marks the operand's tokens materialised.
+* 11003148 (oracle, rule 211): `xRam06001008 = VDP1_PTMR._0_1_;` with `VDP1_PTMR` at the `mov.b @r7,r2` that reads it is the load's own statement, as a RAM global's read is (A7-78).
+* 11007190 (oracle, rule 210): `mac.w @Rm+,@Rn+` has two memory operands in the text and was taken for a store; it reads both and stores nothing, so `iVar2 = iRam26001014;` drawn at it is no copy at a store.
+* 12020446 (open): `iVar3 = iRam0600912c;` at `mov.b r2,@r5` (0x060090E4) in function 0, which runs into function 2's entry ("flow runs into another function's entry"): the flow record has no `insnFirst`, no STORE op and no access record for that instruction, so A7-190's (b) (which moves or marks a register variable's copy of a global at a store) never sees a store. An attempt to take the STORE op of the flow as the store (kept out of the commit) showed the instruction is not in the flow at all; a fix needs the instruction word.
+
+### 2. Triage
+
+* **A7-207** (11004012): the shrunk program has the slot `mov.b r4,@r6` (0x0600903C) also the target of the `bt` at 0x06009036 (the decoder warns of overlapping instructions); the line inside the `if` that returns names 0x0600904A, a store on no path from it. Not analysed further.
+* **11102053**: `uRam26001004 = bVar3;` at a `bsr`; the stored value is `r1 & r0` with r0 = 3 and r1 the `movt` (T & 3), shown by the engine as the bool. `AddFrameStoreTokens`' value test (A7-23, `StoreShowsValue`) compares the makers of the statement's value (the `movt`) with those of the stored register (the `movt` and `mov #3,r0`) and rejects the store. Filed A7-220 with the shrunk program; a store of `X & mask` with a mask number that keeps X's bits should show X.
+* **12106439**: no finding on this tree, on round 28's `Sh2Decompiler.cpp` with this round's oracle, with `SE_GENERATED_CAUTION=deep` or the specials alphabet, or as a one-seed range.
+* **A7-208** (11007546): the engine folds the store 0x06009008 into the merged `CONCAT11` after the slot's pointer read 0x0600900E: A5-109's class (area 5); A5-152 filed with the shrunk program.
+* **A7-209** (12097940, `SE_GENERATED_CAUTION=deep`): function 2 (`add 4,r15 ; mov r4,r0 ; rts`) drops a word, so function 1's `mov.l r4,@-r15` after two calls overwrites its saved r14: r14 really ends 0. A generator matter (area 11).
+
+### 3. Pins and mutation
+
+`TestArea7Round29Pins`: grammar 1 seeds 11002157, 11003148, 11003627, 11007190 whole. `SE_A7_RULE_OFF=210` fails 11007190; `=211` fails 11003148. The product change has no switch: on round 28's `Sh2Decompiler.cpp` this oracle gives 11002157 and 11003627 `map-way-back` again.
+
+### 4. The corpus
+
+Token dumps of this build against a build of round 28's `Sh2Decompiler.cpp` (this round's tests), both images alone and lent: hwram007 identical; hwram008 differs in 12 token lines (4 lines of 3 tokens: `iRam060a55b0 = 1;` at 0x0601CFAE and `xRam060a5284 = ...;` at 0x06033FC6), only the `materialised` flag, in the alone and the lent dump. **No text changes.**
+
+### 5. Runs after the last code edit (`final.sh`)
+
+| Run | Result |
+|---|---|
+| ctest `-j1` | **117 of 117 passed** (678 s) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** (103 s) |
+| 20,000-seed matrix | **failing seeds=0; findings=0** (734 s) |
+| printed-C | **agrees=5196** (197 s) |
+| corpus, both images, `SE_GAME_LEND=1` | all passed, every ledger count 0; missing and said **0** (hwram007) and **4** (hwram008); real entries 999: lent **474 (645)**, 1543: **724 (975)** |
+| sweep grammar 1, 10,000 from 11,500,001 | 2 failing seeds: 11503597 (`map-const-join` / `map-number-store`), 11508679 (`n:map-way-back`) |
+| sweep grammar 2, 10,000 from 11,500,001 | 0 failing seeds |
+| sweep grammar 2, 10,000 from 12,150,001 | 3 failing seeds: 12150363 (`n:map-const-join`), 12158267 (`n:map-copy-store`), 12152782 (`emulator-error`, "Unable to resolve constructor", generator) |
+
+Replayed on round 28's product with this oracle: 11503597, 11508679, 12150363, 12158267 fail the same (none is this round's); filed below. Lint `check-literal-size.py` ok; no vendored file touched.
+
+### 6. Routed
+
+* **Area 7 (next fixer):** A7-200's 12020446, A7-207, A7-220, new sweep seeds 11503597, 11508679 (`mov.b r0,@(3,r6)` at 0x0600902E answered with a copy before its own statement; `iVar2 = uRam06001014;`), 12150363, 12158267; A7-179's rest.
+* **Area 5:** A5-152 (A7-208). **Generator (area 11):** A7-209, seed 12152782.
