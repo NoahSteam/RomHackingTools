@@ -10750,7 +10750,7 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
         std::set<uint32_t> makers;
         bool input = false, unknown = false, numbers = false, memoryOperand = false;
         std::set<uint32_t> aliasStores;                 // (A7-190)
-        std::vector<const ghidra::Varnode*> aliased;
+        std::vector<const ghidra::Varnode*> aliased, memoryVns;
         std::set<const ghidra::Varnode*> seen;
         std::vector<const ghidra::Varnode*> work(1, o->getIn(0));
         while (!work.empty() && !unknown)
@@ -10760,7 +10760,11 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             if (!seen.insert(v).second) continue;
             if (seen.size() > 16) unknown = true;
             else if (v->isConstant()) numbers = true;   // (a number on a path: its maker is A7-22's to find; the other paths' makers stand)
-            else if (!v->isWritten() && !v->isInput() && inMemory(v->getSpace())) memoryOperand = true;   // (A7-179: below)
+            else if (!v->isWritten() && !v->isInput() && inMemory(v->getSpace()))
+            {
+                memoryOperand = true;   // (A7-179: below)
+                memoryVns.push_back(v);
+            }
             else if (!v->isWritten()) (v->isInput() ? input : unknown) = true;
             else if (v->getDef()->getTime() < flow.opsEnd)
             {
@@ -10836,7 +10840,22 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
                 if (acc != flow.accessesByInsn.end()) ats = acc->second;
             };
             std::set<uint32_t> reads;
-            makers = storedRegisterWriters(o, from, aliasStores, true, storesAt, readsGlobal, reads) ? reads : aliasStores;
+            if (storedRegisterWriters(o, from, aliasStores, true, storesAt, readsGlobal, reads))
+                makers = reads;
+            else
+            {
+                // A7-253 (area 7 round 32): a line that draws nothing but the aliasing store (`xVar2 = (xunknown2)uVar1;`, the narrowing the
+                // engine merged out of the stores of the global's value and hoisted, the global's copy `uVar1 = uRam060022a4;` drawn at the
+                // same store, which is no maker of the value) has no store whose register's writers can be taken: the value is the global
+                // the one folded read of it loaded, and that read's instruction makes it. A second reader leaves the engine's choice open.
+                std::set<uint32_t> readers;
+                for (const ghidra::Varnode* mv : aliased)
+                    for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+                        if (!rec.store && rec.fate == ghidra::fate_folded_ordinary && !rec.addr.isInvalid() && rec.addr.getSpace() == data &&
+                            rec.size > 0 && dataOverlaps(rec.addr.getOffset(), rec.size, mv->getOffset(), mv->getSize()))
+                            readers.insert(CanonicalOf(InstructionOf(rec)));
+                makers = (reads.empty() && readers.size() == 1) ? readers : aliasStores;
+            }
         }
         // A7-179: an operand that is a global the engine read, or the global as a call left it (a folded read, no op of its own;
         // `iRam0603ad32 = (int2)uRam0603a9d0;`, a store's value the `mov.w @r1,r1` read, drawn at the `bf/s` after it). On a path that brings
@@ -10855,7 +10874,20 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             };
             std::set<uint32_t> viaStore;
             if (!storedRegisterWriters(o, from, std::set<uint32_t>(), false, foldedStoresAt, [](const FlowOp*, uint32_t) { return true; }, viaStore))
-                continue;
+            {
+                // A7-253 (area 7 round 32): a line that draws nothing but the branch (`xVar2 = (xunknown2)uVar1;`, the narrowing the engine
+                // merged out of the stores of a read global's value and hoisted above both arms, the global's own read printed as `uVar1 =
+                // uRam060022a4;`) has no store to take a register's writers from: the operand is the global the one folded read of it
+                // loaded, and that read's instruction makes the value. Only one instruction that reads it (else the engine's choice is open).
+                std::set<uint32_t> readers;
+                for (const ghidra::Varnode* mv : memoryVns)
+                    for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+                        if (!rec.store && rec.fate == ghidra::fate_folded_ordinary && !rec.addr.isInvalid() && rec.addr.getSpace() == data &&
+                            rec.size > 0 && dataOverlaps(rec.addr.getOffset(), rec.size, mv->getOffset(), mv->getSize()))
+                            readers.insert(CanonicalOf(InstructionOf(rec)));
+                if (readers.size() != 1 || readers.count(from)) continue;
+                viaStore = readers;
+            }
             makers = viaStore;
         }
         // (a global among other paths' values: those paths' makers stand, the one that is the global as the call left it names nothing)

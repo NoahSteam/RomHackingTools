@@ -3088,6 +3088,22 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         number = hex ? std::isxdigit(static_cast<unsigned char>(operand[k])) != 0 : std::isdigit(static_cast<unsigned char>(operand[k])) != 0;
                     if (number) break;
                 }
+                // Rule 260 (area 7 round 32, A7-253): the branch is a `bt`/`bf` and the operand is the status register or a variable
+                // assigned from it (`uVar5 = in_sr | uVar3 == 0;`, `xVar1 = (xunknown1)in_sr;`): a conditional branch reads T, the register's
+                // low bit, and its own flow op is the narrowing of the register to a byte; the engine merged it with the byte stores' narrowing
+                // of the same register (`stc sr,r0` then `mov.b r0,@r4`) and kept the branch's. The branch makes this conversion
+                // (grammar 1 11703274; grammar 2 specials 11600981)
+                if (!A7RuleOff(260) && (d.Mnemonic.compare(0, 2, "bt") == 0 || d.Mnemonic.compare(0, 2, "bf") == 0))
+                {
+                    bool sr = operand == "in_sr";
+                    for (size_t k = 0; !sr && k < r.lines.size(); ++k)
+                    {
+                        const std::string& dl = r.lines[k].text;
+                        const size_t b0 = dl.find_first_not_of(' ');
+                        sr = b0 != std::string::npos && dl.compare(b0, operand.size() + 3, operand + " = ") == 0 && dl.find("in_sr") != std::string::npos;
+                    }
+                    if (sr) break;
+                }
                 bool whole = lt.compare(lt.size() - 1, 1, ";") == 0 && t.end + 1 == lt.size() && lt.compare(eq, 4, " = (") == 0 && open == eq + 3 &&
                              lt.find_first_of(" ,()", nb) == eq && operand.find("Ram") == std::string::npos && operand.find("Stack") == std::string::npos;
                 for (const Token& u : r.lines[li].tokens) whole = whole && (!u.addr || u.begin == u.end || (u.addr == t.addr && !u.materialised));
