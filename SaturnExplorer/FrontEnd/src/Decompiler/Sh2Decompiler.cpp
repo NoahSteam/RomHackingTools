@@ -9361,6 +9361,12 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                                     FlowNumberBefore(flow, fd, pos->second.first, static_cast<int>(pos->second.second), st.in[2], known) && known == 0;
                     }
                 }
+            // (unless the next store stores a register the statement's own instructions made: `extu.w r1,r1 ; mov.l r1,@r14`)
+            if (priorZero)
+            {
+                const ghidra::AccessRecord* nx = nextInHome();
+                if (nx && exactStore(nx)) priorZero = false;
+            }
             if (conversion && !priorZero && !(atLoadOrCall && !flow.callInsns.count(at)) && take(nextInHome())) continue;
             // the emptied stores of the byte on an edge between two blocks
             const auto edgeStores = [&](const ghidra::FlowBlock* from, const ghidra::FlowBlock* to) {
