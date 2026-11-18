@@ -23351,3 +23351,21 @@ The product change moves a conversion's drawn tokens only in the aliased-global 
 * **Host (flow record after the restarts):** A7-253's 12202641, 11900473 (A7-270), A7-250's grammar 2 seeds.
 * **Area 7 (next fixer):** A7-271 (12135074, 12151073, 11905223), A7-272 (11503597, 12150363, 11602585), A7-274's 12246420 (A7-256's class), A7-262, A7-220.
 * **Area 5:** grammar 2 12247189 `read-after-folded-store` (A7-274).
+## Area 3, round 32
+
+Branch `review/3-round32` on master `3b0884c4`. Test-only change (`Sh2GeneratedTests.cpp`, the caution oracle); no product or engine change, no patch. Ledger rows A3-241 (fixes A3-240) and A3-242 (routed seeds).
+
+### 1. A3-240 / A3-241 (grammar 2 seed 12237557, `caution-elsewhere`, r15)
+
+The callee (`tst r3,r3 ; bf ; add #-4,r15 ; rts`) pushes a word and takes nothing of its caller's stack; r15 is in its declared clobbers and the caller's r14 restores r15 at its epilogue. The text's note "may change r15 ... likewise at the calls below" stands at the first call (0x06009076), which input mode 0 skips; the failing call is the second (0x0600908C). A3-216's rule counted a "likewise" only when the saying call ran earlier in the run that needs it. The reader sees the note whether or not the run made that call, so the oracle now also counts a "likewise" whose saying call has a lower address than the needing call. Not a generator or product fault.
+
+Mutation check: A3-216's pin lw1 (the caution moved after the call that needs it, `SE_GENERATED_MUTATE=cautionlate`) still fails with `caution-elsewhere`; the `caution` and `kept` mutation pins still pass. Pin: the A3-241 block of `TestA3RoutedPins` (seed 12237557: 0 findings, caution required 1, said by "likewise" 1).
+
+### 2. Sweeps
+
+* Grammar 2, `SE_GENERATED_CAUTION=deep`, 10,000 seeds from 12,260,001: `failing seeds=1; findings=1`: 12268228 `v:map-way-back` (A7-25), routed to area 7.
+* Grammar 1, 10,000 seeds from 12,260,001: `failing seeds=2; findings=2`: 12260346 `v:folded-read-after-pointer-write` (area 5, A5-164 class) and 12261062 `n:map-const-join` (area 7). No area 3 finding.
+
+### 3. Runs
+
+`ctest -j1` 117 of 117; fault matrix 0 of 94; generator 20k `failing seeds=0; findings=0`; printed-C agrees=5196; corpus with lending: hwram007 0 missing and said, 999: lent 474 (645); hwram008 4 missing and said, 1543: 724 (975); `check-literal-size.py` ok. No product change, so corpus counts and printed C are unchanged.
