@@ -19375,6 +19375,29 @@ void TestArea7A7273Pins(Sh2Decompiler& d)
     CHECK(rep.findings.empty());
 }
 
+// Area 7 round 34. Product: grammar 1 12246420 (A7-300: a poll's store that only "may" show the value is not the line of a hoisted store of the
+// statement's own register), 12273194 (A7-301: a store of an unwritten input register is no store of a zero extension's zero bytes), 11004012
+// (A7-292: the operand of an input's copy is drawn at the store the name is at), grammar 2 12151073 (A7-271: a store of the register a load of
+// its own memory filled writes no number). Oracle: grammar 1 12250922 (rule 302: a CONCAT merge at a store of another global is a copy), 12261062
+// (rule 304: `and Rm,Rn` with Rm below 0x10000 leaves the low half), grammar 2 12181915 (rule 306: a frame array's element names a copy).
+// Grammar 1 12189580 (A7-262) no longer reproduces on the merged base (A7-293).
+void TestArea7Round34Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 1, 12246420 }, Whole{ 1, 12273194 }, Whole{ 1, 12250922 }, Whole{ 1, 11004012 }, Whole{ 1, 12261062 }, Whole{ 1, 12189580 },
+                            Whole{ 2, 12151073 }, Whole{ 2, 12181915 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 34: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -20593,9 +20616,10 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         // that makes a program stop the emulator is not taken when the program the shrink starts from does not stop. Area 7 round 33 (A7-280)
         // fixed that seed's finding, so the pin takes the first of the seeds that still has a finding of its own (the seeds of A7-273's open
         // overlap class, grammar 1), and the seed itself when it has one again. The A7-273 fix closed those four, so the list goes on with
-        // grammar 1 seeds still open (A7-294's 12246420, 12250922, 12273194; A7-292's 11004012).
+        // grammar 1 seeds still open (A7-294's 12246420, 12250922, 12273194; A7-292's 11004012), which round 34 closed in turn; it ends with the seeds still
+        // open then (A7-272's 11503597, A7-220's 11102053).
         bool shrunk = false;   // (the pin is not vacuous: one of the seeds must still have a finding to shrink)
-        for (const uint64_t seed : { 12212141ull, 12133156ull, 12137810ull, 11508679ull, 11703213ull, 12246420ull, 12250922ull, 12273194ull, 11004012ull })
+        for (const uint64_t seed : { 12212141ull, 12133156ull, 12137810ull, 11508679ull, 11703213ull, 12246420ull, 12250922ull, 12273194ull, 11004012ull, 11503597ull, 11102053ull })
         {
             const Program p = Generate(seed);
             const Report base = Evaluate(d, p, false);
@@ -21623,6 +21647,7 @@ void TestGenerated()
         RUN(TestArea7Round32Pins(d));
         RUN(TestArea7Round33Pins(d));
         RUN(TestArea7A7273Pins(d));
+        RUN(TestArea7Round34Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

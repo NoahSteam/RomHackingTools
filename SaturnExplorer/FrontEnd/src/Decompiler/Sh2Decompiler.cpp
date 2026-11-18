@@ -8925,28 +8925,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     zero.varSize = out->getSize();
                     zero.storeAt = static_cast<int>(rel2);
                     for (int i = 0; i < r->size; ++i) zero.compared |= 1u << (static_cast<int>(rel2) + i);
-                    bool v = StoreShowsValue(*r, flow, fd, zero);
-                    // A7-301: not a store of a register no instruction wrote (a pointer parameter, `mov.b r5,@r6`): "may be 0" of an unknown
-                    // input is no reason to take the store for the zero extension's, which a store before it (`mov.w r3,@r6` of the 0 a
-                    // `dt` loop left) wrote; grammar 1 seed 12273194
-                    if (v && !std::getenv("SE_R34_OFF_301"))   // GATETMP
-                    {
-                        const auto pos = flow.ops.find(r->time);
-                        if (pos != flow.ops.end() && pos->second.first >= 0 && static_cast<size_t>(pos->second.first) < flow.blockOps.size() &&
-                            pos->second.second < flow.blockOps[static_cast<size_t>(pos->second.first)].size())
-                        {
-                            const FlowOp& st = flow.blockOps[static_cast<size_t>(pos->second.first)][pos->second.second];
-                            if (st.code == ghidra::CPUI_STORE && st.numIn >= 3 && !st.in[2].Constant() && st.in[2].space && st.in[2].space->getType() == ghidra::IPTR_PROCESSOR)
-                            {
-                                FlowVn whole = st.in[2];
-                                whole.offset &= ~static_cast<ghidra::uintb>(3);
-                                whole.size = 4;
-                                std::vector<const FlowOp*> lw;
-                                bool entry = false;
-                                if (FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), whole, lw, &entry, false) && entry && lw.empty()) v = false;
-                            }
-                        }
-                    }
+                    const bool v = StoreShowsValue(*r, flow, fd, zero);
                     shown[r] = v;
                     return v;
                 }
@@ -9364,7 +9343,25 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             };
             // (A7-69: not at a load: a piece of the word a load reads back, `iStack_2 = (int2)param_1;` at `mov.w @(r0,r15),r2`, is the value of
             // the stores before the load, not of one after it)
-            if (conversion && !(atLoadOrCall && !flow.callInsns.count(at)) && take(nextInHome())) continue;
+            // A7-301: not the next store of the bytes when the store before the statement in its block wrote the number 0 the zero extension
+            // adds (`mov.w r3,@r6` of the 0 a `dt` loop left): the statement is that store's value, and the next store (`mov.b r5,@r6`, an
+            // input that "may be 0") writes what the word holds after it; grammar 1 seed 12273194
+            bool priorZero = false;
+            if (conversion && code == ghidra::CPUI_INT_ZEXT && !std::getenv("SE_R34_OFF_301"))   // GATETMP
+                for (const ghidra::AccessRecord* pz : stores)
+                {
+                    if (priorZero || !writes(pz) || key(pz->pc, pz->slot) >= before) continue;
+                    const auto pos = flow.ops.find(pz->time);
+                    uint64_t known = 1;
+                    if (pos != flow.ops.end() && pos->second.first >= 0 && static_cast<size_t>(pos->second.first) < flow.blockOps.size() &&
+                        pos->second.second < flow.blockOps[static_cast<size_t>(pos->second.first)].size())
+                    {
+                        const FlowOp& st = flow.blockOps[static_cast<size_t>(pos->second.first)][pos->second.second];
+                        priorZero = st.code == ghidra::CPUI_STORE && st.numIn >= 3 &&
+                                    FlowNumberBefore(flow, fd, pos->second.first, static_cast<int>(pos->second.second), st.in[2], known) && known == 0;
+                    }
+                }
+            if (conversion && !priorZero && !(atLoadOrCall && !flow.callInsns.count(at)) && take(nextInHome())) continue;
             // the emptied stores of the byte on an edge between two blocks
             const auto edgeStores = [&](const ghidra::FlowBlock* from, const ghidra::FlowBlock* to) {
                 std::vector<const ghidra::AccessRecord*> on;
