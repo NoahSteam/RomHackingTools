@@ -19463,6 +19463,19 @@ void TestArea7Round34Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7 round 35. Grammar 2 12268228 (A7-305: clean since the flow record, patch 0096) and 12304053 (A7-309, rule 330: `and #0x4,r0` whose only
+// use is `tst #2,r0` is printed as the 0 the line shows). Fails with SE_A7_RULE_OFF=330.
+void TestArea7Round35Pins(Sh2Decompiler& d)
+{
+    for (const int seed : { 12268228, 12304053 })
+    {
+        const Report rep = Evaluate(d, MakeV2(seed), true);
+        std::printf("pin 'area 7 round 35: grammar 2 seed %d': %zu finding(s)\n", seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21796,6 +21809,7 @@ void TestGenerated()
         RUN(TestArea7Round33Pins(d));
         RUN(TestArea7A7273Pins(d));
         RUN(TestArea7Round34Pins(d));
+        RUN(TestArea7Round35Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

@@ -5528,6 +5528,23 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     }
                     computes = (PossibleBits(r, word, sources, at, 0) & (w & 0xFFu)) == 0;
                 }
+                // Rule 330 (area 7 round 35, A7-309): `and #imm,r0` whose result the text uses only through `tst #k,r0` with no bit of k in the
+                // mask -- `and #0x4,r0 ; tst #2,r0` -- is what the engine prints as 0: whatever bits the paths bring in, the result has none of the
+                // bits tested, so the line's variable is the `and`'s where one of its tokens is such a `tst`; grammar 2 seed 12304053
+                if (!computes && !A7RuleOff(330) && want == 0 && (w >> 8) == 0xC9)
+                {
+                    const size_t nameBegin = text.find_first_not_of(' ');
+                    const std::string name = text.substr(nameBegin, text.find(" = ", nameBegin) - nameBegin);
+                    for (const Line& l : r.lines)
+                        for (const Token& t : l.tokens)
+                        {
+                            uint16_t tw = 0;
+                            if (computes || !t.addr || t.addr == at || t.begin >= t.end || t.end > l.text.size() ||
+                                l.text.compare(t.begin, t.end - t.begin, name) != 0 || !word(t.addr, tw))
+                                continue;
+                            if ((tw >> 8) == 0xC8 && ((tw & 0xFFu) & (w & 0xFFu)) == 0) computes = true;
+                        }
+                }
                 if (computes) continue;
             }
             uint32_t got = 0;
