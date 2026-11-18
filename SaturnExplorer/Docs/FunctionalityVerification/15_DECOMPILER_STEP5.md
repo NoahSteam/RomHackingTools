@@ -23656,3 +23656,15 @@ One binary at a time, after the last code edit (`final.sh`):
 | sweep grammar 2, 10,000 from 12,300,001 | 1 failing seed: 12304053 (`n:map-const-join`, `uVar1 = 0;` at `and #0x4,r0`, the first instruction of a join; shrunk replay has no finding, one guess at an oracle rule tried and reverted; A7-309, open) |
 
 Routed: grammar 2 12304053 (A7-309), 12268228 (A7-305, host: flow-record class), A7-272's seeds, A7-220 to the next area 7 fixer.
+## Sweep from 12,400,001
+
+Branch `review/sweep-12.4M` from master `d09218f8` (backup `backup/review-sweep-12.4M`). 10,000 seeds each from 12,400,001; `-j1`, `ulimit -v 3500000`, one heavy binary at a time. No product, engine or test code changed; rows A7-325 and A7-326 (routed).
+
+| Sweep | Result |
+|---|---|
+| grammar 1 | `failing seeds=0; findings=0` |
+| grammar 2, `SE_GENERATED_CAUTION=deep` | `failing seeds=2; findings=2`: 12403636 (`n:map-const-join`, A7-325), 12407467 (`v:map-store-value`, A7-326); both area 7 (mapping), routed |
+| grammar 1, `SE_GENERATED_ALPHABET=specials` | `failing seeds=0; findings=0` |
+| grammar 2, `SE_GENERATED_ALPHABET=specials` | `failing seeds=1; findings=1`: 12403636 again (A7-325) |
+
+Runs on the final tree: `ctest -j1` 117 of 117 passed; fault matrix 0 of 94 failed; generator 20,000 seeds `failing seeds=0; findings=0`; printed-C `agrees=5196`; corpus with lending: hwram007 `lent 474 (645)`, 0 missing and said; hwram008 `lent 724 (975)`, 4 missing and said; every ledger count 0 in both. Lints ok.
