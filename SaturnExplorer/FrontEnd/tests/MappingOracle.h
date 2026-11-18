@@ -2789,6 +2789,19 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // (not a piece of memory the engine copies at the branch, `xVar2 = (xunknown1)uRam06001024;` a merge copy of the byte the `bt/s`'s
                 // slot loads, printed with its piece's cast: a copy at the end of its block, A7-178's, counted with the rest; grammar 1 seed 10815)
                 const std::string operand = lt.substr(t.begin, t.end - t.begin);
+                // A7-196 (area 7 round 28): the operand is a number, `piVar4 = (int4 *)0;` the merge copy of a 0 a loop's exit leaves (`dt` with
+                // `bf` back: the counter is 0 once it falls through), printed with its pointer cast: it converts nothing, as `iVar4 = 0;`
+                // at the same branch, which no rule here judges (the number's maker is a loop's `dt`, not a line of this statement)
+                if (!A7RuleOff(196) && !operand.empty())
+                {
+                    size_t d0 = operand[0] == '-' ? 1 : 0;
+                    const bool hex = operand.compare(d0, 2, "0x") == 0;
+                    if (hex) d0 += 2;
+                    bool number = d0 < operand.size();
+                    for (size_t k = d0; number && k < operand.size(); ++k)
+                        number = hex ? std::isxdigit(static_cast<unsigned char>(operand[k])) != 0 : std::isdigit(static_cast<unsigned char>(operand[k])) != 0;
+                    if (number) break;
+                }
                 bool whole = lt.compare(lt.size() - 1, 1, ";") == 0 && t.end + 1 == lt.size() && lt.compare(eq, 4, " = (") == 0 && open == eq + 3 &&
                              lt.find_first_of(" ,()", nb) == eq && operand.find("Ram") == std::string::npos && operand.find("Stack") == std::string::npos;
                 for (const Token& u : r.lines[li].tokens) whole = whole && (!u.addr || u.begin == u.end || (u.addr == t.addr && !u.materialised));

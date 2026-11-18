@@ -9647,8 +9647,14 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                                !in->isConstant();
             // (A7-114: a conversion there too -- `uRam0240000e = (uint2)in_r0;` at the `cmp/pl r1` after `cmp/eq #2,r0 ; bf ; sub r3,r0`, r0
             // merged under the global's name that the slot's `mov.w r0,@(0x6,r7)` stores after an `xor`; grammar 1 seed 5602142)
-            const bool atJoinStart = (code == ghidra::CPUI_COPY || conversion) && !atLoadOrCall && o->getAddr() == home->getStart() && home->sizeIn() >= 2 &&
-                                     !o->isFromDelaySlot() && !in->isConstant() && !atEnd;
+            // (A7-198: also a copy of a merged register at the first instruction of a join that is a load -- `tas.b @r6` beginning a `dt` loop,
+            // `iStack_18 = iVar3;` with r3 the loop's counter merged under the pushed word's name -- whose load reads no memory the copy
+            // holds: the instruction makes nothing of the copy, whose makers are the register's last writers, `mov #3,r3` and the `dt`)
+            const bool joinLoad = code == ghidra::CPUI_COPY && atLoadOrCall && !flow.callInsns.count(at) && in->isWritten() &&
+                                  in->getDef()->code() == ghidra::CPUI_MULTIEQUAL && in->getSpace()->getType() != ghidra::IPTR_SPACEBASE &&
+                                  in->getSpace() != fd.getArch()->getDefaultDataSpace();
+            const bool atJoinStart = (code == ghidra::CPUI_COPY || conversion) && (!atLoadOrCall || joinLoad) && o->getAddr() == home->getStart() &&
+                                     home->sizeIn() >= 2 && !o->isFromDelaySlot() && !in->isConstant() && !atEnd;
             // (A7-91: the memory a copy the engine made of its own is a copy of -- `uStack_4 = uVar1;` at the `bt` ending a poll loop, the
             // variable's copy of the global the loop's load reads, merged under a pushed word's name: the global itself, as below)
             const ghidra::Varnode* src = in;
@@ -10768,7 +10774,36 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             if (line >= lines.size() || control.count(std::make_pair(line, from)) || (!branch && shared.count(std::make_pair(line, from))) ||
                 (otherOnly && !otherLines.count(line)))
                 continue;
-            if (MoveDrawnTokens(lines[line], from, makers)) ++moved;
+            if (!MoveDrawnTokens(lines[line], from, makers)) continue;
+            ++moved;
+            // A7-197 (area 7 round 28): the narrowing now begins at the maker (`xVar2 = SUB42(pxVar1,0);` at `or r3,r5`), whose own statement
+            // another line holds from an instruction before it (`pxVar1 = param_2 & 0x1ffffff0 | 0x60000000;`, the `and` first): the way back from
+            // the maker answered the narrowing, the line that begins with it, before the maker's own statement. The narrowing is a copy of
+            // the value there (A7-25's mark), so the statement that makes it is offered first. Grammar 1 seed 10805383
+            // (a register variable's `V = <conversion>;` statement only: a store's line keeps the operand it was given at the maker)
+            const uint32_t at0 = *makers.begin();
+            const std::string& lt0 = lines[line].text;
+            const size_t nb0 = lt0.find_first_not_of(' '), eq0 = lt0.find(" = ");
+            if (lines[line].firstAddr != at0 || nb0 == std::string::npos || eq0 == std::string::npos || eq0 <= nb0 ||
+                lt0.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_", nb0) != eq0 ||
+                lt0.compare(nb0, 3, "Ram") == 0 || lt0.find("Ram", nb0) < eq0 || lt0.find("Stack", nb0) < eq0)
+                continue;
+            // (a copy, as the oracle takes it: the line names a store without drawing it, `xVar2 = SUB42(pxVar1,0);` with an empty token at
+            // the pre-decrement store that follows; the narrowing of a load's value, `xVar5 = (xunknown1)uRam26001020;`, names none and is
+            // the load's own statement)
+            bool namesStore = false;
+            for (const Token& t : lines[line].tokens)
+                namesStore = namesStore || (t.addr && t.begin >= t.end && flow.accessesByInsn.find(std::make_pair(CanonicalOf(t.addr), true)) != flow.accessesByInsn.end());
+            if (!namesStore) continue;
+            bool otherHolds = false;
+            for (size_t k = 0; k < lines.size() && !otherHolds; ++k)
+            {
+                if (k == line || lines[k].firstAddr == at0) continue;
+                for (const Token& t : lines[k].tokens) otherHolds = otherHolds || (t.addr == at0 && t.begin < t.end && !t.materialised);
+            }
+            if (!otherHolds) continue;
+            for (Token& t : lines[line].tokens)
+                if (t.addr == at0 && t.begin < t.end) t.materialised = true;
         }
     }
     return moved;

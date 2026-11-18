@@ -22724,3 +22724,58 @@ No caution-class finding in the sweeps. Lints: `check-literal-size.py` ok; no ve
 ### 5. Routed
 
 * **Area 7:** grammar 1 seeds 11102053 (`map-copy-store`), 11103677 (`folded-store-after-access`), 11109544 (`folded-read-after-pointer-write`; the last two engine or area 2), grammar 2 seed 12115379 (`map-frame-store`). Not replayed on master.
+
+## Area 7, round 28
+
+Fixer, branch `review/7-round28` from master `9d94d2b2`, RelWithDebInfo build (`-j1`, `ulimit -v 6000000`). The brief: the rows round 27 filed open (A7-196, A7-197, A7-198), the routed grammar 2 seed 12060177 `n:table-case` (triage), A7-179's rest if time allowed (not reached: still open, unchanged). Host change in `Sh2Decompiler.cpp` (two small ones), oracle changes in `MappingOracle.h` (rule `SE_A7_RULE_OFF=196`) and in the jump-table check of `Sh2GeneratedTests.cpp`, pins `TestArea7Round28Pins`. **No engine patch: 0096 stays free.** Scripts: `Docs/Decompiler/tools/a7_round28/final.sh` (the runs after the last edit, with the sweeps).
+
+| Row | P | Outcome |
+|---|---|---|
+| A7-196 | P3 | **fixed, oracle** (10802262, 10809419) |
+| A7-197 | P3 | **fixed, product** (10805383) |
+| A7-198 | P3 | **fixed, product** (12060407) |
+| A7-199 | P3 | **new, fixed, oracle** (the routed 12060177 `table-case`: not another area's) |
+| A7-179's rest | P3 | open, not reached |
+
+### 1. A7-196 (oracle, rule 196)
+
+`pxRam26001008 = (xunknown2 *)0x0;` (grammar 1) and `piVar4 = (int4 *)0;` (grammar 2), every drawn token at the branch that ends the block before an `if`: the engine's merge copy of a 0 that a `dt` / `bf` loop leaves in its counter (`mov #1,r3 ; L: ... dt r3 ; bf L`), printed with the pointer cast because the variable it is merged into is a pointer. The conversion-at-a-branch rule (A7-171, A7-175) judges a conversion that converts a value some instruction made; the operand here is a number, the same copy a non-pointer variable prints as `iVar4 = 0;` at the same branch, which no rule judges (the number's maker is the loop's `dt`, no line of this statement). The rule no longer judges a conversion whose operand token is a number (decimal or hex, optional `-`). The product's text is unchanged.
+
+### 2. A7-197 (product)
+
+Shrunk: `mov.l lit,r3 ; and r3,r5 ; mov.l lit,r3 ; or r3,r5 ; ... mov.b r3,@-r5 ...`. `pxVar1 = (xunknown1 *)(param_2 & 0x1ffffff0 | 0x60000000);` is the maker's own statement, beginning at the `and` (0x06009002) with the `or` (0x06009006) drawn in it; `xVar2 = SUB42(pxVar1,0);`, the narrowing of the same register that A7-175's `RetargetHoistedConversions` moves to the maker `or`, began at 0x06009006, so a click on the `or` went to the narrowing (the line that begins with the instruction) before the maker's own statement: the way back answered a copy before its own statement (A7-25). After the move the pass now marks the narrowing's tokens at the maker materialised when the line is a register variable's own `V = <conversion>;` statement beginning at the maker and another line draws the maker without beginning there. A store's line (`*param_3 = (int2)pxVar1;`, whose operand sits at the maker) is left as it was.
+
+### 3. A7-198 (product)
+
+`iStack_18 = iVar3;` drawn at `tas.b @r6` (0x06009014), the first instruction of a `mov #3,r3 ; L: tas.b @r6 ; ... dt r3 ; bf L` loop: the engine's copy of the loop counter merged under the pushed word's name, which no store names. A7-107 gives such a copy at a join's first instruction the register's last writers on each path (`mov #3,r3`, the `dt`); the rule was skipped for an instruction with a load, and `tas.b` is one (a read-modify-write). A copy of a merged register (a MULTIEQUAL) at such a join start, a load that is not a call, now takes the same rule: the line is drawn at `mov #3,r3` with an empty token at the `dt`.
+
+### 4. A7-199 (oracle, the routed 12060177)
+
+Triage: the product is right. The program calls a function that sets r9 (a declared clobber) and then `mov r9,r5` indexes the jump table, so every dispatch used index 0, whatever the parameter said; the engine prints `switch(extraout_r9) { case 0: case 1: case 2: ... }`. The generator's run records `selValue` (3, 4: the parameter the harness set), and the table check paired it with the address the jump really reached (entry 0's): "index 3 goes to 0x06009048, whose code the case does not hold". The mapping and the table were not wrong; no other area owns it, and no warning is owed. The table check now judges a run under the first index whose entry is the address it reached when the entry of the intended index is another address (counted `table.index-clobbered`; none: skipped, `table.index-unknown`).
+
+### 5. Pins and mutation
+
+`TestArea7Round28Pins`: grammar 1 seeds 10802262, 10805383 and grammar 2 seeds 10809419, 12060407, 12060177 whole (the shrunk programs need the shrinker's function table or the whole seed's state). With `SE_A7_RULE_OFF=196` the default run fails 10802262 and 10809419. The product changes (A7-197, A7-198) and the table-check change have no switch: before each fix the seed failed as filed (`copy materialised there before its own statement`, `copy-merge`, `table-case`).
+
+### 6. The corpus
+
+Both images with lending pass every ledger count at 0 (below). I did not diff the token dumps against a build of master this round (container restarts and the memory rule): the product changes touch only a narrowing's `materialised` flag at a maker (A7-197, a register variable's `V = <conversion>;` naming a store) and the addresses of a merged register's copy at a `tas.b` loop head (A7-198); neither changes any printed text, and the decompiled text of every corpus function is checked by the corpus run against its own ledger.
+
+### 7. Runs after the last code edit (`final.sh`)
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` (first build of the final code) | **117 of 117 passed** (477 s) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** (149 s) |
+| 20,000-seed matrix | **failing seeds=0; findings=0** (792 s). (An earlier run, before A7-197 was limited to a copy that names a store, found 6 way-back failures in seeds 2145, 3189, 8019, 11902, 13631, 19257: the narrowing of a load's value, `xVar5 = (xunknown1)uRam26001020;`, is the load's own statement.) |
+| printed-C | **agrees=5196** (281 s) |
+| corpus, both images, `SE_GAME_LEND=1` | all passed, every ledger count 0; missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**" |
+| sweep grammar 1, 10,000 from 11,000,001 | **6 failing seeds, 6 findings**: 11002157, 11003148, 11003627, 11007190 `n:map-way-back` (A7-200), 11004012 `v:map-store-value` (A7-207), 11007546 `n:folded-store-after-access` (A7-208) |
+| sweep grammar 2, 10,000 from 11,000,001 | **0 failing seeds** |
+| sweep grammar 2, 10,000 from 12,090,001 | **1 failing seed, 3 findings**: 12097940 `n:generator:callee-saved` (A7-209) |
+
+All six grammar 1 seeds fail the same with the A7-197 and A7-198 product changes switched off (a temporary switch, removed): none is this round's. The ctest and fault runs were on the build before the container restarts; the rest on the same build (the source is the commit). Lints: `check-literal-size.py` ok; no vendored file touched.
+
+### 8. Routed
+
+* **Area 7 (next fixer):** A7-200 and A7-207 to A7-209 (open, not analysed; A7-208 maybe area 3's, A7-209 a generator or engine matter), A7-179's rest (open, not reached).
