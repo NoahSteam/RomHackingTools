@@ -22854,3 +22854,31 @@ failing seeds=6, findings=9. One is area 3: 12147773 `caution-unsaid-deep` (A3-2
 * On-chip span (area 2 or 7): 12105914 `onchip-span-unsaid` (a read of 4 bytes at 0x06009026 reaching 0xE6020104 through an ORed pointer, no note).
 * Table cases: 12147005 `table-case` (index 0 goes to code the ledger lists, the output's case does not hold it, no warning).
 * Fold order: 12147649 `folded-read-after-pointer-write`.
+
+## Area 3, round 30
+
+Branch `review/3-round30` on master `be40a4ce`. Oracle and test changes only (no product code, no engine patch); ledger rows A3-231 to A3-236.
+
+### 1. Rows
+
+* A3-231 (grammar 2 seed 12125921, `caution-unsaid`, r15), fixed in the oracle: the call at 0x06009056 sits in a switch case whose jump table the engine could not recover; the engine removes that case block as unreachable (and warns), so the text has no call to put a caution at. `CheckCautions` skips a call reached straight on from the start of a removed block (counted `caution.call.removed-block`).
+* A3-232 (grammar 2 seed 12147005, `table-case`), closed: does not reproduce (with and without the specials alphabet and the canary); A7-199's class (`table.index-clobbered=2`, every destination printed).
+* A3-233 (grammar 2 seed 12136696), closed: does not reproduce; the caution is said.
+* A3-234 (grammar 2 seed 12175231, `caution-elsewhere`, r11), fixed in the oracle: `CautionNotes` read only the first line after the comment, so a call on the second line of an `if` was missed; it now reads the whole statement (up to the line ending `;`, `{` or `}`, at most 6 lines).
+* A3-235 (grammar 2 seed 12179479, `kept-read:r11`), fixed in the oracle: function 0 has no finished run (every input mode is an excluded address error) and its `unaff_r11` is the pushed word read after the pops, so the text is right; the kept-read check is skipped for a function with no finished run (`excluded.no-run.kept-read`).
+* A3-236 (grammar 2 seed 12177948, `caution-unsaid-deep`, r12), P3 open: A3-230's class (deep only; no printed value is wrong).
+
+Pins in `TestA3RoutedPins` (A3-231 to A3-235) print 0 findings.
+
+### 2. Runs (sequential)
+
+* ctest -j1: 117 of 117 passed. Fault matrix: 0 of 94 job(s) failed.
+* Generator 20k: `failing seeds=0; findings=0`. Printed-C: agrees=5196.
+* Grammar 1 fresh 10k from 11,800,001: `failing seeds=1; findings=1`, 11806821 `n:map-copy-store` (area 7). Grammar 2 fresh 10k from 11,800,001: `failing seeds=1; findings=2`, 11802915 `n:map-const-join` (area 7).
+* Grammar 2 deep 10k from 12,170,001, rerun: `failing seeds=2; findings=3`: 12173135 `n:folded-store-after-access` (area 7 or 5) and 12177948 (A3-236). The first run's 12175231 and 12179479 are fixed.
+* Corpus with lending: hwram007 0 missing and said, `[after] real entries 999: signatures lent 474 (645 parameters)`; hwram008 4 missing and said, `1543: 724 (975)`. No count changed.
+* `check-literal-size.py`: ok.
+
+### 3. Routed
+
+* Area 7: grammar 1 11806821 `map-copy-store`; grammar 2 11802915 `map-const-join`; grammar 2 12173135 `folded-store-after-access` (area 7 or 5).
