@@ -23599,3 +23599,16 @@ Branch `review/open-p3`. Scope: grammar 2 seed 12319207 (A7-324) and the long-op
 - **A7-17**, **A7-18**, **A8-45**: still open as a feature (A7-17), an instrument gap (A7-18) and an instrument record (A8-45); rows updated with what each needs; none is a small fix.
 
 Runs (sequential, one heavy binary at a time): build; `ctest -j1` 117 of 117 passed; fault matrix 0 of 94 failed; generator 20,000 seeds `failing seeds=0; findings=0`; printed-C `agrees=5196`; corpus with lending: hwram007 `lent 474 (645)`, 0 missing and said; hwram008 `lent 724 (975)`, 4 missing and said; all ledger counts 0 in both. Lints: `check-literal-size.py` ok (no vendored or patch file touched).
+
+## Sweep from 12,400,001
+
+Branch `review/sweep-12.4M` from master `d09218f8` (backup `backup/review-sweep-12.4M`). 10,000 seeds each from 12,400,001; `-j1`, `ulimit -v 3500000`, one heavy binary at a time. No product, engine or test code changed; rows A7-325 and A7-326 (routed).
+
+| Sweep | Result |
+|---|---|
+| grammar 1 | `failing seeds=0; findings=0` |
+| grammar 2, `SE_GENERATED_CAUTION=deep` | `failing seeds=2; findings=2`: 12403636 (`n:map-const-join`, A7-325), 12407467 (`v:map-store-value`, A7-326); both area 7 (mapping), routed |
+| grammar 1, `SE_GENERATED_ALPHABET=specials` | `failing seeds=0; findings=0` |
+| grammar 2, `SE_GENERATED_ALPHABET=specials` | `failing seeds=1; findings=1`: 12403636 again (A7-325) |
+
+Runs on the final tree: `ctest -j1` 117 of 117 passed; fault matrix 0 of 94 failed; generator 20,000 seeds `failing seeds=0; findings=0`; printed-C `agrees=5196`; corpus with lending: hwram007 `lent 474 (645)`, 0 missing and said; hwram008 `lent 724 (975)`, 4 missing and said; every ledger count 0 in both. Lints ok.
