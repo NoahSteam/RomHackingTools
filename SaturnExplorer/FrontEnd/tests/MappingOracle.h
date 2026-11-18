@@ -3718,6 +3718,33 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                               MappingHex(r.lines[li].firstAddr) + " first (A7-21, A7-30)");
                     continue;
                 }
+                // (A7-233: a register variable's merge under the variable's name drawn at the instructions where the text assigns that register
+                // variable -- every drawn token also a token of a line `iVar5 = ...;`, loads among them -- `iStack_8 = iVar5;` at `mov #5,r1` and
+                // the three loads of r1 the lines `iVar5 = 5;` and `iVar5 = *param_2;` are drawn at: the merge is those assignments' value, no
+                // store to name; grammar 2 seed 11204379)
+                if (mergedRegister && anyAddress && !A7RuleOff(233))
+                {
+                    bool anyDrawn = false, allAssigned = true;
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        if (!t.addr || t.begin >= t.end) continue;
+                        anyDrawn = true;
+                        bool assigned = false;
+                        for (size_t lj = 0; lj < r.lines.size() && !assigned; ++lj)
+                        {
+                            const std::string& lt = r.lines[lj].text;
+                            const size_t first = lt.find_first_not_of(' ');
+                            if (lj == li || first == std::string::npos || lt.compare(first, shownText.size() + 3, shownText + " = ") != 0) continue;
+                            for (const Token& u : r.lines[lj].tokens) assigned = assigned || (u.addr == t.addr && u.begin < u.end);
+                        }
+                        allAssigned = allAssigned && assigned;
+                    }
+                    if (anyDrawn && allAssigned)
+                    {
+                        ++a.copyRegisterMade;
+                        continue;
+                    }
+                }
                 if (mergedRegister && anyAddress && makersOnly)
                 {
                     ++a.copyRegisterMade;
