@@ -987,6 +987,7 @@ struct Rig
     bool haveShown = false;
     Sig stopped;
     bool haveStopped = false;
+    uint64_t stopDiscards = 0;   // panel.Discarded() when the Stop was pressed: a cancel the panel throws away ends the Stop (A8-47)
     bool stopCertain = false;   // the request stopped was held in the engine: it cannot have finished first
     uint64_t stoppedNamesGen = 0;
 
@@ -1246,6 +1247,9 @@ struct Rig
         PolicyStep();
         ++frames;
         h.Frame(mouse, down);
+        // The cancel came back while the snapshot held was not on screen and the panel threw it away: its Stop is not in force, and
+        // coming back to the question asks it again (A8-29 (c), A8-47).
+        if (haveStopped && panel.Discarded() != stopDiscards) haveStopped = false;
         Observe();
     }
 
@@ -1567,6 +1571,7 @@ struct Rig
             const uint64_t pressedOn = panel.PendingGeneration();
             if (!Click("stop")) return "(no Stop button: panel hidden)";
             stopGen = pressedOn;
+            stopDiscards = panel.Discarded();
             haveStopped = true;
             // The answer may have been collected while the pointer was settling on the button (the engine had finished): the
             // button was gone, the press hit nothing, and the question was answered, not stopped.
@@ -1702,6 +1707,7 @@ struct Rig
         const uint64_t pressedOn = panel.PendingGeneration();
         if (!Click("stop")) return "(no Stop button)";
         stopGen = pressedOn;
+        stopDiscards = panel.Discarded();
         haveStopped = true;
         const auto t1 = std::chrono::steady_clock::now();
         while (!runner.Disabled() && dts::MsSince(t1) < kShortCancelAck * 1000.0 + 5000.0)
@@ -2210,17 +2216,17 @@ const Pinned kPinned[] = {
     // ...and with the view going back to the held frame instead: the answer for it is installed while
     // hidden, which is allowed (the held snapshot is what is on screen) and replaces the other frame's.
     { "A1-8 (view to the held frame)", "scrub 2; select P; hold; scrub 1; hide; scrub 2; scrub 1; wait; show", "C,A,P", 0 },
-};
-
-// The open findings, not in the default run while they fail: SE_MODEL_OPEN=1 runs them alone (exit
-// 1 while any fails). The fixer moves each into kPinned once it passes.
-const Pinned kOpen[] = {
-    // (area 8, round 8) A8-47: the Stop's cancel comes back while the panel is hidden and the view is elsewhere (the panel discards it: not in
+    // (area 8, open-p3) A8-47 (fixed in the model: the Stop ends with a cancel the panel discards): the Stop's cancel comes back while the panel is hidden and the view is elsewhere (the panel discards it: not in
     // force, A8-29 (c)); the view comes back and the panel, shown, asks the question again. The held snapshot never moved, so the model, which
     // forgets a Stop only when the held snapshot leaves the stopped question (A8-44), calls the answer a Stop violation.
     { "A8-47 (scrub)", "hold; select A; stop; hide; scrub 1; wait; resume; show; wait", "C,A", 0 },
     { "A8-47 (BIOS)", "hold; select A; stop; hide; bios 1; wait; bios 0; show; wait", "C,A", 0 },
     { "A8-47 (start)", "hold; select A; stop; hide; bound A 1; wait; bound A 1; show; wait", "C,A", 0 },
+};
+
+// The open findings, not in the default run while they fail: SE_MODEL_OPEN=1 runs them alone (exit
+// 1 while any fails). The fixer moves each into kPinned once it passes.
+const Pinned kOpen[] = {
     { nullptr, nullptr, nullptr, 0 },
 };
 
