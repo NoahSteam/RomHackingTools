@@ -9261,6 +9261,27 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 chosen.insert(r);
                 return true;
             };
+            // A7-300: a store whose stored register was last written, on every path, by the instructions the statement's value is made at
+            const auto exactStore = [&](const ghidra::AccessRecord* r) {
+                if (!shows(r) || values.insns.empty() || !values.numbers.empty() || !values.inputs.empty() || !values.locations.empty() ||
+                    values.rebuilt || values.partial)
+                    return false;
+                FlowVn v;
+                const auto pos = flow.ops.find(r->time);
+                if (!storedRegister(r, v) || pos == flow.ops.end() || pos->second.first < 0) return false;
+                std::vector<const FlowOp*> writers;
+                bool input = false;
+                if (v.size < 4 && v.space && v.space->getType() == ghidra::IPTR_PROCESSOR)   // (a register's low bytes: the whole register)
+                {
+                    v.offset &= ~static_cast<ghidra::uintb>(3);
+                    v.size = 4;
+                }
+                const bool okw = FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), v, writers, &input, false);
+                if (!okw || input || writers.empty()) return false;
+                for (const FlowOp* w : writers)
+                    if (!values.insns.count(w->insn)) return false;
+                return true;
+            };
             // (A7-69: not at a load: a piece of the word a load reads back, `iStack_2 = (int2)param_1;` at `mov.w @(r0,r15),r2`, is the value of
             // the stores before the load, not of one after it)
             if (conversion && !(atLoadOrCall && !flow.callInsns.count(at)) && take(nextInHome())) continue;
@@ -9350,6 +9371,44 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     }
                 }
                 if (first && !read && passes && take(first)) continue;
+            }
+            // A7-300: a store before the statement in its block that only "may" show its value (a poll's load, the statement's value a load
+            // at another address: two loads may read the same value) is not the statement's when the flow after it has a store of the
+            // register the statement's own instructions made: the engine hoisted that store's value to the branch (`mov.l @(0x28,r5),r1 ;
+            // ... ; bf L ; ... L: mov.w r1,@r6` after the polled `mov.w r0,@r6`; grammar 1 seed 12246420)
+            if (prior && !std::getenv("SE_R34_OFF_300") && shows(prior) && !exactStore(prior))   // GATETMP
+            {
+                const auto here = flow.insnBlock.find(at);
+                if (here != flow.insnBlock.end())
+                {
+                    const auto firstExact = [&](int blk, uint32_t after) -> const ghidra::AccessRecord* {
+                        const auto f = flowStores.find(blk);
+                        if (f == flowStores.end()) return nullptr;
+                        for (const auto& p2 : f->second)
+                            if (p2.first >= after && writes(p2.second) && !overwritten(p2.second) && exactStore(p2.second)) return p2.second;
+                        return nullptr;
+                    };
+                    const ghidra::AccessRecord* ahead = firstExact(here->second.first, here->second.second + 1);
+                    std::set<int> visitedAhead = { here->second.first };
+                    std::vector<int> levelAhead = { here->second.first };
+                    while (!ahead && !levelAhead.empty())
+                    {
+                        std::vector<int> nextAhead;
+                        for (int blk : levelAhead)
+                        {
+                            if (blk < 0 || static_cast<size_t>(blk) >= flow.successors.size()) continue;
+                            for (int succ : flow.successors[static_cast<size_t>(blk)])
+                            {
+                                if (!visitedAhead.insert(succ).second) continue;
+                                const ghidra::AccessRecord* r = firstExact(succ, 0);
+                                if (r && !ahead) ahead = r;
+                                else if (!r) nextAhead.push_back(succ);
+                            }
+                        }
+                        levelAhead = std::move(nextAhead);
+                    }
+                    if (ahead && take(ahead)) continue;
+                }
             }
             if (take(prior)) continue;
             std::set<std::pair<const ghidra::FlowBlock*, const ghidra::FlowBlock*>> seen;
