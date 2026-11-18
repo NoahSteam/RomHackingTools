@@ -22896,3 +22896,30 @@ failing seeds=6, findings=9. One is area 3: 12147773 `caution-unsaid-deep` (A3-2
 * On-chip span (area 2 or 7): 12105914 `onchip-span-unsaid` (a read of 4 bytes at 0x06009026 reaching 0xE6020104 through an ORed pointer, no note).
 * Table cases: 12147005 `table-case` (index 0 goes to code the ledger lists, the output's case does not hold it, no warning).
 * Fold order: 12147649 `folded-read-after-pointer-write`.
+
+## Area 5, A5-154 fix
+
+Fixer, branch `review/5-a5154` (area 5 round 2 and master `be40a4ce`); RelWithDebInfo, `-j1`, `ulimit -v 3500000`. One engine patch (**0098**, `merge.cc`), one pin (`TestA5154Pins`). Backups on `backup/review-5-a5154`.
+
+| Row | Class | Outcome |
+|---|---|---|
+| A5-154 | P2, engine | **fixed** (patch 0098): grammar 2 seed 12130995 (`read-after-folded-store`) |
+| A5-160 (area 7's A7-208) | P3 | **not the same mechanism**; analysed as A5-161: the text is right, the oracle's write-back set-aside does not see through a `tas.b` |
+| A5-161 | P3, oracle | open (diagnosed) |
+
+### A5-154
+
+Replayed on this tree (the finding is in the default request; the marked request already prints `xVar2 = 4;`). The shrunk module: `r1 = 4; if (r6 < 5) { r1 = table[r6]; switch (r6) { case 3: x = *r9; } } g = r1 (mov.b r1,@r6); call; ...`. A debug print of the merges of the global's high variable showed the order: (1) RulePropagateCopy feeds the store's COPY into the INDIRECT of the call that follows (0085 allows it: no access between the COPY and the call in its block), so the global's write is the INDIRECT's input, the join `m1 = MULTIEQUAL(4, table entry, ...)`; (2) `Merge::mergeIndirect` merges `m1` with the global: `heldAcrossAccess` (0090) looked at the instances of `m1`'s high variable, one MULTIEQUAL whose cover is the join's block, and found no access; (3) `Merge::mergeOp` merges the join's inputs with its output: the table entry's cover holds the read through `param_2` (so the test of the input alone refused), and `trimOpInput` put a COPY at the end of the predecessor block, the switch's block, before the case that reads `*param_2`; that COPY's own cover holds nothing, so it merged with the global and the write was printed there (`xRam06001028 = (xunknown1)*(table...)` before `switch`), and the constant 4's COPY, in the first block, likewise.
+
+The fix is in the existing walk of `heldAcrossAccess` (an access on a path from one write of the value to the next, `defs.size() > 1`): the inputs of a join are counted as writes (nested joins to 16 of them, a visited list; INDIRECT outputs skipped as before). The walk from the constant's COPY reaches the table read (a load through a pointer) and the merge is refused: the join stays a variable of its own, `xVar2 = 4; if (param_3 < 5) { xVar2 = (xunknown1)*(table); switch ... xVar1 = *param_2; ... } ... xRam06001028 = xVar2;`, the write at the call where the code makes it. Cost: the walk existed; it now runs for a join's inputs too, bounded by the 64 blocks it already stops at, and only for a global's merge with a variable that holds a join.
+
+Patch 0098 is recorded in `patches/README.md` and `VENDOR.md` (patch numbers 0095 to 0097 listed as reserved), the notice is in `merge.cc`'s header, and the vendored lint passes. Pins: `TestA5154Pins` (the seed whole, the shrunk module, and that `xRam06001028 = 4;` is gone from the text). The pin was run without the patch on the shrunk module before the change (1 finding, the one above).
+
+### A5-160 (A7-208) and A5-161
+
+Grammar 1 seed 11007546, shrunk: `mov.w r1,@g ; mov.w @g,r0 ; tas.b @g ; mov.w r0,@g ; ... ; mov.w @(6,r7),r0 ; mov.b r4,@g`. The word store at 06009008 writes back the word read at 06009004; it is joined into the byte store after the pointer read. Not A5-154's mechanism (no join, patch 0098 changes nothing: the finding stays), and the printed values are right: the read through the pointer sees the first store's `in_r1` in the code and in the text. The oracle's set-aside of a write-back of what was just read does not see through the `tas.b` between the read and the write-back. Filed as A5-161 (P3, oracle, open); A5-160 on `review/7-round29` is covered by it.
+
+### Runs (after the last code edit)
+
+See the commit message of the last commit of the branch for the numbers; the table below is the same.
+
