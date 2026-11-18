@@ -1630,7 +1630,16 @@ inline uint32_t PossibleBits(const sfe::decomp::DecompileResult& r, const std::f
         uint32_t b = 0xFFFFFFFFu;
         if (hi == 0xE && n == reg) b = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF)));
         else if (hi == 0x2 && lo == 0x9 && n == reg) b = PossibleBits(r, word, into, mk, n, depth + 1) & PossibleBits(r, word, into, mk, m, depth + 1);
-        else if ((w >> 8) == 0xC9 && reg == 0) b = PossibleBits(r, word, into, mk, 0, depth + 1) & (w & 0xFFu);
+        // (rule 265, area 7 round 32: an `and #imm,r0` the query asks at its own place, the head of the loop it is the body of, adds no bit of its
+        // own: its input's bits are the other makers')
+        else if ((w >> 8) == 0xC9 && reg == 0) b = (mk == at && !A7RuleOff(265)) ? 0u : PossibleBits(r, word, into, mk, 0, depth + 1) & (w & 0xFFu);
+        // (rule 265: a literal `mov.l @(disp,pc),Rn` is the pool word's number)
+        else if (hi == 0xD && n == reg && !A7RuleOff(265))
+        {
+            uint16_t hiw = 0, low = 0;
+            const uint32_t pool = (mk & ~3u) + 4 + (w & 0xFFu) * 4;
+            if (word(pool, hiw) && word(pool + 2, low)) b = (static_cast<uint32_t>(hiw) << 16) | low;
+        }
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x00) b = PossibleBits(r, word, into, mk, n, depth + 1) << 1;    // shll
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x20) b = PossibleBits(r, word, into, mk, n, depth + 1) << 1;    // shal
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x08) b = PossibleBits(r, word, into, mk, n, depth + 1) << 2;    // shll2
@@ -5284,6 +5293,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         const WordValue zero = RegisterBefore(r, word, sources, f.insn, reg);
                         computes = zero.kind == WordValue::Number && zero.value == 0;
                     }
+                }
+                // Rule 265 (area 7 round 32, A7-260): `and #imm,r0` at the head of a join leaves 0 when none of the bits the paths bring into r0
+                // (a literal's, `extu.w` of one, this very `and` round a loop) is in the mask: grammar 1 seed 11901023
+                if (!computes && !A7RuleOff(265) && want == 0 && (w >> 8) == 0xC9)
+                {
+                    if (!haveSources)
+                    {
+                        sources = BranchSources(r, word);
+                        haveSources = true;
+                    }
+                    computes = (PossibleBits(r, word, sources, at, 0) & (w & 0xFFu)) == 0;
                 }
                 if (computes) continue;
             }
