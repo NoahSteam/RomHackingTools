@@ -563,7 +563,7 @@ inline bool IgnoredDiff(const sfe::decomp::DecompileResult& r, const std::functi
             for (int k = 0; k < 8; ++k) s[k] = 0;
             return true;
         }
-        if (d.Mnemonic == "rts") return !s[0];
+        if (d.Mnemonic == "rts") return !s[0] && !s[1];
         // any other: a differing register named among the operands that it reads is a use that shows; one it writes is overwritten
         const MemoryShape shape = ShapeOf(d);
         const bool pureDest = d.Mnemonic.compare(0, 3, "mov") == 0 && (shape.load || (!d.Operands.empty() && d.Operands[0] == '#') || d.Mnemonic == "mova" || d.Mnemonic == "movt");
@@ -594,7 +594,7 @@ inline bool IgnoredDiff(const sfe::decomp::DecompileResult& r, const std::functi
         Diffs s = cur.second;
         if ((d.IsBranch || d.IsCall || d.Mnemonic == "rts") && d.HasDelaySlot)
         {
-            if (d.Mnemonic == "rts") { if (!apply(p + 2, s) || s[0]) return false; continue; }
+            if (d.Mnemonic == "rts") { if (!apply(p + 2, s) || s[0] || s[1]) return false; continue; }
             if (d.IsCall)   // (the callee reads r4-r7 and a register it jumps through; it leaves r0-r7 as its own)
             {
                 if (!d.HasBranchTarget && s[(w >> 8) & 0xF]) return false;
@@ -4562,7 +4562,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 }
                 // (A7-205: the instruction makes a number that differs from the line's only in bits no instruction after it shows -- `mov #8,r0 ;
                 // L: extu.w r0,r0` where r0 is only shifted left 2 and right 16 or overwritten, the engine's `iVar2 = 0;`; grammar 2 seed 10702729)
-                if (!computes && !A7RuleOff(205) && !d.IsBranch && !d.IsCall && !d.HasDelaySlot)
+                if (!computes && !A7RuleOff(205) && !d.IsBranch && !d.IsCall && !d.HasDelaySlot && !SetsT(w) && (w & 0xF0FF) != 0x4024 && (w & 0xF0FF) != 0x4025)
                 {
                     uint16_t before2 = 0;
                     sfe::DisassembledInstruction pd2;

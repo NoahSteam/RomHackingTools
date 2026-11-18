@@ -2,11 +2,11 @@
 # Area 7, joins and stores: the runs after the last code edit, one after another on the final build (the worktree's RelWithDebInfo build).
 # usage: final.sh <build dir> <image dir> <scratch dir>     (writes <scratch>/final_*.log and final.out; deletes the out dirs it makes)
 B="$1"; H="$2"; D="$3"
-ulimit -v 6000000
+ulimit -v 3500000
 mkdir -p "$D"
 cd "$B/.." || exit 1
 note() { echo "$*" | tee -a "$D/final.out"; }
-t0=$(date +%s); ctest --test-dir "$B" --output-on-failure -j2 > "$D/final_ctest.log" 2>&1
+t0=$(date +%s); ctest --test-dir "$B" --output-on-failure -j1 > "$D/final_ctest.log" 2>&1
 note "ctest: $(grep -E 'tests passed|tests failed' "$D/final_ctest.log" | tail -1) ($(( $(date +%s) - t0 )) s)"
 rm -rf "$D/fault"; t0=$(date +%s); "$B/bin/SaturnExplorerDecompilerFaultTests" "$D/fault" > "$D/final_fault.log" 2>&1
 note "fault: $(grep -o 'fault matrix: [0-9]* of [0-9]* job(s) failed' "$D/final_fault.log") ($(( $(date +%s) - t0 )) s)"; rm -rf "$D/fault"
