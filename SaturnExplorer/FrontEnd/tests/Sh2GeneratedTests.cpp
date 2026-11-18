@@ -5855,13 +5855,20 @@ std::vector<CautionNote> CautionNotes(const DecompileResult& r)
         for (std::sregex_iterator m(names.begin(), names.end(), reg), end; m != end; ++m)
             for (int k = 0; k < kKeptN; ++k)
                 if ((*m)[1].str() == kKeptNames[k]) c.regs |= 1u << k;
-        for (size_t n = j + 1; n < r.lines.size(); ++n)
-            if (!r.lines[n].tokens.empty())
-            {
-                for (const Token& tk : r.lines[n].tokens)
-                    if (tk.addr != 0) c.at.insert(tk.addr);
-                break;
-            }
+        // (area 3, round 30, A3-234) ...the statement the comment stands before: its first line with tokens, and the lines after it up to the one
+        // that ends it (`;`, `{`, `}`), at most 6: a call in the second line of a condition (`if ((a) &&` / `(func_0x...(), b)) {`) is covered by
+        // the note placed above the statement
+        bool started = false;
+        for (size_t n = j + 1; n < r.lines.size() && n < j + 7; ++n)
+        {
+            if (!started && r.lines[n].tokens.empty()) continue;
+            started = true;
+            for (const Token& tk : r.lines[n].tokens)
+                if (tk.addr != 0) c.at.insert(tk.addr);
+            const std::string& lt = r.lines[n].text;
+            const size_t last = lt.find_last_not_of(" \t");
+            if (last == std::string::npos || lt[last] == ';' || lt[last] == '{' || lt[last] == '}') break;
+        }
         out.push_back(c);
         i = j;
     }
@@ -6013,6 +6020,34 @@ void CheckCautions(const Subject& subject, int fi, const std::map<uint32_t, Prot
     std::set<std::pair<uint32_t, int>> changed;
     std::set<uint32_t> callsRun;
     const bool compareR0 = fn.returns || fn.partial || fn.choiceBy >= 0;
+    // (area 3, round 30, A3-231) The blocks the engine says it removed as unreachable ("Removing unreachable block (ram,0x06009056)"): a call
+    // made in one (reached straight on from its start) is not in the text, so no caution can be said at it; the text's own warning is the
+    // statement (grammar 2 seed 12125921: a switch whose jump table the engine could not recover, "Treating indirect jump as call", the case
+    // code with the call removed).
+    std::set<uint32_t> removedStarts;
+    for (const std::string& w : r.warnings)
+    {
+        static const char kRemoved[] = "Removing unreachable block (ram,0x";
+        const size_t at = w.find(kRemoved);
+        if (at != std::string::npos) removedStarts.insert(static_cast<uint32_t>(std::strtoul(w.c_str() + at + sizeof(kRemoved) - 1, nullptr, 16)));
+    }
+    const auto inRemovedBlock = [&](uint32_t pc) {
+        for (const uint32_t s : removedStarts)
+        {
+            if (s > pc || pc - s > 128u || s < kCode) continue;
+            bool straight = true;
+            for (uint32_t a = s; a < pc && straight; a += 2)
+            {
+                if ((a - kCode) / 2 >= subject.words.size()) { straight = false; break; }
+                const uint16_t w = subject.WordAt(a);
+                const unsigned hi = w >> 12;
+                straight = !(hi == 0xA || hi == 0xB || (hi == 0x8 && (w & 0x0F00u) >= 0x0900u && (w & 0x0F00u) != 0x0A00u && (w & 0x0F00u) != 0x0C00u && (w & 0x0F00u) != 0x0E00u) ||
+                             w == 0x000Bu || (hi == 0x4 && ((w & 0xF0FFu) == 0x402Bu || (w & 0xF0FFu) == 0x400Bu)) || (hi == 0x0 && ((w & 0xF0FFu) == 0x0023u || (w & 0xF0FFu) == 0x0003u)));
+            }
+            if (straight) return true;
+        }
+        return false;
+    };
     int reruns = 0;
     const int kMaxReruns = 24;
     for (size_t ri = 0; ri < runs.size(); ++ri)
@@ -6029,6 +6064,11 @@ void CheckCautions(const Subject& subject, int fi, const std::map<uint32_t, Prot
             }
             callsRun.insert(c.callPc);
             if (!c.returned) continue;
+            if (inRemovedBlock(c.callPc))
+            {
+                count("caution.call.removed-block", 1);
+                continue;
+            }
             const auto l = lent.find(c.target);
             if (l != lent.end() && l->second.known) continue;
             for (int k = 0; k < kKeptN; ++k)
@@ -9238,6 +9278,17 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (saved)
                     {
                         count("excluded.saved-word-read.kept-read");
+                        continue;
+                    }
+                    // (area 3, round 30, A3-235) ...and a function none of whose runs finished (every input mode an excluded address error,
+                    // grammar 2 seed 12179479: its body runs on into a function reading an unaligned word) has no run to tell a saved word's
+                    // read from the register's: its `unaff_r11` there is the pushed word the code after the pops reads (`mov.l @(8,r15),r3`
+                    // two frames below), A3-212/A3-225's case that the stack runs cannot judge
+                    bool anyRun = false;
+                    for (const RunOut& base : runs) anyRun = anyRun || (base.finished && base.perturbed < 0);
+                    if (!anyRun)
+                    {
+                        count("excluded.no-run.kept-read");
                         continue;
                     }
                     add(std::string("kept-read:") + k.name, std::string("a function it calls was lent a signature that changes ") + k.name +
@@ -20763,6 +20814,35 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         std::printf("pin 'A3-228 grammar 2 seed 12055901': %zu finding(s), caution said %d, deep %d\n", seed.findings.size(), count(seed, "caution.said"),
                     count(seed, "caution.unsaid.deep"));
         CHECK(seed.findings.empty() && count(seed, "caution.unsaid.deep") + count(seed, "caution.unsaid.deep.own-effect") == 0);
+    }
+    // A3-231 (grammar 2 seed 12125921): the switch's jump table cannot be recovered ("Treating indirect jump as call"), the case code with a call
+    // that changes r15 is removed as unreachable (warned), so the text has no call to put a caution at: the oracle left such a call out
+    // (`caution.call.removed-block`); before, `caution-unsaid` for the call at 06009056.
+    {
+        const Report seed = Evaluate(d, MakeV2(12125921), false);
+        std::printf("pin 'A3-231 grammar 2 seed 12125921': %zu finding(s), calls in removed blocks %d\n", seed.findings.size(), count(seed, "caution.call.removed-block"));
+        CHECK(seed.findings.empty() && count(seed, "caution.call.removed-block") > 0);
+    }
+    // A3-232 (grammar 2 seed 12147005, routed `table-case`): not reproduced; the switch is A7-199's class (a callee set the index register, the
+    // table check judges the run under the index the jump reached, counted `table.index-clobbered`), all destinations printed.
+    {
+        const Report seed = Evaluate(d, MakeV2(12147005), false);
+        std::printf("pin 'A3-232 grammar 2 seed 12147005': %zu finding(s), clobbered-index runs %d\n", seed.findings.size(), count(seed, "table.index-clobbered"));
+        CHECK(seed.findings.empty() && count(seed, "table.index-clobbered") > 0);
+    }
+    // A3-233 (grammar 2 seed 12136696, routed `caution-unsaid-deep`, r15, A3-228's class): not reproduced on A3-228's code; the caution is said.
+    {
+        const Report seed = Evaluate(d, MakeV2(12136696), false);
+        std::printf("pin 'A3-233 grammar 2 seed 12136696': %zu finding(s), caution said %d\n", seed.findings.size(), count(seed, "caution.said"));
+        CHECK(seed.findings.empty() && count(seed, "caution.said") > 0 && count(seed, "caution.unsaid.deep") + count(seed, "caution.unsaid.deep.own-effect") == 0);
+    }
+    // A3-234 and A3-235 (grammar 2 seeds 12175231 `caution-elsewhere` and 12179479 `kept-read:r11`, oracle): the note placed above a multi-line
+    // condition covers a call on its second line; a function with no finished run is not judged by the kept-read check (counted).
+    {
+        const Report a = Evaluate(d, MakeV2(12175231), false);
+        const Report b = Evaluate(d, MakeV2(12179479), false);
+        std::printf("pin 'A3-234/235': %zu and %zu finding(s), no-run exclusions %d\n", a.findings.size(), b.findings.size(), count(b, "excluded.no-run.kept-read"));
+        CHECK(a.findings.empty() && b.findings.empty() && count(b, "excluded.no-run.kept-read") > 0);
     }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
