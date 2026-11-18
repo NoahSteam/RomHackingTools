@@ -89,12 +89,34 @@ violation; no open P1 or P2 rows.
 | 4 | Control flow and boundaries | Every instruction executed on random inputs is in the body or named in a warning; tables, shared epilogues, fallthrough, data in code, flow out of captured memory. | Generator, game corpus |
 | 5 | Hardware-register semantics | The conservation oracle; the map audit against Mednafen (`HARDWARE_REGISTER_AUDIT.md`) and its width table (every register, width and direction; `FrontEnd/tests/HardwareWidthTable.golden.txt`, which is printed from the rules and so only pins them), checked against the case labels Mednafen's handlers decode (`Docs/Decompiler/tools/derive_handler_cases.py` -> `FrontEnd/tests/MednafenHandlerCases.txt`, compared cell by cell in `SaturnExplorerHardwareWidthTableTests`, with the lane mask of each label, every misaligned on-chip address, and a note required for every write that acts whatever is written); the emulator's access trace. Inferred volatility for polled memory once the oracle is in. | Generator with mailboxes and registers, game corpus |
 | 6 | Worker lifecycle and exhaustion | Fault injection as a matrix: allocation k fails for every k across a run; cancel at every phase boundary and every thousand ops; under ASan and LSan. Invariant: no crash, no damaged engine without a report, no result for a stale generation. | Fixtures, the largest game functions |
-| 7 | Pseudocode-to-assembly mapping | Every token address lies in the body; a line several instructions contribute to is marked; navigation round-trips. | Game corpus |
+| 7 | Pseudocode-to-assembly mapping | Every token address lies in the body; a line several instructions contribute to is marked; navigation round-trips. The contract it enforces and what is accepted are set below ("Area 7: contract and acceptance"). | Game corpus, generator |
 | 8 | Trust indicators | A state model of stale, unsupported, truncated, unimplemented, unavailable and too-large, driven by area 1's sequences (built in round 1: `FrontEnd/tests/DecompilerTrustModel.h` and `DecompilerTrustTests.cpp`, which compare the model with what the panel drew; see `15_DECOMPILER_STEP5.md`). | Generated sequences |
 | 9 | BIOS and external files | Loaders fuzzed with truncated and malformed inputs; concurrent instances; link handling (built in round 1: `FrontEnd/tests/LoaderFuzzTests.cpp`, a seeded run in `ctest`, `SE_LOADFUZZ_*` for long ones; round 2 added the files' life across a session, the `lifecycle` module: a save keeps what the user put in the file; see `15_DECOMPILER_STEP5.md`). | Generated files |
 | 10 | Vendored patches | The reproduction job; one review per patch against pinned upstream; upstream bugs filed. | CI |
 | 11 | Validation and test strength | Mutation score per oracle; no skipped tests; the generator covers its grammar. | The suites themselves |
 | 12 | Platforms and release | The CI matrix, a release checklist on a tagged build. | CI |
+
+### Area 7: contract and acceptance
+
+Set after an external design review of rounds 14 to 34 (2026-11-18). Thirty-odd rounds of seed-by-seed fixes grew the
+product's mapping passes and the oracle (`MappingOracle.h`) by about 2,000 lines each without the tail converging: the
+token model has one address per token and a lowest-address default, so the passes and the oracle each reconstruct
+separately which instruction did a statement's effect, which contributed its value, and which is a useful click target.
+
+- **Seed-specific P3 fixes are stopped.** A new P3 mapping finding is filed under its class and either accepted by class
+  or left for the link-model redesign (a design document comes first and is approved before any rewrite).
+- **The contract** a debugger user can rely on, which the oracle enforces: a direct link names a valid instruction or an
+  explicitly identified bad-data location; a represented store or branch leads first to its own effect (for a store,
+  the instruction that writes the displayed bytes); a reverse lookup offers every linked line, and the panel's
+  cycling reaches each of them; a fallback to a nearby line is labelled as the nearest mapped line, never as a proven
+  origin.
+- **P2**: a wrong primary store or branch (the first answer is not the instruction that did the effect), or a link to
+  an invalid instruction.
+- **Accepted P3 classes**: display order among equally valid candidates; missing links for absorbed intermediates; a
+  correctly attributed store that stays visible though a later store overwrites it.
+- **Done for area 7**: no open P1 or P2; two consecutive clean review rounds on fresh seed ranges and the game corpus;
+  an overnight generator run with no violation of the contract above. Residual P3s are recorded fixed or accepted by
+  class. Their rate per 10,000 seeds per grammar is tracked for drift but is not a release gate.
 
 Priority 1 areas (1 to 6) run first, as two or three parallel tracks; Priority 2 areas (7 to 10)
 are mostly single sessions once CI exists; 11 is the generator and the mutation audit; 12 is CI.
