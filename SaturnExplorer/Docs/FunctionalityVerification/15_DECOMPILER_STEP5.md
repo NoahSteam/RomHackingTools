@@ -23132,3 +23132,39 @@ Not fixed (one class needs more than a round each; none was taken): way-back A7-
 | sweep grammar 2, 10,000 from 12,200,001 | 2 failing seeds: 12202641 (`map-conversion-branch`, A7-253), 12204851 (`map-copy-store`, A7-252) |
 
 Lints: `check-literal-size.py` ok. Routed: 12173135 (grammar 2) to area 5 (A7-255).
+
+## Area 7, round 31
+
+Branch `review/7-round31` from master `531a5928` with `review/7-round30` merged (conflicts in `Sh2GeneratedTests.cpp`, the ledger and this record resolved by keeping both sides; the ledger's A7-200, A7-207, A7-208, A7-209, A7-220 and A5-160 rows are master's newer text). The merged pins passed before any work. RelWithDebInfo, `-j1`, `ulimit -v 3500000`. **No product change and no engine patch (0096 stays free).** One product attempt (A7-251, `MovtNumber`) was reverted. Five oracle rules in `MappingOracle.h` (250 to 254), pins `TestArea7Round31Pins` (eight whole seeds), scripts `Docs/Decompiler/tools/a7_round31/final.sh`.
+
+| Row | Outcome |
+|---|---|
+| A7-250 way-back | fixed in part: grammar 1 11303278 (rule 250), 12133156, 11508679, 12137810, 11703213 (rule 251). Grammar 2 11304044, 11708927, 12020446 open (product: the flow record) |
+| A7-251 const-join | fixed in part: grammar 2 12154848 (rule 252), 11802915 (rule 253). Open: 11503597, 12150363, 11602585 (specials) |
+| A7-252 copy-store | fixed in part: 11806821, 12158267, 12204851 (rule 254). A7-220 (11102053) open |
+| A5-154's routed seeds | triaged: A7-260 to A7-264 |
+| A7-253, A7-254 | not reached (11900473 added to A7-253 as A7-263) |
+
+### 1. Oracle rules (each judged from the program text and the run values; none is a product bug)
+
+* **250** (`MappingOracle.h`, the copy classifier's `readAtStore`): grammar 1 11303278, shrunk to 33 words. `SMPC_OREG8 = cRam26001008;` is drawn at `mov.b r0,@(0x6,r6)` (0x06009014), which writes the read-only register; the oracle took the RAM global on its right for a read copied at a store (A7-69) because the store does not write that global, and then ordered `in_r1 = param_2;` (the real copy) as the instruction's own statement, so the way back "answered a copy first". The name and the value are both drawn at the store and the ledger has its write: it is the store's own statement. Rule: a plain line whose assigned name is a hardware register (capitalised, no `Ram`), drawn at the instruction, with a ledger write there, is not a read at a store.
+* **251**: grammar 1 11508679, 12133156, 12137810, 11703213: each has the decoder's `Instruction at (ram,...) overlaps instruction at (ram,...)` (a delay slot that is also a branch target: in 12133156's shrunk program `bt/s 0x06009014 ; mov.l r3,@r6` with `bra 0x06009010` landing on the slot). The engine prints the slot once per way in and the text is its reading of two programs; no order of lines answers a click on it. The oracle's way-back check is not applied to such a function. Mutation: `SE_A7_RULE_OFF=251` fails 12133156 and 11508679.
+* **252**: grammar 2 12154848: `unaff_r14 = 0;` at `mov #0x0,r14`, the loop head; the oracle's A7-26 guess (the line's register from where the text uses the variable) found the use drawn at `mov.l r3,@(0x4,r4)`, the store of a copy of r14, and said the paths set it in r3. A variable the engine names for a register (`unaff_rN`, `in_rN`) is that register's.
+* **253**: grammar 2 11802915: `uVar2 = 0;` at the loop head `mov.b @r14,r1`, which reads the frame slot the code stored 0 in (`mov.l r0,@(r0,r14)` with r0 = 0); the engine folded the read (access fate `read ... folded`) and the load is the instruction that gives r1 the number. A folded load is accepted as the maker, as `mov #imm` is.
+* **254**: grammar 1 11806821, grammar 2 12204851 and 12158267: `iStack_2c = param_2;` (shrunk) at `mov r5,r2`, `xStack_f = 5;` at `mov #5,r0`: the engine named the register's variable after the frame word the register was loaded from (`mov.l @r14,r2`, `mov.b @(9,r15),r0`); the line is the register move's own statement and a store of the slot (`mov.w r2,@r14`) is another statement, so "names none of the folded stores" asks for something the line is not. A copy line whose drawn tokens are all at `mov Rm,Rn` or `mov #imm` is not judged by copy-store.
+
+Mutation: `SE_A7_RULE_OFF=<n>` for each of 250 to 254 fails the pin seeds named above (one failing seed per rule, two or three for 251 and 254).
+
+### 2. Not fixed (analysed)
+
+* **A7-250 grammar 2 (11304044, 11708927, 12020446)**: the function runs into other functions (`flow runs into ... another function's entry`); `puVar1 = puRam0600908c;`/`pcVar4 = pcRam060090d4;`, a read of a pool word printed as a variable, is drawn at the store 0x060090BC without the materialised mark. MarkMaterialisedReads' A7-57 branch needs an implied output, and A7-190's copy branch needs `flow.accessesByInsn` or the store's op: the flow record is taken once after the first flow and has nothing of the code reached after a `jmp` the engine resolves later (round 29's observation for 12020446). The fix is a flow record after the restarts (host), or a second record for the added blocks.
+* **A7-251**: 12150363: `xStack_c = 0;` at the loop head `mov.b @r5,r0`; the variable merges the frame load that enters through `bra 0x0600903E` (no number) with the `movt r1` two instructions on (T clear on the `bf` back edge). `AddJoinConstantTokens` leaves the token at the head because one path is not a number. Attempt 1: letting `MovtNumber` accept a `movt` that is not the block's first instruction (no op of another instruction before it writes sr or calls): changes nothing for this seed (its join also has the frame-load path), reverted. 11503597 (the volatile request): `uRam06002308 = 1;` at `mov #1,r3`, r3 merged by the engine with the global the later stores write, so the text stores 1 and decrements the global in a loop (the said `text-store`); the named store stores 0. 11602585 (specials): `iVar6 = 0;` at `and r3,r2`, r2 a merge of `mov #0` and a `movt`.
+* **A7-220/11102053**: unchanged, product (`StatementValues`/`FinalValues` do not see through `X & mask`).
+
+### 3. Triage of A5-154's routed seeds (replayed; deep where flagged)
+
+Not reproduced: grammar 1 11902840, 11904869, 12185736 (A7-264, closed). Reproduce: grammar 1 11901023 (const-join, A7-260), 11905223 (store-dead, A7-261), 12188214 and 12189580 (way-back with no overlap and no run-into warning; the shrunk 12189580 is an analysed infinite poll loop, A7-262), grammar 2 11900473 (conversion-branch, A7-263), 11901051 (way-back, runs into other functions: A7-250's class) and 12181915 (way-back, A7-262).
+
+### 4. Corpus and runs
+
+RUNS_PLACEHOLDER
