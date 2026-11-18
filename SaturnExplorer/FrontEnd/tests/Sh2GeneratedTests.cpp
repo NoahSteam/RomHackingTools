@@ -16103,10 +16103,26 @@ bool StopsInEmulator(const Program& p)
     auto snap = dts::MakeSnapshot(hw);
     Runner runner(s, snap);
     const int worlds = s.markVolatile ? 2 : 1;
+    const char* oldRule = std::getenv("SE_GENERATED_A11_39");   // =0 makes the rule A11-35 had (a stop only), to list what A11-39 changes
+    const bool conv = !(oldRule && std::string(oldRule) == "0");
+    const bool dbg = std::getenv("SE_GENERATED_TRACE_A11_35") != nullptr;
     for (int world = 0; world < worlds; ++world)
         for (size_t fi = 0; fi < s.fns.size(); ++fi)
             for (const RunOut& run : runner.Ordinary(s.fns[fi], world == 1))
-                if (!run.error.empty()) return true;
+            {
+                if (!run.error.empty()) { if (dbg) std::fprintf(stderr, "  stop in fn %zu: %s\n", fi, run.error.c_str()); return true; }
+                if (!conv) continue;
+                // (A11-39, A7-209) ...or breaks the convention the generator promises: a finished run of a function with an intent that ends
+                // with a callee-saved register, a state register or PR changed (a callee that pops a word too many lets the caller's later push
+                // overwrite a saved register: 12097940's function 1)
+                const FnInfo& fn = s.fns[fi];
+                if (!(s.v2 && fn.intent) || !run.finished) continue;
+                for (int reg = 8; reg < 16; ++reg)
+                    if (run.fin[reg] != run.init[reg] && !((fn.clobbers >> reg) & 1u)) { if (dbg) std::fprintf(stderr, "  r%d changed in fn %zu\n", reg, fi); return true; }
+                for (int n = 0; n < 4; ++n)
+                    if (run.finState[n] != run.initState[n] && !((fn.clobbers >> (17 + n)) & 1u)) return true;
+                if (run.finPr != run.initPr) return true;
+            }
     return false;
 }
 
