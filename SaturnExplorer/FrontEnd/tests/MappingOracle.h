@@ -4115,6 +4115,21 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     ++a.copyNoAddress;
                     continue;
                 }
+                // (A7-252 rule 254: a line all of whose drawn tokens are at register moves or `mov #imm`, `mov r5,r2` -- `iStack_2c = param_2;` -- is that move's
+                // statement: the engine named the register's variable after the frame word the register was read from (`mov.l @r14,r2`) and
+                // the move writes that variable; the store of the same word, `mov.w r2,@r14`, writes the slot, not this line; grammar 2 seeds
+                // 12204851 and 12158267)
+                if (!A7RuleOff(254))
+                {
+                    bool moves = false, other = false;
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        uint16_t mw = 0;
+                        if (!t.addr || t.begin >= t.end || !word(t.addr, mw)) continue;
+                        ((mw & 0xF00F) == 0x6003 || (mw >> 12) == 0xE) ? moves = true : other = true;
+                    }
+                    if (moves && !other) continue;
+                }
                 ++a.copyStoreMissing;
                 ++(frame ? a.copyFrameMissing : a.copyGlobalMissing);
                 // (A5-124: not a register's read the engine stores as read -- `xRam26001028 = SH2_RTCSR;`, 0090's merge of `mov.l @(0,r7),r2 ;
@@ -5080,6 +5095,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             if ((tw & 0xFF0Fu) == (0x200Du | rn << 8) && ((tw >> 4) & 0xF) != rn) computes = true;
                         }
                 }
+                // (A7-251 rule 253: a load the engine folded -- `mov.b @r14,r1` of a frame slot the code stored 0 in, accessFates `read ... folded`
+                // -- gives its register the number the engine knew the memory held: the load is the line's own, as `mov #imm` is; grammar 2
+                // seed 11802915)
+                if (!computes && !A7RuleOff(253) && ShapeOf(d).load && !ShapeOf(d).store)
+                    for (const AccessFate& f : r.accessFates) computes = computes || (f.insn == at && !f.write);
                 if (computes) continue;
             }
             uint32_t got = 0;
@@ -5129,6 +5149,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 const size_t nameBegin = text.find_first_not_of(' ');
                 const size_t nameEnd = text.find(" = ", nameBegin);
                 const std::string name = text.substr(nameBegin, nameEnd - nameBegin);
+                // (A7-251 rule 252: a variable the engine names for a register, `unaff_r14` or `in_r3`, is that register's whatever
+                // instruction the text draws its other uses at -- `*(xunknown4 *)(param_1 + 4) = unaff_r14;` at `mov.l r3,@(0x4,r4)`, the
+                // store of a copy of r14 -- so the instruction that makes the number into it is the line's own; grammar 2 seed 12154848)
+                if (!A7RuleOff(252) && (name == "unaff_r" + std::to_string(rm) || name == "in_r" + std::to_string(rm))) continue;
                 std::set<int> used;
                 // (A7-91: only a line that is a bare copy, `uVar4 = (uint2)uVar3;` -- `iVar1 = iVar1 + -1;` at the `dt r3` that begins
                 // a loop's tail is the instruction's own; grammar 1 seed 4106897)
