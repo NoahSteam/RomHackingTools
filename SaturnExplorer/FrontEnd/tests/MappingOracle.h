@@ -2374,6 +2374,22 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 own = own || (f.insn == t.addr && f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
                             readAtStore = !own;
                         }
+                        // (A7-250 rule 250: a hardware register the line assigns, `SMPC_OREG8 = cRam26001008;` with both the name and the value drawn at
+                        // the `mov.b r0,@(0x6,r6)` that writes it, is that store's own statement: the value is the load's result the store writes (A7-69's
+                        // read-at-store is for a store of another variable); the ledger has the store's write; grammar 1 seed 11303278)
+                        if (readAtStore && !A7RuleOff(250))
+                        {
+                            const std::string& lt = r.lines[li].text;
+                            const size_t nb = lt.find_first_not_of(' ');
+                            if (nb != std::string::npos && nb < assign && lt[nb] >= 'A' && lt[nb] <= 'Z' && lt.compare(nb, assign - nb, "Ram") != 0 &&
+                                lt.substr(nb, assign - nb).find_first_of(" *()[]") == std::string::npos && lt.substr(nb, assign - nb).find("Ram") == std::string::npos)
+                            {
+                                bool nameHere = false, writes = false;
+                                for (const Token& u : r.lines[li].tokens) nameHere = nameHere || (u.addr == t.addr && u.begin == nb && u.end <= assign);
+                                for (const MemoryAccess& m : r.accesses) writes = writes || (m.insn == t.addr && m.write);
+                                if (nameHere && writes) readAtStore = false;
+                            }
+                        }
                     }
                     // (A7-69: a line drawn at a store of its own variable -- `uRam06001034 = 2;` at the word store of 2 to it, naming the byte
                     // store beside it -- is that store's statement, not a copy materialised there; grammar 1 seed 3204967)
@@ -4179,6 +4195,43 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     ++a.copyNoAddress;
                     continue;
                 }
+                // (A7-252 rule 254: a line all of whose drawn tokens are at register moves or `mov #imm`, `mov r5,r2` -- `iStack_2c = param_2;` -- is that move's
+                // statement: the engine named the register's variable after the frame word the register was read from (`mov.l @r14,r2`) and
+                // the move writes that variable; the store of the same word, `mov.w r2,@r14`, writes the slot, not this line; grammar 2 seeds
+                // 12204851 and 12158267)
+                if (!A7RuleOff(254))
+                {
+                    // (only where the register the move writes was loaded from the variable's own memory by an instruction of the function,
+                    // `mov.l @r14,r2` then `mov r5,r2`: the variable is the register's, named for the memory it was read from)
+                    const size_t nb = text.find_first_not_of(' '), eq = text.find(" = ");
+                    std::string vname = nb == std::string::npos || eq == std::string::npos || eq <= nb ? std::string() : text.substr(nb, eq - nb);
+                    if (vname.find("._") != std::string::npos) vname.resize(vname.find("._"));
+                    uint32_t vva = 0;
+                    const bool vglobal = IsRamGlobal(vname, &vva), vframe = vname.find("Stack_") != std::string::npos;
+                    bool moves = false, other = false;
+                    std::set<int> written;
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        uint16_t mw = 0;
+                        if (!t.addr || t.begin >= t.end || !word(t.addr, mw)) continue;
+                        if ((mw & 0xF00F) == 0x6003 || (mw >> 12) == 0xE)
+                        {
+                            moves = true;
+                            written.insert(static_cast<int>((mw >> 8) & 0xF));
+                        }
+                        else other = true;
+                    }
+                    bool loadedHere = false;
+                    if (moves && !other && (vglobal || vframe))
+                        for (const AccessFate& f : r.accessFates)
+                        {
+                            uint16_t lw = 0;
+                            if (f.write || f.frame != vframe || !word(f.insn, lw) || (vglobal && GlobalDelta(vva, f.address) >= f.size)) continue;
+                            for (int reg : WrittenRegisters(sfe::Sh2Decode(f.insn, lw)))
+                                loadedHere = loadedHere || written.count(reg);
+                        }
+                    if (loadedHere) continue;
+                }
                 ++a.copyStoreMissing;
                 ++(frame ? a.copyFrameMissing : a.copyGlobalMissing);
                 // (A5-124: not a register's read the engine stores as read -- `xRam26001028 = SH2_RTCSR;`, 0090's merge of `mov.l @(0,r7),r2 ;
@@ -5144,6 +5197,29 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             if ((tw & 0xFF0Fu) == (0x200Du | rn << 8) && ((tw >> 4) & 0xF) != rn) computes = true;
                         }
                 }
+                // (A7-251 rule 253: a load the engine folded -- `mov.b @r14,r1` of a frame slot the code stored 0 in, accessFates `read ... folded`
+                // -- gives its register the number the engine knew the memory held: the load is the line's own, as `mov #imm` is; grammar 2
+                // seed 11802915)
+                if (!computes && !A7RuleOff(253) && want == 0 && ShapeOf(d).load && !ShapeOf(d).store)
+                {
+                    bool folded = false;
+                    for (const AccessFate& f : r.accessFates) folded = folded || (f.insn == at && !f.write && f.frame);
+                    // (and a store of a frame word the code makes 0: a register the words give as 0, `mov #0,r0 ; mov.l r0,@(r0,r14)`)
+                    for (const AccessFate& f : r.accessFates)
+                    {
+                        uint16_t sw = 0;
+                        int size = 0;
+                        const int reg = folded && f.write && f.frame && word(f.insn, sw) ? StoredRegister(sw, size) : -1;
+                        if (reg < 0 || computes) continue;
+                        if (!haveSources)
+                        {
+                            sources = BranchSources(r, word);
+                            haveSources = true;
+                        }
+                        const WordValue zero = RegisterBefore(r, word, sources, f.insn, reg);
+                        computes = zero.kind == WordValue::Number && zero.value == 0;
+                    }
+                }
                 if (computes) continue;
             }
             uint32_t got = 0;
@@ -5193,6 +5269,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 const size_t nameBegin = text.find_first_not_of(' ');
                 const size_t nameEnd = text.find(" = ", nameBegin);
                 const std::string name = text.substr(nameBegin, nameEnd - nameBegin);
+                // (A7-251 rule 252: a variable the engine names for a register, `unaff_r14` or `in_r3`, is that register's whatever
+                // instruction the text draws its other uses at -- `*(xunknown4 *)(param_1 + 4) = unaff_r14;` at `mov.l r3,@(0x4,r4)`, the
+                // store of a copy of r14 -- so the instruction that makes the number into it is the line's own; grammar 2 seed 12154848)
+                if (!A7RuleOff(252) && (name == "unaff_r" + std::to_string(rm) || name == "in_r" + std::to_string(rm))) continue;
                 std::set<int> used;
                 // (A7-91: only a line that is a bare copy, `uVar4 = (uint2)uVar3;` -- `iVar1 = iVar1 + -1;` at the `dt r3` that begins
                 // a loop's tail is the instruction's own; grammar 1 seed 4106897)
