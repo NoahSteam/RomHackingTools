@@ -5855,13 +5855,20 @@ std::vector<CautionNote> CautionNotes(const DecompileResult& r)
         for (std::sregex_iterator m(names.begin(), names.end(), reg), end; m != end; ++m)
             for (int k = 0; k < kKeptN; ++k)
                 if ((*m)[1].str() == kKeptNames[k]) c.regs |= 1u << k;
-        for (size_t n = j + 1; n < r.lines.size(); ++n)
-            if (!r.lines[n].tokens.empty())
-            {
-                for (const Token& tk : r.lines[n].tokens)
-                    if (tk.addr != 0) c.at.insert(tk.addr);
-                break;
-            }
+        // (area 3, round 30, A3-234) ...the statement the comment stands before: its first line with tokens, and the lines after it up to the one
+        // that ends it (`;`, `{`, `}`), at most 6: a call in the second line of a condition (`if ((a) &&` / `(func_0x...(), b)) {`) is covered by
+        // the note placed above the statement
+        bool started = false;
+        for (size_t n = j + 1; n < r.lines.size() && n < j + 7; ++n)
+        {
+            if (!started && r.lines[n].tokens.empty()) continue;
+            started = true;
+            for (const Token& tk : r.lines[n].tokens)
+                if (tk.addr != 0) c.at.insert(tk.addr);
+            const std::string& lt = r.lines[n].text;
+            const size_t last = lt.find_last_not_of(" \t");
+            if (last == std::string::npos || lt[last] == ';' || lt[last] == '{' || lt[last] == '}') break;
+        }
         out.push_back(c);
         i = j;
     }
@@ -9239,6 +9246,17 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (saved)
                     {
                         count("excluded.saved-word-read.kept-read");
+                        continue;
+                    }
+                    // (area 3, round 30, A3-235) ...and a function none of whose runs finished (every input mode an excluded address error,
+                    // grammar 2 seed 12179479: its body runs on into a function reading an unaligned word) has no run to tell a saved word's
+                    // read from the register's: its `unaff_r11` there is the pushed word the code after the pops reads (`mov.l @(8,r15),r3`
+                    // two frames below), A3-212/A3-225's case that the stack runs cannot judge
+                    bool anyRun = false;
+                    for (const RunOut& base : runs) anyRun = anyRun || (base.finished && base.perturbed < 0);
+                    if (!anyRun)
+                    {
+                        count("excluded.no-run.kept-read");
                         continue;
                     }
                     add(std::string("kept-read:") + k.name, std::string("a function it calls was lent a signature that changes ") + k.name +
@@ -20681,6 +20699,14 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         const Report seed = Evaluate(d, MakeV2(12136696), false);
         std::printf("pin 'A3-233 grammar 2 seed 12136696': %zu finding(s), caution said %d\n", seed.findings.size(), count(seed, "caution.said"));
         CHECK(seed.findings.empty() && count(seed, "caution.said") > 0 && count(seed, "caution.unsaid.deep") + count(seed, "caution.unsaid.deep.own-effect") == 0);
+    }
+    // A3-234 and A3-235 (grammar 2 seeds 12175231 `caution-elsewhere` and 12179479 `kept-read:r11`, oracle): the note placed above a multi-line
+    // condition covers a call on its second line; a function with no finished run is not judged by the kept-read check (counted).
+    {
+        const Report a = Evaluate(d, MakeV2(12175231), false);
+        const Report b = Evaluate(d, MakeV2(12179479), false);
+        std::printf("pin 'A3-234/235': %zu and %zu finding(s), no-run exclusions %d\n", a.findings.size(), b.findings.size(), count(b, "excluded.no-run.kept-read"));
+        CHECK(a.findings.empty() && b.findings.empty() && count(b, "excluded.no-run.kept-read") > 0);
     }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
