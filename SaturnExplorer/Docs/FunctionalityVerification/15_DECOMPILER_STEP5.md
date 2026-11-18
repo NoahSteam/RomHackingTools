@@ -23228,3 +23228,31 @@ No product code changed, so the corpus token output and the printed C are those 
 
 * **Area 7 (next fixer):** A7-250's flow-record class (grammar 2 11304044, 11708927, 12020446, 11901051) and its overlap class (grammar 1 11508679, 12133156, 12137810, 11703213); A7-251 (11503597, 12150363, 11602585, A7-260, A7-265: 12222552, 12222510); A7-220 (11102053); A7-253 (+ A7-263), A7-254 (+ A7-261), A7-262.
 
+
+## Area 3, round 31
+
+Branch `review/3-round31` on master `26841c56`. Two host changes in `Sh2Decompiler.cpp` (`Call`, the walk of a callee's code), no engine patch; ledger rows A3-237 to A3-240; A3-236 fixed, A3-230 closed. Pins: the A3-237/238 block of `TestA3RoutedPins`.
+
+### 1. Triage
+
+* **Grammar 2 `caution-elsewhere` seeds** 12161411, 12165339, 12165969, 12167636, 12169251 and 12155319: none reproduces, with or without `SE_GENERATED_CAUTION=deep`. They were found on a build before A3-234's multi-line fix (a call on a later line of the statement the note stands above). A3-239, closed.
+* **11904122 `caution-unsaid`, r12 (A3-237).** Shrunk (the generator's own shrink): F0 calls F1 (not lent) and reads r12; F1 holds the caller's PR in r13 (`sts pr,r13`) and calls the lent F2; F2 pushes r13, runs a store loop through a copy of r15 and sets r12. F2's signature does not keep r13 (the walk cannot bound the loop's stores against the pushed word), so `Apply` gave r13 a value that is not PR, F1's `lds r13,pr ; rts` proved no return (F1 withheld "a return not to its caller") and the change of r12 was never recorded. A3-226's frame-pointer rule (a register holding a stack address stays, when the callee's walk shows no certain change) now also covers a register holding the caller's PR.
+* **12218480 `caution-unsaid-deep`, r13 (A3-238).** F2 (lent) sets r13 only on one path, F1 (not lent) stores r13 after calling it, F0 calls F1 twice. The value after F2's call was the call's output only; it may be the entry value as well (F2 does not overwrite r13 on every path, `CalleeWritten`), so F1's record of the caller registers it reads lacked r13. The output value now carries `Value::mayEntry` for the registers of r8-r14, GBR, VBR the walked function held as their entry value, a lent callee does not keep and does not overwrite on every path.
+* **A3-236 (12177948)** is A3-238's defect (with A3-238's change switched off it fails, with A3-237's off it passes): fixed. **A3-230 (12147773)** does not reproduce on master, with or without the round's changes (no finding, `caution.reruns=2`, the runs do not differ): closed. The ledger's earlier reading, that they needed per-call work on the callee tree, was wrong for A3-236.
+* Attribution (each change switched off alone by a temporary environment test, not committed): 11904122 needs A3-237's change; 12218480 and 12177948 need A3-238's.
+
+### 2. Evidence the change moves nothing else
+
+Both corpus images, alone and lent, with the token dump (every text and token), run with the two changes switched off by a temporary environment test (not committed) and with them on: the dumps are byte-identical (007 and 008), so no printed C changed and no caution was added or lost there. The 20k generator, printed-C and the fault matrix are below.
+
+### 3. Runs
+
+* `ctest -j1`: 117 of 117 passed (after correcting the pin: the first run's pin for 12147773 failed, that seed does not reproduce). Fault matrix: 0 of 94 job(s) failed.
+* Generator 20k (`SE_GENERATED_SEEDS=20000`): `failing seeds=0; findings=0`. Printed-C (3000 seeds): agrees=5196.
+* Corpus with lending, both images (code identical to the final product): hwram007 0 missing and said, `[after] real entries 999: signatures lent 474 (645 parameters)`; hwram008 4 missing and said, `1543: 724 (975)`. Token dumps (alone and lent) byte-identical with the two changes switched off, both images.
+* Grammar 2, `SE_GENERATED_CAUTION=deep`, 10,000 seeds from 12,230,001: `failing seeds=1; findings=1`: 12237557 `n:caution-elsewhere`, r15, two calls (A3-240, P3 open; fails the same with both changes off).
+* `check-literal-size.py`: ok.
+
+### 4. Routed
+
+None to other areas. Open in area 3: A3-240 (12237557).

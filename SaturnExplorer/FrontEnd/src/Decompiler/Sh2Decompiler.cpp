@@ -1641,10 +1641,26 @@ private:
             {
                 if (((e.preserved >> r) & 1u) || ((changedFor >> r) & 1u)) continue;
                 const Value v = Get(s, mReg[r]);
-                if (v.kind == Value::Sp) framePointers.emplace_back(r, v);
+                if (v.kind == Value::Sp || (v.kind == Value::Reg && v.v == kPr)) framePointers.emplace_back(r, v);   // (A3-237) ...or the caller's PR saved in a register (`sts pr,r13`)
             }
         }
+        // (area 3, round 31, A3-238) In a walk of a callee's code: a lent callee that does not overwrite a register of kUnkeptRegs on every path
+        // (CalleeWritten) and whose signature does not keep it returns it as the walked function had it on some path (grammar 2 seed 12218480:
+        // the lent F2 sets r13 only when r3 is not 0, the walked F1 then stores r13). The value Apply gives it is the call's output; it may be
+        // the entry value too, so the caller's register is read there (Value::mayEntry, EntryOf).
+        std::vector<int> entryBack;
+        if (mNested && signatureLent && haveTarget)
+        {
+            const uint32_t through = kUnkeptRegs & kModelKept & ~e.preserved & ~CalleeWritten(target);
+            for (int r = 0; r < kTracked; ++r)
+                if (((through >> r) & 1u) && ((EntryOf(Get(s, mReg[r])) >> r) & 1u)) entryBack.push_back(r);
+        }
         Apply(s, e, targetIsR0);
+        for (const int r : entryBack)
+        {
+            auto f = s.vars.find(KeyOf(mReg[r]));
+            if (f != s.vars.end()) f->second.mayEntry |= 1u << r;
+        }
         for (const auto& fp : framePointers) Set(s, mReg[fp.first], fp.second);
         for (const auto& c : carried)
         {
