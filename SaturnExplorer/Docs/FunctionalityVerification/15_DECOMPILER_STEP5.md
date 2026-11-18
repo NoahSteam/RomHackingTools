@@ -22484,3 +22484,53 @@ After the last code edit (`Sh2Decompiler.cpp`, `MappingOracle.h` and `Sh2Generat
 
 * **Area 7 (next fixer):** A7-193 and A7-194 (P3, oracle, open); A7-191, A7-192 and A7-179's rest as before.
 * **Area 3:** grammar 2 seed 10605744 (`n:caution-unsaid`: the call at 0x0600906E, of 0x06009098 with no signature lent, comes back with gbr changed in the run of input mode 2), found by this round's sweep, the same with the round's changes off; not filed here.
+
+## Area 11, round 8
+
+Fixer, branch `review/11-round8` from master `10aefa40`; RelWithDebInfo build, `-j1`, `ulimit -v 6000000`. Rows A11-35 (fixed) and A11-36 (fixed in part; the rest is A11-37). Only `FrontEnd/tests/Sh2GeneratedTests.cpp`, the ledger and this section changed; no product code, no engine patch.
+
+### 1. A11-35: a push between calls after the callee that pops
+
+The grammar's r15 module (grammar 2, seeds from 12,000,001) has its last function pop a word of its caller's on one path (`tst r3,r3 ; bt ; add #4,r15`). Every other function has a frame pointer, whose epilogue takes the stack back, so the drift is harmless unless an item that uses r15 runs between calls: the only one is the spill (`mov.l Rn,@-r15 ... mov.l @r15+,Rn`). After k calls of the popping function r15 is 4k bytes above where it was, and the push lands at r14 + 4k - 4. Seed 12018405: two calls, frame 4, the push at r14 + 4, the saved PR; the function returned to 0x06021100 and the emulator stopped.
+
+Fix (`Gen::MakeFunc`, after the function's items are made, `Item::bare`): in a module whose popping function has `add #4,r15` (`cautionSpPops`), a spill that follows k calls of it (counted in item order, through skips) with 4k - 4 >= the function's frame is drawn as its block alone, shape `spill.bare`: no push, no pop. No random draw moves, so no other part of the program changes. `SE_GENERATED_BARESPILL=0` draws the old programs; `SE_GENERATED_TRACE_A11_35=1` prints each seed that has a bare spill.
+
+The rule is conservative: whether the pop runs is a runtime matter (the `tst` on r3, which the caller leaves), so it cannot tell a spill that would have corrupted the frame from one whose pop never runs. Seeds whose program changed (the sweeps below listed them; 12,030,001-12,070,000 was not swept with the listing, only the routed 12047405 is known there):
+
+| Range | Seeds with a bare spill | Before the fix |
+|---|---|---|
+| 12,000,001-12,030,000 | 12018405, 12020830 | 12018405 `emulator-error`; 12020830 valid (r3 is 0 at the test) |
+| 12047405 (routed) | 12047405 | `emulator-error` at 0x06021100 |
+| 12,070,001-12,080,000 | 12073732, 12074524, 12079155 | all three valid |
+| 12,100,001-12,110,000 | 12101424 | valid |
+
+Every other seed makes the program it made. Pins: seeds 12018405 and 12047405, no finding.
+
+### 2. A11-36: two new productions, fresh range from 12,100,001
+
+`kCautionLoopFirst` = 12,100,001, a stream of its own (`cautionLoopRng`), drawn only for those seeds:
+
+* lp: the changer's change made in a counted loop, `tst Rt,Rt ; bt/bf L ; mov #n,Rc ; M: <change> ; dt Rc ; bf M ; L:` (Rc is r1 or r2, not one the function reads on entry, not the convention's read register), 35 in 100 of the module's changes; shape `caution.change.loop`.
+* o4: a copy of the register read by a branch, `tst Rc,Rc ; bt L ; mov.l Rp,@Rp ; L:` instead of the store of the copy, 40 in 100 of the reads that store through r4 or r5; shape `caution.call.read.branch`.
+
+In 10,000 seeds from 12,100,001: `caution.change.loop` 2,308 and `caution.call.read.branch` 511 items. Pins: no seed 12,000,001-12,000,600 holds either shape; the first program of each from 12,100,001 whose runs require a caution passes with it said (loop 12100016, branch 12100093). What stays open: A11-37 (pi, pie, tb, th2, mr2, mx1, mx2, a210d, o1, o2, o3).
+
+### 3. Runs (final build)
+
+| Run | Result |
+|---|---|
+| `ctest -j1` | **117 of 117 passed** (818 s) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix | **failing seeds=0; findings=0**; canary 240 programs, 0 failing |
+| printed-C (3000 seeds) | **agrees=5196** |
+| grammar 2, 12,000,001-12,030,000 (30,000 seeds; before the pins were added) | 2 failing seeds, 3 findings, none of the changed seeds: 12021967 (`map-const-join`, A7-193, known), 12020446 (`map-way-back`, area 7, new) |
+| grammar 2, 12,070,001-12,080,000 | 1 failing: 12078687 (`n:map-frame-store`, area 7) |
+| grammar 2, 12,100,001-12,110,000 (the new range) | 4 failing: 12105644 (`n:caution-unsaid`, r9, area 3), 12102661 (`map-const-join`) and 12106439 (`map-conversion-branch`), area 7, 12105914 (`onchip-span-unsaid`, area 5) |
+| corpus, `SE_GAME_LEND=1` | both images all passed, every count 0; missing and said **0** (hwram007) and **4** (hwram008); real entries 999: lent **474 (645)**; 1543: **724 (975)** |
+| lints | `check-literal-size.py` ok (no vendored file touched) |
+
+### 4. Routed (not fixed here)
+
+* **Area 3:** grammar 2 seed 12105644 (`n:caution-unsaid`: the call at 0x06009030 of 0x06009070, no signature lent, comes back with r9 changed (the callee changes it after its epilogue, A3-199's shape, `tst r3,r3 ; bt ; mov #4,r9`), set back there the run does otherwise; the text says no caution naming r9). Not one of the new shapes.
+* **Area 7:** 12020446 (`n:map-way-back`: instruction 060090E4 answered with a copy materialised before its own statement), 12078687 (`n:map-frame-store`), 12102661 (`n:map-const-join`), 12106439 (`n:map-conversion-branch`); 12021967 is A7-193.
+* **Area 5:** 12105914 (`n:onchip-span-unsaid`: a 4-byte read at 06009026 reached E6020104 through a pointer made by ORing a constant).
