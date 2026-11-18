@@ -23296,3 +23296,58 @@ No generator-side failure (no emulator stop, no `generator:` signature).
 
 * **Area 3:** A3-240 (grammar 2 12237557), analysis in section 2.
 * **Area 7:** grammar 1 12212141 (`map-copy-store`, line `uRam06001017 = in_r0;`), 12250922 (`map-way-back`); grammar 2 12252055 (`map-const-join`), 12255565 (`map-copy-store`).
+## Area 7, round 32
+
+Branch `review/7-round32` from master `5e741c49` (round 31 merged). RelWithDebInfo, `-j1`, `ulimit -v 3500000`. **One product change** (`RetargetHoistedConversions`, A7-253) and **no engine patch** (0096 stays free). Oracle rules 260 to 265 in `MappingOracle.h`, pins `TestArea7Round32Pins` (nine whole seeds), scripts `Docs/Decompiler/tools/a7_round32/final.sh`. Seven ledger rows closed or closed in part, new rows A7-270 to A7-274.
+
+| Row | Outcome |
+|---|---|
+| A7-253 conversion-branch | fixed in part: grammar 1 12133872 (product), 11703274 and grammar 2 specials 11600981 (rule 260). Open: grammar 2 12202641 and 11900473 (flow record after a `jmp`: A7-270) |
+| A7-254 store classes | fixed in part: 11703335 (rule 261), 11703803 (rule 262), 12132326 (rule 263). Open: 11004012 (overlap, A7-273), 12135074, 12151073, 11905223 (A7-271) |
+| A7-265 | fixed: 12222552 (rules 261, 264) and 12222510 (rule 264) |
+| A7-260 / A7-251 | A7-260 (11901023) fixed by rule 265. 11503597, 12150363, 11602585 open (A7-272) |
+| A7-250 overlap | second attempt failed, reverted, recorded (A7-273) |
+
+### 1. The product change (A7-253, grammar 1 12133872)
+
+Shrunk to 28 words. `xVar2 = (xunknown2)uVar1;` (the half-word narrowing the engine merged out of three `mov.w r1,@r6` stores and hoisted above both arms) was drawn at the `bt/s` 0x06009004 whose slot `mov.b r0,@(0xc,r5)` is a store the engine cannot tell from the global (it keeps the global's value as that store may have left it, an INDIRECT). `RetargetHoistedConversions` took the aliasing store as the maker (the A7-190 path: "else as before (the store's instruction)") because the line draws no other store whose register's writers could be taken. The operand is the global's copy `uVar1 = uRam060022a4;`, which the one folded read of the global (`mov.l @(r0,r6),r1`, 0x0600900C) loaded: when `storedRegisterWriters` finds nothing and exactly one instruction reads the global (accessFates folded reads overlapping the aliased varnode), that instruction is the maker. A second reader leaves the engine's choice open and nothing moves. The same fallback was written for the register-less memory operand path (A7-179) and is reached by no seed here. The corpus counts and the printed C are unchanged (below).
+
+### 2. Oracle rules (each from the program text and run values; none is a product bug)
+
+* **260** (conversion-branch): grammar 1 11703274 (`uVar3 = (uint1)uVar10;` at the `bt` 0x0600901E, `uVar10 = in_sr | ...;`) and grammar 2 specials 11600981 (`xVar1 = (xunknown1)in_sr;` / `(xunknown1)uVar5` with `uVar5 = in_sr | uVar3 == 0;`). A `bt`/`bf` reads T, the low bit of SR: its own flow op (debug print: SUBPIECE at the branch, time before the flow's end) narrows the register, and the engine merged it with the byte stores' narrowing of the same register. A conversion of SR (or of a variable assigned from `in_sr`) at a `bt`/`bf` is the branch's.
+* **261** (`DeclaredWidth`): `unkuint3` and `xunknown3` are three bytes, not four (a width the table did not know returned 4): grammar 1 11703335 (`uRam26003074 = (uint4)param_2;` with `unkuint3 param_2`; the byte store of 0 at the word's high byte is the extension's, A7-120's rule never fired with width 4) and the `Var3 = 0xfffff3;` of 12222552.
+* **262** (`MemoryBefore`): grammar 1 11703803, volatile request. The loop `do { xRamc0001024 = 0x11; uVar2 = Ram26001028; } while ...` reads the poll with a read the engine does not fold (no folded read in the access fates); past it the engine does not forward the store's number to `mov.b @r6,r1`, so r1 is `(char)(xRamc0001024 >> 0x18) ^ param_1` (`uVar3`), not param_1. A read of a known address without a folded fate on the path stops the walk.
+* **263** (store-dead): grammar 1 12132326, `cRam26002304 = (char)xVar1 + param_1;` drawn at two identical stores `mov.b r2,@r6 ; [mov.b r1,@r6 ;] mov.b r2,@r6` (all dead, overwritten by the last store): the engine merged the identical stores into one line, drawn at both. A line drawn at a second store of the same register and bytes is the pair's statement, not one dead store's.
+* **264** (const-join): grammar 2 12222510, `uRam26002004 = 0xffd8;` at `mov #-0x28,r2` stored by `mov.w r2,@r7`: the sign extension to 32 bits against the shown 16-bit number. A global is as wide as the widest access of the function at its address when none is a word (as A7-69's named-store width, for the case where the accesses' tokens are elsewhere).
+* **265** (const-join): grammar 1 11901023 (A7-260), `uVar1 = 0;` at `and #0xEF,r0`, the head of a `dt` loop entered by `extu.w r1,r0` of the literal 0x60000000. `PossibleBits` learned the literal load (`mov.l @(disp,pc),Rn`) and ignores an `and #imm,r0` queried at its own place (it adds no bit of its own round its loop); the instruction computes 0 when the mask has none of the possible bits.
+
+Mutation: `SE_A7_RULE_OFF=<n>` for 260, 261, 262, 263, 264, 265 fails the pin seeds named above (260: 11703274 and 11600981; 261: 11703335 and 12222552; 262: 11703803; 263: 12132326; 264: 12222510; 265: 11901023); the product change is pinned by 12133872.
+
+### 3. Not fixed (analysed)
+
+* **A7-250 overlap class, second attempt (A7-273)**: recorded in the ledger in full: an oracle exemption at the way-back's `copyFirst` test for a delay slot another branch enters, with an own line at the slot, closed 12133156 but defeated fixtures a7_147 (damaged-text check) and a7_166 (rule-166-off mutations, twice); gated under rule 166 and excluding lines naming a farther store the fixtures came back, the seed did not. Reverted; the coordinator takes it over. The product answer would be a way-in order of the slot's lines.
+* **A7-253 grammar 2 12202641, 11900473**: `RetargetHoistedConversions` never sees the op: `flow.insnFirst.find(at) == end`, the code reached after the `jmp` the engine resolves later is not in the one flow record (A7-270; the same limit as A7-250's grammar 2 seeds).
+* **A7-254**: 11004012 is the overlap class again (slot also a target, `xRam2600210c = (char)param_1;` named at the slot copy's later store); 12135074 runs into another function; 12151073's name token is drawn at the old register's frame store (product, AddFrameStoreTokens); 11905223's `and r2,r2` no-op defeats rule 184's equal-makers test (A7-271).
+* **A7-251**: 11503597, 12150363, 11602585 not touched (A7-272); round 31's `MovtNumber` attempt not repeated.
+
+### 4. Corpus and runs (one binary at a time, after the last code edit)
+
+| Run | Result |
+|---|---|
+| `ctest -j1` | 117 of 117 passed (549 s) |
+| fault matrix | `fault matrix: 0 of 94 job(s) failed` |
+| 20,000-seed matrix | `failing seeds=0; findings=0` (640 s) |
+| printed-C | `agrees=5196` |
+| corpus hwram007, lent | 0 check(s) failed; 0 missing and said; "real entries 999: signatures lent 474 (645 parameters)" |
+| corpus hwram008, lent | 0 check(s) failed; 4 missing and said; "1543: 724 (975 parameters)" |
+| sweep grammar 1, 10,000 from 12,240,001 | 1 failing seed: 12246420 (`n:map-store-twin`, A7-256's class, A7-274) |
+| sweep grammar 2, 10,000 from 12,240,001 | 1 failing seed: 12247189 (`n:read-after-folded-store`, area 5's class, A7-274) |
+
+The product change moves a conversion's drawn tokens only in the aliased-global case; the corpus ledger counts stayed 0 and the printed C agreed on all 5196 programs. Lint `check-literal-size.py` run below; no vendored file touched.
+
+### 5. Routed
+
+* **Coordinator:** A7-250's overlap class (A7-273: 11508679, 12133156, 12137810, 11703213, with A7-207's 11004012) after two failed oracle attempts.
+* **Host (flow record after the restarts):** A7-253's 12202641, 11900473 (A7-270), A7-250's grammar 2 seeds.
+* **Area 7 (next fixer):** A7-271 (12135074, 12151073, 11905223), A7-272 (11503597, 12150363, 11602585), A7-274's 12246420 (A7-256's class), A7-262, A7-220.
+* **Area 5:** grammar 2 12247189 `read-after-folded-store` (A7-274).
