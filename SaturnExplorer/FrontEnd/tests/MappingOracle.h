@@ -5494,17 +5494,6 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             }
                     }
                 }
-                // (A7-300 rule 307: `and Rm,Rn` of two registers with no bit possible in both -- r2 = 2 and r0 = 4 on every path -- is 0; the
-                // paths into the join bring different numbers, which the oracle's single walk does not give; grammar 2 seed 12296264)
-                if (!computes && !A7RuleOff(307) && want == 0 && (w & 0xF00F) == 0x2009)
-                {
-                    if (!haveSources)
-                    {
-                        sources = BranchSources(r, word);
-                        haveSources = true;
-                    }
-                    computes = (PossibleBits(r, word, sources, at, static_cast<int>((w >> 4) & 0xF)) & PossibleBits(r, word, sources, at, static_cast<int>((w >> 8) & 0xF))) == 0;
-                }
                 // (A7-251 rule 253: a load the engine folded -- `mov.b @r14,r1` of a frame slot the code stored 0 in, accessFates `read ... folded`
                 // -- gives its register the number the engine knew the memory held: the load is the line's own, as `mov #imm` is; grammar 2
                 // seed 11802915)
