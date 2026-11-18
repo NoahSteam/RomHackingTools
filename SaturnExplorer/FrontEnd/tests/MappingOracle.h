@@ -2532,8 +2532,6 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             for (uint32_t at : LineInstructions(r.lines[li])) owns[at].push_back(li);
             if (r.lines[li].firstAddr && !copyOnly(r.lines[li].firstAddr, li)) firsts.insert(r.lines[li].firstAddr);
         }
-        bool overlapping = false;
-        for (const std::string& w : r.warnings) overlapping = overlapping || w.find("overlaps instruction at") != std::string::npos;
         for (const auto& kv : owns)
         {
             const LineLookup k = index.Find(kv.first);
@@ -2565,11 +2563,6 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             }
             if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first && !statementFirst) || copyFirst)
             {
-                // (A7-250 rule 251: in a function the engine says has overlapping instructions -- a delay slot that is also a branch target,
-                // `Instruction at (ram,0x06009010) overlaps instruction at (ram,0x0600900e)` -- the slot is printed once for each way in and
-                // the text is the engine's reading of two programs at once; no order of the lines answers a click on it. The warning is
-                // the engine's own word that the text is not to be trusted there; grammar 1 seeds 11508679, 12133156, 12137810, 11703213)
-                if (overlapping && !A7RuleOff(251)) continue;
                 ++a.backWrong;
                 problem("back", "the instruction " + MappingHex(kv.first) + " is answered " +
                                     (!owner ? "with no line that holds it" : copyFirst ? "with a copy materialised there before its own statement (A7-25)"
@@ -4121,14 +4114,36 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // 12204851 and 12158267)
                 if (!A7RuleOff(254))
                 {
+                    // (only where the register the move writes was loaded from the variable's own memory by an instruction of the function,
+                    // `mov.l @r14,r2` then `mov r5,r2`: the variable is the register's, named for the memory it was read from)
+                    const size_t nb = text.find_first_not_of(' '), eq = text.find(" = ");
+                    std::string vname = nb == std::string::npos || eq == std::string::npos || eq <= nb ? std::string() : text.substr(nb, eq - nb);
+                    if (vname.find("._") != std::string::npos) vname.resize(vname.find("._"));
+                    uint32_t vva = 0;
+                    const bool vglobal = IsRamGlobal(vname, &vva), vframe = vname.find("Stack_") != std::string::npos;
                     bool moves = false, other = false;
+                    std::set<int> written;
                     for (const Token& t : r.lines[li].tokens)
                     {
                         uint16_t mw = 0;
                         if (!t.addr || t.begin >= t.end || !word(t.addr, mw)) continue;
-                        ((mw & 0xF00F) == 0x6003 || (mw >> 12) == 0xE) ? moves = true : other = true;
+                        if ((mw & 0xF00F) == 0x6003 || (mw >> 12) == 0xE)
+                        {
+                            moves = true;
+                            written.insert(static_cast<int>((mw >> 8) & 0xF));
+                        }
+                        else other = true;
                     }
-                    if (moves && !other) continue;
+                    bool loadedHere = false;
+                    if (moves && !other && (vglobal || vframe))
+                        for (const AccessFate& f : r.accessFates)
+                        {
+                            uint16_t lw = 0;
+                            if (f.write || f.frame != vframe || !word(f.insn, lw) || (vglobal && GlobalDelta(vva, f.address) >= f.size)) continue;
+                            for (int reg : WrittenRegisters(sfe::Sh2Decode(f.insn, lw)))
+                                loadedHere = loadedHere || written.count(reg);
+                        }
+                    if (loadedHere) continue;
                 }
                 ++a.copyStoreMissing;
                 ++(frame ? a.copyFrameMissing : a.copyGlobalMissing);
@@ -5098,8 +5113,26 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // (A7-251 rule 253: a load the engine folded -- `mov.b @r14,r1` of a frame slot the code stored 0 in, accessFates `read ... folded`
                 // -- gives its register the number the engine knew the memory held: the load is the line's own, as `mov #imm` is; grammar 2
                 // seed 11802915)
-                if (!computes && !A7RuleOff(253) && ShapeOf(d).load && !ShapeOf(d).store)
-                    for (const AccessFate& f : r.accessFates) computes = computes || (f.insn == at && !f.write);
+                if (!computes && !A7RuleOff(253) && want == 0 && ShapeOf(d).load && !ShapeOf(d).store)
+                {
+                    bool folded = false;
+                    for (const AccessFate& f : r.accessFates) folded = folded || (f.insn == at && !f.write && f.frame);
+                    // (and a store of a frame word the code makes 0: a register the words give as 0, `mov #0,r0 ; mov.l r0,@(r0,r14)`)
+                    for (const AccessFate& f : r.accessFates)
+                    {
+                        uint16_t sw = 0;
+                        int size = 0;
+                        const int reg = folded && f.write && f.frame && word(f.insn, sw) ? StoredRegister(sw, size) : -1;
+                        if (reg < 0 || computes) continue;
+                        if (!haveSources)
+                        {
+                            sources = BranchSources(r, word);
+                            haveSources = true;
+                        }
+                        const WordValue zero = RegisterBefore(r, word, sources, f.insn, reg);
+                        computes = zero.kind == WordValue::Number && zero.value == 0;
+                    }
+                }
                 if (computes) continue;
             }
             uint32_t got = 0;

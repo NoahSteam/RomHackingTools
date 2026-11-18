@@ -19219,9 +19219,8 @@ void TestArea7Round30Pins(Sh2Decompiler& d)
     gSpecialReads = savedSpecials;
 }
 
-// Area 7 round 31. Oracle rules 250 to 254, each by whole seeds (the shrunk programs are in the ledger rows). A7-250: grammar 1 11303278 (rule 250: a
-// hardware register's store `SMPC_OREG8 = cRam26001008;` is the store's own statement, not a copy of a read), grammar 1 12133156 and 11508679 (rule 251:
-// a function the engine says has overlapping instructions, a slot that is also a branch target). A7-251: grammar 2 12154848 (rule 252: `unaff_r14 = 0;`
+// Area 7 round 31. Oracle rules 250, 252, 253 and 254, each by whole seeds (the shrunk programs are in the ledger rows). A7-250: grammar 1 11303278 (rule 250: a
+// hardware register's store `SMPC_OREG8 = cRam26001008;` is the store's own statement, not a copy of a read). A7-251: grammar 2 12154848 (rule 252: `unaff_r14 = 0;`
 // at `mov #0,r14`, the variable named for the register) and 11802915 (rule 253: a folded load of a frame slot holding 0 gives the number). A7-252: grammar 1
 // 11806821, grammar 2 12204851 and 12158267 (rule 254: a line drawn only at register moves or `mov #imm` is the move's statement).
 void TestArea7Round31Pins(Sh2Decompiler& d)
@@ -19231,7 +19230,7 @@ void TestArea7Round31Pins(Sh2Decompiler& d)
         int grammar;
         long seed;
     };
-    for (const Whole& w : { Whole{ 1, 11303278 }, Whole{ 1, 12133156 }, Whole{ 1, 11508679 }, Whole{ 2, 12154848 }, Whole{ 2, 11802915 },
+    for (const Whole& w : { Whole{ 1, 11303278 }, Whole{ 2, 12154848 }, Whole{ 2, 11802915 },
                             Whole{ 1, 11806821 }, Whole{ 2, 12204851 }, Whole{ 2, 12158267 } })
     {
         const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
