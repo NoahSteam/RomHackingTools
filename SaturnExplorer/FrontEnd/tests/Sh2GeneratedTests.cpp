@@ -19019,6 +19019,27 @@ void TestArea7Round28Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 4 round 3 pins. Grammar 2 seed 12121815 (found with SE_GENERATED_CAUTION=deep): a switch on a register a callee set (`extraout_r10`),
+// the generator's intended index differing from the one the run dispatched with; A7-199's rule (the run is judged under the first index whose
+// entry is the address it reached) judges it, and the table's cases, default entry included, hold the code the runs reached.
+void TestArea4Round3Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 2, 12121815 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 4 round 3: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        const auto k = rep.counts.find("table.index-clobbered");
+        CHECK(k != rep.counts.end() && k->second > 0);
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21069,6 +21090,7 @@ void TestGenerated()
         RUN(TestArea7P2FixPins(d));
         RUN(TestArea7Round27Pins(d));
         RUN(TestArea7Round28Pins(d));
+        RUN(TestArea4Round3Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
