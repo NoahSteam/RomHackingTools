@@ -22,6 +22,7 @@
  * Modified for SaturnExplorer: every change to an op keeps the non-zero and consume masks around it a superset of the truth, in place of 0046 and 0049 (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a STORE guard is kept against the alias analysis while the STORE is aimed at its local or pending; the frame records walk to 4,096 ops and follow a guard read through a piece (patches/0072-engine-frame-chains-and-save-slots.patch).
+ * Modified for SaturnExplorer: the host is called when a flow has been followed (patches/0096-engine-flow-done-hook.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -1221,6 +1222,8 @@ void Funcdata::followFlow(const Address &baddr,const Address &eaddr)
     flags |= unimplemented_present;
   if (flow.hasBadData())
     flags |= baddata_present;
+  if (flowDone)		// SaturnExplorer (0096): a restart follows the flow again, and can reach code the first flow did not
+    flowDone(*this);
 }
 
 /// \brief Generate a clone with truncated control-flow given a partial function

@@ -23546,3 +23546,44 @@ Fixer, branch `review/5-round4` (master `bf576e7a`); RelWithDebInfo, `-j1`, `uli
 | lints | literal size ok (no `patches/` change) |
 
 No product code changed, so the corpus texts and counts are those of the tree before.
+
+## Area 7, flow record after restarts
+
+Branch `review/7-flowrecord` from master `f190ce76` (backup `backup/review-7-flowrecord`). Rows A7-320 to A7-323, engine patch 0096. `-j1`, `ulimit -v 3500000`, one heavy binary at a time.
+
+### 1. Mechanism
+
+`Sh2Decompiler::DecompileInto` took `RecordFlow` once, right after the first `followFlow`. The actions then restart (`ActionRestartGroup`), clear the analysis and follow the flow again, and a restart reaches code the first flow did not: a `jmp` the analysis resolves late, a function that runs into another's code. The final p-code, `getAccessFates` (keyed by op time) and the printed text belong to the last flow, but every pass that reads the record (`insnFirst`, `blockOps`, `accessesByInsn`, `Calls`, `RetargetHoistedConversions`, `MarkMaterialisedReads`, the flow ranges and successors in the result) read the first one. Measured with a temporary trace on grammar 2 seed 11900473: function 0 of the replay had 50 instructions in the first flow and 98 after the restart (and 98 and 128 in the printing pass); the instructions the restart added had no op, no `insnFirst` entry and no access record, so the conversion at the `bf` (0x0600905C) was never retargeted (`flow.insnFirst.find(at) == end`, A7-270).
+
+### 2. Fix
+
+Patch 0096 (`funcdata.hh`, `funcdata_op.cc`): `Funcdata::setFlowDone(std::function<void(Funcdata&)>)`, called at the end of `followFlow` (a jump-table recovery's own function object has no hook). Host (`DecompileInto`): the hook records every flow after the first of the entry function in the printing pass only (the learning pass prints nothing), and after `perform` the last record replaces the first. Functions touched: `Sh2Decompiler::DecompileInto` (the hook, the `flow` variable made non-const and replaced after the actions) and `MarkMaterialisedReads` (the A7-124 case no longer skips an op flagged as a delay slot's, A7-321). Nothing else; `RecordFlow` is unchanged. Functions without a restart pay nothing; one with restarts pays one `RecordFlow` per later flow.
+
+Cost (Linux, RelWithDebInfo, `SaturnExplorerSh2DecompilerTests` without the corpus): 49.6 s with the hook off, 50.3 s on; hwram008 lent corpus run of the same binary 723 s off, 710 s on (noise). `SaturnExplorerSh2GeneratedTests` over 2,500 grammar 2 seeds from 12,310,001: 179.5 s on the build before and 179.5 s after. The only text difference on the corpus run's output (apart from timings) is a line of the fixture "A7-126 a store the flow's record did not reach": `iVar1 = 1;` now has its origin token 0x06009064 (the instruction the restart reached).
+
+### 3. Seeds (all grammar 2)
+
+| Seed | Row | Outcome |
+|---|---|---|
+| 11304044, 11708927, 12020446 | A7-250 | fixed by the last-flow record; pinned |
+| 11900473 | A7-270, A7-263 | fixed; pinned (whole and shrunk) |
+| 12273885, 12274445 | A7-283 | fixed; pinned |
+| 11901051 | A7-250, A7-262 | not a restart: the load is a delay slot's, A7-124's case skipped slots (A7-321); fixed; pinned |
+| 12202641 | A7-270 | open, A7-322: the `jmp` table is not recovered (`Too many branches`), no restart, the conversion is drawn at the `jmp` the engine treats as a call |
+| 12135074 | A7-271 | open, A7-323: the first flow already holds the callee's code, no restart; call/store order class |
+
+Pins: `TestA7FlowRecordPins` (seven whole seeds and the shrunk replays of 11900473 and 12020446), RUN after `TestA5162Pins`. The shrunk replays and the seeds failed on the build before the change (this round's replays).
+
+### 4. Runs
+
+| Run | Result |
+|---|---|
+| `ctest -j1` | 117 of 117 passed (558 s) |
+| fault matrix | `fault matrix: 0 of 94 job(s) failed` |
+| 20,000-seed matrix | `failing seeds=0; findings=0` (652 s) |
+| printed-C | `agrees=5196` |
+| corpus hwram007, lent | all passed; 0 missing and said; "real entries 999: signatures lent 474 (645 parameters)" |
+| corpus hwram008, lent | all passed; 4 missing and said; "1543: 724 (975 parameters)" |
+| sweep grammar 2, 10,000 from 12,310,001 | 1 failing seed: 12319207 (`baddata`), A7-324, the same on the build before this change |
+
+Lints: `check-literal-size.py` ok; `check-vendored-tree.py lint` ok.
