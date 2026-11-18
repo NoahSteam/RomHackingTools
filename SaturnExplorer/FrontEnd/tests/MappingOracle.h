@@ -1640,6 +1640,8 @@ inline uint32_t PossibleBits(const sfe::decomp::DecompileResult& r, const std::f
             const uint32_t pool = (mk & ~3u) + 4 + (w & 0xFFu) * 4;
             if (word(pool, hiw) && word(pool + 2, low)) b = (static_cast<uint32_t>(hiw) << 16) | low;
         }
+        // (rule 307: `mova @(disp,pc),r0` is the address it names: a number)
+        else if ((w >> 8) == 0xC7 && reg == 0 && !A7RuleOff(307)) b = (mk & ~3u) + 4 + (w & 0xFFu) * 4;
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x00) b = PossibleBits(r, word, into, mk, n, depth + 1) << 1;    // shll
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x20) b = PossibleBits(r, word, into, mk, n, depth + 1) << 1;    // shal
         else if (hi == 0x4 && n == reg && (w & 0xFF) == 0x08) b = PossibleBits(r, word, into, mk, n, depth + 1) << 2;    // shll2
@@ -5491,6 +5493,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 if ((tw & 0xFF0Fu) == (0x200Du | rn << 8) && ((tw >> 4) & 0xF) != rn) computes = true;   // xtrct Rm,Rn
                             }
                     }
+                }
+                // (A7-300 rule 307: `and Rm,Rn` of two registers with no bit possible in both -- r2 = 2 and r0 = 4 on every path -- is 0; the
+                // paths into the join bring different numbers, which the oracle's single walk does not give; grammar 2 seed 12296264)
+                if (!computes && !A7RuleOff(307) && want == 0 && (w & 0xF00F) == 0x2009)
+                {
+                    if (!haveSources)
+                    {
+                        sources = BranchSources(r, word);
+                        haveSources = true;
+                    }
+                    computes = (PossibleBits(r, word, sources, at, static_cast<int>((w >> 4) & 0xF)) & PossibleBits(r, word, sources, at, static_cast<int>((w >> 8) & 0xF))) == 0;
                 }
                 // (A7-251 rule 253: a load the engine folded -- `mov.b @r14,r1` of a frame slot the code stored 0 in, accessFates `read ... folded`
                 // -- gives its register the number the engine knew the memory held: the load is the line's own, as `mov #imm` is; grammar 2
