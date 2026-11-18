@@ -20,7 +20,7 @@ It does **not** own the frontend breakpoint model, recorded-frame browser, expre
 | Wire contract | [SeLiveProtocol.h](../../../Integration/Common/SeLiveProtocol.h): `SE_LIVE_VERSION`, `SE_LIVE_VERB_*`, `SE_LIVE_CAP_*`, section sizes and wire layouts |
 | Export server | [se_export.c](../../../Integration/Common/se_export.c), [se_export.h](../../../Integration/Common/se_export.h): `SeExportInit`, `SeExportSnapshot`, `SeExportEndFrame`, `SeExportGateFrame`, `SeExportGateHalt`, `SeExportDeinit` |
 | Mednafen adapter | [se_mednafen_glue.c](../../../Integration/Mednafen/se_mednafen_glue.c): `SeMednafenFrameHook`, `SeMednafenEndFrameHook`, `SeMednafenSnapshot`; [apply.py](../../../Integration/Mednafen/apply.py): generated emulator accessors/hooks |
-| Yabause adapter | [apply.py](../../../Integration/Yabause/apply.py): patches emulator frame loop/debugger integration and copies the common server |
+| Yabause adapter (unsupported, unmaintained) | [apply.py](../../../Integration/Yabause/apply.py): patches emulator frame loop/debugger integration and copies the common server |
 | App adoption | [App.cpp](../../../FrontEnd/src/App.cpp): `CreateContextFromSource`, `App::OpenSavestate`, `OpenSavestateBuffer`, `OpenFullDump`, `OpenLive`, `AttachLiveSource`, `CloseData`, `AdoptNewEmulatorInstance` |
 | Emulator installation/launch | [install.py](../../../Integration/install.py) (Mednafen pinned via [UPSTREAM.json](../../../Integration/Mednafen/UPSTREAM.json)); [Launcher.cpp](../../../FrontEnd/src/Launcher.cpp): `BuildLaunchArgs`, `BuildLaunchArgv`, `Launcher::Validate`, `BundledMednafenPath` (a release's `mednafen-se/` beside the app, used when no path is recorded), `MednafenFirmwareDir` (also passed as `-filesys.path_firmware` by `App::LaunchSession`), `ResolveMednafenExe` (an Executable set to the `mednafen-se/` folder means the Mednafen inside it, applied on load and in Launch Settings so the firmware check looks in `mednafen-se/firmware`); release packaging in [DISTRIBUTION.md](../../../Integration/DISTRIBUTION.md); process/platform launch details are outside this document's traced scope |
 
@@ -116,4 +116,4 @@ Two older descriptions disagree with this revision's code:
 
 ## Related documentation
 
-[Knowledge-base index](../README.md), [architecture](../ARCHITECTURE.md), [data flow](../DATA_FLOW.md), [Mednafen integration](../../../Integration/Mednafen/README.md), [Yabause integration](../../../Integration/Yabause/README.md), [installation](../../../Integration/INSTALL.md), [distribution contracts](../../../Integration/DISTRIBUTION.md).
+[Knowledge-base index](../README.md), [architecture](../ARCHITECTURE.md), [data flow](../DATA_FLOW.md), [Mednafen integration](../../../Integration/Mednafen/README.md), [Yabause integration (unsupported)](../../../Integration/Yabause/README.md), [installation](../../../Integration/INSTALL.md), [distribution contracts](../../../Integration/DISTRIBUTION.md).

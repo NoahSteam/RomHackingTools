@@ -98,11 +98,11 @@ toolbar's **Open** button.
 CI does not build or publish the web version.
 
 ### Live mode — inspect a running emulator (native builds)
-The Windows and native-SDL2 builds can read a **running** Yabause in realtime
-instead of a savestate. Apply the small patch in
-[`Integration/Yabause/`](../Integration/Yabause/README.md) to your Yabause build, run
-a game, then launch Saturn Explorer with `--live` (or use **Open ▸ Connect to
-Yabause**). Every panel then tracks the live game. (The web build is savestate-only
+The Windows and native-SDL2 builds can read a **running** Mednafen in realtime
+instead of a savestate. Build a patched Mednafen with the [installer](../Integration/INSTALL.md)
+or the patch in [`Integration/Mednafen/`](../Integration/Mednafen/README.md), run
+a game, then launch Saturn Explorer with `--live` (or use **File ▸ Connect to emulator
+(live)**). Mednafen is the only supported live emulator. Every panel then tracks the live game. (The web build is savestate-only
 — live mode needs sockets/threads.)
 
 ### Decompiler — Ghidra's SH-2 engine (desktop builds)

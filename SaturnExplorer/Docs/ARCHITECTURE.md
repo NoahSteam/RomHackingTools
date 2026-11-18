@@ -413,7 +413,7 @@ SaturnExplorer/
     Common/                            se_export.c (the server, plain C), SeLiveProtocol.h,
                                        SeStateCodec.h (rewind delta/RLE codec)  [+ tests/]
     Mednafen/                          apply.py: patches a Mednafen checkout. Read its README
-    Yabause/                           the same shape for Yabause
+    Yabause/                           the same shape for Yabause (unsupported, unmaintained)
   FrontEnd/                          ← the reference app (Dear ImGui)
     src/                               App.{h,cpp} + panels; portable, no OS calls
       DataSearchRunner.{h,cpp}         the data search's worker thread, queueing and routing
@@ -565,7 +565,7 @@ manager; the D3D11, OpenGL and SDL2 backends ship with it.
    `se_rom_search_*` / `se_history_for` declarations that anticipated it were removed at ABI 6
    (review finding ABI-03).
 9. **M7 — Live driver. [DONE]** `Drivers/Live` connects to an emulator patched by
-   `Integration/Mednafen/apply.py` (or the Yabause equivalent) over a Unix socket, a Windows named
+   `Integration/Mednafen/apply.py` (the only supported live emulator) over a Unix socket, a Windows named
    pipe, or TCP for the web build, and speaks the versioned protocol in `SeLiveProtocol.h`. Beyond
    the per-frame snapshot: pause / frame step / instruction step, execution breakpoints and memory
    watchpoints, tracepoints, controller injection, writes back to work RAM and sound RAM, decoded

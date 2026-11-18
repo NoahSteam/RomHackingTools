@@ -1,5 +1,10 @@
 # Yabause live-tap integration
 
+> **Unsupported.** Live mode is supported with **Mednafen only** — see
+> [`Integration/Mednafen/README.md`](../Mednafen/README.md). This Yabause patch is kept for
+> reference, is not maintained or tested, and is not expected to work with current Saturn
+> Explorer builds. Yabause-family `.yss` savestates can still be opened as files.
+
 This lets Saturn Explorer read a **running** Yabause in realtime: Yabause runs a
 tiny local-socket server that streams its VDP1/VDP2 VRAM, CRAM, and VDP2 registers
 each frame; Saturn Explorer's **LiveDriver** connects and updates every panel live.
