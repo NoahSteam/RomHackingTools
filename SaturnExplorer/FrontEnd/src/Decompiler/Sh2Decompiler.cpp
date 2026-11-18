@@ -9010,6 +9010,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         // before the branch. Only when the statement is at no store of the variable (its own store decides then) and the search below finds
         // no store of the input itself; grammar 1 seed 4802131.
         std::vector<const ghidra::AccessRecord*> inputStores;
+        std::vector<const ghidra::AccessRecord*> loadedInputStores;   // (A7-280)
         bool inputOverOwn = false;   // (A7-189: the input's stores found at a store of the variable that is not one)
         {
             const ghidra::Varnode* v = o->numInput() >= 1 ? o->getIn(0) : nullptr;
@@ -9046,6 +9047,27 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                         if (FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), stored, writers, &input, false) &&
                             writers.empty() && input)
                             inputStores.push_back(r);
+                        else
+                        {
+                            // A7-280: the same register's low bytes, last written by loads only (`mov.w @r7,r0 ; mov.b r0,@(3,r6)`): the
+                            // engine names the register's one variable `in_r0` over the entry's value and the value a polled read left in
+                            // it, so the store stores that variable too. Only a fallback, when the search finds no store of the statement
+                            // at a call or a load.
+                            FlowVn whole = stored;
+                            whole.offset &= ~static_cast<ghidra::uintb>(3);
+                            whole.size = 4;
+                            std::vector<const FlowOp*> lastWriters;
+                            bool entry = false;
+                            if (FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), whole, lastWriters, &entry, false) &&
+                                !entry && !lastWriters.empty())
+                            {
+                                bool loads = true;
+                                for (const FlowOp* w : lastWriters)
+                                    loads = loads && (w->code == ghidra::CPUI_LOAD ||
+                                                      flow.accessesByInsn.find(std::make_pair(CanonicalOf(w->insn), false)) != flow.accessesByInsn.end());
+                                if (loads) loadedInputStores.push_back(r);
+                            }
+                        }
                         continue;
                     }
                     // (A7-189: another register, a whole copy of the input register on every path, the input unwritten before the copy)
@@ -9560,6 +9582,13 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     if (!exact.empty() && !taken) chosen = exact;
                 }
             }
+        }
+        if (chosen.empty() && atLoadOrCall && !loadedInputStores.empty())
+        {
+            const ghidra::AccessRecord* latest = nullptr;
+            for (const ghidra::AccessRecord* r : loadedInputStores)
+                if (runsBefore(r) && (!latest || r->time > latest->time)) latest = r;
+            if (latest) chosen.insert(latest);
         }
         if (chosen.empty() && atLoadOrCall)
             for (ghidra::int4 b = 0; b < out->getSize(); ++b)

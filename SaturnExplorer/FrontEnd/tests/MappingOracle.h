@@ -4196,6 +4196,53 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         }
                     }
                 }
+                // Rule 271 (area 7 round 33, A7-281): a statement of the function's input -- `pxStack_20 = param_1;`, the engine's copy of r4 at a
+                // loop's head, the variable named after the frame word r4 is pushed to after the loop -- that the product says names no instruction
+                // (A7-52 judges that) has no click to be wrong, when no store of the variable stores the input unchanged (every candidate's
+                // register has a maker other than the entry); grammar 2 seed 12255565
+                if (!A7RuleOff(271) && r.lines[li].noOrigin && !anyAddress)
+                {
+                    const size_t eq = text.find(" = ");
+                    size_t v = eq == std::string::npos ? eq : eq + 3;
+                    while (v != std::string::npos && v < text.size() && text[v] == '(')
+                    {
+                        const size_t close = text.find(')', v);
+                        v = close == std::string::npos ? close : close + 1;
+                    }
+                    if (v != std::string::npos && v + 2 < text.size() && text.back() == ';')
+                    {
+                        const std::string operand = text.substr(v, text.size() - 1 - v);
+                        bool input = operand.compare(0, 6, "param_") == 0 || operand.compare(0, 4, "in_r") == 0 || operand.compare(0, 7, "unaff_r") == 0;
+                        for (char c : operand) input = input && (std::isalnum(static_cast<unsigned char>(c)) || c == '_');
+                        bool unchanged = false;
+                        // (the register the input is: `param_k` is r(3+k) while the arguments are in registers, `in_rN` and `unaff_rN` are rN)
+                        int inReg = -1;
+                        if (input)
+                            inReg = operand.compare(0, 6, "param_") == 0 ? (operand.size() == 7 && operand[6] >= '1' && operand[6] <= '4' ? 3 + (operand[6] - '0') : -1)
+                                                                        : std::atoi(operand.c_str() + (operand.compare(0, 4, "in_r") == 0 ? 4 : 7));
+                        if (inReg < 0) input = false;
+                        if (input)
+                            for (uint32_t st : candidates)
+                            {
+                                uint16_t sw = 0;
+                                int size = 0;
+                                const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
+                                if (reg < 0 || reg != inReg) continue;
+                                if (!haveSources)
+                                {
+                                    sources = BranchSources(r, word);
+                                    haveSources = true;
+                                }
+                                std::set<uint32_t> makers;
+                                if (!RegisterMakers(r, word, sources, st, reg, makers) || (makers.size() == 1 && makers.count(0))) unchanged = true;
+                            }
+                        if (input && !unchanged)
+                        {
+                            ++a.copyNoAddress;
+                            continue;
+                        }
+                    }
+                }
                 // (A7-99: a number the engine trimmed to the bits the code uses -- `uRam06002380 = 0;` for the byte store of 2, the loop testing
                 // `& 0x1000000`; `xStack_c = 0;` for the half-word store of 8 read back by its high byte -- is no store's value, and the line
                 // says it names no instruction; grammar 1 seed 4502735, grammar 2 seed 4506709)
@@ -4866,6 +4913,22 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         return all;
                     };
                     if (zeroChain(at, static_cast<int>((w >> 8) & 0xF), 0)) computes = true;
+                }
+                // Rule 270 (area 7 round 33, A7-272): `add #imm,Rn` at a join whose Rn the paths give as a number on one of them and as a load
+                // on another: the paths are correlated by a compare the oracle does not follow (`cmp/pl r6 ; bf L` twice, the load only where the
+                // second `bf` is not taken), so the add always runs on the number, and the engine's -0xac is that number plus the immediate;
+                // grammar 2 seed 12252055
+                if (!computes && !A7RuleOff(270) && (w >> 12) == 0x7)
+                {
+                    std::set<uint32_t> makersN;
+                    const uint32_t imm = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF)));
+                    if (RegisterMakers(r, word, sources, at, static_cast<int>((w >> 8) & 0xF), makersN) && !makersN.count(0))
+                        for (uint32_t m : makersN)
+                        {
+                            uint16_t mw = 0;
+                            uint32_t v = 0;
+                            if (word(m, mw) && made(m, mw, v) && sameNumber(v + imm)) computes = true;
+                        }
                 }
                 // (A7-205: the instruction makes a number that differs from the line's only in bits no instruction after it shows -- `mov #8,r0 ;
                 // L: extu.w r0,r0` where r0 is only shifted left 2 and right 16 or overwritten, the engine's `iVar2 = 0;`; grammar 2 seed 10702729)
