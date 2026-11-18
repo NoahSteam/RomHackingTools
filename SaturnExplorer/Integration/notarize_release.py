@@ -66,7 +66,9 @@ def notary_args(profile, scratch):
     """The notarytool credential arguments, and the temporary files they need."""
     if profile:
         return ["--keychain-profile", profile]
-    env = os.environ
+    # Secrets pasted into GitHub often carry a trailing newline (a copied password, `base64 | pbcopy`); notarytool
+    # sends it verbatim and Apple answers 401, so trim the single-line values.
+    env = {k: v.strip() if k != "NOTARY_KEY_P8" else v for k, v in os.environ.items()}
     if env.get("NOTARY_KEY_P8") and env.get("NOTARY_KEY_ID") and env.get("NOTARY_ISSUER_ID"):
         key = os.path.join(scratch, "AuthKey.p8")
         fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
