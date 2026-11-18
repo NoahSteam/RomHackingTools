@@ -12764,6 +12764,10 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     std::vector<HardwareRange> aliasRanges;
     bool aliasRetry = false;
     constexpr int kAliasRounds = 6;
+    // (A10-19) A probe pass, run only after a pass failed with the engine's "Volatile memory was propagated": it is given the ranges that
+    // pass had less the user's, and finds the accesses of the code that straddle the user's range (probeAgainst) into probeFound.
+    const std::vector<HardwareRange>* probeAgainst = nullptr;
+    std::vector<HardwareRange> probeFound;
 
     // One pass: a fresh Architecture, every function registered, flow followed, read-only
     // literals applied, actions run. 'print' adds the markup output; 'mayRetry' lets a print pass stop, before it prints, when the
@@ -13204,6 +13208,11 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (!request.allMemoryVolatile)
         {
             const std::vector<ConstAccess> seenAccesses = ConstantAccesses(*fd, ram);
+            if (probeAgainst)
+            {
+                probeFound = StraddlingRanges(seenAccesses, *probeAgainst);
+                return std::string();
+            }
             std::vector<HardwareRange> fresh = NewAliasedRanges(seenAccesses, aliasKnown);
             for (const HardwareRange& h : fresh)
             {
@@ -13602,6 +13611,50 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         return std::string("ok");
     };
 
+    // (A10-19) A pass that fails with the engine's "Volatile memory was propagated" while the request marks memory volatile: an access of the
+    // code that straddles the edge of the user's range (the A10-18 case, a misaligned store against a range the user gave) is no access the
+    // engine can split. The user's range is not there to find it from in a first pass, so a probe pass without the user's ranges finds the
+    // accesses that cut through them, they are marked whole (as A10-18's are), and the pass runs again. Once: a failure that remains is the
+    // engine's, and the request fails as before.
+    bool probed = false;
+    auto guarded = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) -> std::string {
+        for (;;)
+        {
+            try
+            {
+                return runPass(callees, print, targets, mayRetry);
+            }
+            catch (ghidra::LowlevelError& e)
+            {
+                if (probed || userVolatile.empty() || request.allMemoryVolatile ||
+                    e.explain.find("Volatile memory was propagated") == std::string::npos)
+                    throw;
+                probed = true;
+                const std::vector<HardwareRange> withUser = userVolatile;
+                userVolatile = aliasRanges;
+                probeAgainst = &withUser;
+                probeFound.clear();
+                try
+                {
+                    runPass(CalleeAliases(), false, nullptr, false);
+                }
+                catch (ghidra::LowlevelError&)
+                {
+                    probeFound.clear();
+                }
+                probeAgainst = nullptr;
+                userVolatile = withUser;
+                if (probeFound.empty()) throw;
+                for (const HardwareRange& h : probeFound)
+                {
+                    aliasRanges.push_back(h);
+                    userVolatile.push_back(h);
+                }
+                probeFound.clear();
+            }
+        }
+    };
+
     CalleeAliases callees;
     std::string printed;
     // The callees reported are the printed pass's own: the first pass can take a jump for a call
@@ -13615,7 +13668,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     }
     else if (request.registerCallees)
     {
-        runPass(CalleeAliases(), false, &first, false);
+        guarded(CalleeAliases(), false, &first, false);
         firstPassRan = true;
     }
     if (seedOut)
@@ -13635,7 +13688,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     for (int round = 0;; ++round)
     {
         aliasRetry = false;
-        printed = runPass(first, true, &callees, round < kAliasRounds);
+        printed = guarded(first, true, &callees, round < kAliasRounds);
         if (!aliasRetry) break;
         // The same boundary as the first pass's, for a printing pass that gives way to another (aliasRetry): its locals and Architecture
         // are gone, and a cancel raised in its teardown is honoured here, in Actions, not carried into the next pass's Init (A5-63).
