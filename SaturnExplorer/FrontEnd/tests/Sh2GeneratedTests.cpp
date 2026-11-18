@@ -20669,6 +20669,13 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         std::printf("pin 'A3-231 grammar 2 seed 12125921': %zu finding(s), calls in removed blocks %d\n", seed.findings.size(), count(seed, "caution.call.removed-block"));
         CHECK(seed.findings.empty() && count(seed, "caution.call.removed-block") > 0);
     }
+    // A3-232 (grammar 2 seed 12147005, routed `table-case`): not reproduced; the switch is A7-199's class (a callee set the index register, the
+    // table check judges the run under the index the jump reached, counted `table.index-clobbered`), all destinations printed.
+    {
+        const Report seed = Evaluate(d, MakeV2(12147005), false);
+        std::printf("pin 'A3-232 grammar 2 seed 12147005': %zu finding(s), clobbered-index runs %d\n", seed.findings.size(), count(seed, "table.index-clobbered"));
+        CHECK(seed.findings.empty() && count(seed, "table.index-clobbered") > 0);
+    }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
     {
