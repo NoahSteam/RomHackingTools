@@ -23017,3 +23017,30 @@ Fixer, branch `review/11-round9` from master `be40a4ce`, RelWithDebInfo (`-j1`, 
 **Seeds changed** (`SE_GENERATED_LISTONLY=1 SE_GENERATED_TRACE_A11_35=1`, grammar 2, 12,000,001-12,200,000, with `SE_GENERATED_A11_39=0` (A11-35's rule) and without): A11-35's rule changes 12018405, 12037749, 12047405, 12056533, 12081644, 12152782; the new rule adds 12097940 and nothing else. 12097940 fails as drawn before (`n:generator:callee-saved`). Grammar 1 does not go through `Generate2`.
 
 **Runs** (RelWithDebInfo): ctest 117 of 117 passed; the 20k generator matrix `failing seeds=0; findings=0`; printed-C `agrees=5196`; grammar 2 caution sweep 12,090,001 + 10,000 `failing seeds=0; findings=0` (12097940 passes); 12,150,001 + 10,000: 5 failing seeds, none the generator's (12152782 passes): 12150363 `map-const-join` and 12154848 `map-const-join`, 12151073 `map-number-store`, 12158267 `map-copy-store` (area 7), 12155319 `n:caution-elsewhere` (area 3: the call at 0x0600903A of 0x0600906A, no signature lent, comes back with r9 changed in input mode 1). The fault matrix and the corpus images were not run (no product code changed).
+
+## Area 7, round 30
+
+Branch `review/7-round30` on master `5477b68c`, with `review/7-joins2` and `review/11-round9` merged (conflicts in `Sh2GeneratedTests.cpp`, the ledger and this record resolved by keeping both sides; the ledger's A7-200, A7-207, A7-208 and A7-209 rows are the newer branch's). The merged pins passed before any work. One product change; no oracle rule; no engine patch. Ledger A7-240 fixed, A7-250 to A7-255 filed, A7-200, A7-207 and A7-220 updated. Pins: `TestArea7Round30Pins`.
+
+### 1. A7-240 (fixed; grammar 2 12123120, and 11600932 under the specials alphabet)
+
+The previous round's diagnosis (`RetargetHoistedConversions` moves the narrowing's tokens to no maker) was not the cause: that function does not reach the op (it is in its own block; a trace showed the tokens correct after it). The tokens were zeroed one step earlier, in `AddFrameStoreTokens`: the statement `xRam00000000 = (xunknown1)unaff_r9;` is a SUBPIECE at the store's own instruction, `shows(own)` was false, and a statement the store does not show is given the maker `0`. `StoreShowsValue` walks `r1` back (`FlowValueMayBe`) to `mov.l @(0,r15),r1`, whose pointer the walk does not place in a function that runs into another's code; A7-176's rule ("a read of memory whose pointer is not placed is another value than a computation's") answered "not this value", though its own comment says the rule is for a statement with no input, and this statement shows one (`unaff_r9`). The rule now also requires `want.inputs.empty()`. Without the change the pin has 1 finding (12123120) and 2 (11600932); with it none, and the corpus counts, the 20k matrix and printed-C are as before.
+
+### 2. Triage of the routed seeds (replayed on the merged branch; the grammar is the one the seed was routed with)
+
+Not fixed (one class needs more than a round each; none was taken): way-back A7-250 (11508679, 11303278, 12133156, 12137810, 11703213 in grammar 1; 11304044, 11708927, 12020446 in grammar 2), const-join A7-251 (11503597; 12150363, 12154848, 11802915 in grammar 2; 11602585), copy-store A7-252 (11806821, 12158267; A7-220), conversion-branch A7-253 (12133872, 11703274; 11600981), store-value, -dead, -after and number-store A7-254 (11703335, 11703803, 11004012 = A7-207, 12132326, 12135074, 12151073). 12173135 (grammar 2) is area 5's `folded-store-after-access` (A7-255, routed). 12150363 and 12158267 do not reproduce in grammar 1, only in grammar 2.
+
+### 3. Runs
+
+| Run | Result |
+|---|---|
+| `ctest -j1` | 117 of 117 passed (535 s) |
+| fault matrix | 0 of 94 job(s) failed |
+| 20,000-seed matrix | `failing seeds=0; findings=0` |
+| printed-C | agrees=5196 |
+| corpus hwram007, lent | "real entries 999: signatures lent 474 (645 parameters)"; 0 missing and said |
+| corpus hwram008, lent | "1543: 724 (975)"; 4 missing and said |
+| sweep grammar 1, 10,000 from 12,200,001 | 1 failing seed: 12205947 (`map-store-twin`, A7-256) |
+| sweep grammar 2, 10,000 from 12,200,001 | 2 failing seeds: 12202641 (`map-conversion-branch`, A7-253), 12204851 (`map-copy-store`, A7-252) |
+
+Lints: `check-literal-size.py` ok. Routed: 12173135 (grammar 2) to area 5 (A7-255).
