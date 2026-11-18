@@ -23228,3 +23228,44 @@ No product code changed, so the corpus token output and the printed C are those 
 
 * **Area 7 (next fixer):** A7-250's flow-record class (grammar 2 11304044, 11708927, 12020446, 11901051) and its overlap class (grammar 1 11508679, 12133156, 12137810, 11703213); A7-251 (11503597, 12150363, 11602585, A7-260, A7-265: 12222552, 12222510); A7-220 (11102053); A7-253 (+ A7-263), A7-254 (+ A7-261), A7-262.
 
+
+
+## Area 11, round 10
+
+Fixer, branch `review/11-round10` from master `5e741c49`; RelWithDebInfo, `-j1`, `ulimit -v 3500000`, one heavy binary at a time. Test-side only (`Sh2GeneratedTests.cpp`); no product code, no engine patch. The brief: grammar 1 seed 12212141 (routed by area 5 round 3), grammar 2 seed 12237557 (A3-240), and a sweep of each grammar from 12,250,001.
+
+### 1. A11-40: grammar 1 seed 12212141 `emulator-error` (fixed; harness, not the generator)
+
+The seed's own program has one finding, `n:map-copy-store` (`uRam06001017 = in_r0;` after the polled word read, "names none of the 1 store(s) folded into the variable (first 0600901A); a click goes to 06009030"), and no emulator stop (a DBGSTOP-style trace of every `Run` that threw showed none in the 12 runs of the program: the stops were all in the shrunk replays). The `emulator-error` was in the report of the shrunk replay printed under it: the shrinker took out `sts pr,r3 ; mov.l r3,@-r15` and kept `mov.l @r15+,r3 ; lds r3,pr`, so the function returned to PR 0 (`Unable to load 16 bytes at 0x0: uncaptured memory at 0x00000000 (BIOS)`). `Shrinker::Still` now refuses a step whose program stops the emulator or breaks the convention (`StopsInEmulator`, A11-35/A11-39) when the program the shrink starts from does not (`baseStops`). Pin `A11-40 grammar 1 seed 12212141`: the shrunk replay still has `n:map-copy-store` and no `emulator-error`. The `map-copy-store` stays: area 7 (A7-252's class; the store is the poll loop's copy of r0 read by a `mov.w @r7,r0` and stored byte-wise after the loop).
+
+### 2. A11-41: grammar 2 seed 12237557 (A3-240) is not the generator's
+
+The module is the r15 module's: function 1 is `mov.w @r4,r2 ; mov #-0x65,r1 ; mov.l r2,@r7 ; tst r3,r3 ; bf L ; add #-4,r15 ; L: rts`. It **pushes** a word (`add #-4`), it does not pop, so it takes nothing of its caller's stack: A11-35 and A11-39 were `add #4,r15` pops that let a later push overwrite a saved register. Replayed: no emulator stop, no callee-saved register changed, r15 is in function 1's declared clobbers, and function 0's frame pointer (r14) restores r15 at its epilogue. So `StopsInEmulator` is rightly false and the generator keeps the program. The finding is the oracle's (A3-216): function 0 has two calls of function 1, 0x06009076 (inside a branch, `dt r1 ; bt`) and 0x0600908C. The text's caution above the first call says "this call may change r15 ... likewise at the calls below". In input mode 0 the first call is skipped, so the run that needs the caution at 0x0600908C has no call before it that carries it, and `CheckCautions` calls that `caution-elsewhere`. Routed back to area 3 (A3-240): the printed text does say it for the calls below; whether a saying call the run did not make still counts is area 3's decision.
+
+### 3. Seeds whose program changed
+
+None. `Generate`, `Generate2`, `StopsInEmulator` and the generator's draws are untouched; the only change is the shrinker's acceptance of a candidate, which never changes the program a seed makes (the grammar 2 12,000,001-12,250,000 listing with `SE_GENERATED_LISTONLY=1` and the trace switches is therefore empty by construction; grammar 1 does not go through `Generate2`).
+
+### 4. Sweeps from 12,250,001 (10,000 seeds each, `SE_GENERATED_SHRINK=0`)
+
+| Run | Result |
+|---|---|
+| grammar 1 | `failing seeds=1; findings=1`: 12250922 `v:map-way-back` (instruction 06009038 answered with a line that does not begin with it): area 7 |
+| grammar 2, `SE_GENERATED_CAUTION=deep` | `failing seeds=2; findings=3`: 12252055 `n:map-const-join` (`iVar2 = -0xac;` drawn at 06009050, `add #0x92,r1`, the first instruction of a join), 12255565 `n:map-copy-store` (`pxStack_20 = param_1;`, a click goes to 00000000): both area 7 |
+
+No generator-side failure (no emulator stop, no `generator:` signature).
+
+### 5. Runs (final build)
+
+| Run | Result |
+|---|---|
+| build, `ctest -j1` | **117 of 117 passed** (537 s) |
+| 20,000-seed matrix | **failing seeds=0; findings=0** (the A11-40 pin: shrunk in 22 evaluations, one `n:map-copy-store`, no `emulator-error`) |
+| printed-C (3000 seeds) | **agrees=5196** |
+| fault matrix, corpus | not run: no product code changed (test file only) |
+| lints | `check-literal-size.py`: ok |
+
+### 6. Routed
+
+* **Area 3:** A3-240 (grammar 2 12237557), analysis in section 2.
+* **Area 7:** grammar 1 12212141 (`map-copy-store`, line `uRam06001017 = in_r0;`), 12250922 (`map-way-back`); grammar 2 12252055 (`map-const-join`), 12255565 (`map-copy-store`).

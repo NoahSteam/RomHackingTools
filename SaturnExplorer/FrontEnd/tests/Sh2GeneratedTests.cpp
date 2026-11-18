@@ -20516,6 +20516,18 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         CHECK(bad == 0);
     }
     {
+        // A11-40 (area 11, the shrinker): grammar 1 seed 12212141's own program has one finding (`n:map-copy-store`); its shrunk replay took out the
+        // push of PR and kept the pop (`mov.l @r15+,r3 ; lds r3,pr`), returned to 0 and reported an `emulator-error` the seed does not have. A step
+        // that makes a program stop the emulator is not taken when the program the shrink starts from does not stop.
+        const Program p = Generate(12212141);
+        Shrinker s{ d, p, "n:map-copy-store" };
+        const Program small = s.Run();
+        const Report again = Evaluate(d, small, false);
+        std::printf("pin 'A11-40 grammar 1 seed 12212141': seed stops %d; shrunk in %d evaluations, still %d, emulator-error %d, stops %d\n", int(StopsInEmulator(p)),
+                    s.evals, int(Has(again, "n:map-copy-store")), int(Has(again, "emulator-error")), int(StopsInEmulator(small)));
+        CHECK(!StopsInEmulator(p) && Has(again, "n:map-copy-store") && !Has(again, "emulator-error") && !StopsInEmulator(small));
+    }
+    {
         // A3-193 (area 3, oracle): grammar 2 seed 8602477, `n:return-dropped`. Each arm of `tst r4,r4 ; bf` ends with `mov #7,r0 ; mov.b @(r0,r4),r1`
         // or `mov #2,r0 ; mov.b @(r0,r5),r3`: r0 is an index the function used after its last write of it, scratch by A3-41's reading. Counted
         // (`excluded.r0-index.return-dropped`), no finding.
