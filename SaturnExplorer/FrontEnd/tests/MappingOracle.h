@@ -330,6 +330,7 @@ struct MemoryShape
 {
     bool load = false, store = false, call = false;
 };
+inline bool A7RuleOff(int row);
 inline MemoryShape ShapeOf(const sfe::DisassembledInstruction& d)
 {
     MemoryShape m;
@@ -354,6 +355,8 @@ inline MemoryShape ShapeOf(const sfe::DisassembledInstruction& d)
     {
         m.load = operands.front().find('@') != std::string::npos;
         m.store = operands.back().find('@') != std::string::npos;
+        // (A7-210: `mac.w @Rm+,@Rn+` reads both operands and writes the MAC registers, no memory: it is no store; grammar 1 seed 11007190)
+        if (!A7RuleOff(210) && d.Mnemonic.compare(0, 4, "mac.") == 0) m.store = false;
     }
     return m;
 }
@@ -2367,6 +2370,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             if (!A7RuleOff(165))
                                 for (const MemoryAccess& m : r.accesses)
                                     readHere = readHere || (m.insn == t.addr && !m.write && m.direct && GlobalDelta(va, m.address) < m.size);
+                        }
+                        // (A7-211: a hardware register the line reads, `xRam06001008 = VDP1_PTMR._0_1_;` with `VDP1_PTMR` at the `mov.b @r7,r2` that
+                        // reads it, is that load's own statement as a RAM global's is (A7-78); grammar 1 seed 11003148)
+                        if (!A7RuleOff(211) && !readHere && !operand.empty() && operand[0] >= 'A' && operand[0] <= 'Z' && operand.find("Ram") == std::string::npos)
+                        {
+                            uint16_t hw = 0;
+                            if (word(t.addr, hw))
+                            {
+                                const MemoryShape hs = ShapeOf(sfe::Sh2Decode(t.addr, hw));
+                                readHere = hs.load && !hs.store;
+                            }
                         }
                         // (A7-119: a frame local the line reads, `(int4)iStack_14` at the `mov.w @r14,r3` that loads it, is that load's own
                         // statement as a global is: the copy of what the load read into the store after it; grammar 2 seed 6205642)

@@ -22539,6 +22539,61 @@ All five sweep seeds fail the same with master's `Sh2Decompiler.cpp` (this round
 
 * **Area 7 (next fixer):** A7-196, A7-197, A7-198 (open, not analysed), A7-179's rest.
 * **Other area:** grammar 2 seed 12060177 (`n:table-case`: the jump table's indexes 3 and 4 go to 0x06009078, which does something the ledger lists, and the case for it holds no such code, no warning says cases may be missing); found by the sweep from 12,060,001, the same on master.
+
+## Area 7, round 28
+
+Fixer, branch `review/7-round28` from master `9d94d2b2`, RelWithDebInfo build (`-j1`, `ulimit -v 6000000`). The brief: the rows round 27 filed open (A7-196, A7-197, A7-198), the routed grammar 2 seed 12060177 `n:table-case` (triage), A7-179's rest if time allowed (not reached: still open, unchanged). Host change in `Sh2Decompiler.cpp` (two small ones), oracle changes in `MappingOracle.h` (rule `SE_A7_RULE_OFF=196`) and in the jump-table check of `Sh2GeneratedTests.cpp`, pins `TestArea7Round28Pins`. **No engine patch: 0096 stays free.** Scripts: `Docs/Decompiler/tools/a7_round28/final.sh` (the runs after the last edit, with the sweeps).
+
+| Row | P | Outcome |
+|---|---|---|
+| A7-196 | P3 | **fixed, oracle** (10802262, 10809419) |
+| A7-197 | P3 | **fixed, product** (10805383) |
+| A7-198 | P3 | **fixed, product** (12060407) |
+| A7-199 | P3 | **new, fixed, oracle** (the routed 12060177 `table-case`: not another area's) |
+| A7-179's rest | P3 | open, not reached |
+
+### 1. A7-196 (oracle, rule 196)
+
+`pxRam26001008 = (xunknown2 *)0x0;` (grammar 1) and `piVar4 = (int4 *)0;` (grammar 2), every drawn token at the branch that ends the block before an `if`: the engine's merge copy of a 0 that a `dt` / `bf` loop leaves in its counter (`mov #1,r3 ; L: ... dt r3 ; bf L`), printed with the pointer cast because the variable it is merged into is a pointer. The conversion-at-a-branch rule (A7-171, A7-175) judges a conversion that converts a value some instruction made; the operand here is a number, the same copy a non-pointer variable prints as `iVar4 = 0;` at the same branch, which no rule judges (the number's maker is the loop's `dt`, no line of this statement). The rule no longer judges a conversion whose operand token is a number (decimal or hex, optional `-`). The product's text is unchanged.
+
+### 2. A7-197 (product)
+
+Shrunk: `mov.l lit,r3 ; and r3,r5 ; mov.l lit,r3 ; or r3,r5 ; ... mov.b r3,@-r5 ...`. `pxVar1 = (xunknown1 *)(param_2 & 0x1ffffff0 | 0x60000000);` is the maker's own statement, beginning at the `and` (0x06009002) with the `or` (0x06009006) drawn in it; `xVar2 = SUB42(pxVar1,0);`, the narrowing of the same register that A7-175's `RetargetHoistedConversions` moves to the maker `or`, began at 0x06009006, so a click on the `or` went to the narrowing (the line that begins with the instruction) before the maker's own statement: the way back answered a copy before its own statement (A7-25). After the move the pass now marks the narrowing's tokens at the maker materialised when the line is a register variable's own `V = <conversion>;` statement beginning at the maker and another line draws the maker without beginning there. A store's line (`*param_3 = (int2)pxVar1;`, whose operand sits at the maker) is left as it was.
+
+### 3. A7-198 (product)
+
+`iStack_18 = iVar3;` drawn at `tas.b @r6` (0x06009014), the first instruction of a `mov #3,r3 ; L: tas.b @r6 ; ... dt r3 ; bf L` loop: the engine's copy of the loop counter merged under the pushed word's name, which no store names. A7-107 gives such a copy at a join's first instruction the register's last writers on each path (`mov #3,r3`, the `dt`); the rule was skipped for an instruction with a load, and `tas.b` is one (a read-modify-write). A copy of a merged register (a MULTIEQUAL) at such a join start, a load that is not a call, now takes the same rule: the line is drawn at `mov #3,r3` with an empty token at the `dt`.
+
+### 4. A7-199 (oracle, the routed 12060177)
+
+Triage: the product is right. The program calls a function that sets r9 (a declared clobber) and then `mov r9,r5` indexes the jump table, so every dispatch used index 0, whatever the parameter said; the engine prints `switch(extraout_r9) { case 0: case 1: case 2: ... }`. The generator's run records `selValue` (3, 4: the parameter the harness set), and the table check paired it with the address the jump really reached (entry 0's): "index 3 goes to 0x06009048, whose code the case does not hold". The mapping and the table were not wrong; no other area owns it, and no warning is owed. The table check now judges a run under the first index whose entry is the address it reached when the entry of the intended index is another address (counted `table.index-clobbered`; none: skipped, `table.index-unknown`).
+
+### 5. Pins and mutation
+
+`TestArea7Round28Pins`: grammar 1 seeds 10802262, 10805383 and grammar 2 seeds 10809419, 12060407, 12060177 whole (the shrunk programs need the shrinker's function table or the whole seed's state). With `SE_A7_RULE_OFF=196` the default run fails 10802262 and 10809419. The product changes (A7-197, A7-198) and the table-check change have no switch: before each fix the seed failed as filed (`copy materialised there before its own statement`, `copy-merge`, `table-case`).
+
+### 6. The corpus
+
+Both images with lending pass every ledger count at 0 (below). I did not diff the token dumps against a build of master this round (container restarts and the memory rule): the product changes touch only a narrowing's `materialised` flag at a maker (A7-197, a register variable's `V = <conversion>;` naming a store) and the addresses of a merged register's copy at a `tas.b` loop head (A7-198); neither changes any printed text, and the decompiled text of every corpus function is checked by the corpus run against its own ledger.
+
+### 7. Runs after the last code edit (`final.sh`)
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` (first build of the final code) | **117 of 117 passed** (477 s) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** (149 s) |
+| 20,000-seed matrix | **failing seeds=0; findings=0** (792 s). (An earlier run, before A7-197 was limited to a copy that names a store, found 6 way-back failures in seeds 2145, 3189, 8019, 11902, 13631, 19257: the narrowing of a load's value, `xVar5 = (xunknown1)uRam26001020;`, is the load's own statement.) |
+| printed-C | **agrees=5196** (281 s) |
+| corpus, both images, `SE_GAME_LEND=1` | all passed, every ledger count 0; missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**" |
+| sweep grammar 1, 10,000 from 11,000,001 | **6 failing seeds, 6 findings**: 11002157, 11003148, 11003627, 11007190 `n:map-way-back` (A7-200), 11004012 `v:map-store-value` (A7-207), 11007546 `n:folded-store-after-access` (A7-208) |
+| sweep grammar 2, 10,000 from 11,000,001 | **0 failing seeds** |
+| sweep grammar 2, 10,000 from 12,090,001 | **1 failing seed, 3 findings**: 12097940 `n:generator:callee-saved` (A7-209) |
+
+All six grammar 1 seeds fail the same with the A7-197 and A7-198 product changes switched off (a temporary switch, removed): none is this round's. The ctest and fault runs were on the build before the container restarts; the rest on the same build (the source is the commit). Lints: `check-literal-size.py` ok; no vendored file touched.
+
+### 8. Routed
+
+* **Area 7 (next fixer):** A7-200 and A7-207 to A7-209 (open, not analysed; A7-208 maybe area 3's, A7-209 a generator or engine matter), A7-179's rest (open, not reached).
 ## Area 3, A3-226 fix
 
 Fixer, branch `review/3-a3226` from master `10aefa40`. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). Host change in `Sh2Decompiler.cpp` (`Call`: A3-226, A3-221); oracle change and pins in `Sh2GeneratedTests.cpp` (A3-220; `TestA3RoutedPins`, the A3-226, A3-221 and A3-220 blocks). **No engine patch: 0095 stays free.** No generator change. Scratch only (the shrunk words are in the pin and in section 1).
@@ -22726,58 +22781,60 @@ No caution-class finding in the sweeps. Lints: `check-literal-size.py` ok; no ve
 
 * **Area 7:** grammar 1 seeds 11102053 (`map-copy-store`), 11103677 (`folded-store-after-access`), 11109544 (`folded-read-after-pointer-write`; the last two engine or area 2), grammar 2 seed 12115379 (`map-frame-store`). Not replayed on master.
 
-## Area 7, round 28
+## Area 7, round 29
 
-Fixer, branch `review/7-round28` from master `9d94d2b2`, RelWithDebInfo build (`-j1`, `ulimit -v 6000000`). The brief: the rows round 27 filed open (A7-196, A7-197, A7-198), the routed grammar 2 seed 12060177 `n:table-case` (triage), A7-179's rest if time allowed (not reached: still open, unchanged). Host change in `Sh2Decompiler.cpp` (two small ones), oracle changes in `MappingOracle.h` (rule `SE_A7_RULE_OFF=196`) and in the jump-table check of `Sh2GeneratedTests.cpp`, pins `TestArea7Round28Pins`. **No engine patch: 0096 stays free.** Scripts: `Docs/Decompiler/tools/a7_round28/final.sh` (the runs after the last edit, with the sweeps).
+Fixer, branch `review/7-round29` from round 28 + master `72496d2d`, RelWithDebInfo build (`-j1`, `ulimit -v 3500000`). The brief: A7-200 (four grammar 1 seeds and the routed grammar 2 12020446), A7-207, the routed 12106439 and 11102053, triage of A7-208 and A7-209, A7-179's rest if time allowed (not reached, unchanged). Host change in `Sh2Decompiler.cpp` (`MarkMaterialisedReads`' A7-145 pass), oracle rules 210 and 211 in `MappingOracle.h`, pins `TestArea7Round29Pins`. **No engine patch: 0096 stays free.** Scripts: `Docs/Decompiler/tools/a7_round29/final.sh`.
 
 | Row | P | Outcome |
 |---|---|---|
-| A7-196 | P3 | **fixed, oracle** (10802262, 10809419) |
-| A7-197 | P3 | **fixed, product** (10805383) |
-| A7-198 | P3 | **fixed, product** (12060407) |
-| A7-199 | P3 | **new, fixed, oracle** (the routed 12060177 `table-case`: not another area's) |
+| A7-200 | P3 | **fixed in part**: 11002157, 11003627 (product), 11003148 (oracle 211), 11007190 (oracle 210); grammar 2 12020446 stays open |
+| A7-207 | P3 | open, analysed (overlapping slot/target instructions) |
+| 12106439 | - | does not reproduce (passes on this tree and on round 28's product, with every env variant tried) |
+| 11102053 | P3 | filed **A7-220**, analysed, open |
+| A7-208 | P3 | routed to area 5 (**A5-160**): a folded store printed after a pointer read, A5-109's class |
+| A7-209 | P3 | routed to the generator (area 11): the generated program itself overwrites the saved r14 |
 | A7-179's rest | P3 | open, not reached |
 
-### 1. A7-196 (oracle, rule 196)
+### 1. A7-200
 
-`pxRam26001008 = (xunknown2 *)0x0;` (grammar 1) and `piVar4 = (int4 *)0;` (grammar 2), every drawn token at the branch that ends the block before an `if`: the engine's merge copy of a 0 that a `dt` / `bf` loop leaves in its counter (`mov #1,r3 ; L: ... dt r3 ; bf L`), printed with the pointer cast because the variable it is merged into is a pointer. The conversion-at-a-branch rule (A7-171, A7-175) judges a conversion that converts a value some instruction made; the operand here is a number, the same copy a non-pointer variable prints as `iVar4 = 0;` at the same branch, which no rule judges (the number's maker is the loop's `dt`, no line of this statement). The rule no longer judges a conversion whose operand token is a number (decimal or hex, optional `-`). The product's text is unchanged.
+* 11002157 (product): `iRam26001018 = iVar1;` (the write-back after the `if` that returns, tokens at the store 0x06009010, naming the byte store 0x0600901A) beside `iRam26001018 = (int4)iRam26002200;` (the store's own line, before it on the same path). The A7-145 pass took another plain line for the store's own only when it named the store of the very next instruction (round 27's restriction for A7-166's fixture). It now takes it too when no `return` at the block's depth lies between the two lines (the oracle's A7-166 reading), so A7-166's fixture (a `return` between) stays unmarked.
+* 11003627 (product): `xRam06001004 = (int2)uRam26001000;` with `uRam26001000` drawn at the word store 0x06009022 that wrote it and naming the later store 0x06009028 of the join: the same pass now also takes the line's operand as the variable (the other line `uRam26001000 = CONCAT22(...)`, which is no plain copy, has its name at the store), and marks the operand's tokens materialised.
+* 11003148 (oracle, rule 211): `xRam06001008 = VDP1_PTMR._0_1_;` with `VDP1_PTMR` at the `mov.b @r7,r2` that reads it is the load's own statement, as a RAM global's read is (A7-78).
+* 11007190 (oracle, rule 210): `mac.w @Rm+,@Rn+` has two memory operands in the text and was taken for a store; it reads both and stores nothing, so `iVar2 = iRam26001014;` drawn at it is no copy at a store.
+* 12020446 (open): `iVar3 = iRam0600912c;` at `mov.b r2,@r5` (0x060090E4) in function 0, which runs into function 2's entry ("flow runs into another function's entry"): the flow record has no `insnFirst`, no STORE op and no access record for that instruction, so A7-190's (b) (which moves or marks a register variable's copy of a global at a store) never sees a store. An attempt to take the STORE op of the flow as the store (kept out of the commit) showed the instruction is not in the flow at all; a fix needs the instruction word.
 
-### 2. A7-197 (product)
+### 2. Triage
 
-Shrunk: `mov.l lit,r3 ; and r3,r5 ; mov.l lit,r3 ; or r3,r5 ; ... mov.b r3,@-r5 ...`. `pxVar1 = (xunknown1 *)(param_2 & 0x1ffffff0 | 0x60000000);` is the maker's own statement, beginning at the `and` (0x06009002) with the `or` (0x06009006) drawn in it; `xVar2 = SUB42(pxVar1,0);`, the narrowing of the same register that A7-175's `RetargetHoistedConversions` moves to the maker `or`, began at 0x06009006, so a click on the `or` went to the narrowing (the line that begins with the instruction) before the maker's own statement: the way back answered a copy before its own statement (A7-25). After the move the pass now marks the narrowing's tokens at the maker materialised when the line is a register variable's own `V = <conversion>;` statement beginning at the maker and another line draws the maker without beginning there. A store's line (`*param_3 = (int2)pxVar1;`, whose operand sits at the maker) is left as it was.
+* **A7-207** (11004012): the shrunk program has the slot `mov.b r4,@r6` (0x0600903C) also the target of the `bt` at 0x06009036 (the decoder warns of overlapping instructions); the line inside the `if` that returns names 0x0600904A, a store on no path from it. Not analysed further.
+* **11102053**: `uRam26001004 = bVar3;` at a `bsr`; the stored value is `r1 & r0` with r0 = 3 and r1 the `movt` (T & 3), shown by the engine as the bool. `AddFrameStoreTokens`' value test (A7-23, `StoreShowsValue`) compares the makers of the statement's value (the `movt`) with those of the stored register (the `movt` and `mov #3,r0`) and rejects the store. Filed A7-220 with the shrunk program; a store of `X & mask` with a mask number that keeps X's bits should show X.
+* **12106439**: no finding on this tree, on round 28's `Sh2Decompiler.cpp` with this round's oracle, with `SE_GENERATED_CAUTION=deep` or the specials alphabet, or as a one-seed range.
+* **A7-208** (11007546): the engine folds the store 0x06009008 into the merged `CONCAT11` after the slot's pointer read 0x0600900E: A5-109's class (area 5); A5-160 filed with the shrunk program.
+* **A7-209** (12097940, `SE_GENERATED_CAUTION=deep`): function 2 (`add 4,r15 ; mov r4,r0 ; rts`) drops a word, so function 1's `mov.l r4,@-r15` after two calls overwrites its saved r14: r14 really ends 0. A generator matter (area 11).
 
-### 3. A7-198 (product)
+### 3. Pins and mutation
 
-`iStack_18 = iVar3;` drawn at `tas.b @r6` (0x06009014), the first instruction of a `mov #3,r3 ; L: tas.b @r6 ; ... dt r3 ; bf L` loop: the engine's copy of the loop counter merged under the pushed word's name, which no store names. A7-107 gives such a copy at a join's first instruction the register's last writers on each path (`mov #3,r3`, the `dt`); the rule was skipped for an instruction with a load, and `tas.b` is one (a read-modify-write). A copy of a merged register (a MULTIEQUAL) at such a join start, a load that is not a call, now takes the same rule: the line is drawn at `mov #3,r3` with an empty token at the `dt`.
+`TestArea7Round29Pins`: grammar 1 seeds 11002157, 11003148, 11003627, 11007190 whole. `SE_A7_RULE_OFF=210` fails 11007190; `=211` fails 11003148. The product change has no switch: on round 28's `Sh2Decompiler.cpp` this oracle gives 11002157 and 11003627 `map-way-back` again.
 
-### 4. A7-199 (oracle, the routed 12060177)
+### 4. The corpus
 
-Triage: the product is right. The program calls a function that sets r9 (a declared clobber) and then `mov r9,r5` indexes the jump table, so every dispatch used index 0, whatever the parameter said; the engine prints `switch(extraout_r9) { case 0: case 1: case 2: ... }`. The generator's run records `selValue` (3, 4: the parameter the harness set), and the table check paired it with the address the jump really reached (entry 0's): "index 3 goes to 0x06009048, whose code the case does not hold". The mapping and the table were not wrong; no other area owns it, and no warning is owed. The table check now judges a run under the first index whose entry is the address it reached when the entry of the intended index is another address (counted `table.index-clobbered`; none: skipped, `table.index-unknown`).
+Token dumps of this build against a build of round 28's `Sh2Decompiler.cpp` (this round's tests), both images alone and lent: hwram007 identical; hwram008 differs in 12 token lines (4 lines of 3 tokens: `iRam060a55b0 = 1;` at 0x0601CFAE and `xRam060a5284 = ...;` at 0x06033FC6), only the `materialised` flag, in the alone and the lent dump. **No text changes.**
 
-### 5. Pins and mutation
-
-`TestArea7Round28Pins`: grammar 1 seeds 10802262, 10805383 and grammar 2 seeds 10809419, 12060407, 12060177 whole (the shrunk programs need the shrinker's function table or the whole seed's state). With `SE_A7_RULE_OFF=196` the default run fails 10802262 and 10809419. The product changes (A7-197, A7-198) and the table-check change have no switch: before each fix the seed failed as filed (`copy materialised there before its own statement`, `copy-merge`, `table-case`).
-
-### 6. The corpus
-
-Both images with lending pass every ledger count at 0 (below). I did not diff the token dumps against a build of master this round (container restarts and the memory rule): the product changes touch only a narrowing's `materialised` flag at a maker (A7-197, a register variable's `V = <conversion>;` naming a store) and the addresses of a merged register's copy at a `tas.b` loop head (A7-198); neither changes any printed text, and the decompiled text of every corpus function is checked by the corpus run against its own ledger.
-
-### 7. Runs after the last code edit (`final.sh`)
+### 5. Runs after the last code edit (`final.sh`)
 
 | Run | Result |
 |---|---|
-| full `ctest -j2` (first build of the final code) | **117 of 117 passed** (477 s) |
-| fault suite | **fault matrix: 0 of 94 job(s) failed** (149 s) |
-| 20,000-seed matrix | **failing seeds=0; findings=0** (792 s). (An earlier run, before A7-197 was limited to a copy that names a store, found 6 way-back failures in seeds 2145, 3189, 8019, 11902, 13631, 19257: the narrowing of a load's value, `xVar5 = (xunknown1)uRam26001020;`, is the load's own statement.) |
-| printed-C | **agrees=5196** (281 s) |
-| corpus, both images, `SE_GAME_LEND=1` | all passed, every ledger count 0; missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**" |
-| sweep grammar 1, 10,000 from 11,000,001 | **6 failing seeds, 6 findings**: 11002157, 11003148, 11003627, 11007190 `n:map-way-back` (A7-200), 11004012 `v:map-store-value` (A7-207), 11007546 `n:folded-store-after-access` (A7-208) |
-| sweep grammar 2, 10,000 from 11,000,001 | **0 failing seeds** |
-| sweep grammar 2, 10,000 from 12,090,001 | **1 failing seed, 3 findings**: 12097940 `n:generator:callee-saved` (A7-209) |
+| ctest `-j1` | **117 of 117 passed** (678 s) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** (103 s) |
+| 20,000-seed matrix | **failing seeds=0; findings=0** (734 s) |
+| printed-C | **agrees=5196** (197 s) |
+| corpus, both images, `SE_GAME_LEND=1` | all passed, every ledger count 0; missing and said **0** (hwram007) and **4** (hwram008); real entries 999: lent **474 (645)**, 1543: **724 (975)** |
+| sweep grammar 1, 10,000 from 11,500,001 | 2 failing seeds: 11503597 (`map-const-join` / `map-number-store`), 11508679 (`n:map-way-back`) |
+| sweep grammar 2, 10,000 from 11,500,001 | 0 failing seeds |
+| sweep grammar 2, 10,000 from 12,150,001 | 3 failing seeds: 12150363 (`n:map-const-join`), 12158267 (`n:map-copy-store`), 12152782 (`emulator-error`, "Unable to resolve constructor", generator) |
 
-All six grammar 1 seeds fail the same with the A7-197 and A7-198 product changes switched off (a temporary switch, removed): none is this round's. The ctest and fault runs were on the build before the container restarts; the rest on the same build (the source is the commit). Lints: `check-literal-size.py` ok; no vendored file touched.
+Replayed on round 28's product with this oracle: 11503597, 11508679, 12150363, 12158267 fail the same (none is this round's); filed below. Lint `check-literal-size.py` ok; no vendored file touched.
 
-### 8. Routed
+### 6. Routed
 
 * **Area 7 (next fixer):** A7-200 and A7-207 to A7-209 (open, not analysed; A7-208 maybe area 3's, A7-209 a generator or engine matter), A7-179's rest (open, not reached).
 
@@ -22861,3 +22918,5 @@ Branch `review/4-round3` (from f07b0197). No product or engine change, no patch 
 * **Seed 12121815 (grammar 2, `SE_GENERATED_CAUTION=deep`), A4-19.** Does not reproduce at f07b0197 with or without the specials alphabet, canary on or off. The module is A7-199's class: a switch on `extraout_r10` (a callee set the register), the intended index differing from the dispatched one (`table.index-clobbered=6`). Round 28's oracle rule judges it; the cases and the default entry are right and all 8 traced destinations are printed. Pinned whole in `TestArea4Round3Pins` (0 findings, the clobbered-index counter must be positive).
 * **A4-5.** Re-examined, left accepted: recovering the destination needs the flow to be re-run after a later pass learns an indirect jump's target, which costs every function (Windows Debug CI is about 7x slower) for a text that is not wrong (warned at the jump, signature withheld).
 * **Sweeps, grammar 2 from 11,600,001, 10,000 seeds each.** Specials: 3 failing seeds, 5 findings; plain: 2 failing seeds, 3 findings. No table finding in either. All are map-oracle classes (`map-copy-store` seed 11600932, `map-const-join` seed 11602585, `map-conversion-branch` seed 11600981, specials only), routed to area 7.
+* **Area 7 (next fixer):** A7-200's 12020446, A7-207, A7-220, new sweep seeds 11503597, 11508679 (`mov.b r0,@(3,r6)` at 0x0600902E answered with a copy before its own statement; `iVar2 = uRam06001014;`), 12150363, 12158267; A7-179's rest.
+* **Area 5:** A5-160 (A7-208). **Generator (area 11):** A7-209, seed 12152782.

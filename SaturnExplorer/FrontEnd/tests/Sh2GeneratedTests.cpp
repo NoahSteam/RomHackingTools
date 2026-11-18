@@ -19060,6 +19060,23 @@ void TestArea4Round3Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7 round 29: A7-200 (grammar 1 seeds 11002157 and 11003627: product; 11003148 and 11007190: oracle rules 211 and 210), whole.
+void TestArea7Round29Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 1, 11002157 }, Whole{ 1, 11003148 }, Whole{ 1, 11003627 }, Whole{ 1, 11007190 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 29: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21112,6 +21129,7 @@ void TestGenerated()
         RUN(TestArea7Round28Pins(d));
         RUN(TestArea7JoinPins(d));
         RUN(TestArea4Round3Pins(d));
+        RUN(TestArea7Round29Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
