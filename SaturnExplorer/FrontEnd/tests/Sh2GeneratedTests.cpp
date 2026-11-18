@@ -18835,6 +18835,26 @@ void TestArea7Round27Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7, joins and stores (A7-201 to A7-206): grammar 2 seeds 12078687 (mova is no load: a frame piece assigned its address, rule 201),
+// grammar 1 12050176 (`xor` of the word a store wrote, rule 202), grammar 2 10908446 (`xor` of two copies, rule 203), 12102661 (`add #imm` of
+// a zero chain, rule 204), 10702729 (an extension that differs from the line's 0 only in bits nothing shows, rule 205), and 12051473
+// (a copy of an input over a call is the value the call sees: the store before it, the product, A7-206).
+void TestArea7JoinPins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 2, 12078687 }, Whole{ 1, 12050176 }, Whole{ 2, 10908446 }, Whole{ 2, 12102661 }, Whole{ 2, 10702729 }, Whole{ 2, 12051473 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 joins: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -20775,6 +20795,7 @@ void TestGenerated()
         RUN(TestArea7Round26Pins(d));
         RUN(TestArea7P2FixPins(d));
         RUN(TestArea7Round27Pins(d));
+        RUN(TestArea7JoinPins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

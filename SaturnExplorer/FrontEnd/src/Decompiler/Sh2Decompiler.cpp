@@ -8897,8 +8897,34 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 const FlowOp& last = flow.blockOps[static_cast<size_t>(ib->second.first)][ib->second.second];
                 // (not a statement of the call's own output, `xStack_30 = (xunknown4)xVar3;` for the r1 a 64-bit return leaves, which a
                 // store after the call wrote: the A7-39 triage, grammar 2 seed 1820753)
+                // (A7-206: the statement's value is a call's output only when the copies and casts it is made through end at the call's own op:
+                // `pxStack_24 = (xunknown2 *)in_r2;` at a `jsr`, a CAST the engine put at the call's address over the merge of the register at the
+                // push `mov.l r2,@-r15` before it, is the value the call sees -- a store before it -- though its own op is at the call; the
+                // store after, which the call's block holds, wrote the next value; grammar 2 seed 12051473)
+                bool passesInput = false;
+                if (last.code != ghidra::CPUI_RETURN && o->numInput() >= 1 && flow.callInsns.count(at))
+                {
+                    const ghidra::Varnode* v = o->getIn(0);
+                    for (int k = 0; k < 6 && v; ++k)
+                    {
+                        if (!v->isWritten())
+                        {
+                            passesInput = v->isInput();
+                            break;
+                        }
+                        const ghidra::PcodeOp* def = v->getDef();
+                        if (def->code() == ghidra::CPUI_COPY || def->code() == ghidra::CPUI_CAST || def->code() == ghidra::CPUI_SUBPIECE ||
+                            def->code() == ghidra::CPUI_INT_ZEXT || def->code() == ghidra::CPUI_INT_SEXT)
+                            v = def->getIn(0);
+                        else
+                        {
+                            passesInput = def->code() == ghidra::CPUI_MULTIEQUAL && InstructionOf(def) != at;
+                            break;
+                        }
+                    }
+                }
                 if ((last.code == ghidra::CPUI_CALL || last.code == ghidra::CPUI_CALLIND || last.code == ghidra::CPUI_RETURN) &&
-                    !(last.code != ghidra::CPUI_RETURN && StatementValues(o, flow.opsEnd).insns.count(at)))
+                    !(last.code != ghidra::CPUI_RETURN && !passesInput && StatementValues(o, flow.opsEnd).insns.count(at)))
                 {
                     useBlock = ib->second.first;
                     usePos = static_cast<int>(ib->second.second);
