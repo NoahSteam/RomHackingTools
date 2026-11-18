@@ -73,7 +73,7 @@ Saturn Explorer runs three ways from one codebase:
 Input it understands:
   * Yabause / Yaba Sanshiro `.yss` savestates
   * Mednafen savestates and raw memory dumps
-  * A live, running, patched Mednafen or Yabause (see LIVE MODE below)
+  * A live, running, patched Mednafen (see LIVE MODE below)
 
 
 -------------------------------------------------------------------------------
@@ -101,7 +101,6 @@ The one-command installer builds Saturn Explorer AND downloads, patches, and
 builds a Saturn emulator for live mode. From the SaturnExplorer folder:
 
     install.bat                     Build Saturn Explorer + Mednafen (default)
-    install.bat --with-yabause      Also build Yabause (Qt)
     install.bat --dry-run           Show the plan without changing anything
     install.bat --yes               Don't prompt before each install / build step
 
@@ -155,8 +154,8 @@ instead of a static savestate. A small, self-contained tap is patched into the
 emulator's source (the installer does this for you); it serves the console's
 memory + CPU state to Saturn Explorer over a local socket.
 
-  1. Run the installer (or apply the patch in Integration/Mednafen/ or
-     Integration/Yabause/ to your own emulator build).
+  1. Run the installer (or apply the patch in Integration/Mednafen/ to your
+     own Mednafen build).
   2. Start a game in the patched emulator.
   3. Launch Saturn Explorer with  --live , or use the "Launch Mednafen" button /
      Open > Connect menu.

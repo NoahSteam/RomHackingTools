@@ -26,7 +26,7 @@ Built for **fan translators, ROM hackers, and curious developers**, it helps ans
 
 ![Three steps: open a savestate or connect to a patched emulator; select a sprite and inspect its texture, colors, and layers; investigate matching game data, memory, and code.](Docs/Images/explore-workflow.svg)
 
-1. **Open a moment in the game.** Load a supported savestate or memory dump. On desktop, you can also connect to a patched Mednafen or Yabause emulator.
+1. **Open a moment in the game.** Load a supported savestate or memory dump. On desktop, you can also connect to a patched Mednafen emulator.
 2. **Pick something to investigate.** Click a sprite in the reconstructed output to see the command that drew it. Inspect the texture and palette, or toggle backgrounds to see how the scene fits together.
 3. **Follow the evidence.** Search for matching artwork in game data, inspect memory, or use live debugging to investigate the code behind what you see.
 
@@ -38,7 +38,7 @@ Built for **fan translators, ROM hackers, and curious developers**, it helps ans
 
 Get a desktop build from the **[releases page](https://github.com/NoahSteam/RomHackingTools/releases)** or follow the **[build guide](Docs/BUILD.md)** for Windows, macOS, or Linux.
 
-Live debugging requires an emulator with the Saturn Explorer integration patch. The **[Windows installer](Integration/INSTALL.md)** can build the tool and a patched emulator for you. For manual setup, see the **[Mednafen](Integration/Mednafen/README.md)** or **[Yabause](Integration/Yabause/README.md)** integration instructions.
+Live debugging requires an emulator with the Saturn Explorer integration patch. The **[Windows installer](Integration/INSTALL.md)** can build the tool and a patched emulator for you. For manual setup, see the **[Mednafen](Integration/Mednafen/README.md)** integration instructions.
 
 ## Learn as you explore
 
