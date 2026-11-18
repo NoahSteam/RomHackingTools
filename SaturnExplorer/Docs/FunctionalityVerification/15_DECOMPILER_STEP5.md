@@ -22605,3 +22605,45 @@ Every changed text loses an r2 note whose address the text shows as an argument.
 * **Area 7:** grammar 1 seeds 10706671 and 10707881 (`map-way-back`), grammar 1 12050176 and grammar 2 10702729 (`map-const-join`), grammar 1 12052695 (`read-after-folded-store`; engine or area 2), grammar 2 12051473 (`map-store-after`): all on master.
 * **Generator (area 11):** grammar 2 seed 12056533 `generator:no-return` (the program's run reads address 0).
 * **Area 3 (next fixer):** A3-228 (P2, open: 12055901, r15 at a call of 060090BC).
+
+## Area 3, A3-228 fix
+
+Fixer, branch `review/3-a3228` from master `5df1678b`. Host change in `Sh2Decompiler.cpp` (`Call`); pin in `Sh2GeneratedTests.cpp` (`TestA3RoutedPins`, the A3-228 block). **No engine patch: 0095 stays free.** No generator change. Build `-j1`, `ulimit -v 3500000`, one heavy binary at a time.
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-228 | P2 | **fixed** (host): a later unlent call reads r15 an earlier call changed |
+
+### 1. Shrunk and diagnosed
+
+Grammar 2 seed 12055901 (`SE_GENERATED_CAUTION=deep`) shrinks to three functions. Function 2 (not lent) ends on every path through `add #4,r15 ; rts` (a switch whose cases and default all reach it): it returns with r15 four higher. Function 0 calls it, restores r15 from its frame pointer r14 at its epilogue, and calls function 1 (not lent), which stores its own frame address (`mov r15,r2 ; mov.l r2,@(8,r4)`). The runs with r15 set back at the first call store another word, the text has no caution at the first call (function 1's own text, which calls function 2 too, has one).
+
+Cause: the call's caution for an earlier callee's change is said when a later read of the register takes the mark (`UseUnkept`). A later call took the marks of r2 and r4-r7, and (A3-222) of r8-r14, GBR, VBR the callee reads on entry; never r15 (excluded: "the stack pointer itself"). But a callee that is not lent runs with the stack pointer the earlier call left: its frame, the stack arguments it reads at r15 and up, the frame addresses it stores or hands on.
+
+### 2. Fix
+
+At a call of an unlent callee (probe only: `keepKept && mUnkeptSeen && !signatureLent`), the marks on r15's value are read (`UseUnkept`). A mark is on r15 only after an unlent callee changes r15 for certain on some path (A3-206), so the work is one empty-vector test per unlent call elsewhere: nothing decoded or formatted. A lent callee is not covered (its signature says what it reads of the stack; not met in a sweep).
+
+**Pin** (`TestA3RoutedPins`): the shrunk words and seed 12055901 whole: no finding, caution said, nothing counted `caution.unsaid.deep`. Before the change the shrunk module and the seed gave the `n:caution-unsaid-deep` finding.
+
+### 3. Corpus
+
+Both images with lending, `corpus.sh`-style dumps: cautions ("this call may change") **41 / 58 (007 alone / lent) and 39 / 55 (008 alone / lent): unchanged**, none naming r15 in either image. Every ledger count 0; missing and said 0 (007) and 4 (008); 999 real entries: signatures lent 474 (645 parameters); 1543: 724 (975).
+
+### 4. Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest, 117 tests | all passed (Area9Round6Tests failed once under load in the first pass, a timing test of a stuck lock; passed alone) |
+| fault matrix | 0 of 94 job(s) failed |
+| generator, 20,000 seeds | no finding, no failing seed |
+| printed-C, 3,000 seeds | agrees=5196 |
+| grammar 1, 10,000 from 11,100,001 | 3 failing seeds: 11102053 `n:map-copy-store`, 11103677 `v:folded-store-after-access`, 11109544 `v:folded-read-after-pointer-write` |
+| grammar 2, 10,000 from 11,100,001 | 0 failing seeds |
+| grammar 2, 10,000 from 12,110,001, `SE_GENERATED_CAUTION=deep` | 1 failing seed: 12115379 `n:map-frame-store` |
+
+No caution-class finding in the sweeps. Lints: `check-literal-size.py` ok; no vendored file touched.
+
+### 5. Routed
+
+* **Area 7:** grammar 1 seeds 11102053 (`map-copy-store`), 11103677 (`folded-store-after-access`), 11109544 (`folded-read-after-pointer-write`; the last two engine or area 2), grammar 2 seed 12115379 (`map-frame-store`). Not replayed on master.
