@@ -369,7 +369,8 @@ inline int DeclaredWidth(const sfe::decomp::DecompileResult& r, const std::strin
     if (name.empty()) return 4;
     const auto widthOf = [](const std::string& type) {
         const char last = type.back();
-        if (last == '1' || last == '2' || last == '4' || last == '8') return last - '0';
+        // (rule 261, area 7 round 32: a three-byte type, `unkuint3`, is three; the byte count of a type the engine makes for an odd access)
+        if (last == '1' || last == '2' || last == '4' || last == '8' || (last == '3' && !A7RuleOff(261))) return last - '0';
         if (type == "char" || type == "uchar" || type == "bool" || type == "byte") return 1;
         if (type == "short" || type == "ushort") return 2;
         return 4;
@@ -961,6 +962,15 @@ inline WordValue MemoryBefore(const sfe::decomp::DecompileResult& r, const std::
             word(p, w);
             int ssize = 0;
             const int reg = StoredRegister(w, ssize);
+            // Rule 262 (area 7 round 32, A7-254): a read of a known address that the engine did not fold -- the volatile read of a poll the
+            // request marks (`uVar2 = Ram26001028;` in the loop that stores the word the function reads on) -- is a call the engine keeps
+            // memory's values across no longer: the store's number is not forwarded past it (grammar 1 11703803, volatile request)
+            if (!A7RuleOff(262) && reg < 0 && (w >> 8) != 0xC0 && (w >> 8) != 0xC1 && (w >> 8) != 0xC2 && !FoldedAccess(r, p, false))
+            {
+                uint32_t la = 0;
+                int ls = 0;
+                if (AccessAddress(r, word, into, p, w, false, la, ls, depth + 1)) return WordValue();
+            }
             // (A7-69: `tas.b @Rn` writes the byte it read with bit 7 set; grammar 1 seeds 2702841, 3005842)
             if ((w & 0xF0FF) == 0x401B)
             {
@@ -2953,6 +2963,30 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         std::set<uint32_t> makers;
                         if (reg >= 0 && RegisterMakers(r, word, into, t.addr, reg, makers) && makers.size() == 1 && *makers.begin() == 0) continue;
                     }
+                    // Rule 263 (area 7 round 32, A7-254): the line is drawn at a second store of the same register, to the same bytes
+                    // (`mov.b r2,@r6 ; mov.b r2,@r6 ; ... ; mov.b r5,@r6`, or with a store of another register between): the engine merged the
+                    // identical stores into one statement and drew it at both, so the line is the pair's statement and no one dead store's.
+                    // Grammar 1 seed 12132326
+                    if (!A7RuleOff(263) && foldedStores.count(t.addr) && t.begin >= nb && t.end <= eq + 2)
+                    {
+                        uint16_t sw = 0;
+                        int ssize = 0;
+                        const int reg = word(t.addr, sw) ? StoredRegister(sw, ssize) : -1;
+                        bool twin = false;
+                        const AccessFate& ft = *foldedStores[t.addr];
+                        std::set<uint32_t> drawn = named;
+                        drawn.insert(valued.begin(), valued.end());
+                        for (uint32_t x : drawn)
+                        {
+                            uint16_t xw = 0;
+                            int xsize = 0;
+                            const auto fx = foldedStores.find(x);
+                            twin = twin || (reg >= 0 && x != t.addr && fx != foldedStores.end() && word(x, xw) &&
+                                            StoredRegister(xw, xsize) == reg && fx->second->address == ft.address && fx->second->size == ft.size &&
+                                            fx->second->frame == ft.frame);
+                        }
+                        if (twin) continue;
+                    }
                     if (!A7RuleOff(169) && t.begin >= nb && t.begin >= eq + 3 && t.begin >= 3 && lt[t.begin - 1] == ')')
                     {
                         size_t open = lt.rfind('(', t.begin - 1);
@@ -4431,6 +4465,21 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (t.addr && t.begin == t.end && word(t.addr, sw) && StoredRegister(sw, size) >= 0) named = std::max(named, size);
                 }
                 if (named > 0 && named < 4) width = named;
+            }
+            // Rule 264 (area 7 round 32, A7-265): a global the text declares nowhere is as wide as the widest access the function makes at its
+            // address when none is a word (`uRam26002004 = 0xffd8;` for `mov #-0x28,r2` stored by `mov.w r2,@r7`, the accesses' own tokens
+            // being elsewhere): the number the sign extension makes of the byte is shown at the variable's width; grammar 2 seed 12222510
+            if (width >= 4 && !A7RuleOff(264))
+            {
+                uint32_t va = 0;
+                const std::string gname = text.substr(nameAt, text.find(" = ", nameAt) - nameAt);
+                if (IsRamGlobal(gname, &va))
+                {
+                    int widest = 0;
+                    for (const AccessFate& f : r.accessFates)
+                        if (f.size > 0 && !f.frame && GlobalDelta(f.address, va) == 0) widest = std::max(widest, static_cast<int>(f.size));
+                    if (widest > 0 && widest < 4) width = widest;
+                }
             }
             const uint32_t widthMask = width >= 4 ? 0xFFFFFFFFu : (1u << (8 * width)) - 1;
             const auto sameNumber = [&](uint32_t x) { return ((x ^ want) & widthMask) == 0; };
