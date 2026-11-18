@@ -6127,6 +6127,9 @@ void CheckCautions(const Subject& subject, int fi, const std::map<uint32_t, Prot
             {
                 bool before = false;
                 for (size_t q = 0; q < n.call && q < needRun.calls.size() && !before; ++q) before = c.at.count(needRun.calls[q].callPc) != 0;
+                // (area 3, round 32, A3-241) ...or the saying call lies before this one in the text (a lower address): the reader sees "likewise
+                // at the calls below" whether or not the run made that call (seed 12237557: input mode 0 skips the first call)
+                for (uint32_t sp : c.at) if (sp < pc) before = true;
                 if (before) likewise = true;
                 else elsewhere = true;
             }
@@ -21035,6 +21038,16 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(rep.findings.empty() && count(rep, "caution.required") > 0 && count(rep, "caution.said") + count(rep, "caution.said.likewise") > 0 &&
                   count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect") == 0);
         }
+    }
+    // A3-241 (oracle; was A3-240, grammar 2 seed 12237557 `caution-elsewhere`, r15, two calls): the note "may change r15 ... likewise at the calls
+    // below" stands at the first call, which input mode 0 skips; the run that needs the second call's caution never made the saying call. The text
+    // says it for the calls below, so a saying call with a lower address counts whether or not the run made it (A3-216's mutation pin, lw1, still
+    // flags the note moved after the call that needs it).
+    {
+        const Report rep = Evaluate(d, MakeV2(12237557), false);
+        std::printf("pin 'A3-241 grammar 2 seed 12237557': %zu finding(s), caution required %d, said %d, likewise %d\n", rep.findings.size(),
+                    count(rep, "caution.required"), count(rep, "caution.said"), count(rep, "caution.said.likewise"));
+        CHECK(rep.findings.empty() && count(rep, "caution.required") > 0 && count(rep, "caution.said") + count(rep, "caution.said.likewise") > 0);
     }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
