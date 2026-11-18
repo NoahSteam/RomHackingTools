@@ -106,8 +106,9 @@ int main()
     CHECK(BundledMednafenPath(dir + "/outer/Outer.app/Contents/Tools/Inner/Tool") ==
           dir + "/outer/Outer.app/Contents/Tools/Inner/mednafen-se/mednafen");
 
-    // Load and Save: the bundled copy is used when no path is recorded and is not written back; a recorded
-    // path -- present or not -- is never replaced.
+    // Load and Save: a release uses the copy beside it and never writes it back. [emulators] mednafen -- shared
+    // with developer builds and other installs -- does not override it; only an override chosen in this
+    // install (recorded with the bundled path it was chosen beside) does, and is kept even while missing.
     {
         const std::string exe = dir + "/plain/SaturnExplorerFrontEnd", bundled = dir + "/plain/mednafen-se/mednafen";
         Settings none;
@@ -115,27 +116,65 @@ int main()
         a.Load(none, exe);
         CHECK(a.Emulators()[0].exePath == bundled);
         CHECK(a.UsesBundledMednafen());
+        CHECK(a.BundledMednafen() == bundled);
         Settings out;
         a.Save(out);
-        CHECK(out.Get("emulators", "mednafen", "x").empty());
+        CHECK(out.Get("emulators", "mednafen.release", "x").empty());
+        CHECK(out.Get("emulators", "mednafen", "x") == "x");   // the shared key is not touched
         Launcher again;
         again.Load(out, dir + "/mac/SaturnExplorer.app/Contents/MacOS/SaturnExplorer");   // moved elsewhere
         CHECK(again.Emulators()[0].exePath == dir + "/mac/mednafen-se/mednafen");
 
-        Settings custom;
-        custom.Set("emulators", "mednafen", "/Volumes/gone/mednafen");
+        // A path from a dev build, another install, or a folder typed into v1.0: the release's copy wins,
+        // and saving leaves that path in place for whoever recorded it.
+        for (const std::string& foreign : { std::string("/Volumes/gone/mednafen"), dir + "/plain/mednafen-se",
+                                            dir + "/mac/mednafen-se/mednafen" })
+        {
+            Settings shared;
+            shared.Set("emulators", "mednafen", foreign);
+            Launcher r;
+            r.Load(shared, exe);
+            CHECK(r.Emulators()[0].exePath == bundled);
+            CHECK(r.UsesBundledMednafen());
+            r.Save(shared);
+            CHECK(shared.Get("emulators", "mednafen", "") == foreign);
+        }
+
+        // An override chosen in this install is kept, missing or not, and survives a save/load.
         Launcher b;
-        b.Load(custom, exe);
-        CHECK(b.Emulators()[0].exePath == "/Volumes/gone/mednafen");
-        CHECK(!b.UsesBundledMednafen());
+        b.Load(none, exe);
+        b.Emulators()[0].exePath = "/Volumes/gone/mednafen";
         Settings kept;
         b.Save(kept);
-        CHECK(kept.Get("emulators", "mednafen", "") == "/Volumes/gone/mednafen");
+        CHECK(kept.Get("emulators", "mednafen.release", "") == "/Volumes/gone/mednafen");
+        CHECK(kept.Get("emulators", "mednafen.release.for", "") == bundled);
+        Launcher b2;
+        b2.Load(kept, exe);
+        CHECK(b2.Emulators()[0].exePath == "/Volumes/gone/mednafen");
+        CHECK(!b2.UsesBundledMednafen());
+        // ... but not by another install, which uses its own copy.
+        Launcher other;
+        other.Load(kept, dir + "/mac/SaturnExplorer.app/Contents/MacOS/SaturnExplorer");
+        CHECK(other.Emulators()[0].exePath == dir + "/mac/mednafen-se/mednafen");
+        // Going back to the included copy clears the override.
+        b2.Emulators()[0].exePath = bundled;
+        b2.Save(kept);
+        CHECK(kept.Get("emulators", "mednafen.release", "x").empty());
+        CHECK(kept.Get("emulators", "mednafen.release.for", "x").empty());
 
         Launcher dev;
         dev.Load(none, dir + "/bare/SaturnExplorerFrontEnd");   // developer build: nothing beside it
         CHECK(dev.Emulators()[0].exePath.empty());
         CHECK(!dev.UsesBundledMednafen());
+        // A developer build keeps reading and writing the shared key.
+        Settings devs;
+        devs.Set("emulators", "mednafen", "/Volumes/gone/mednafen");
+        Launcher dev2;
+        dev2.Load(devs, dir + "/bare/SaturnExplorerFrontEnd");
+        CHECK(dev2.Emulators()[0].exePath == "/Volumes/gone/mednafen");
+        Settings devOut;
+        dev2.Save(devOut);
+        CHECK(devOut.Get("emulators", "mednafen", "") == "/Volumes/gone/mednafen");
     }
     CHECK(MednafenFirmwareDir("/opt/se/mednafen-se/mednafen") == "/opt/se/mednafen-se/firmware");
     CHECK(MednafenFirmwareDir("mednafen").empty());

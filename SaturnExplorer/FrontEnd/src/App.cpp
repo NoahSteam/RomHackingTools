@@ -9472,7 +9472,7 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
     {
         ImGui::PushID(static_cast<int>(i));
         const bool mednafen = emus[i].key == "mednafen";
-        const float cardHeight = mednafen ? 315.0f : 250.0f;
+        const float cardHeight = mednafen ? (mLauncher.BundledMednafen().empty() ? 315.0f : 340.0f) : 250.0f;
         if (ImGui::BeginChild("##emulator_card", ImVec2(0, cardHeight), ImGuiChildFlags_Borders))
         {
             DrawLaunchEmulatorIcon(mednafen);
@@ -9517,6 +9517,21 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
                     const std::string resolved = ResolveMednafenExe(mLaunchEdits[i].exe);
                     if (resolved != mLaunchEdits[i].exe)
                         std::snprintf(mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe), "%s", resolved.c_str());
+                }
+                // A release says whether the field names the Mednafen it ships, and offers the way back to it:
+                // another build may not speak this release's live protocol.
+                const std::string& bundledExe = mLauncher.BundledMednafen();
+                if (mednafen && !bundledExe.empty())
+                {
+                    if (bundledExe == mLaunchEdits[i].exe)
+                        ImGui::TextDisabled("The Mednafen included with this release.");
+                    else
+                    {
+                        ImGui::TextDisabled("Not the Mednafen included with this release.");
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("Use included"))
+                            std::snprintf(mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe), "%s", bundledExe.c_str());
+                    }
                 }
 
                 ImGui::TextUnformatted("Arguments Template");

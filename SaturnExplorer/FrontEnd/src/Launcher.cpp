@@ -46,6 +46,10 @@ const Known kKnown[] = {
     {"mednafen", "Mednafen", "\"{rom}\""},
 };
 
+// A release's own Mednafen override and the bundled path it was chosen beside (see Launcher::Load).
+const char* kReleaseOverrideKey    = "mednafen.release";
+const char* kReleaseOverrideForKey = "mednafen.release.for";
+
 const char* kRomToken  = "{rom}";
 const char* kBiosToken = "{bios}";
 
@@ -249,14 +253,22 @@ void Launcher::Load(const Settings& s, const std::string& executablePath)
         // Exe path is written by the installer under [emulators] <key>; Launch Settings
         // edits that same key so an override persists there.
         e.exePath      = s.Get("emulators", k.key, "");
-        if (e.key == "mednafen")
+        if (e.key == "mednafen" && !mBundledMednafen.empty())
+        {
+            // A release runs the patched Mednafen it ships with: the live protocol is versioned, so a
+            // Mednafen from another build is at best a mismatch. settings.ini is shared by every install
+            // and by developer builds, so [emulators] mednafen may name another release's copy, a dev
+            // checkout or a hand-typed folder (v1.0 then "launched" the folder, opening Explorer). A release
+            // therefore ignores that key and honours only an override chosen in THIS install, recorded
+            // with the bundled path it was chosen beside. Moving or upgrading the install falls back to the
+            // copy beside it; an override chosen here is kept even while its file is missing.
+            const std::string over = s.Get("emulators", kReleaseOverrideKey, "");
+            const bool ours = !over.empty() && s.Get("emulators", kReleaseOverrideForKey, "") == mBundledMednafen;
+            e.exePath = ours ? ResolveMednafenExe(over) : mBundledMednafen;
+        }
+        else if (e.key == "mednafen")
         {
             e.exePath = ResolveMednafenExe(MigrateMednafenExe(e.exePath));
-            // A release ships its own patched Mednafen beside the program: with no path recorded, use it.
-            // Save() leaves the path empty while the bundled copy is in use, so a download that is moved
-            // keeps finding the copy beside it, and a path the user did record -- even one that is missing
-            // right now, on an unmounted volume -- is never replaced.
-            if (e.exePath.empty()) e.exePath = mBundledMednafen;
         }
         const std::string sect = std::string("launch.") + k.key;
         e.argsTemplate = s.Get(sect, "args", k.args);
@@ -289,9 +301,18 @@ void Launcher::Save(Settings& s) const
 {
     for (const EmulatorSpec& e : mEmus)
     {
-        // keep the installer's key in sync with overrides; the bundled copy is found again at every start
-        const bool bundled = e.key == "mednafen" && !mBundledMednafen.empty() && e.exePath == mBundledMednafen;
-        s.Set("emulators", e.key, bundled ? std::string() : e.exePath);
+        if (e.key == "mednafen" && !mBundledMednafen.empty())
+        {
+            // A release writes only its own keys, so a developer build's [emulators] mednafen survives it.
+            // The bundled copy is never recorded: it is found again beside the program at every start.
+            const bool bundled = e.exePath == mBundledMednafen;
+            s.Set("emulators", kReleaseOverrideKey, bundled ? std::string() : e.exePath);
+            s.Set("emulators", kReleaseOverrideForKey, bundled ? std::string() : mBundledMednafen);
+        }
+        else
+        {
+            s.Set("emulators", e.key, e.exePath);   // keep the installer's key in sync with overrides
+        }
         const std::string sect = std::string("launch.") + e.key;
         s.Set(sect, "args", e.argsTemplate);
         s.Set(sect, "workdir", e.workDir);

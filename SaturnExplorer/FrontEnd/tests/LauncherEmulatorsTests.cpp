@@ -96,6 +96,47 @@ int main()
         SE_RMDIR(folder.c_str());
     }
 
+    // A release (a mednafen-se/ folder beside the program) uses its own Mednafen even when the shared
+    // [emulators] mednafen names another one -- the v1.0 report: that key held the mednafen-se folder, and
+    // the launch opened Explorer instead of the emulator. Only an override chosen in this install counts.
+    {
+#ifdef _WIN32
+        const char* leaf = "mednafen.exe";
+        const std::string sep = "\\";
+#else
+        const char* leaf = "mednafen";
+        const std::string sep = "/";
+#endif
+        const std::string root = "se_launcher_release_test", seDir = root + sep + "mednafen-se";
+        const std::string program = root + sep + "SaturnExplorerFrontEnd", bundled = seDir + sep + leaf;
+        SE_MKDIR(root.c_str());
+        SE_MKDIR(seDir.c_str());
+        std::ofstream(bundled.c_str(), std::ios::binary) << "x";
+
+        Settings shared;
+        shared.Set("emulators", "mednafen", "C:/dev/_emu/mednafen.exe");
+        Launcher r;
+        r.Load(shared, program);
+        CHECK(r.Emulators()[0].exePath == bundled);
+        CHECK(r.UsesBundledMednafen());
+        r.Save(shared);
+        CHECK(shared.Get("emulators", "mednafen", "") == "C:/dev/_emu/mednafen.exe");   // a dev build's, kept
+        CHECK(shared.Get("emulators", "mednafen.release", "x").empty());
+
+        r.Emulators()[0].exePath = "C:/custom/mednafen.exe";   // chosen in this install's Launch Settings
+        r.Save(shared);
+        Launcher again;
+        again.Load(shared, program);
+        CHECK(again.Emulators()[0].exePath == "C:/custom/mednafen.exe");
+        Launcher dev;   // a developer build sharing the file never sees the release's override
+        dev.Load(shared, "nowhere" + sep + "SaturnExplorerFrontEnd");
+        CHECK(dev.Emulators()[0].exePath == "C:/dev/_emu/mednafen.exe");
+
+        std::remove(bundled.c_str());
+        SE_RMDIR(seDir.c_str());
+        SE_RMDIR(root.c_str());
+    }
+
     if (gFailures == 0) std::printf("LauncherEmulators: all checks passed\n");
     return gFailures == 0 ? 0 : 1;
 }
