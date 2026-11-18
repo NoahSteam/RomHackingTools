@@ -3210,6 +3210,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 if (!word(t.addr, w)) continue;
                 const sfe::DisassembledInstruction d = sfe::Sh2Decode(t.addr, w);
                 if (!d.IsValid || !d.IsBranch || d.IsCall || d.Mnemonic == "rts" || d.Mnemonic == "rte") continue;
+                // Rule 333 (area 7 round 35, A7-322): a `jmp` through a table the engine could not recover is made a call ("Treating indirect jump
+                // as call"): the conversion of an argument the call takes is its own; grammar 2 seed 12202641
+                if (!A7RuleOff(333))
+                {
+                    bool asCall = false;
+                    char hexAt[16];
+                    std::snprintf(hexAt, sizeof hexAt, "0x%08x", t.addr);
+                    const std::string needle = std::string(hexAt) + ": Treating indirect jump as call";
+                    for (const std::string& warn : r.warnings) asCall = asCall || warn.find(needle) != std::string::npos;
+                    if (asCall) continue;
+                }
                 // (the statement is the conversion: its name, `=`, the cast and its one operand, and every drawn token at the branch)
                 // (not a piece of memory the engine copies at the branch, `xVar2 = (xunknown1)uRam06001024;` a merge copy of the byte the `bt/s`'s
                 // slot loads, printed with its piece's cast: a copy at the end of its block, A7-178's, counted with the rest; grammar 1 seed 10815)
