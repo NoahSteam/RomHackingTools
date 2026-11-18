@@ -7702,7 +7702,15 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
                     break;
                 }
                 // (memory whose pointer the flow does not show may be what the statement reads: not known)
-                const std::pair<bool, FlowVn> m = whole ? memoryOf(st.blk, i) : std::make_pair(false, FlowVn());
+                std::pair<bool, FlowVn> m = whole ? memoryOf(st.blk, i) : std::make_pair(false, FlowVn());
+                // A7-281: a part of the loaded register is the same part of the memory (big-endian both): the low half of r2 after `mov.l @r7,r2`
+                // is the word's second half, which the half-word store `mov.w r0,@(2,r7)` wrote (`mov.w r2,@r7` stores what that store did;
+                // grammar 1 seed 12205947: the line of the second store was drawn at the first)
+                if (m.first && st.vn.size < op.out.size && st.vn.size < m.second.size && m.second.size == op.out.size)
+                {
+                    m.second.offset += st.vn.offset - op.out.offset;
+                    m.second.size = st.vn.size;
+                }
                 // A7-176: unless the statement is a computation (an op of an instruction other than this read) that reads no memory and is
                 // no number, no input and no engine-made sum: a read of memory is then another value than the computation's, and a store
                 // of it is not the statement's (`sub r3,r2`'s `in_r2 - r3` is not the `mov.b r3,@r6` of the word loaded into r3)

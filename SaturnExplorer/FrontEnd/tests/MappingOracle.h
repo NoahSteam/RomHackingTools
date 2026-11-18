@@ -2505,6 +2505,18 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 readHere = readHere || (f.insn == t.addr && !f.write && !f.frame &&
                                                         (bytes == 0xFFFFFFFFu ? GlobalDelta(va, f.address) < f.size
                                                                               : GlobalDelta(from, f.address) < f.size || GlobalDelta(f.address, from) < bytes));
+                            // Rule 273 (area 7 round 33, A7-262): a global read whole, with no cast, drawn at an instruction that reads a byte or a half
+                            // inside it (`uVar4 = _Ram26001034;` at `tas.b @r7` with r7 = 0x26001036, after `mac.w @r6+,@r7+`, the word the function
+                            // reads elsewhere at its address): the statement reads the whole variable and the instruction reads part of it, the
+                            // read-modify-write's own read; grammar 1 seed 12188214
+                            if (!A7RuleOff(273) && !readHere && bytes == 0xFFFFFFFFu)
+                            {
+                                uint32_t width = 0;
+                                for (const AccessFate& f : r.accessFates)
+                                    if (!f.frame && GlobalDelta(f.address, va) == 0) width = std::max<uint32_t>(width, f.size);
+                                for (const AccessFate& f : r.accessFates)
+                                    readHere = readHere || (f.insn == t.addr && !f.write && !f.frame && width > 1 && GlobalDelta(f.address, va) < width);
+                            }
                             // (A7-165: a marked-volatile read is no fate -- the engine lists it in the ledger only, `read 2 at 0600900A direct
                             // 26001028 printed 1x` -- and `xRam26001030 = Ram26001028;` drawn at the `mov.w @r7,r0` that reads it is that load's
                             // own statement as a folded one is; grammar 1 specials seed 9302668)
@@ -2950,13 +2962,40 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         int ssize = 0;
                         const int reg = word(t.addr, sw) ? StoredRegister(sw, ssize) : -1;
                         std::set<uint32_t> makers;
+                        // Rule 272 (area 7 round 33, A7-271): `and Rn,Rn` keeps Rn (the generator's no-op): it is no maker of the register, the
+                        // makers before it are; grammar 1 seed 11905223 (`and r2,r2` between the entry and the second store)
+                        const auto keepNoOps = [&](std::set<uint32_t>& ms) {
+                            if (A7RuleOff(272)) return;
+                            for (int pass = 0; pass < 4; ++pass)
+                            {
+                                std::set<uint32_t> next;
+                                bool changed = false;
+                                for (uint32_t m : ms)
+                                {
+                                    uint16_t mw = 0;
+                                    std::set<uint32_t> before;
+                                    if (m && word(m, mw) && (mw & 0xF00F) == 0x2009 && static_cast<int>((mw >> 8) & 0xF) == reg &&
+                                        static_cast<int>((mw >> 4) & 0xF) == reg && RegisterMakers(r, word, into, m, reg, before))
+                                    {
+                                        next.insert(before.begin(), before.end());
+                                        changed = true;
+                                    }
+                                    else next.insert(m);
+                                }
+                                ms = next;
+                                if (!changed) break;
+                            }
+                        };
                         bool same = reg >= 0 && RegisterMakers(r, word, into, t.addr, reg, makers) && !makers.empty();
+                        if (same) keepNoOps(makers);
                         for (uint32_t x : valued)
                         {
                             uint16_t xw = 0;
                             int xsize = 0;
                             std::set<uint32_t> xm;
-                            same = same && x != t.addr && word(x, xw) && StoredRegister(xw, xsize) == reg && RegisterMakers(r, word, into, x, reg, xm) && xm == makers;
+                            same = same && x != t.addr && word(x, xw) && StoredRegister(xw, xsize) == reg && RegisterMakers(r, word, into, x, reg, xm);
+                            if (same) keepNoOps(xm);
+                            same = same && xm == makers;
                         }
                         if (same) continue;
                     }
@@ -4227,14 +4266,30 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 uint16_t sw = 0;
                                 int size = 0;
                                 const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
-                                if (reg < 0 || reg != inReg) continue;
+                                if (reg < 0) continue;
                                 if (!haveSources)
                                 {
                                     sources = BranchSources(r, word);
                                     haveSources = true;
                                 }
                                 std::set<uint32_t> makers;
-                                if (!RegisterMakers(r, word, sources, st, reg, makers) || (makers.size() == 1 && makers.count(0))) unchanged = true;
+                                if (!RegisterMakers(r, word, sources, st, reg, makers)) unchanged = true;
+                                // (the input itself, or a register a load fills -- which may read the input back from the frame word it was pushed to)
+                                else if (reg == inReg && makers.size() == 1 && makers.count(0)) unchanged = true;
+                                else
+                                    for (uint32_t m : makers)
+                                    {
+                                        uint16_t mw = 0;
+                                        if (!m || !word(m, mw)) continue;
+                                        // (the register a load fills: `mov.x @Rm,Rn`, `@Rm+`, `@(d,Rm)`, `@(r0,Rm)` and pc-relative fill Rn; the r0 forms r0)
+                                        const unsigned lo = mw & 0xFu, hi = mw >> 12;
+                                        int dest = -1;
+                                        if ((hi == 0x6 && lo != 3 && lo <= 6) || hi == 0x5 || hi == 0x9 || hi == 0xD || (hi == 0x0 && lo >= 0xC && lo <= 0xE))
+                                            dest = static_cast<int>((mw >> 8) & 0xF);
+                                        else if (((mw >> 8) == 0x84 || (mw >> 8) == 0x85) || ((mw >> 8) >= 0xC4 && (mw >> 8) <= 0xC6))
+                                            dest = 0;
+                                        if (dest == reg) unchanged = true;
+                                    }
                             }
                         if (input && !unchanged)
                         {
