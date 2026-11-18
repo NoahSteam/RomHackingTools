@@ -10928,6 +10928,9 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
             // the maker answered the narrowing, the line that begins with it, before the maker's own statement. The narrowing is a copy of
             // the value there (A7-25's mark), so the statement that makes it is offered first. Grammar 1 seed 10805383
             // (a register variable's `V = <conversion>;` statement only: a store's line keeps the operand it was given at the maker)
+            // (no maker -- the input's path, `makers` cleared above -- moves the tokens to none, and has no first instruction to compare:
+            // dereferencing the empty set's begin() is undefined; MSVC's checked library stops on it)
+            if (makers.empty()) continue;
             const uint32_t at0 = *makers.begin();
             const std::string& lt0 = lines[line].text;
             const size_t nb0 = lt0.find_first_not_of(' '), eq0 = lt0.find(" = ");
