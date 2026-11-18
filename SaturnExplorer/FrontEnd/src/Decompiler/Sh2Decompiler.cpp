@@ -9347,7 +9347,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // adds (`mov.w r3,@r6` of the 0 a `dt` loop left): the statement is that store's value, and the next store (`mov.b r5,@r6`, an
             // input that "may be 0") writes what the word holds after it; grammar 1 seed 12273194
             bool priorZero = false;
-            if (conversion && code == ghidra::CPUI_INT_ZEXT))
+            if (conversion && code == ghidra::CPUI_INT_ZEXT)
                 for (const ghidra::AccessRecord* pz : stores)
                 {
                     if (priorZero || !writes(pz) || key(pz->pc, pz->slot) >= before) continue;
@@ -10362,7 +10362,7 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         // (as the oracle takes a copy) and when another line draws the instruction as its own; grammar 1 seed 6802425.
         // (A7-308: also the extension of a load made in a delay slot, `mov.b @r4,r1` in the slot of `bf/s`, whose copy line names a store after
         // the call; grammar 1 seed 12299659)
-        if ((o->code() == ghidra::CPUI_INT_SEXT || o->code() == ghidra::CPUI_INT_ZEXT) && out && out->isImplied() && true &&
+        if ((o->code() == ghidra::CPUI_INT_SEXT || o->code() == ghidra::CPUI_INT_ZEXT) && out && out->isImplied() &&
             o->getIn(0)->isWritten() && !o->getIn(0)->isImplied())
         {
             const ghidra::PcodeOp* def = o->getIn(0)->getDef();
