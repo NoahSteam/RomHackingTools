@@ -19144,6 +19144,30 @@ void TestArea7Joins2Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7 round 30. A7-240 (grammar 2 seed 12123120): `xRam00000000 = (xunknown1)unaff_r9;` at `mov.b r1,@r4`, r1 a load of the frame word a pushed
+// r9 left, in a function that runs into another's code: A7-176's "a read of memory is another value" rule is no rule for a statement that
+// shows an input (the pointer of the load is not placed), so the store showed the statement's value and AddFrameStoreTokens gave the line
+// its token. A7-253: grammar 2 seed 11600932 (the specials alphabet) is not reproduced by the merged branches.
+void TestArea7Round30Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+        bool specials;
+    };
+    const bool savedSpecials = gSpecialReads;
+    for (const Whole& w : { Whole{ 2, 12123120, false }, Whole{ 2, 11600932, true } })
+    {
+        gSpecialReads = w.specials;
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 30: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    gSpecialReads = savedSpecials;
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21230,6 +21254,7 @@ void TestGenerated()
         RUN(TestArea4Round3Pins(d));
         RUN(TestArea7Round29Pins(d));
         RUN(TestArea7Joins2Pins(d));
+        RUN(TestArea7Round30Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

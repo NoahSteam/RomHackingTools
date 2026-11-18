@@ -7690,7 +7690,10 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
                 // A7-176: unless the statement is a computation (an op of an instruction other than this read) that reads no memory and is
                 // no number, no input and no engine-made sum: a read of memory is then another value than the computation's, and a store
                 // of it is not the statement's (`sub r3,r2`'s `in_r2 - r3` is not the `mov.b r3,@r6` of the word loaded into r3)
-                if (!m.first && !want.rebuilt && want.locations.empty() && want.numbers.empty() && !want.insns.empty())
+                // A7-240: ...and no input either, as the rule says: `xRam00000000 = (xunknown1)unaff_r9;` at `mov.b r1,@r4`, r1 the load of the
+                // frame word the pushed r9 left, in a function that runs into another's code (a pointer the walk cannot place): the memory may be
+                // the input; the line was drawn at no instruction and a click went to another line. Grammar 2 seed 12123120
+                if (!m.first && !want.rebuilt && want.locations.empty() && want.numbers.empty() && want.inputs.empty() && !want.insns.empty())
                 {
                     // (not when an instruction of the statement's value reads memory too: the engine takes two reads of one address for one value, A7-150)
                     bool reads = false;
