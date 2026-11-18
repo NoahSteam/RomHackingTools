@@ -8091,6 +8091,65 @@ bool StoreShowsValue(const ghidra::AccessRecord& r, const FlowRecord& flow, cons
         if (FlowNumberBefore(flow, fd, at->second.first, static_cast<int>(at->second.second), store->in[2], known))
             return want.Has(known, store->in[2].size);
     }
+    // A7-271 (A7-306): a store of the register a load of the very memory it writes filled -- `mov.w @r15,r3 ; mov.b r3,@r15`, the frame word
+    // read and written back -- writes the word's own value, never a number the statement shows: no number the line names that store for
+    // (`iStack_28 = -9;` drawn at the `mov #-9,r3` named the store of the old r3); grammar 2 seed 12151073
+    FlowVn storedReg = isStore ? store->in[2] : FlowVn();
+    if (numbersOnly && isStore && storedReg.space && storedReg.space->getType() == ghidra::IPTR_INTERNAL)
+    {
+        // (the register a temporary of the store's instruction copies or narrows, `mov.b r3,@r15`)
+        const std::vector<FlowOp>& sops = flow.blockOps[static_cast<size_t>(at->second.first)];
+        for (size_t i = at->second.second; i-- > 0;)
+            if (sops[i].hasOut && SameStorage(sops[i].out, storedReg))
+            {
+                if ((sops[i].code == ghidra::CPUI_SUBPIECE || sops[i].code == ghidra::CPUI_COPY) && sops[i].numIn >= 1 && !sops[i].in[0].Constant()) storedReg = sops[i].in[0];
+                break;
+            }
+    }
+    if (numbersOnly && isStore && !std::getenv("SE_R34_OFF_306") && !storedReg.Constant() && storedReg.space &&   // GATETMP
+        storedReg.space->getType() == ghidra::IPTR_PROCESSOR)
+    {
+        FlowVn whole = storedReg;
+        whole.offset &= ~static_cast<ghidra::uintb>(3);
+        whole.size = 4;
+        std::vector<const FlowOp*> writers;
+        bool entry = false;
+        bool stackS = false, stackL = false;
+        ghidra::uintb offS = 0, offL = 0;
+        if (FlowLastWriters(flow, fd, at->second.first, static_cast<int>(at->second.second), whole, writers, &entry, false) && !entry && !writers.empty() &&
+            FlowPointer(flow, fd, at->second.first, static_cast<int>(at->second.second), store->in[1], stackS, offS))
+        {
+            bool same = true;
+            for (const FlowOp* w : writers)
+            {
+                bool found = false;
+                for (size_t b = 0; b < flow.blockOps.size() && !found; ++b)
+                {
+                    const std::vector<FlowOp>& ops = flow.blockOps[b];
+                    if (ops.empty() || w < &ops.front() || w > &ops.back()) continue;
+                    found = true;
+                    int wi = static_cast<int>(w - &ops.front());
+                    const FlowOp* ld = w;
+                    // (through the extension that widens what the load read: `mov.w @r15,r3` is a LOAD of two bytes and a sign extension)
+                    for (int hop = 0; hop < 3 && ld->code != ghidra::CPUI_LOAD && ld->numIn >= 1 && !ld->in[0].Constant() &&
+                                      (ld->code == ghidra::CPUI_INT_SEXT || ld->code == ghidra::CPUI_INT_ZEXT || ld->code == ghidra::CPUI_COPY || ld->code == ghidra::CPUI_SUBPIECE);
+                         ++hop)
+                    {
+                        int k = wi - 1;
+                        while (k >= 0 && !(ops[static_cast<size_t>(k)].hasOut && SameStorage(ops[static_cast<size_t>(k)].out, ld->in[0]))) --k;
+                        if (k < 0) break;
+                        ld = &ops[static_cast<size_t>(k)];
+                        wi = k;
+                    }
+                    same = same && ld->code == ghidra::CPUI_LOAD && !ld->literal && ld->numIn >= 2 &&
+                           FlowPointer(flow, fd, static_cast<int>(b), wi, ld->in[1], stackL, offL) && stackL == stackS && offL <= offS &&
+                           offS + static_cast<ghidra::uintb>(storedReg.size) <= offL + static_cast<ghidra::uintb>(ld->out.size);
+                }
+                same = same && found;
+            }
+            if (same) return false;
+        }
+    }
     if (want.times.count(r.time)) return true;
     // (A7-126: a store whose instruction the flow's record has no op of -- flow reached it only after the record was taken, past a `jmp`
     // the engine resolved later, `mov.l r3,@r7` of a callee the code jumps into -- is a value the walk knows nothing of: it may be the
