@@ -20592,8 +20592,10 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         // push of PR and kept the pop (`mov.l @r15+,r3 ; lds r3,pr`), returned to 0 and reported an `emulator-error` the seed does not have. A step
         // that makes a program stop the emulator is not taken when the program the shrink starts from does not stop. Area 7 round 33 (A7-280)
         // fixed that seed's finding, so the pin takes the first of the seeds that still has a finding of its own (the seeds of A7-273's open
-        // overlap class, grammar 1), and the seed itself when it has one again.
-        for (const uint64_t seed : { 12212141ull, 12133156ull, 12137810ull, 11508679ull, 11703213ull })
+        // overlap class, grammar 1), and the seed itself when it has one again. The A7-273 fix closed those four, so the list goes on with
+        // grammar 1 seeds still open (A7-294's 12246420, 12250922, 12273194; A7-292's 11004012).
+        bool shrunk = false;   // (the pin is not vacuous: one of the seeds must still have a finding to shrink)
+        for (const uint64_t seed : { 12212141ull, 12133156ull, 12137810ull, 11508679ull, 11703213ull, 12246420ull, 12250922ull, 12273194ull, 11004012ull })
         {
             const Program p = Generate(seed);
             const Report base = Evaluate(d, p, false);
@@ -20606,8 +20608,10 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                         static_cast<unsigned long long>(seed), int(StopsInEmulator(p)), s.evals, int(Has(again, sig)), sig.c_str(), int(Has(again, "emulator-error")),
                         int(StopsInEmulator(small)));
             CHECK(!StopsInEmulator(p) && Has(again, sig) && !Has(again, "emulator-error") && !StopsInEmulator(small));
+            shrunk = true;
             break;
         }
+        CHECK(shrunk);
     }
     {
         // A3-193 (area 3, oracle): grammar 2 seed 8602477, `n:return-dropped`. Each arm of `tst r4,r4 ; bf` ends with `mov #7,r0 ; mov.b @(r0,r4),r1`
