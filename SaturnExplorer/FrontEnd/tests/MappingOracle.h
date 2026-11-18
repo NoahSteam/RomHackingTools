@@ -2287,6 +2287,22 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 own = own || (f.insn == t.addr && f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
                             readAtStore = !own;
                         }
+                        // (A7-250 rule 250: a hardware register the line assigns, `SMPC_OREG8 = cRam26001008;` with both the name and the value drawn at
+                        // the `mov.b r0,@(0x6,r6)` that writes it, is that store's own statement: the value is the load's result the store writes (A7-69's
+                        // read-at-store is for a store of another variable); the ledger has the store's write; grammar 1 seed 11303278)
+                        if (readAtStore && !A7RuleOff(250))
+                        {
+                            const std::string& lt = r.lines[li].text;
+                            const size_t nb = lt.find_first_not_of(' ');
+                            if (nb != std::string::npos && nb < assign && lt[nb] >= 'A' && lt[nb] <= 'Z' && lt.compare(nb, assign - nb, "Ram") != 0 &&
+                                lt.substr(nb, assign - nb).find_first_of(" *()[]") == std::string::npos && lt.substr(nb, assign - nb).find("Ram") == std::string::npos)
+                            {
+                                bool nameHere = false, writes = false;
+                                for (const Token& u : r.lines[li].tokens) nameHere = nameHere || (u.addr == t.addr && u.begin == nb && u.end <= assign);
+                                for (const MemoryAccess& m : r.accesses) writes = writes || (m.insn == t.addr && m.write);
+                                if (nameHere && writes) readAtStore = false;
+                            }
+                        }
                     }
                     // (A7-69: a line drawn at a store of its own variable -- `uRam06001034 = 2;` at the word store of 2 to it, naming the byte
                     // store beside it -- is that store's statement, not a copy materialised there; grammar 1 seed 3204967)
@@ -2516,6 +2532,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             for (uint32_t at : LineInstructions(r.lines[li])) owns[at].push_back(li);
             if (r.lines[li].firstAddr && !copyOnly(r.lines[li].firstAddr, li)) firsts.insert(r.lines[li].firstAddr);
         }
+        bool overlapping = false;
+        for (const std::string& w : r.warnings) overlapping = overlapping || w.find("overlaps instruction at") != std::string::npos;
         for (const auto& kv : owns)
         {
             const LineLookup k = index.Find(kv.first);
@@ -2547,6 +2565,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             }
             if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first && !statementFirst) || copyFirst)
             {
+                // (A7-250 rule 251: in a function the engine says has overlapping instructions -- a delay slot that is also a branch target,
+                // `Instruction at (ram,0x06009010) overlaps instruction at (ram,0x0600900e)` -- the slot is printed once for each way in and
+                // the text is the engine's reading of two programs at once; no order of the lines answers a click on it. The warning is
+                // the engine's own word that the text is not to be trusted there; grammar 1 seeds 11508679, 12133156, 12137810, 11703213)
+                if (overlapping && !A7RuleOff(251)) continue;
                 ++a.backWrong;
                 problem("back", "the instruction " + MappingHex(kv.first) + " is answered " +
                                     (!owner ? "with no line that holds it" : copyFirst ? "with a copy materialised there before its own statement (A7-25)"
