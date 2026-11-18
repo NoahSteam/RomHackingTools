@@ -22906,6 +22906,7 @@ Fixer, branch `review/5-a5154` (area 5 round 2 and master `be40a4ce`); RelWithDe
 | A5-154 | P2, engine | **fixed** (patch 0098): grammar 2 seed 12130995 (`read-after-folded-store`) |
 | A5-160 (area 7's A7-208) | P3 | **not the same mechanism**; analysed as A5-161: the text is right, the oracle's write-back set-aside does not see through a `tas.b` |
 | A5-161 | P3, oracle | open (diagnosed) |
+| A5-162 | P2, engine | open, found by the sweep (grammar 1 seed 12183970, `folded-read-after-access`), same without patch 0098 |
 
 ### A5-154
 
@@ -22921,5 +22922,24 @@ Grammar 1 seed 11007546, shrunk: `mov.w r1,@g ; mov.w @g,r0 ; tas.b @g ; mov.w r
 
 ### Runs (after the last code edit)
 
-See the commit message of the last commit of the branch for the numbers; the table below is the same.
+| Run | Result |
+|---|---|
+| ctest, `-j1` | 117 of 117 passed |
+| fault matrix | 0 of 94 job(s) failed |
+| generator, 20,000 seeds (pins included) | failing seeds=0; findings=0 |
+| grammar 1, 10,000 from 11,900,001 | 4 failing seeds, all area 7 mapping classes: 11901023 (`map-const-join`), 11902840 and 11904869 (`map-way-back`), 11905223 (`map-store-dead`) |
+| grammar 2, 10,000 from 11,900,001 | 3 failing seeds: 11900473 (`map-conversion-branch`), 11901051 (`map-way-back`), 11904122 (`caution-unsaid`, r12 at a call: area 3) |
+| grammar 1, 10,000 from 12,180,001, `SE_GENERATED_CAUTION=deep` | 4 failing seeds: 12183970 (`v:folded-read-after-access`, **A5-162, open**), 12185736 (`map-copy-store`), 12188214 and 12189580 (`map-way-back`) |
+| grammar 2, 10,000 from 12,180,001, `SE_GENERATED_CAUTION=deep` | 1 failing seed: 12181915 (`map-way-back`) |
+| printed-C, 3,000 seeds | agrees=5196 |
+| corpus hwram007 / hwram008, alone and lent | `all passed` (every ledger count 0; missing and said 0 and 4; lent 474 (645) and 724 (975)); the six token dumps byte-identical to the build with the join walk switched off |
+| lints | literal size and vendored tree ok |
+
+Every one of the 12 failing seeds was replayed with the patch's walk switched off (a temporary environment switch, not committed): each fails the same way, so none is caused by 0098.
+
+### Routed
+
+* **Area 5, next fixer:** A5-162 (P2, open), A5-161 (P3, oracle).
+* **Area 7:** grammar 1 11901023, 11902840, 11904869, 11905223, 12185736, 12188214, 12189580; grammar 2 11900473, 11901051, 12181915.
+* **Area 3:** grammar 2 11904122 (`caution-unsaid`, A3-228's class).
 
