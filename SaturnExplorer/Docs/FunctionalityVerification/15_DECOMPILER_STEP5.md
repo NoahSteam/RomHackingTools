@@ -22484,3 +22484,70 @@ After the last code edit (`Sh2Decompiler.cpp`, `MappingOracle.h` and `Sh2Generat
 
 * **Area 7 (next fixer):** A7-193 and A7-194 (P3, oracle, open); A7-191, A7-192 and A7-179's rest as before.
 * **Area 3:** grammar 2 seed 10605744 (`n:caution-unsaid`: the call at 0x0600906E, of 0x06009098 with no signature lent, comes back with gbr changed in the run of input mode 2), found by this round's sweep, the same with the round's changes off; not filed here.
+
+## Area 3, A3-226 fix
+
+Fixer, branch `review/3-a3226` from master `10aefa40`. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). Host change in `Sh2Decompiler.cpp` (`Call`: A3-226, A3-221); oracle change and pins in `Sh2GeneratedTests.cpp` (A3-220; `TestA3RoutedPins`, the A3-226, A3-221 and A3-220 blocks). **No engine patch: 0095 stays free.** No generator change. Scratch only (the shrunk words are in the pin and in section 1).
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-226 | P2 | **fixed** (host): the walk of function 1 lost r15 because a lent callee's signature does not keep the frame pointer r14 |
+| seed 10605744 | - | **not reproducible** on master `10aefa40`: filed A3-227 (P3), closed as not reproduced |
+| A3-220 | P3 | **fixed** (oracle): an arena attribution by chance is confirmed by a run with the register started elsewhere |
+| A3-221 | P3 | **fixed** (host): no r2 note when the same exact address is an argument the call shows |
+| A3-228 | P2 | **filed open** (host): grammar 2 seed 12055901, a later-callee miss of r15 (found by the sweep, on master) |
+
+### 1. A3-226: why the walk lost the return
+
+Shrunk fixture (the round's A3-214 section 3; `SE_GENERATED_CAUTION=deep`): function 1 (not lent) pushes r8-r11, r14 and PR, makes r14 a copy of r15, calls function 2 (lent), pops, and after its epilogue sets r10 when r3 = 0. A temporary trace of the nested walk (`Call` and `Return`, removed) showed function 2's walk returning with r14 `mayEntry` only (its store loop `mov.l r1,@-r2` through a copy of r15 is not bounded, so the saved word may be written over), so function 2's lent signature does not keep r14 (`e.preserved`: bit 14 clear). In the walk of function 1, `Apply` took the signature and gave r14 the call's output, no stack address; `mov r14,r15` at the epilogue made r15 unknown, the pops of PR and the registers read unknown words, and `rts` was reached with PR and r15 both `Fuzzy` with no `mayEntry`: no return proven, and `mChangedAt` takes nothing from a path that is not a return (A3-207's branch needs `mayEntry` of PR). So `mov #0x18,r10` after the epilogue was never recorded as a change.
+
+**Fix.** In the cautions' walks only (`FollowTables()`, so the frame rules' walks, hand-outs and the corpus frame notes are master's), a register of r8-r14 that holds an exact stack address before a call of a lent callee, which that callee's signature does not keep and whose own walk shows no return changing it for certain (`CalleeChanged`), stays what it was after the call (the fail-open reading these walks have for a change that is only possible). A register the callee does change for certain is replaced as before. The cost is one `CalleeChanged` lookup (cached) per lent call in those walks and a vector that is empty unless a frame pointer qualifies; nothing is decoded or formatted.
+
+**Pins** (`TestA3RoutedPins`, the A3-226 block): the shrunk words and grammar 2 seed 12011728 whole: no finding, `caution.required` and `caution.said` above 0, and neither `caution.unsaid.deep` nor `.deep.own-effect` counted. With the change off (temporary switch) both CHECKs fail (required 1, said 0, deep 1).
+
+### 2. Seed 10605744
+
+Replayed alone (`SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=10605744 SE_GENERATED_CANARY=0`, with `SE_GENERATED_PINS=0`, with `SE_GENERATED_CAUTION=deep`, with the specials alphabet; also as a one-seed range with shrink off): no finding on master, with or without this branch's change. The whole range 10,600,001 to 10,610,000 of grammar 2 (canary, shrink and pins off) on master with the A3-226 change off has one failing seed, 10609398 (`n:map-const-join`, A7-193). The finding was in the sweep of the A3-214 branch (`7f9645d5`); the later master commits that touch the decompiler are `2890c1bc` (A3-214 cleanups) and `a4cfbcd2` (the dispatch reader's mask tests), neither said to change output. An attempt to bisect by putting the A3-214 branch's `Sh2Decompiler.cpp` under today's tests failed for another reason (the tests expect A7-189/190), so not bisected. Filed A3-227, closed not reproduced; it is a seed to look for in later sweeps, not a product or oracle decision.
+
+### 3. A3-221 and A3-220
+
+**A3-221** (`Call`, the unlent branch): the r2 note is requested with `exactToo = false` (so an exact stack address in r2 says nothing and adds no escape, as r4-r7 do) when r4-r7 hold the same exact address (`Value::Sp`, the same offset) in an argument the engine shows: r4-r6 always, r7 unless r4-r6 are all unset (A3-48). An address in r2 alone, or a based or laundered one, notes as before; the hand-out of the address to the engine is the probe's own loop over r2-r7. Pin: fr2 (words from `tools/a3_round28/fixtures.src`) no note, and the same program with `mov r2,r4` made a nop notes it.
+
+Corpus note counts (both images, alone and lent, the dumps of `a7_round2/corpus.sh`, the base the same tree without this change):
+
+| dump | cautions | r2 notes | r14 notes | stack slot notes (is / may be) | texts changed |
+|---|---|---|---|---|---|
+| 007 alone | 41 -> 41 | 87 -> 66 | 186 -> 189 | same | 21 |
+| 007 lent | 58 -> 58 | 63 -> 32 | 288 -> 290 | same | 31 |
+| 008 alone | 39 -> 39 | 123 -> 97 | 579 -> 582 | 6 -> 7 / 191 -> 192 | 25 |
+| 008 lent | 55 -> 55 | 135 -> 98 | 755 -> 757 | 5 -> 7 / 173 -> 175 | 37 |
+
+Every changed text loses an r2 note whose address the text shows as an argument. The gained r14 and stack-slot notes are ones the r2 note stood in front of at the same call (the note names one register: r2 first, then the lowest in the hand-out set), so they are net facts the old text hid; the net count of these notes is down by 18, 29, 21 and 31. No caution moved in either image (A3-226's change: the walks of the cautions' on the corpus change no record).
+
+**A3-220** (`EffectClaimsContradicted`): where the arena check is about to fail, the store's address is confirmed by one run with that register started 0x40 further on (the `PointerMoves` of A3-163, now with `byAddress`): an address that does not move is not a store through the register (counted `excluded.pointer-not-moved.claim-wrong`); a run that stops early or takes another path keeps the finding. Only reached where the claim was about to fail, so the cost is nil on agreeing runs. Pin: seed 10302868, no finding, 4 stores excused; off, 1 finding. The two `PointerMoves` lambdas of the A3-163 pin take the new parameter.
+
+### 4. Sweeps (fresh ranges; canary, shrink and pins off; this tree's `SaturnExplorerSh2GeneratedTests`)
+
+| Run | Result |
+|---|---|
+| grammar 1, 10,000 from 10,700,001 | 2 failing seeds, 3 findings: 10706671 (`n:`/`v:map-way-back`, A7-25) and 10707881 (`n:map-way-back`): both the same on master (the pre-change binary) |
+| grammar 2, 10,000 from 10,700,001 | 1 failing seed, 1 finding: 10702729 (`n:map-const-join`, A7-193's class) |
+| grammar 1, 10,000 from 12,050,001, `SE_GENERATED_CAUTION=deep` | 2 failing seeds, 3 findings: 12050176 (`v:map-const-join`), 12052695 (`n:read-after-folded-store`, two): both the same on master |
+| grammar 2, 10,000 from 12,050,001, `SE_GENERATED_CAUTION=deep` | 3 failing seeds, 7 findings: 12051473 (`n:map-store-after`, A7-32's class), 12056533 (`n:generator:no-return`, an emulator error: "Unable to load 16 bytes at 0x0"), **12055901 (`n:caution-unsaid-deep`, r15: A3-228)**; all three the same on master |
+
+### 5. Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest | 117 tests, all passed |
+| fault matrix | 0 of 94 job(s) failed |
+| generator, 20,000 seeds | failing seeds=0; findings=0 |
+| printed-C, 3,000 seeds | agrees=5196 |
+| corpus, both images with lending | every ledger count 0; missing and said 0 (007) and 4 (008); 999 real entries: signatures lent 474 (645 parameters); 1543: 724 (975) |
+| lints | `check-literal-size`: ok (the vendored lint not run: no patch, no vendored file) |
+
+### 6. Routed
+
+* **Area 7:** grammar 1 seeds 10706671 and 10707881 (`map-way-back`), grammar 1 12050176 and grammar 2 10702729 (`map-const-join`), grammar 1 12052695 (`read-after-folded-store`; engine or area 2), grammar 2 12051473 (`map-store-after`): all on master.
+* **Generator (area 11):** grammar 2 seed 12056533 `generator:no-return` (the program's run reads address 0).
+* **Area 3 (next fixer):** A3-228 (P2, open: 12055901, r15 at a call of 060090BC).

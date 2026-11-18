@@ -1367,7 +1367,28 @@ private:
                 if (((kConvention >> r) & 1u)) UseUnkept(Get(s, mReg[r]));
         if (!signatureLent)
         {
-            NoteFrameEscape(s, 2, true, at);
+            // (area 3, A3-221) The same exact address in an argument the call shows (r4-r7: -O0 code makes it in r2 and copies it,
+            // `mov r2,r4`) is no address "in none of the arguments": no note, as for r4-r7 themselves (060622E0/008). r7 only when it is not
+            // dropped (r4-r6 all unset, A3-48).
+            {
+                const Value a2 = Get(s, mReg[2]);
+                bool shownArg = false;
+                if (a2.kind == Value::Sp)
+                {
+                    bool unsetAll = true;
+                    for (int r = 4; r < 7; ++r)
+                    {
+                        const Value x = Get(s, mReg[r]);
+                        unsetAll = unsetAll && ((x.kind == Value::Reg && x.v == r) || (x.kind == Value::Fuzzy && !x.own));
+                    }
+                    for (int r = 4; r < 8; ++r)
+                    {
+                        const Value x = Get(s, mReg[r]);
+                        shownArg = shownArg || (x.kind == Value::Sp && x.v == a2.v && !(r == 7 && unsetAll));
+                    }
+                }
+                NoteFrameEscape(s, 2, !shownArg, at);
+            }
             if (mTolerant)
             {
                 // The probe's callee is any callee the first flow cannot name, and the engine reads it by the default model: it takes
@@ -1599,7 +1620,26 @@ private:
             for (int r = 0; r < kTracked; ++r)
                 if (((through >> r) & 1u) && !Get(s, mReg[r]).unkept.empty()) carried.emplace_back(r, Get(s, mReg[r]).unkept);
         }
+        // (area 3, A3-226) A walk of the cautions' (FollowTables): a frame pointer (r8-r14 holding an address of this frame, the usual r14) a lent
+        // callee's signature does not keep, though its own walk shows no return changing the register for certain (CalleeChanged): the callee
+        // restores it from a word its own store loop may have written over (the walk cannot bound it: `mov.l r1,@-r2` through a copy of r15),
+        // so the signature takes it as not kept. The value Apply gives it is no stack address, the walk loses r15 at the epilogue's
+        // `mov r14,r15` and proves no return, and what the path changes after the epilogue is never recorded (grammar 2 seed 12011728:
+        // `mov #0x18,r10` after it, read through r6 by the tail-jumped function). The value stays; a register the callee does change for
+        // certain on some path is replaced as before.
+        std::vector<std::pair<int, Value>> framePointers;
+        if (mNested && FollowTables() && signatureLent && haveTarget)
+        {
+            const uint32_t changedFor = CalleeChanged(target);
+            for (int r = 8; r < kR15; ++r)
+            {
+                if (((e.preserved >> r) & 1u) || ((changedFor >> r) & 1u)) continue;
+                const Value v = Get(s, mReg[r]);
+                if (v.kind == Value::Sp) framePointers.emplace_back(r, v);
+            }
+        }
         Apply(s, e, targetIsR0);
+        for (const auto& fp : framePointers) Set(s, mReg[fp.first], fp.second);
         for (const auto& c : carried)
         {
             auto f = s.vars.find(KeyOf(mReg[c.first]));

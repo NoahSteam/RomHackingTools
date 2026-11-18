@@ -6377,7 +6377,9 @@ std::string PointerName(int k) { return k == 15 ? std::string("r15 (the stack)")
 // store's index in run.trace, it answers whether the same store, in a run with k started elsewhere, stores a value moved by as much. A value
 // that only lands on k's start by arithmetic on other registers does not move (grammar 2 seed 2807704: r4 ^ r5 + r5 is r6's start, by the
 // arenas' 0x1000 spacing) and is no evidence of a leak; 'unmoved' counts the stores so excused.
-using PointerMoves = std::function<bool(int k, size_t traceIndex)>;
+// (area 3, A3-220) With 'byAddress' it asks the same of the store's address: a store that lands in k's arena by chance (r5 + (r5 & 0xffff) is
+// r6's start, grammar 2 seed 10302868) is not through k when the address stays where it was with k started 0x40 further on.
+using PointerMoves = std::function<bool(int k, size_t traceIndex, bool byAddress)>;
 std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, std::string* sigOut = nullptr, const PointerMoves* moves = nullptr,
                                      int* unmoved = nullptr)
 {
@@ -6389,8 +6391,9 @@ std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, st
         run.fin[15] - run.init[15] != static_cast<uint32_t>(e.spDelta))
         return fail("claim-wrong:spDelta", "the prototype says r15 ends " + std::to_string(e.spDelta) + " bytes from where it began and a run ends " +
                                                std::to_string(static_cast<int32_t>(run.fin[15] - run.init[15])) + " from it");
-    for (const TraceRec& t : run.trace)
+    for (size_t ti0 = 0; ti0 < run.trace.size(); ++ti0)
     {
+        const TraceRec& t = run.trace[ti0];
         if (!t.write) continue;
         const uint32_t a = t.addr & 0x0FFFFFFFu;
         if (a >= kStackTop && a < kStackHi)
@@ -6408,6 +6411,13 @@ std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, st
         // seed 2616394, the same oracle false positive as A3-100 and A3-115, here in the storesThrough path). The store is through the register
         // the swapped value came from, which storesThrough names, not r4.
         if (arena >= 0 && arena < 4 && BitwiseOfOthers(run, a, 4 + arena)) arena = -1;
+        // (area 3, A3-220) ...nor an address that stays where it was when the register is started elsewhere (a sum of another register's start
+        // and a part of it, which lands in the arena by chance): confirmed by a run, asked only where the claim is about to fail
+        if (arena >= 0 && !(e.storesThrough & (ArenaBit(arena) | origin::kMemory)) && moves && !(*moves)(arena < 4 ? 4 + arena : 17, ti0, true))
+        {
+            if (unmoved) ++*unmoved;
+            arena = -1;
+        }
         if (arena >= 0 && !(e.storesThrough & (ArenaBit(arena) | origin::kMemory)))
             return fail("claim-wrong:storesThrough", "a run stores at " + Hex(a) + ", in the arena of " + (arena < 4 ? "r" + std::to_string(4 + arena) : std::string("gbr")) +
                                                          ", and storesThrough names neither that register nor memory");
@@ -6432,7 +6442,7 @@ std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, st
         const uint32_t a = t.addr & 0x0FFFFFFFu;
         const uint32_t want = PointerOrigin(k) | origin::kMemory;
         const bool claimed = (a >= kStackTop && a < kStackHi) ? (e.frameValues & want) != 0 : (a < kStackLo || a >= kStackHi) ? (e.leaks & want) != 0 : true;
-        if (!claimed && moves && k != 15 && !(*moves)(k, ti))
+        if (!claimed && moves && k != 15 && !(*moves)(k, ti, false))
         {
             if (unmoved) ++*unmoved;
             continue;
@@ -8906,7 +8916,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 // (A3-163) a pointer store the claims leave out is confirmed by a run with that register started 0x40 further on: the same
                 // store (the same instruction, the same occurrence) must store a value 0x40 further on too. A run that stops early or takes
                 // another path is no evidence either way and keeps the finding.
-                const PointerMoves moves = [&](int k, size_t ti) -> bool {
+                const PointerMoves moves = [&](int k, size_t ti, bool byAddress) -> bool {
                     const TraceRec& t = run.trace[ti];
                     RunSpec rs;
                     rs.mode = run.mode;
@@ -8927,7 +8937,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         if (run.trace[i].write && run.trace[i].insn == t.insn && run.trace[i].depth == t.depth) ++nth;
                     for (const TraceRec& o : other.trace)
                         if (o.write && o.insn == t.insn && o.depth == t.depth && nth-- == 0)
-                            return o.size != t.size || static_cast<uint32_t>(o.value) == static_cast<uint32_t>(t.value) + delta;
+                            return byAddress ? o.addr != t.addr : (o.size != t.size || static_cast<uint32_t>(o.value) == static_cast<uint32_t>(t.value) + delta);
                     return true;
                 };
                 int unmoved = 0;
@@ -19216,8 +19226,8 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         none.frameValues = 0;
         none.frameWords = 0;
         none.spDelta = 0;
-        const PointerMoves moved = [](int, size_t) { return true; };
-        const PointerMoves still = [](int, size_t) { return false; };
+        const PointerMoves moved = [](int, size_t, bool) { return true; };
+        const PointerMoves still = [](int, size_t, bool) { return false; };
         std::string sig;
         int unmoved = 0;
         CHECK(!EffectClaimsContradicted(none, run, &sig, &moved, &unmoved).empty() && sig == "claim-wrong:leaks" && unmoved == 0);
@@ -20239,6 +20249,51 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
             CHECK(rep.findings.empty() && count(rep, "caution.said") > 0);
         }
+    }
+    // A3-226 (grammar 2 seed 12011728, shrunk; counted `caution.unsaid.deep`): function 1 (not lent) pushes r8-r11, r14 and PR, calls the lent
+    // function 2, whose own walk restores r14 from a word its store loop may have written over (the signature does not keep r14), pops and,
+    // after its epilogue, sets r10 when r3 = 0; function 0 copies r10 to r6 and tail-jumps into function 2, which reads through r6. The walk
+    // of function 1 took r14, its frame pointer, as not kept, lost r15 at `mov r14,r15` and proved no return, so the change was never recorded:
+    // the caution naming r10 at the call of function 1 is required and said, nothing counted deep.
+    {
+        const ModulePin m = { "A3-226 shrunk",
+                              "2F86 2F96 2FA6 2FB6 4F22 7FE0 6843 6953 6A63 6B73 B010 0009 6483 6593 66A3 67B3 D304 7F20 4F26 6BF6 6AF6 69F6 68F6 432B 0009 0009 0600 9078 "
+                              "2F86 2F96 2FA6 2FB6 2FE6 4F22 7FD0 6EF3 6843 6953 6A63 6B73 B012 0009 6483 6593 66A3 67B3 6052 7E30 6FE3 4F26 6EF6 6BF6 6AF6 69F6 68F6 "
+                              "2338 8B00 EA18 000B 0009 "
+                              "2FE6 7FE8 6EF3 62F3 7218 E103 2216 4110 8BFC E200 6260 6040 7E18 6FE3 6EF6 000B 0009",
+                              "0/0/32,38/38/78,78/78/9a", nullptr, "1,1,1", "1400,400,400", "0,8,8" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s), required %d, said %d, deep %d\n", m.name, rep.findings.size(), count(rep, "caution.required"),
+                    count(rep, "caution.said"), count(rep, "caution.unsaid.deep"));
+        for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "caution.required") > 0 && count(rep, "caution.said") > 0 && count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect") == 0);
+        const Report seed = Evaluate(d, MakeV2(12011728), false);
+        std::printf("pin 'A3-226 grammar 2 seed 12011728': %zu finding(s), caution said %d, deep %d\n", seed.findings.size(), count(seed, "caution.said"),
+                    count(seed, "caution.unsaid.deep"));
+        CHECK(seed.findings.empty() && count(seed, "caution.said") > 0 && count(seed, "caution.unsaid.deep") + count(seed, "caution.unsaid.deep.own-effect") == 0);
+    }
+    // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
+    // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
+    {
+        const char* funcs = "0/0/1a,20/20/28";
+        const ModulePin shown = { "A3-221 fr2", "4F22 7FF8 E105 2F12 62F3 6423 B008 0009 60F2 7F08 4F26 000B 0009 0009 0009 0009 E107 2412 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                                  funcs, nullptr, "1,0", nullptr, nullptr };
+        const ModulePin alone = { "A3-221 fr2 control", "4F22 7FF8 E105 2F12 62F3 0009 B008 0009 60F2 7F08 4F26 000B 0009 0009 0009 0009 E107 2412 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009",
+                                  funcs, nullptr, "1,0", nullptr, nullptr };
+        const Report a = EvaluateSubject(d, ModuleSubject(shown), true);
+        const Report b = EvaluateSubject(d, ModuleSubject(alone), true);
+        const bool noteA = std::regex_replace(a.text, std::regex("\\s+"), " ").find("in none of the arguments") != std::string::npos;
+        const bool noteB = std::regex_replace(b.text, std::regex("\\s+"), " ").find("in none of the arguments") != std::string::npos;
+        std::printf("pin 'A3-221': address in r2 and r4: %zu finding(s), note %d; in r2 alone: %zu finding(s), note %d\n", a.findings.size(), int(noteA), b.findings.size(), int(noteB));
+        CHECK(a.findings.empty() && !noteA && b.findings.empty() && noteB);
+    }
+    // A3-220 (oracle): grammar 2 seed 10302868, function 1 hands function 2 `(r5 & 0xffff) + r5` (0x06021100 + 0x1100 = 0x06022200, r6's arena
+    // by chance); the lent summary names r5, the text is right. The store's address does not move with r6 started elsewhere: excused (counted).
+    {
+        const Report rep = Evaluate(d, MakeV2(10302868), false);
+        std::printf("pin 'A3-220 grammar 2 seed 10302868': %zu finding(s), excused %d\n", rep.findings.size(), count(rep, "excluded.pointer-not-moved.claim-wrong"));
+        for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "excluded.pointer-not-moved.claim-wrong") > 0);
     }
     // A3-224 and A3-225 (the kept-read check, A3-3's): a lent callee that may change r13 (r9) and a text that reads the register's saved word
     // as its entry value, rightly. Grammar 2 seed 10409168: function 0 pushes r13 last and calls the changer twice, each call handed the push's
