@@ -220,6 +220,9 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
+//   SE_GENERATED_BARESPILL=0  A11-35: the spills a pop of r15 breaks are drawn with their push and pop again (the programs of seeds 12018405 and
+//                             12047405 before the fix, which stop the emulator); SE_GENERATED_TRACE_A11_35=1 lists the seeds the fix changes,
+//                             SE_GENERATED_LISTONLY=1 only makes the programs (no run), to list a wide range quickly
 //   SE_GENERATED_MUTATE=1|ledger|caution|cautionlate|second|alias|params|ret|body|cases|warn|preserved|claims|lent|data|honour|kept|tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe|toksilent
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
@@ -525,6 +528,7 @@ struct Item
     // Version 2.
     bool stack = false;            // Mem: a local, through r15 or the frame pointer
     int spillReg = 1;              // Spill: the register pushed and popped around 'kids'
+    bool bare = false;             // Spill (A11-35): 'kids' only, no push and pop: r15 may be moved by an earlier call (cautionSpFn's pop)
     int callee = -1;               // Call: the function called
     bool viaJsr = false;           // Call: jsr @Rn after a literal-pool load (else bsr)
     bool viaBsrf = false;          // Call (with viaJsr): bsrf Rn instead of jsr @Rn, the literal being the distance (A2-20)
@@ -656,6 +660,11 @@ struct Gen
     // (A11-33) ...and one for the shapes of A3-197's caution (a callee that changes r8-r14, GBR, VBR or r15 on some path, a thunk to it, the callers
     // that read the register after the call), version 2, from kCautionFirst on only (Generate2): no seed below it changes. Per module:
     Rng cautionRng;
+    Rng cautionLoopRng;           // (A11-36) the productions of the seeds from kCautionLoopFirst on: a change through a loop, a read by a branch
+    bool cautionLoopOn = false;
+    bool bareSpillOn = true;      // SE_GENERATED_BARESPILL=0 makes the programs the seeds made before A11-35's fix (to replay them)
+    int bareSpills = 0;           // (A11-35) the spills made bare, for the notes
+    bool cautionSpPops = false;   // the function that leaves r15 moved has `add #4,r15` (a pop of its caller's word)
     bool cautionOn = false;
     bool cautionModule = false;   // this module has them
     uint32_t cautionKept = 0;     // the registers its changers change (bits as Func::clobbers: r8-r14, 17 gbr, 18 vbr)
@@ -682,7 +691,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull), postJoinRng(seed ^ 0x706F73744A6F696Eull), modPollRng(seed ^ 0x6D6F64506F6C6C21ull), ptrAliasRng(seed ^ 0x707472416C696173ull), cautionRng(seed ^ 0x6361757469306E21ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull), postJoinRng(seed ^ 0x706F73744A6F696Eull), modPollRng(seed ^ 0x6D6F64506F6C6C21ull), ptrAliasRng(seed ^ 0x707472416C696173ull), cautionRng(seed ^ 0x6361757469306E21ull), cautionLoopRng(seed ^ 0x6C6F6F7043617574ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -1851,9 +1860,18 @@ struct Gen
                 if (np && cautionRng.Chance(80))
                 {
                     const int rp = ptr[cautionRng.Below(static_cast<uint32_t>(np))];
-                    it.after.push_back(uint16_t(0x1000 | rp << 8 | cautionRead << 4 | cautionRng.Below(4)));   // mov.l Rs,@(disp,Rp)
+                    const uint32_t disp = cautionRng.Below(4);
+                    if (cautionLoopOn && b != 15 && cautionLoopRng.Chance(40))
+                    {
+                        // (A11-36) read by a branch: `tst Rc,Rc ; bt L ; mov.l Rp,@Rp ; L:` (the store only when the copy is not 0)
+                        it.after.push_back(uint16_t(0x2008 | cautionRead << 8 | cautionRead << 4));
+                        it.after.push_back(0x8900);
+                        it.after.push_back(uint16_t(0x2002 | rp << 8 | rp << 4));
+                        it.shape = "caution.call.read.branch";
+                    }
+                    else it.after.push_back(uint16_t(0x1000 | rp << 8 | cautionRead << 4 | disp));   // mov.l Rs,@(disp,Rp)
                 }
-                it.shape = "caution.call.read";
+                if (std::string(it.shape) != "caution.call.read.branch") it.shape = "caution.call.read";
             }
         }
         // After the call only what was restored, and r0 if the callee returns, holds a value.
@@ -1956,6 +1974,7 @@ struct Gen
             sk.kids.push_back(c);
             f.items.push_back(sk);
             f.clobbers |= 1u << 15;
+            if (c.words[0] == 0x7F04) cautionSpPops = true;
             if (c.words[0] == 0x2F36) f.reads |= 1u << 3;
             return;
         }
@@ -1967,7 +1986,29 @@ struct Gen
         }
         else c.words = { uint16_t(0xE000 | b << 8 | (4 * cautionRng.Below(32))) };   // mov #imm,Rn (a multiple of 4: no address error through it)
         c.shape = "caution.change";
-        sk.kids.push_back(c);
+        // (A11-36) From kCautionLoopFirst on, on a stream of its own: the change made inside a loop (`mov #n,Rc ; L: <change> ; dt Rc ; bf L`), the counter
+        // r1 or r2 that nothing reads on entry (not the convention's read, A3-5, nor r3, the skip's test).
+        if (cautionLoopOn && cautionLoopRng.Chance(35))
+        {
+            uint32_t used = f.reads;
+            if (at && !f.items.empty() && !f.items[0].words.empty()) used |= 1u << ((f.items[0].words[0] >> 8) & 0xF);
+            used |= leftScratch;
+            int cn[2], ncn = 0;
+            for (int q = 1; q <= 2; ++q)
+                if (!((used >> q) & 1u)) cn[ncn++] = q;
+            if (ncn)
+            {
+                Item lp;
+                lp.type = Item::Loop;
+                lp.shape = "caution.change.loop";
+                lp.counter = cn[cautionLoopRng.Below(static_cast<uint32_t>(ncn))];
+                lp.count = 2 + static_cast<int>(cautionLoopRng.Below(2));
+                lp.kids.push_back(c);
+                sk.kids.push_back(lp);
+            }
+            else sk.kids.push_back(c);
+        }
+        else sk.kids.push_back(c);
         f.clobbers |= 1u << b;
         const bool saved = std::find(f.pushed.begin(), f.pushed.end(), b) != f.pushed.end();
         if (saved)
@@ -2223,6 +2264,30 @@ struct Gen
         AddModulePoll(f, idx);
         if (hasConvRead) f.items.insert(f.items.begin(), convRead);   // first: before anything can write what it reads
         if (cautionModule) AddCautionChange(f, idx, hasConvRead ? 1 : 0);
+        // (A11-35) A push between calls after the callee that pops its caller's word (`add #4,r15`, cautionSpFn): each call leaves r15 four bytes
+        // higher on a path, and the push then lands at r14 + 4k - 4, over the saved registers once that is past the locals (seed 12018405: two calls,
+        // frame 4, the saved PR: the return went to 0x06021100). Such a spill is made without its push and pop. Only these spills change: no seed
+        // below kCautionFirst has the callee, and a spill with fewer calls before it than the frame has words keeps its program.
+        if (cautionSpPops && idx != cautionSpFn && bareSpillOn)
+        {
+            int moved = 0;
+            std::function<void(std::vector<Item>&)> walk = [&](std::vector<Item>& list) {
+                for (Item& it : list)
+                {
+                    if (it.type == Item::Call && it.callee == cautionSpFn) ++moved;
+                    if (it.type == Item::Spill && 4 * moved - 4 >= f.frame && !it.bare)
+                    {
+                        it.bare = true;
+                        it.shape = "spill.bare";
+                        ++bareSpills;
+                    }
+                    walk(it.slot);
+                    walk(it.kids);
+                    for (std::vector<Item>& c : it.cases) walk(c);
+                }
+            };
+            walk(f.items);
+        }
         // A return chosen by an input (A3-64), from a stream of its own and after every other draw, so no program a seed made before it changes but
         // for this item: in a function that returns, makes no call (a callee may leave anything in r0), and has no table (mova writes r0) and no
         // shared exit. Last, as the return value (no retWord follows it).
@@ -2981,6 +3046,8 @@ constexpr uint64_t kModPollFirst = 5800001;
 constexpr uint64_t kPtrAliasFirst = 6400001;
 // ...and A11-33's (version 2: A3-197's shapes, Gen::AddCautionChange and the caution's reads after a call), likewise: the fresh range from 12,000,001.
 constexpr uint64_t kCautionFirst = 12000001;
+// ...and A11-36's (a change through a loop, a read by a branch; Gen::cautionLoopRng), likewise: the fresh range from 12,100,001.
+constexpr uint64_t kCautionLoopFirst = 12100001;
 
 Program Generate(uint64_t seed)
 {
@@ -2994,13 +3061,38 @@ Program Generate(uint64_t seed)
     return g.Run();
 }
 
+// (A11-35) Defined after the emulator: whether the program fits its layout, and whether the emulator stops on any run of any function.
+bool FitsLayout(const Program& p);
+bool StopsInEmulator(const Program& p);
+
 // A version 2 module. 'attempt' re-draws it when the layout does not fit (a pool out of reach).
 Program Generate2(uint64_t seed, int attempt)
 {
-    Gen g(seed ^ (static_cast<uint64_t>(attempt) << 40));
-    g.modPollOn = seed >= kModPollFirst;
-    g.cautionOn = seed >= kCautionFirst;
-    return g.Module();
+    auto make = [&](bool bare, int& bareSpills) {
+        Gen g(seed ^ (static_cast<uint64_t>(attempt) << 40));
+        g.modPollOn = seed >= kModPollFirst;
+        g.cautionOn = seed >= kCautionFirst;
+        g.cautionLoopOn = seed >= kCautionLoopFirst;
+        g.bareSpillOn = bare;
+        Program prog = g.Module();
+        bareSpills = g.bareSpills;
+        return prog;
+    };
+    const char* e = std::getenv("SE_GENERATED_BARESPILL");
+    const bool off = e && std::string(e) == "0";
+    int bareSpills = 0;
+    Program prog = make(!off, bareSpills);
+    if (!bareSpills) return prog;
+    // (A11-35) A spill after a call of the callee that pops is made bare only when the program as it was made before stops the emulator (its pop
+    // runs and the push lands on a saved word): every other seed keeps the program it always made, a layout that does not fit included.
+    int none = 0;
+    Program old = make(false, none);
+    if (!FitsLayout(old) || !StopsInEmulator(old))
+    {
+        return old;
+    }
+    if (std::getenv("SE_GENERATED_TRACE_A11_35")) std::fprintf(stderr, "A11-35 seed %llu: %d spill(s) bare\n", static_cast<unsigned long long>(seed), bareSpills);
+    return prog;
 }
 
 // ---- Assembly -------------------------------------------------------------------------------
@@ -3355,9 +3447,9 @@ struct Emitter
             break;
         }
         case Item::Spill:
-            Put(static_cast<uint16_t>(0x2F06 | it.spillReg << 4));        // mov.l Rn,@-r15
+            if (!it.bare) Put(static_cast<uint16_t>(0x2F06 | it.spillReg << 4));        // mov.l Rn,@-r15
             EmitList(it.kids);
-            Put(static_cast<uint16_t>(0x60F6 | it.spillReg << 8));        // mov.l @r15+,Rn
+            if (!it.bare) Put(static_cast<uint16_t>(0x60F6 | it.spillReg << 8));        // mov.l @r15+,Rn
             break;
         case Item::Call:
         {
@@ -8658,8 +8750,27 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         else defaultPath = true;
                     }
             if (defaultPath) count("table.out-of-range-index");
-            for (const auto& dest : byIndex)
+            for (const auto& destRun : byIndex)
             {
+                // A7-199 (area 7 round 28): the index the run was meant to dispatch with is not the one the jump used when a call between the
+                // register's load and the `jmp` clobbers the register (`mov r9,r5` after a call that sets r9: the jump takes entry 0 whatever
+                // the parameter said). The table's entry for the intended index is then another address than the one the run reached, and the
+                // case the output prints for the index the jump took is the right one: the run is judged by the first index whose entry is
+                // the address it reached. Grammar 2 seed 12060177
+                std::pair<int, uint32_t> dest = destRun;
+                if (dest.first >= 0 && static_cast<size_t>(dest.first) < tl.entry.size() && tl.entry[static_cast<size_t>(dest.first)] != dest.second)
+                {
+                    int real = -2;
+                    for (size_t k = 0; k < tl.entry.size() && real == -2; ++k)
+                        if (tl.entry[k] == dest.second) real = static_cast<int>(k);
+                    if (real == -2)
+                    {
+                        count("table.index-unknown");
+                        continue;
+                    }
+                    count("table.index-clobbered");
+                    dest.first = real;
+                }
                 count("table.destination");
                 // The code the index runs, and whether it does anything the ledger lists: a case that
                 // does nothing may be merged into another or the default.
@@ -15979,6 +16090,26 @@ void TestPrintedC()
     CHECK(failing == 0);
 }
 
+bool FitsLayout(const Program& p) { return Assemble(p).ok; }
+
+bool StopsInEmulator(const Program& p)
+{
+    const Subject s = MakeSubject(p);
+    if (s.bad) return false;
+    std::vector<uint8_t> hw;
+    for (size_t i = 0; i < s.words.size(); ++i) dts::Put16(hw, kCode - 0x06000000u + 2 * i, s.words[i]);
+    dts::Put16(hw, kSentinel - 0x06000000u, 0x0009);
+    dts::Put16(hw, kSentinel - 0x06000000u + 2, 0x0009);
+    auto snap = dts::MakeSnapshot(hw);
+    Runner runner(s, snap);
+    const int worlds = s.markVolatile ? 2 : 1;
+    for (int world = 0; world < worlds; ++world)
+        for (size_t fi = 0; fi < s.fns.size(); ++fi)
+            for (const RunOut& run : runner.Ordinary(s.fns[fi], world == 1))
+                if (!run.error.empty()) return true;
+    return false;
+}
+
 // A version 2 program that fits: a re-draw when a pool or a branch is out of reach.
 Program MakeV2(uint64_t seed)
 {
@@ -18900,6 +19031,46 @@ void TestArea7Round27Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7 round 28 pins (whole seeds). A7-196: a pointer's zero printed with its cast, a merge copy at a branch (10802262, 10809419, rule 196).
+// A7-197: a narrowing at the maker whose own statement begins earlier is a copy there (10805383, product). A7-198: a merged register's copy
+// at a `tas.b` that begins a loop names the register's makers (12060407, product). A7-199: a jump table's index the run did not dispatch
+// with, a callee having clobbered the register (12060177, oracle).
+void TestArea7Round28Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 1, 10802262 }, Whole{ 2, 10809419 }, Whole{ 1, 10805383 }, Whole{ 2, 12060407 }, Whole{ 2, 12060177 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 28: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
+// Area 7, joins and stores (A7-201 to A7-206): grammar 2 seeds 12078687 (mova is no load: a frame piece assigned its address, rule 201),
+// grammar 1 12050176 (`xor` of the word a store wrote, rule 202), grammar 2 10908446 (`xor` of two copies, rule 203), 12102661 (`add #imm` of
+// a zero chain, rule 204), 10702729 (an extension that differs from the line's 0 only in bits nothing shows, rule 205), and 12051473
+// (a copy of an input over a call is the value the call sees: the store before it, the product, A7-206).
+void TestArea7JoinPins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 2, 12078687 }, Whole{ 1, 12050176 }, Whole{ 2, 10908446 }, Whole{ 2, 12102661 }, Whole{ 2, 10702729 }, Whole{ 2, 12051473 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 joins: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -20263,6 +20434,56 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         std::printf("pin 'A11-33 grammar below kCautionFirst': %d caution shape(s) in grammar 2 seeds 1-300\n", below);
         CHECK(below == 0);
     }
+    // Area 11, round 8. A11-35: a caller that pushes a scratch value after two calls of the callee that pops its caller's word (`add #4,r15`) wrote over
+    // its own saved PR and the emulator stopped at 0x06021100 (seeds 12018405 and the routed 12047405): their spills are now drawn bare (no push and pop;
+    // Item::bare), no finding; with SE_GENERATED_BARESPILL=0 the old programs, which stop (emulator-error). A11-36: the grammar's two new
+    // productions (`caution.change.loop`: the change made in a counted loop; `caution.call.read.branch`: the copy read by `tst ; bt`), for the seeds from
+    // kCautionLoopFirst on only and on their own stream: the first program of each whose runs require a caution passes with it said, within 1,500 seeds,
+    // and no seed from kCautionFirst to kCautionLoopFirst - 1 (the 600 first) holds either.
+    {
+        for (uint64_t seed : { uint64_t(12018405), uint64_t(12037749), uint64_t(12047405), uint64_t(12056533), uint64_t(12081644) })
+        {
+            const Report rep = Evaluate(d, MakeV2(seed), false);
+            std::printf("pin 'A11-35 grammar 2 seed %llu': %zu finding(s)\n", static_cast<unsigned long long>(seed), rep.findings.size());
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(rep.findings.empty());
+        }
+        int old = 0;
+        for (uint64_t seed = kCautionFirst; seed < kCautionFirst + 600; ++seed)
+        {
+            const Program p = MakeV2(seed);
+            std::map<std::string, int> sh;
+            CountProgram(p, sh);
+            old += sh["caution.change.loop"] + sh["caution.call.read.branch"];
+        }
+        std::printf("pin 'A11-36 new productions below kCautionLoopFirst': %d in grammar 2 seeds %llu-%llu\n", old, static_cast<unsigned long long>(kCautionFirst),
+                    static_cast<unsigned long long>(kCautionFirst + 599));
+        CHECK(old == 0);
+        for (const char* shape : { "caution.change.loop", "caution.call.read.branch" })
+        {
+            long found = 0;
+            int tried = 0;
+            Report rep;
+            for (uint64_t seed = kCautionLoopFirst; seed < kCautionLoopFirst + 1500 && !found; ++seed)
+            {
+                const Program p = MakeV2(seed);
+                bool has = false;
+                for (const Func& f : p.fns)
+                {
+                    ForEachConstItem(f, [&](const Item& it) { has = has || std::strcmp(it.shape, shape) == 0; });
+                    ForEachConstItem(f.afterExit, [&](const Item& it) { has = has || std::strcmp(it.shape, shape) == 0; });
+                }
+                if (!has) continue;
+                ++tried;
+                rep = Evaluate(d, p, false);
+                if (count(rep, "caution.required") > 0) found = static_cast<long>(seed);
+            }
+            std::printf("pin 'A11-36 grammar, %s': %d program(s) of the shape tried, first requiring a caution: seed %ld, %zu finding(s), required %d, said %d\n",
+                        shape, tried, found, rep.findings.size(), count(rep, "caution.required"), count(rep, "caution.said") + count(rep, "caution.said.likewise"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(found != 0 && rep.findings.empty());
+        }
+    }
     // Area 3, round 28 review (`tools/a3_round28/fixtures.src`). A3-215: an unlent U clears r12 when r3 = 0, then a lent L (it clears r12 when
     // r5 = 0, so its signature does not keep r12), and the caller stores r12 after both (mx2, the shape of grammar 2 seed 12010219): the lent
     // call's new value lost U's mark and no caution was said. A3-219: a later callee F2 pushes r10, calls G, pops r10 and stores it (a210d): the
@@ -20449,6 +20670,26 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         std::printf("pin 'A3-226 grammar 2 seed 12011728': %zu finding(s), caution said %d, deep %d\n", seed.findings.size(), count(seed, "caution.said"),
                     count(seed, "caution.unsaid.deep"));
         CHECK(seed.findings.empty() && count(seed, "caution.said") > 0 && count(seed, "caution.unsaid.deep") + count(seed, "caution.unsaid.deep.own-effect") == 0);
+    }
+    // A3-228 (grammar 2 seed 12055901, shrunk; counted `caution.unsaid.deep`): function 2 (not lent) leaves through `add #4,r15 ; rts` on every
+    // path; function 0 calls it, restores r15 from r14 at its epilogue and calls function 1 (not lent), which stores its own frame address
+    // (`mov r15,r2 ; mov.l r2,@(8,r4)`): the runs with r15 as the first call left it store another word. A later unlent call reads r15, so the
+    // caution naming r15 is required at the first call (it was said only inside function 1).
+    {
+        const ModulePin m = { "A3-228 shrunk",
+                              "2F86 2F96 2FA6 2FC6 2FE6 0C2A 7FF0 6EF3 6843 6953 6A63 B02A 0009 6483 6593 66A3 B00D 0009 6483 6593 66A3 7E10 6FE3 4C2A 6EF6 6CF6 6AF6 69F6 68F6 000B 0009 "
+                              "2F86 2F96 2FC6 2FE6 0C2A 7FF8 6EF3 6843 6953 B00D 6683 6483 6593 62F3 1422 7E08 6FE3 4C2A 6EF6 6CF6 69F6 68F6 000B 0009 "
+                              "E105 3516 8919 4508 C702 015E 412B 0009 0009 0600 90A8 0600 9098 0600 909C 0600 90A8 0600 90A0 0600 90A4 A007 0009 A005 0009 A003 0009 A001 0009 163C 7F04 6053 000B 0009",
+                              "0/0/3e,3e/3e/6e,6e/6e/b2", "7a:5:6:a8:a8,98,9c,a8,a0,a4", "0,0,1", "28800,28800,8000", "8,20008,60000" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s), required %d, said %d, deep %d\n", m.name, rep.findings.size(), count(rep, "caution.required"),
+                    count(rep, "caution.said"), count(rep, "caution.unsaid.deep"));
+        for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "caution.said") > 0 && count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect") == 0);
+        const Report seed = Evaluate(d, MakeV2(12055901), false);
+        std::printf("pin 'A3-228 grammar 2 seed 12055901': %zu finding(s), caution said %d, deep %d\n", seed.findings.size(), count(seed, "caution.said"),
+                    count(seed, "caution.unsaid.deep"));
+        CHECK(seed.findings.empty() && count(seed, "caution.unsaid.deep") + count(seed, "caution.unsaid.deep.own-effect") == 0);
     }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
@@ -20911,6 +21152,8 @@ void TestGenerated()
         RUN(TestArea7Round26Pins(d));
         RUN(TestArea7P2FixPins(d));
         RUN(TestArea7Round27Pins(d));
+        RUN(TestArea7Round28Pins(d));
+        RUN(TestArea7JoinPins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
@@ -20921,6 +21164,7 @@ void TestGenerated()
     // Grammar 1 is the original (one function, no stack, no calls); grammar 2 is modules. By default
     // the seeds alternate, so the short run covers both inside its time.
     const long grammar = EnvNumber("SE_GENERATED_GRAMMAR", 0);
+    const bool listOnly = EnvNumber("SE_GENERATED_LISTONLY", 0) != 0;
 
     std::map<std::string, int> shapes, classes, counts;
     std::map<std::string, int> mnemonics;
@@ -20935,6 +21179,7 @@ void TestGenerated()
         const bool v2 = grammar == 2 || (grammar == 0 && seed % 2 == 0);
         const Program p = v2 ? MakeV2(static_cast<uint64_t>(seed)) : Generate(static_cast<uint64_t>(seed));
         (v2 ? v2seeds : v1seeds) += 1;
+        if (listOnly) continue;   // SE_GENERATED_LISTONLY=1: only make the programs (with SE_GENERATED_TRACE_A11_35=1, to list what A11-35's fix changes)
         CountProgram(p, shapes);
         if (coverage) CountProgramMnemonics(p, mnemonics);
         const bool detail = verbose || failing < detailLimit;

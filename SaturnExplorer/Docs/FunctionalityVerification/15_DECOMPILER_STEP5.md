@@ -22684,3 +22684,215 @@ See the report of the fixer; the numbers are in the commit message of the last c
 * **Area 5, next fixer:** A5-154 (P2, open): grammar 2 seed 12130995.
 * **Area 7:** grammar 1 11303278, 12132326, 12133156, 12133872, 12137810; grammar 2 11304044, 12135074; and the mapping of two-instance delay-slot stores (A5-153).
 * **Area 3:** grammar 2 12136696 (A3-228's class).
+## Area 11, round 8
+
+Fixer, branch `review/11-round8` from master `10aefa40`; RelWithDebInfo build, `-j1`, `ulimit -v 6000000`. Rows A11-35 (fixed) and A11-36 (fixed in part; the rest is A11-37). Only `FrontEnd/tests/Sh2GeneratedTests.cpp`, the ledger and this section changed; no product code, no engine patch.
+
+### 1. A11-35: a push between calls after the callee that pops
+
+The grammar's r15 module (grammar 2, seeds from 12,000,001) has its last function pop a word of its caller's on one path (`tst r3,r3 ; bt ; add #4,r15`). Every other function has a frame pointer, whose epilogue takes the stack back, so the drift is harmless unless an item that uses r15 runs between calls: the only one is the spill (`mov.l Rn,@-r15 ... mov.l @r15+,Rn`). After k calls of the popping function r15 is 4k bytes above where it was, and the push lands at r14 + 4k - 4. Seed 12018405: two calls, frame 4, the push at r14 + 4, the saved PR; the function returned to 0x06021100 and the emulator stopped.
+
+Fix, in two parts. (a) `Gen::MakeFunc` (`Item::bare`): in such a module a spill that follows k calls of the popping function (counted in item order, through skips) with 4k - 4 >= the function's frame can be drawn as its block alone, shape `spill.bare`: no push, no pop. No random draw moves. (b) `Generate2` takes that program only when the program drawn without it stops the emulator (`StopsInEmulator`: every function, every input mode, both worlds); otherwise it returns the old program unchanged, a layout that does not fit included (so `MakeV2`'s re-draws are as they were). The first version of the fix applied (a) alone: it also changed five seeds that were valid (12020830, 12073732, 12074524, 12079155, 12101424: whether the pop runs depends on the `tst` of r3, which the generator cannot see), and the coordinator's follow-up asked for (b). `SE_GENERATED_BARESPILL=0` draws the old programs; `SE_GENERATED_TRACE_A11_35=1` prints each seed the fix changes and `SE_GENERATED_LISTONLY=1` makes the programs only, so a range of 110,000 seeds lists in minutes.
+
+Seeds whose program changed, over grammar 2 12,000,001-12,110,000 (the whole range listed): **12018405, 12037749, 12047405, 12056533, 12081644**. 12018405 and 12047405 stopped with `emulator-error` (0x06021100); 12037749, 12056533 and 12081644 failed `n:generator:no-return` (the return goes to the overwritten saved word; 12056533 and 12037749 and 12081644 were routed or unseen seeds of the same shape). Each fails as drawn before and has no finding now. None of 12020830, 12031425, 12033005, 12033773, 12044532, 12055901, 12060407, 12060177, 12051473, 12073732, 12074524, 12079155, 12101424 changes. Seeds below 12,000,001 and grammar 1 never reach the rule. Pins: the five seeds, no finding.
+
+### 2. A11-36: two new productions, fresh range from 12,100,001
+
+`kCautionLoopFirst` = 12,100,001, a stream of its own (`cautionLoopRng`), drawn only for those seeds:
+
+* lp: the changer's change made in a counted loop, `tst Rt,Rt ; bt/bf L ; mov #n,Rc ; M: <change> ; dt Rc ; bf M ; L:` (Rc is r1 or r2, not one the function reads on entry, not the convention's read register), 35 in 100 of the module's changes; shape `caution.change.loop`.
+* o4: a copy of the register read by a branch, `tst Rc,Rc ; bt L ; mov.l Rp,@Rp ; L:` instead of the store of the copy, 40 in 100 of the reads that store through r4 or r5; shape `caution.call.read.branch`.
+
+In 10,000 seeds from 12,100,001: `caution.change.loop` 2,308 and `caution.call.read.branch` 511 items. Pins: no seed 12,000,001-12,000,600 holds either shape; the first program of each from 12,100,001 whose runs require a caution passes with it said (loop 12100016, branch 12100093). What stays open: A11-37 (pi, pie, tb, th2, mr2, mx1, mx2, a210d, o1, o2, o3).
+
+### 3. Runs (final build)
+
+| Run | Result |
+|---|---|
+| `ctest -j1` (rerun after the narrowing) | **117 of 117 passed** |
+| fault suite, corpus | run before the narrowing; no product code and neither binary changed since |
+| 20,000-seed matrix (rerun) | **failing seeds=0; findings=0** |
+| printed-C (3000 seeds, rerun) | **agrees=5196** |
+| grammar 2, 12,000,001-12,030,000 (30,000 seeds; before the pins were added) | 2 failing seeds, 3 findings, none of the changed seeds: 12021967 (`map-const-join`, A7-193, known), 12020446 (`map-way-back`, area 7, new) |
+| grammar 2, 12,070,001-12,080,000 (rerun, the same) | 1 failing: 12078687 (`n:map-frame-store`, area 7) |
+| grammar 2, 12,100,001-12,110,000 (the new range; rerun, the same) | 4 failing: 12105644 (`n:caution-unsaid`, r9, area 3), 12102661 (`map-const-join`) and 12106439 (`map-conversion-branch`), area 7, 12105914 (`onchip-span-unsaid`, area 5) |
+| corpus, `SE_GAME_LEND=1` | both images all passed, every count 0; missing and said **0** (hwram007) and **4** (hwram008); real entries 999: lent **474 (645)**; 1543: **724 (975)** |
+| lints | `check-literal-size.py` ok (no vendored file touched) |
+
+### 4. Routed (not fixed here)
+
+* **Area 3:** grammar 2 seed 12105644 (`n:caution-unsaid`: the call at 0x06009030 of 0x06009070, no signature lent, comes back with r9 changed (the callee changes it after its epilogue, A3-199's shape, `tst r3,r3 ; bt ; mov #4,r9`), set back there the run does otherwise; the text says no caution naming r9). Not one of the new shapes.
+* **Area 7:** 12020446 (`n:map-way-back`: instruction 060090E4 answered with a copy materialised before its own statement), 12078687 (`n:map-frame-store`), 12102661 (`n:map-const-join`), 12106439 (`n:map-conversion-branch`); 12021967 is A7-193.
+* **Area 5:** 12105914 (`n:onchip-span-unsaid`: a 4-byte read at 06009026 reached E6020104 through a pointer made by ORing a constant).
+
+
+## Area 3, A3-228 fix
+
+Fixer, branch `review/3-a3228` from master `5df1678b`. Host change in `Sh2Decompiler.cpp` (`Call`); pin in `Sh2GeneratedTests.cpp` (`TestA3RoutedPins`, the A3-228 block). **No engine patch: 0095 stays free.** No generator change. Build `-j1`, `ulimit -v 3500000`, one heavy binary at a time.
+
+| Row | P | Outcome |
+|---|---|---|
+| A3-228 | P2 | **fixed** (host): a later unlent call reads r15 an earlier call changed |
+
+### 1. Shrunk and diagnosed
+
+Grammar 2 seed 12055901 (`SE_GENERATED_CAUTION=deep`) shrinks to three functions. Function 2 (not lent) ends on every path through `add #4,r15 ; rts` (a switch whose cases and default all reach it): it returns with r15 four higher. Function 0 calls it, restores r15 from its frame pointer r14 at its epilogue, and calls function 1 (not lent), which stores its own frame address (`mov r15,r2 ; mov.l r2,@(8,r4)`). The runs with r15 set back at the first call store another word, the text has no caution at the first call (function 1's own text, which calls function 2 too, has one).
+
+Cause: the call's caution for an earlier callee's change is said when a later read of the register takes the mark (`UseUnkept`). A later call took the marks of r2 and r4-r7, and (A3-222) of r8-r14, GBR, VBR the callee reads on entry; never r15 (excluded: "the stack pointer itself"). But a callee that is not lent runs with the stack pointer the earlier call left: its frame, the stack arguments it reads at r15 and up, the frame addresses it stores or hands on.
+
+### 2. Fix
+
+At a call of an unlent callee (probe only: `keepKept && mUnkeptSeen && !signatureLent`), the marks on r15's value are read (`UseUnkept`). A mark is on r15 only after an unlent callee changes r15 for certain on some path (A3-206), so the work is one empty-vector test per unlent call elsewhere: nothing decoded or formatted. A lent callee is not covered (its signature says what it reads of the stack; not met in a sweep).
+
+**Pin** (`TestA3RoutedPins`): the shrunk words and seed 12055901 whole: no finding, caution said, nothing counted `caution.unsaid.deep`. Before the change the shrunk module and the seed gave the `n:caution-unsaid-deep` finding.
+
+### 3. Corpus
+
+Both images with lending, `corpus.sh`-style dumps: cautions ("this call may change") **41 / 58 (007 alone / lent) and 39 / 55 (008 alone / lent): unchanged**, none naming r15 in either image. Every ledger count 0; missing and said 0 (007) and 4 (008); 999 real entries: signatures lent 474 (645 parameters); 1543: 724 (975).
+
+### 4. Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest, 117 tests | all passed (Area9Round6Tests failed once under load in the first pass, a timing test of a stuck lock; passed alone) |
+| fault matrix | 0 of 94 job(s) failed |
+| generator, 20,000 seeds | no finding, no failing seed |
+| printed-C, 3,000 seeds | agrees=5196 |
+| grammar 1, 10,000 from 11,100,001 | 3 failing seeds: 11102053 `n:map-copy-store`, 11103677 `v:folded-store-after-access`, 11109544 `v:folded-read-after-pointer-write` |
+| grammar 2, 10,000 from 11,100,001 | 0 failing seeds |
+| grammar 2, 10,000 from 12,110,001, `SE_GENERATED_CAUTION=deep` | 1 failing seed: 12115379 `n:map-frame-store` |
+
+No caution-class finding in the sweeps. Lints: `check-literal-size.py` ok; no vendored file touched.
+
+### 5. Routed
+
+* **Area 7:** grammar 1 seeds 11102053 (`map-copy-store`), 11103677 (`folded-store-after-access`), 11109544 (`folded-read-after-pointer-write`; the last two engine or area 2), grammar 2 seed 12115379 (`map-frame-store`). Not replayed on master.
+
+## Area 7, round 28
+
+Fixer, branch `review/7-round28` from master `9d94d2b2`, RelWithDebInfo build (`-j1`, `ulimit -v 6000000`). The brief: the rows round 27 filed open (A7-196, A7-197, A7-198), the routed grammar 2 seed 12060177 `n:table-case` (triage), A7-179's rest if time allowed (not reached: still open, unchanged). Host change in `Sh2Decompiler.cpp` (two small ones), oracle changes in `MappingOracle.h` (rule `SE_A7_RULE_OFF=196`) and in the jump-table check of `Sh2GeneratedTests.cpp`, pins `TestArea7Round28Pins`. **No engine patch: 0096 stays free.** Scripts: `Docs/Decompiler/tools/a7_round28/final.sh` (the runs after the last edit, with the sweeps).
+
+| Row | P | Outcome |
+|---|---|---|
+| A7-196 | P3 | **fixed, oracle** (10802262, 10809419) |
+| A7-197 | P3 | **fixed, product** (10805383) |
+| A7-198 | P3 | **fixed, product** (12060407) |
+| A7-199 | P3 | **new, fixed, oracle** (the routed 12060177 `table-case`: not another area's) |
+| A7-179's rest | P3 | open, not reached |
+
+### 1. A7-196 (oracle, rule 196)
+
+`pxRam26001008 = (xunknown2 *)0x0;` (grammar 1) and `piVar4 = (int4 *)0;` (grammar 2), every drawn token at the branch that ends the block before an `if`: the engine's merge copy of a 0 that a `dt` / `bf` loop leaves in its counter (`mov #1,r3 ; L: ... dt r3 ; bf L`), printed with the pointer cast because the variable it is merged into is a pointer. The conversion-at-a-branch rule (A7-171, A7-175) judges a conversion that converts a value some instruction made; the operand here is a number, the same copy a non-pointer variable prints as `iVar4 = 0;` at the same branch, which no rule judges (the number's maker is the loop's `dt`, no line of this statement). The rule no longer judges a conversion whose operand token is a number (decimal or hex, optional `-`). The product's text is unchanged.
+
+### 2. A7-197 (product)
+
+Shrunk: `mov.l lit,r3 ; and r3,r5 ; mov.l lit,r3 ; or r3,r5 ; ... mov.b r3,@-r5 ...`. `pxVar1 = (xunknown1 *)(param_2 & 0x1ffffff0 | 0x60000000);` is the maker's own statement, beginning at the `and` (0x06009002) with the `or` (0x06009006) drawn in it; `xVar2 = SUB42(pxVar1,0);`, the narrowing of the same register that A7-175's `RetargetHoistedConversions` moves to the maker `or`, began at 0x06009006, so a click on the `or` went to the narrowing (the line that begins with the instruction) before the maker's own statement: the way back answered a copy before its own statement (A7-25). After the move the pass now marks the narrowing's tokens at the maker materialised when the line is a register variable's own `V = <conversion>;` statement beginning at the maker and another line draws the maker without beginning there. A store's line (`*param_3 = (int2)pxVar1;`, whose operand sits at the maker) is left as it was.
+
+### 3. A7-198 (product)
+
+`iStack_18 = iVar3;` drawn at `tas.b @r6` (0x06009014), the first instruction of a `mov #3,r3 ; L: tas.b @r6 ; ... dt r3 ; bf L` loop: the engine's copy of the loop counter merged under the pushed word's name, which no store names. A7-107 gives such a copy at a join's first instruction the register's last writers on each path (`mov #3,r3`, the `dt`); the rule was skipped for an instruction with a load, and `tas.b` is one (a read-modify-write). A copy of a merged register (a MULTIEQUAL) at such a join start, a load that is not a call, now takes the same rule: the line is drawn at `mov #3,r3` with an empty token at the `dt`.
+
+### 4. A7-199 (oracle, the routed 12060177)
+
+Triage: the product is right. The program calls a function that sets r9 (a declared clobber) and then `mov r9,r5` indexes the jump table, so every dispatch used index 0, whatever the parameter said; the engine prints `switch(extraout_r9) { case 0: case 1: case 2: ... }`. The generator's run records `selValue` (3, 4: the parameter the harness set), and the table check paired it with the address the jump really reached (entry 0's): "index 3 goes to 0x06009048, whose code the case does not hold". The mapping and the table were not wrong; no other area owns it, and no warning is owed. The table check now judges a run under the first index whose entry is the address it reached when the entry of the intended index is another address (counted `table.index-clobbered`; none: skipped, `table.index-unknown`).
+
+### 5. Pins and mutation
+
+`TestArea7Round28Pins`: grammar 1 seeds 10802262, 10805383 and grammar 2 seeds 10809419, 12060407, 12060177 whole (the shrunk programs need the shrinker's function table or the whole seed's state). With `SE_A7_RULE_OFF=196` the default run fails 10802262 and 10809419. The product changes (A7-197, A7-198) and the table-check change have no switch: before each fix the seed failed as filed (`copy materialised there before its own statement`, `copy-merge`, `table-case`).
+
+### 6. The corpus
+
+Both images with lending pass every ledger count at 0 (below). I did not diff the token dumps against a build of master this round (container restarts and the memory rule): the product changes touch only a narrowing's `materialised` flag at a maker (A7-197, a register variable's `V = <conversion>;` naming a store) and the addresses of a merged register's copy at a `tas.b` loop head (A7-198); neither changes any printed text, and the decompiled text of every corpus function is checked by the corpus run against its own ledger.
+
+### 7. Runs after the last code edit (`final.sh`)
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` (first build of the final code) | **117 of 117 passed** (477 s) |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** (149 s) |
+| 20,000-seed matrix | **failing seeds=0; findings=0** (792 s). (An earlier run, before A7-197 was limited to a copy that names a store, found 6 way-back failures in seeds 2145, 3189, 8019, 11902, 13631, 19257: the narrowing of a load's value, `xVar5 = (xunknown1)uRam26001020;`, is the load's own statement.) |
+| printed-C | **agrees=5196** (281 s) |
+| corpus, both images, `SE_GAME_LEND=1` | all passed, every ledger count 0; missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**" |
+| sweep grammar 1, 10,000 from 11,000,001 | **6 failing seeds, 6 findings**: 11002157, 11003148, 11003627, 11007190 `n:map-way-back` (A7-200), 11004012 `v:map-store-value` (A7-207), 11007546 `n:folded-store-after-access` (A7-208) |
+| sweep grammar 2, 10,000 from 11,000,001 | **0 failing seeds** |
+| sweep grammar 2, 10,000 from 12,090,001 | **1 failing seed, 3 findings**: 12097940 `n:generator:callee-saved` (A7-209) |
+
+All six grammar 1 seeds fail the same with the A7-197 and A7-198 product changes switched off (a temporary switch, removed): none is this round's. The ctest and fault runs were on the build before the container restarts; the rest on the same build (the source is the commit). Lints: `check-literal-size.py` ok; no vendored file touched.
+
+### 8. Routed
+
+* **Area 7 (next fixer):** A7-200 and A7-207 to A7-209 (open, not analysed; A7-208 maybe area 3's, A7-209 a generator or engine matter), A7-179's rest (open, not reached).
+
+## Area 7, joins and stores
+
+Fixer, branch `review/7-joins` from master `5df1678b`, RelWithDebInfo build (`-j1`, `ulimit -v 3500000`). The brief: the routed seeds grammar 2 10702729, 12102661, 10908446 (`map-const-join`; the last also filed by area 5 as A5-151, which is not a row of this branch's ledger), grammar 1 12050176 (`map-const-join`, caution-deep range), grammar 2 12051473 (`map-store-after`) and 12078687 (`map-frame-store`). All six reproduced on this branch before the change. Oracle rules in `MappingOracle.h` (`SE_A7_RULE_OFF=201` to `205`), one product change in `Sh2Decompiler.cpp` (`AddFrameStoreTokens`, A7-206), pins `TestArea7JoinPins` in `Sh2GeneratedTests.cpp`. **No engine patch: 0097 stays free.** Script: `Docs/Decompiler/tools/a7_joins/final.sh`.
+
+| Row | P | Seed | Outcome |
+|---|---|---|---|
+| A7-201 | P3 | grammar 2 12078687 | **fixed, oracle**: `mova` is no load for A7-11's frame-store check |
+| A7-202 | P3 | grammar 1 12050176 | **fixed, oracle**: A7-137 (a store read back) also for `xor`, either register the loaded one |
+| A7-203 | P3 | grammar 2 10908446 (A5-151) | **fixed, oracle**: `xor`/`sub` of a register and its copy |
+| A7-204 | P3 | grammar 2 12102661 | **fixed, oracle**: `add #imm,Rn` of a zero chain |
+| A7-205 | P3 | grammar 2 10702729 | **fixed, oracle**: a number differing from the line's only in bits nothing shows |
+| A7-206 | P3 | grammar 2 12051473 | **fixed, product** (mapping only): the call-output exemption of A7-39 |
+
+### 1. The decisions
+
+* **A7-201** (12078687): `xStack_8._0_2_ = 0x9080;` is drawn at `mova @(disp,pc),r0`, whose operand text has an `@`; `ShapeOf` took it for a load, so the check of A7-11 (a piece of a frame word assigned at a load or a call) wanted a store named. The line is the merged register's address. The check no longer counts `mova` as a load.
+* **A7-202** (12050176): `mov.l r3,@r7 ; mov.b @(0xc,r5),r0 ; mov.l @r7,r0 ; ... ; xor r3,r0` is 0 as `sub` of the same two was (A7-137). The rule takes `xor` and either register as the loaded one.
+* **A7-203** (10908446): `mov.w @r5+,r1 ; mov r1,r0 ; ... ; xor r0,r1`: two registers with the one maker (RegisterMakers goes through moves) that no path runs twice give 0.
+* **A7-204** (12102661): `add -0x6c,r1` with r1 0 after a `dt` loop and `shlr16` round another loop, `xVar6 = 0xffffff94;`: a zero chain (a number 0, a `dt`, `xor Rn,Rn`, a shift, extension or move of the chain) is 0 as A7-192's.
+* **A7-205** (10702729): `mov #8,r0 ; L: extu.w r0,r0` printed `iVar2 = 0;`: r0 is only shifted left 2 and right 16, stored narrow or overwritten afterwards. New `IgnoredDiff` follows the bits in which the instruction's number and the line's differ through moves, extensions, shifts, `xtrct`, narrow stores and overwrites, calls (r4-r7 read), up to 600 states; any other read of a differing register, a compare, a return value (r0 and r1), a jump it cannot follow with a difference left, ends it. It runs only on the path that would report, so passing programs pay nothing. Not for instructions that set T (the existing `a7_58 rotcl other` fixture): the line may be T's. Two of the first version's faults were found by the existing `*_other` fixtures of `Sh2DecompilerTests` (they mutate a number by one bit and want the violation): the 64-bit return in r0:r1 and `rotcl`.
+* **A7-206** (12051473, product): `pxStack_24 = (xunknown2 *)in_r2;` is a CAST the engine put at the `jsr` over the merge of r2 at the push `mov.l r2,@-r15` before it. A7-39's exemption (a statement of the call's own output is shown by a store after the call) took it for a call output because the CAST op is at the call's address, so `useBlock` was off and the next store of the byte in the call's block (the push of r5 after the call) was named. The exemption now holds only when the copies and casts end at the call's own op; a MULTIEQUAL or the input is not a call output, and A7-32's rule (a store that runs before the call) applies. Mapping tokens only: no text changes.
+
+### 2. Pins and mutation
+
+`TestArea7JoinPins`: the six seeds whole (grammar 1 12050176; grammar 2 12078687, 10908446, 12102661, 10702729, 12051473). Each oracle rule is switched by `SE_A7_RULE_OFF` (201 to 205); A7-206 has no switch.
+
+### 3. Runs (after the last code edit, `final.sh`; one binary at a time)
+
+| Run | Result |
+|---|---|
+| `ctest -j1` | **117 of 117 passed** (912 s) |
+| fault matrix | **0 of 94 job(s) failed** |
+| 20,000-seed matrix | **failing seeds=0; findings=0** |
+| printed-C | **agrees=5196** |
+| corpus hwram007, lent | 0 checks failed, missing and said 0; "[after] real entries 999: signatures lent 474 (645 parameters)" |
+| corpus hwram008, lent | 0 checks failed, missing and said 4; "1543: 724 (975)" |
+| sweep grammar 1, 10,000 from 11,200,001 | 1 failing seed: 11202623 `n:map-way-back` (A7-211) |
+| sweep grammar 2, 10,000 from 11,200,001 | 2 failing seeds: 11203194, 11204379 `n:map-copy-store` (A7-210) |
+| sweep grammar 1, 10,000 from 12,120,001, caution deep | 2 failing seeds: 12128210 `v:folded-store-after-access` (A7-213), 12128747 `n:map-way-back` (A7-211) |
+| sweep grammar 2, 10,000 from 12,120,001, caution deep | 5 failing seeds, 11 findings: 12121815 `n:table-case`, 12123120 `n:map-copy-store` (A7-210), 12125265 `n:map-way-back` (A7-211), 12125921 `n:caution-unsaid` (r15 at a call of 060090B0), 12127788 `n:map-const-join` (A7-212) |
+
+None of the eight mapping seeds is this round's: each fails the same with A7-206 switched off (a temporary switch, removed), and the oracle rules only add excuses. The corpus token dumps were not compared with a master build (no base build was kept; the product change touches only which instruction a frame statement names at a call, no text, and every ledger count is 0).
+
+### 4. Routed
+
+A7-210 to A7-213 filed open (next area 7 fixer); grammar 2 12121815 (`table-case`) to area 3 or 4 (as 12060177), 12125921 (`caution-unsaid`, r15) to area 3. Row numbers: this section holds A7-201 to A7-206; the round 28 branch holds A7-196 to A7-200 and 207 to 209, and oracle rules 196 to 199.
+## Area 3, round 29
+
+Branch `review/3-round29` on master `72496d2d` plus `review/3-a3228` (merged first, `ad8bc60b`). No product or test code changed in this round; ledger rows A3-229 and A3-230 only.
+
+### 1. Grammar 2 seed 12105644 (`n:caution-unsaid`, r9)
+
+Does not reproduce: replayed alone (`SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=12105644 SE_GENERATED_CANARY=0`, also with `SE_GENERATED_CAUTION=deep`) it has no finding; the text carries "this call may change r9, read after it ..." at the first call and "likewise at the calls below". With A3-228's r15 line switched off (rebuilt, replayed) it is still clean, so A3-228 did not move it. The whole range 12,100,001 to 12,110,000 (deep, 10,000 seeds) has three failing seeds, none of them area 3 and none this one. Filed as A3-229 (closed, not reproduced), like A3-227. No pin: nothing changed.
+
+### 2. Sweep of the A11-36 range (grammar 2, deep, 10,000 seeds from 12,140,001)
+
+failing seeds=6, findings=9. One is area 3: 12147773 `caution-unsaid-deep` (A3-230, P3 open: a kept register changed through a nested callee and read by a later call of the same callee; no printed value is wrong, and the walk it would need is per-call work on the callee tree). The others are routed (section 4).
+
+### 3. Runs
+
+* ctest -j1: 117 of 117 passed. Fault matrix: 0 of 94 job(s) failed.
+* Generator 20k (`SE_GENERATED_SEEDS=20000`): `failing seeds=0; findings=0`.
+* Grammar 1 fresh 10k from 11,400,001: `failing seeds=0; findings=0`. Grammar 2 fresh 10k from 11,400,001: `failing seeds=1; findings=1`, seed 11408984 `v:map-way-back` (area 7, routed).
+* Printed-C (3000 seeds): agrees=5196.
+* Corpus with lending: hwram007 0 missing and said, `[after] real entries 999: signatures lent 474 (645 parameters)`; hwram008 4 missing and said, `1543: 724 (975)`. No count changed (no code changed).
+* Deep range 12,100,001 to 12,110,000: failing seeds=3 (below).
+
+### 4. Routed
+
+* Area 7 (map oracle): 12102661 and 12146409 `map-const-join`; 12106439 and 12142637 `map-conversion-branch`; 12148671 `map-frame-store`; 11408984 `map-way-back`.
+* On-chip span (area 2 or 7): 12105914 `onchip-span-unsaid` (a read of 4 bytes at 0x06009026 reaching 0xE6020104 through an ORed pointer, no note).
+* Table cases: 12147005 `table-case` (index 0 goes to code the ledger lists, the output's case does not hold it, no warning).
+* Fold order: 12147649 `folded-read-after-pointer-write`.
