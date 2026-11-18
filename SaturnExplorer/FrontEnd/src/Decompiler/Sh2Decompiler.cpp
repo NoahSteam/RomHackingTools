@@ -10341,7 +10341,9 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         // the variable. Its tokens there are a copy materialised at the load (A7-25), which the way back offers after the load's line --
         // when the copy line's lowest address is the load, it came first. Only on a plain copy that names a store of another instruction
         // (as the oracle takes a copy) and when another line draws the instruction as its own; grammar 1 seed 6802425.
-        if ((o->code() == ghidra::CPUI_INT_SEXT || o->code() == ghidra::CPUI_INT_ZEXT) && out && out->isImplied() && !o->isFromDelaySlot() &&
+        // (A7-308: also the extension of a load made in a delay slot, `mov.b @r4,r1` in the slot of `bf/s`, whose copy line names a store after
+        // the call; grammar 1 seed 12299659)
+        if ((o->code() == ghidra::CPUI_INT_SEXT || o->code() == ghidra::CPUI_INT_ZEXT) && out && out->isImplied() && (!o->isFromDelaySlot() || !std::getenv("SE_R34_OFF_308")) &&   // GATETMP
             o->getIn(0)->isWritten() && !o->getIn(0)->isImplied())
         {
             const ghidra::PcodeOp* def = o->getIn(0)->getDef();

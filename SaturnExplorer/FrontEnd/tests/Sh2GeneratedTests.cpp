@@ -19380,7 +19380,8 @@ void TestArea7A7273Pins(Sh2Decompiler& d)
 // (A7-292: the operand of an input's copy is drawn at the store the name is at), grammar 2 12151073 (A7-271: a store of the register a load of
 // its own memory filled writes no number). Oracle: grammar 1 12250922 (rule 302: a CONCAT merge at a store of another global is a copy), 12261062
 // (rule 304: `and Rm,Rn` with Rm below 0x10000 leaves the low half), grammar 2 12181915 (rule 306: a frame array's element names a copy).
-// Grammar 1 12189580 (A7-262) no longer reproduces on the merged base (A7-293).
+// Grammar 1 12299659 (A7-308, product: a load made in a delay slot, its extension's copy line names a store after the call), grammar 2 12296264 (rule
+// 307: `and Rm,Rn` of numbers with no common bit is 0, `mova` is a number). Grammar 1 12189580 (A7-262) no longer reproduces on the merged base (A7-293).
 void TestArea7Round34Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -19389,7 +19390,7 @@ void TestArea7Round34Pins(Sh2Decompiler& d)
         long seed;
     };
     for (const Whole& w : { Whole{ 1, 12246420 }, Whole{ 1, 12273194 }, Whole{ 1, 12250922 }, Whole{ 1, 11004012 }, Whole{ 1, 12261062 }, Whole{ 1, 12189580 },
-                            Whole{ 2, 12151073 }, Whole{ 2, 12181915 } })
+                            Whole{ 2, 12151073 }, Whole{ 2, 12181915 }, Whole{ 1, 12299659 }, Whole{ 2, 12296264 } })
     {
         const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
         std::printf("pin 'area 7 round 34: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
