@@ -22642,3 +22642,43 @@ Seeds 366, 1259, 1486 and 3284 pass in the 20,000-seed run (counted as `order.fo
 | lints | literal size ok; vendored tree lint ok |
 
 The corpus dumps are unchanged: the host change runs only after a failed pass and the oracle change reads text.
+## Area 11, round 8
+
+Fixer, branch `review/11-round8` from master `10aefa40`; RelWithDebInfo build, `-j1`, `ulimit -v 6000000`. Rows A11-35 (fixed) and A11-36 (fixed in part; the rest is A11-37). Only `FrontEnd/tests/Sh2GeneratedTests.cpp`, the ledger and this section changed; no product code, no engine patch.
+
+### 1. A11-35: a push between calls after the callee that pops
+
+The grammar's r15 module (grammar 2, seeds from 12,000,001) has its last function pop a word of its caller's on one path (`tst r3,r3 ; bt ; add #4,r15`). Every other function has a frame pointer, whose epilogue takes the stack back, so the drift is harmless unless an item that uses r15 runs between calls: the only one is the spill (`mov.l Rn,@-r15 ... mov.l @r15+,Rn`). After k calls of the popping function r15 is 4k bytes above where it was, and the push lands at r14 + 4k - 4. Seed 12018405: two calls, frame 4, the push at r14 + 4, the saved PR; the function returned to 0x06021100 and the emulator stopped.
+
+Fix, in two parts. (a) `Gen::MakeFunc` (`Item::bare`): in such a module a spill that follows k calls of the popping function (counted in item order, through skips) with 4k - 4 >= the function's frame can be drawn as its block alone, shape `spill.bare`: no push, no pop. No random draw moves. (b) `Generate2` takes that program only when the program drawn without it stops the emulator (`StopsInEmulator`: every function, every input mode, both worlds); otherwise it returns the old program unchanged, a layout that does not fit included (so `MakeV2`'s re-draws are as they were). The first version of the fix applied (a) alone: it also changed five seeds that were valid (12020830, 12073732, 12074524, 12079155, 12101424: whether the pop runs depends on the `tst` of r3, which the generator cannot see), and the coordinator's follow-up asked for (b). `SE_GENERATED_BARESPILL=0` draws the old programs; `SE_GENERATED_TRACE_A11_35=1` prints each seed the fix changes and `SE_GENERATED_LISTONLY=1` makes the programs only, so a range of 110,000 seeds lists in minutes.
+
+Seeds whose program changed, over grammar 2 12,000,001-12,110,000 (the whole range listed): **12018405, 12037749, 12047405, 12056533, 12081644**. 12018405 and 12047405 stopped with `emulator-error` (0x06021100); 12037749, 12056533 and 12081644 failed `n:generator:no-return` (the return goes to the overwritten saved word; 12056533 and 12037749 and 12081644 were routed or unseen seeds of the same shape). Each fails as drawn before and has no finding now. None of 12020830, 12031425, 12033005, 12033773, 12044532, 12055901, 12060407, 12060177, 12051473, 12073732, 12074524, 12079155, 12101424 changes. Seeds below 12,000,001 and grammar 1 never reach the rule. Pins: the five seeds, no finding.
+
+### 2. A11-36: two new productions, fresh range from 12,100,001
+
+`kCautionLoopFirst` = 12,100,001, a stream of its own (`cautionLoopRng`), drawn only for those seeds:
+
+* lp: the changer's change made in a counted loop, `tst Rt,Rt ; bt/bf L ; mov #n,Rc ; M: <change> ; dt Rc ; bf M ; L:` (Rc is r1 or r2, not one the function reads on entry, not the convention's read register), 35 in 100 of the module's changes; shape `caution.change.loop`.
+* o4: a copy of the register read by a branch, `tst Rc,Rc ; bt L ; mov.l Rp,@Rp ; L:` instead of the store of the copy, 40 in 100 of the reads that store through r4 or r5; shape `caution.call.read.branch`.
+
+In 10,000 seeds from 12,100,001: `caution.change.loop` 2,308 and `caution.call.read.branch` 511 items. Pins: no seed 12,000,001-12,000,600 holds either shape; the first program of each from 12,100,001 whose runs require a caution passes with it said (loop 12100016, branch 12100093). What stays open: A11-37 (pi, pie, tb, th2, mr2, mx1, mx2, a210d, o1, o2, o3).
+
+### 3. Runs (final build)
+
+| Run | Result |
+|---|---|
+| `ctest -j1` (rerun after the narrowing) | **117 of 117 passed** |
+| fault suite, corpus | run before the narrowing; no product code and neither binary changed since |
+| 20,000-seed matrix (rerun) | **failing seeds=0; findings=0** |
+| printed-C (3000 seeds, rerun) | **agrees=5196** |
+| grammar 2, 12,000,001-12,030,000 (30,000 seeds; before the pins were added) | 2 failing seeds, 3 findings, none of the changed seeds: 12021967 (`map-const-join`, A7-193, known), 12020446 (`map-way-back`, area 7, new) |
+| grammar 2, 12,070,001-12,080,000 (rerun, the same) | 1 failing: 12078687 (`n:map-frame-store`, area 7) |
+| grammar 2, 12,100,001-12,110,000 (the new range; rerun, the same) | 4 failing: 12105644 (`n:caution-unsaid`, r9, area 3), 12102661 (`map-const-join`) and 12106439 (`map-conversion-branch`), area 7, 12105914 (`onchip-span-unsaid`, area 5) |
+| corpus, `SE_GAME_LEND=1` | both images all passed, every count 0; missing and said **0** (hwram007) and **4** (hwram008); real entries 999: lent **474 (645)**; 1543: **724 (975)** |
+| lints | `check-literal-size.py` ok (no vendored file touched) |
+
+### 4. Routed (not fixed here)
+
+* **Area 3:** grammar 2 seed 12105644 (`n:caution-unsaid`: the call at 0x06009030 of 0x06009070, no signature lent, comes back with r9 changed (the callee changes it after its epilogue, A3-199's shape, `tst r3,r3 ; bt ; mov #4,r9`), set back there the run does otherwise; the text says no caution naming r9). Not one of the new shapes.
+* **Area 7:** 12020446 (`n:map-way-back`: instruction 060090E4 answered with a copy materialised before its own statement), 12078687 (`n:map-frame-store`), 12102661 (`n:map-const-join`), 12106439 (`n:map-conversion-branch`); 12021967 is A7-193.
+* **Area 5:** 12105914 (`n:onchip-span-unsaid`: a 4-byte read at 06009026 reached E6020104 through a pointer made by ORing a constant).
