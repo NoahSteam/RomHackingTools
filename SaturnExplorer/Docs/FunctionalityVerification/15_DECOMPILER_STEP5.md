@@ -22585,12 +22585,12 @@ Both images with lending pass every ledger count at 0 (below). I did not diff th
 | 20,000-seed matrix | **failing seeds=0; findings=0** (792 s). (An earlier run, before A7-197 was limited to a copy that names a store, found 6 way-back failures in seeds 2145, 3189, 8019, 11902, 13631, 19257: the narrowing of a load's value, `xVar5 = (xunknown1)uRam26001020;`, is the load's own statement.) |
 | printed-C | **agrees=5196** (281 s) |
 | corpus, both images, `SE_GAME_LEND=1` | all passed, every ledger count 0; missing and said **0** (hwram007) and **4** (hwram008); "[after] real entries 999: signatures lent **474 (645 parameters)**" and "1543: **724 (975)**" |
-| sweep grammar 1, 10,000 from 11,000,001 | **6 failing seeds, 6 findings**: 11002157, 11003148, 11003627, 11007190 `n:map-way-back` (A7-200), 11004012 `v:map-store-value` (A7-201), 11007546 `n:folded-store-after-access` (A7-202) |
+| sweep grammar 1, 10,000 from 11,000,001 | **6 failing seeds, 6 findings**: 11002157, 11003148, 11003627, 11007190 `n:map-way-back` (A7-200), 11004012 `v:map-store-value` (A7-207), 11007546 `n:folded-store-after-access` (A7-208) |
 | sweep grammar 2, 10,000 from 11,000,001 | **0 failing seeds** |
-| sweep grammar 2, 10,000 from 12,090,001 | **1 failing seed, 3 findings**: 12097940 `n:generator:callee-saved` (A7-203) |
+| sweep grammar 2, 10,000 from 12,090,001 | **1 failing seed, 3 findings**: 12097940 `n:generator:callee-saved` (A7-209) |
 
 All six grammar 1 seeds fail the same with the A7-197 and A7-198 product changes switched off (a temporary switch, removed): none is this round's. The ctest and fault runs were on the build before the container restarts; the rest on the same build (the source is the commit). Lints: `check-literal-size.py` ok; no vendored file touched.
 
 ### 8. Routed
 
-* **Area 7 (next fixer):** A7-200 to A7-203 (open, not analysed; A7-202 maybe area 3's, A7-203 a generator or engine matter), A7-179's rest (open, not reached).
+* **Area 7 (next fixer):** A7-200 and A7-207 to A7-209 (open, not analysed; A7-208 maybe area 3's, A7-209 a generator or engine matter), A7-179's rest (open, not reached).
