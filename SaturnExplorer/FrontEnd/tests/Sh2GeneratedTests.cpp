@@ -19303,6 +19303,33 @@ void TestArea7Round31Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7 round 32. A7-253: grammar 1 12133872 (product: a conversion of an aliased global's copy goes to the one read that loaded it) and 11703274, grammar 2
+// specials 11600981 (rule 260: a `bt`/`bf` makes the narrowing of the status register it reads). A7-254: grammar 1 11703335 (rule 261: `unkuint3` is three
+// bytes), 11703803 (rule 262: a read of a poll the engine did not fold is no forwarding of an earlier store), 12132326 (rule 263: identical stores merged
+// into one line). A7-265: grammar 1 12222552 and grammar 2 12222510 (rule 264: a global's width is its accesses'). A7-260: grammar 1 11901023 (rule 265:
+// `and #imm,r0` of bits the paths leave clear).
+void TestArea7Round32Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+        bool specials;
+    };
+    const bool savedSpecials = gSpecialReads;
+    for (const Whole& w : { Whole{ 1, 12133872, false }, Whole{ 1, 11703274, false }, Whole{ 2, 11600981, true }, Whole{ 1, 11703335, false },
+                            Whole{ 1, 11703803, false }, Whole{ 1, 12132326, false }, Whole{ 1, 12222552, false }, Whole{ 2, 12222510, false },
+                            Whole{ 1, 11901023, false } })
+    {
+        gSpecialReads = w.specials;
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 32: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    gSpecialReads = savedSpecials;
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21524,6 +21551,7 @@ void TestGenerated()
         RUN(TestArea7Joins2Pins(d));
         RUN(TestArea7Round30Pins(d));
         RUN(TestArea7Round31Pins(d));
+        RUN(TestArea7Round32Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
