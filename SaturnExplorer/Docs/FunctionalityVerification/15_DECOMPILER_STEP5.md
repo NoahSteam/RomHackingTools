@@ -22683,6 +22683,7 @@ In 10,000 seeds from 12,100,001: `caution.change.loop` 2,308 and `caution.call.r
 * **Area 7:** 12020446 (`n:map-way-back`: instruction 060090E4 answered with a copy materialised before its own statement), 12078687 (`n:map-frame-store`), 12102661 (`n:map-const-join`), 12106439 (`n:map-conversion-branch`); 12021967 is A7-193.
 * **Area 5:** 12105914 (`n:onchip-span-unsaid`: a 4-byte read at 06009026 reached E6020104 through a pointer made by ORing a constant).
 
+
 ## Area 3, A3-228 fix
 
 Fixer, branch `review/3-a3228` from master `5df1678b`. Host change in `Sh2Decompiler.cpp` (`Call`); pin in `Sh2GeneratedTests.cpp` (`TestA3RoutedPins`, the A3-228 block). **No engine patch: 0095 stays free.** No generator change. Build `-j1`, `ulimit -v 3500000`, one heavy binary at a time.
@@ -22826,3 +22827,30 @@ None of the eight mapping seeds is this round's: each fails the same with A7-206
 ### 4. Routed
 
 A7-210 to A7-213 filed open (next area 7 fixer); grammar 2 12121815 (`table-case`) to area 3 or 4 (as 12060177), 12125921 (`caution-unsaid`, r15) to area 3. Row numbers: this section holds A7-201 to A7-206; the round 28 branch holds A7-196 to A7-200 and 207 to 209, and oracle rules 196 to 199.
+## Area 3, round 29
+
+Branch `review/3-round29` on master `72496d2d` plus `review/3-a3228` (merged first, `ad8bc60b`). No product or test code changed in this round; ledger rows A3-229 and A3-230 only.
+
+### 1. Grammar 2 seed 12105644 (`n:caution-unsaid`, r9)
+
+Does not reproduce: replayed alone (`SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=12105644 SE_GENERATED_CANARY=0`, also with `SE_GENERATED_CAUTION=deep`) it has no finding; the text carries "this call may change r9, read after it ..." at the first call and "likewise at the calls below". With A3-228's r15 line switched off (rebuilt, replayed) it is still clean, so A3-228 did not move it. The whole range 12,100,001 to 12,110,000 (deep, 10,000 seeds) has three failing seeds, none of them area 3 and none this one. Filed as A3-229 (closed, not reproduced), like A3-227. No pin: nothing changed.
+
+### 2. Sweep of the A11-36 range (grammar 2, deep, 10,000 seeds from 12,140,001)
+
+failing seeds=6, findings=9. One is area 3: 12147773 `caution-unsaid-deep` (A3-230, P3 open: a kept register changed through a nested callee and read by a later call of the same callee; no printed value is wrong, and the walk it would need is per-call work on the callee tree). The others are routed (section 4).
+
+### 3. Runs
+
+* ctest -j1: 117 of 117 passed. Fault matrix: 0 of 94 job(s) failed.
+* Generator 20k (`SE_GENERATED_SEEDS=20000`): `failing seeds=0; findings=0`.
+* Grammar 1 fresh 10k from 11,400,001: `failing seeds=0; findings=0`. Grammar 2 fresh 10k from 11,400,001: `failing seeds=1; findings=1`, seed 11408984 `v:map-way-back` (area 7, routed).
+* Printed-C (3000 seeds): agrees=5196.
+* Corpus with lending: hwram007 0 missing and said, `[after] real entries 999: signatures lent 474 (645 parameters)`; hwram008 4 missing and said, `1543: 724 (975)`. No count changed (no code changed).
+* Deep range 12,100,001 to 12,110,000: failing seeds=3 (below).
+
+### 4. Routed
+
+* Area 7 (map oracle): 12102661 and 12146409 `map-const-join`; 12106439 and 12142637 `map-conversion-branch`; 12148671 `map-frame-store`; 11408984 `map-way-back`.
+* On-chip span (area 2 or 7): 12105914 `onchip-span-unsaid` (a read of 4 bytes at 0x06009026 reaching 0xE6020104 through an ORed pointer, no note).
+* Table cases: 12147005 `table-case` (index 0 goes to code the ledger lists, the output's case does not hold it, no warning).
+* Fold order: 12147649 `folded-read-after-pointer-write`.
