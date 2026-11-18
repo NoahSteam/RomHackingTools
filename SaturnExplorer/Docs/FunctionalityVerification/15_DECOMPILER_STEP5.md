@@ -22779,3 +22779,11 @@ All six grammar 1 seeds fail the same with the A7-197 and A7-198 product changes
 ### 8. Routed
 
 * **Area 7 (next fixer):** A7-200 and A7-207 to A7-209 (open, not analysed; A7-208 maybe area 3's, A7-209 a generator or engine matter), A7-179's rest (open, not reached).
+
+## Area 4, round 3
+
+Branch `review/4-round3` (from f07b0197). No product or engine change, no patch 0099.
+
+* **Seed 12121815 (grammar 2, `SE_GENERATED_CAUTION=deep`), A4-19.** Does not reproduce at f07b0197 with or without the specials alphabet, canary on or off. The module is A7-199's class: a switch on `extraout_r10` (a callee set the register), the intended index differing from the dispatched one (`table.index-clobbered=6`). Round 28's oracle rule judges it; the cases and the default entry are right and all 8 traced destinations are printed. Pinned whole in `TestArea4Round3Pins` (0 findings, the clobbered-index counter must be positive).
+* **A4-5.** Re-examined, left accepted: recovering the destination needs the flow to be re-run after a later pass learns an indirect jump's target, which costs every function (Windows Debug CI is about 7x slower) for a text that is not wrong (warned at the jump, signature withheld).
+* **Sweeps, grammar 2 from 11,600,001, 10,000 seeds each.** Specials: 3 failing seeds, 5 findings; plain: 2 failing seeds, 3 findings. No table finding in either. All are map-oracle classes (`map-copy-store` seed 11600932, `map-const-join` seed 11602585, `map-conversion-branch` seed 11600981, specials only), routed to area 7.
