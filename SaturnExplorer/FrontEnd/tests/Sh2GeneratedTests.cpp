@@ -7677,7 +7677,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 // grammar 1 seed 7402502. The bus is big-endian: the piece's offset from the end of the wider access is its shift. A
                                 // wider write is left to the rules below, which judge where the engine joins the narrow store into it, A5-123's
                                 // `joined-earlier`, grammar 1 seed 5203228.)
-                                if (!p.write && p.addr <= t.addr && t.addr + static_cast<uint32_t>(t.size) <= p.addr + static_cast<uint32_t>(p.size) && p.size <= 8 && t.size < 8)
+                                // (A5-163: ...and a wider write of the bytes, the last access of them, holding the value stored: `mov.l r2,@g ; ... ; mov.w
+                                // r2,@(2,g)` stores what the longword already holds there, so no read or write between sees a difference wherever the text
+                                // puts it, grammar 1 seed 12128210. An access of these bytes between is the walk's stop, as before.)
+                                if ((!p.write || (!dts::A7RuleOff(5163) && p.size > t.size)) && p.addr <= t.addr &&
+                                    t.addr + static_cast<uint32_t>(t.size) <= p.addr + static_cast<uint32_t>(p.size) && p.size <= 8 && t.size < 8)
                                 {
                                     const uint32_t shift = 8u * (p.addr + static_cast<uint32_t>(p.size) - t.addr - static_cast<uint32_t>(t.size));
                                     const uint64_t mask = (uint64_t(1) << (8 * t.size)) - 1;
@@ -8367,6 +8371,24 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }
                 return below && !covers;
             };
+            // (the register a read's own instruction loads, when it is a plain load into a register that nothing before it in a delayed branch's
+            // pair shares: -1 for any other)
+            const auto wordAt = [&](uint32_t pc, uint16_t& w) {
+                if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                w = subject.WordAt(pc);
+                return true;
+            };
+            const auto loadedRegister = [&](const AccessFate& rd) {
+                uint16_t w = 0, pw = 0;
+                if (!wordAt(rd.insn, w)) return -1;
+                const sfe::DisassembledInstruction d = sfe::Sh2Decode(rd.insn, w);
+                if (wordAt(rd.insn - 2, pw) && sfe::Sh2Decode(rd.insn - 2, pw).HasDelaySlot) return -1;
+                const size_t comma = d.Operands.rfind(',');
+                if (!d.IsValid || d.Mnemonic.compare(0, 3, "mov") != 0 || !dts::ShapeOf(d).load || comma == std::string::npos || d.Operands[0] != '@') return -1;
+                const std::string last = d.Operands.substr(comma + 1);
+                if (last.size() < 2 || last[0] != 'r' || last.find_first_not_of("0123456789", 1) != std::string::npos) return -1;
+                return std::atoi(last.c_str() + 1);
+            };
             for (const AccessFate& rd : r.accessFates)
             {
                 if (rd.write || rd.fate != AccessFate::FoldedOrdinary || !rd.constantAddress || rd.frame || rd.origBlock < 0) continue;
@@ -8493,6 +8515,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 count("order.folded-read-before-pointer-write.constant-store");
                                 continue;
                             }
+                            if (!dts::A7RuleOff(5164) && loadedRegister(rd) >= 0 && !dts::ValueMayReach(r, wordAt, rd.insn + 2, loadedRegister(rd), m.insn))
+                            {
+                                count("order.folded-read-before-pointer-write.value-passes-no-write");
+                                continue;
+                            }
                             add("folded-read-after-pointer-write", "the read at " + Hex(rd.insn) + " the engine folded from " + Hex(rd.address) +
                                                                        " is named on no line, and line " + std::to_string(li) + " reads the global after the write through a pointer at " +
                                                                        Hex(m.insn) + " (line " + std::to_string(m.firstLine) + "), which the code makes after the read and before no other read of it");
@@ -8506,27 +8533,13 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 // `mov.l @(r0,r7),r0` in a `dt` loop, r0 overwritten by `extu.w r2,r0` after it: the loop's `uVar2 = uRam26001010;` after the loop's
                 // register write is the value of the read at 0x06009016, which the code makes after that write, held in the loop by the merge.)
                 bool deadValue = false;
-                if (!dts::A7RuleOff(5162) && rd.insn >= kCode && (rd.insn - kCode) / 2 < subject.words.size())
+                const int loaded = !dts::A7RuleOff(5162) ? loadedRegister(rd) : -1;
+                if (loaded >= 0)
                 {
-                    const sfe::DisassembledInstruction d = sfe::Sh2Decode(rd.insn, subject.WordAt(rd.insn));
-                    const bool slot = rd.insn >= kCode + 2 && sfe::Sh2Decode(rd.insn - 2, subject.WordAt(rd.insn - 2)).HasDelaySlot;
-                    const size_t comma = d.Operands.rfind(',');
-                    if (d.IsValid && !slot && d.Mnemonic.compare(0, 3, "mov") == 0 && dts::ShapeOf(d).load && comma != std::string::npos && d.Operands[0] == '@')
-                    {
-                        const std::string last = d.Operands.substr(comma + 1);
-                        if (last.size() >= 2 && last[0] == 'r' && last.find_first_not_of("0123456789", 1) == std::string::npos)
-                        {
-                            std::array<uint32_t, 16> diff;
-                            diff.fill(0);
-                            diff[static_cast<size_t>(std::atoi(last.c_str() + 1))] = 0xFFFFFFFFu;
-                            const auto word = [&](uint32_t pc, uint16_t& w) {
-                                if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
-                                w = subject.WordAt(pc);
-                                return true;
-                            };
-                            deadValue = dts::IgnoredDiff(r, word, rd.insn + 2, diff);
-                        }
-                    }
+                    std::array<uint32_t, 16> diff;
+                    diff.fill(0);
+                    diff[static_cast<size_t>(loaded)] = 0xFFFFFFFFu;
+                    deadValue = dts::IgnoredDiff(r, wordAt, rd.insn + 2, diff);
                 }
                 if (deadValue) count("order.folded-read-before-access.dead-read");
                 for (const MemoryAccess& m : got)
@@ -8570,6 +8583,12 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             count(m.direct ? "order.folded-read-before-access.returned" : "order.folded-read-before-pointer-write.returned");
                             continue;
                         }
+                    }
+                    if (shown > statementEnd(m.firstLine) && !dts::A7RuleOff(5164) && loadedRegister(rd) >= 0 &&
+                        !dts::ValueMayReach(r, wordAt, rd.insn + 2, loadedRegister(rd), m.insn))
+                    {
+                        count(m.direct ? "order.folded-read-before-access.value-passes-no-access" : "order.folded-read-before-pointer-write.value-passes-no-write");
+                        continue;
                     }
                     if (shown > statementEnd(m.firstLine))
                         add(m.direct ? "folded-read-after-access" : "folded-read-after-pointer-write",
