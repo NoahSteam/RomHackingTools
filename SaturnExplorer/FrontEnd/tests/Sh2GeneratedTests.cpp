@@ -9605,6 +9605,7 @@ struct Shrinker
     int evals = 0;
     int budget = 250;
     std::function<bool(const Program&)> accept;   // a test's stand-in for "the finding is still there" (empty: evaluate the program)
+    int baseStops = -1;   // (A11-40) -1: not asked yet; 1: the program the shrink starts from stops the emulator or breaks the convention itself
 
     // What the generator declared of a function must still be true of the program a shrink step leaves (A2-50). The one declaration an
     // item can carry is `return g(p);` (Func::retIsCall): r0 is what the last call's callee returned, and no instruction of the function
@@ -9682,6 +9683,10 @@ struct Shrinker
         if (!IntentHolds(prog)) return false;
         ++evals;
         if (accept) return accept(prog);
+        // (A11-40) A step that makes a program the emulator stops on (a pop left without its push, PR read back as 0: grammar 1 seed 12212141's
+        // shrunk replay) gives the replay an `emulator-error` the seed's own program does not have, and the finding it reports is no longer
+        // the seed's. Only a program the shrink starts from that itself stops may shrink to one that stops.
+        if (baseStops == 0 && StopsInEmulator(prog)) return false;
         return Has(Evaluate(d, prog, false), sig);
     }
 
@@ -9840,6 +9845,7 @@ struct Shrinker
 
     Program Run()
     {
+        if (!accept) baseStops = StopsInEmulator(prog) ? 1 : 0;   // (A11-40) the program the shrink starts from
         while (evals < budget)
         {
             bool changed = false;
