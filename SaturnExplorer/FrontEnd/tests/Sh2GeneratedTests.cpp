@@ -20194,7 +20194,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
     // kCautionLoopFirst on only and on their own stream: the first program of each whose runs require a caution passes with it said, within 1,500 seeds,
     // and no seed from kCautionFirst to kCautionLoopFirst - 1 (the 600 first) holds either.
     {
-        for (uint64_t seed : { uint64_t(12018405), uint64_t(12047405) })
+        for (uint64_t seed : { uint64_t(12018405), uint64_t(12037749), uint64_t(12047405), uint64_t(12056533), uint64_t(12081644) })
         {
             const Report rep = Evaluate(d, MakeV2(seed), false);
             std::printf("pin 'A11-35 grammar 2 seed %llu': %zu finding(s)\n", static_cast<unsigned long long>(seed), rep.findings.size());
