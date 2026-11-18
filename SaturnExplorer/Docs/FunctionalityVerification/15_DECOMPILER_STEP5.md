@@ -23455,4 +23455,16 @@ Fixer, branch `review/5-round4` (master `bf576e7a`); RelWithDebInfo, `-j1`, `uli
 
 * **Area 7:** grammar 1 12299659 (`map-way-back`, 0600902C, A7-25); grammar 2 12296264 (`map-const-join`, 0600905C).
 
-(Final run numbers are in the report to the coordinator and the commit message.)
+### Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| build, `-j1`; ctest `-j1` | 117 of 117 passed |
+| fault matrix | 0 of 94 job(s) failed |
+| generator, 20,000 seeds (pins included) | failing seeds=0; findings=0 |
+| printed-C, 3,000 seeds | agrees=5196 |
+| corpus hwram007, lent | all passed; every ledger count 0; missing and said 0; real entries 999: signatures lent 474 (645 parameters) |
+| corpus hwram008, lent | all passed; every ledger count 0; missing and said 4; real entries 1543: 724 (975) |
+| lints | literal size ok (no `patches/` change) |
+
+No product code changed, so the corpus texts and counts are those of the tree before.
