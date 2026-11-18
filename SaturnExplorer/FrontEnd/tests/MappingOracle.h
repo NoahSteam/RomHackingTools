@@ -2336,7 +2336,16 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 return word(text.substr(b, eq - b)) && word(text.substr(v + 6, comma - v - 6)) && !at.empty() &&
                        at.find_first_not_of("0123456789") == std::string::npos;
             }
-            return word(text.substr(b, eq - b)) && v < text.size() && word(text.substr(v, text.size() - 1 - v));
+            // (A7-300 rule 306: a frame array's element, `aiStack_1c[0] = (int4)cVar1;`, is the name of a copy as a variable is: the product
+            // marks the line a copy materialised at the load that made cVar1 (A7-191), naming the frame store; grammar 2 seed 12181915)
+            std::string name = text.substr(b, eq - b);
+            if (!A7RuleOff(306) && name.size() > 3 && name.back() == ']')
+            {
+                const size_t open = name.find('[');
+                if (open != std::string::npos && open > 0 && name.find_first_not_of("0123456789", open + 1) == name.size() - 1 && name.size() - 1 > open + 1)
+                    name.resize(open);
+            }
+            return word(name) && v < text.size() && word(text.substr(v, text.size() - 1 - v));
         };
         std::map<uint32_t, std::set<size_t>> ownDrawn, copyDrawn;
         for (size_t li = 0; li < r.lines.size(); ++li)
