@@ -8924,7 +8924,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     }
                 }
                 if ((last.code == ghidra::CPUI_CALL || last.code == ghidra::CPUI_CALLIND || last.code == ghidra::CPUI_RETURN) &&
-                    !(last.code != ghidra::CPUI_RETURN && !passesInput && StatementValues(o, flow.opsEnd).insns.count(at)))
+                    !(last.code != ghidra::CPUI_RETURN && passesInput && StatementValues(o, flow.opsEnd).insns.count(at)))
                 {
                     useBlock = ib->second.first;
                     usePos = static_cast<int>(ib->second.second);

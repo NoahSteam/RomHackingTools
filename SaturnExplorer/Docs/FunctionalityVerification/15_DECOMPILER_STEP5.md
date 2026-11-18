@@ -22642,8 +22642,13 @@ Fixer, branch `review/7-joins` from master `5df1678b`, RelWithDebInfo build (`-j
 | printed-C | **agrees=5196** |
 | corpus hwram007, lent | 0 checks failed, missing and said 0; "[after] real entries 999: signatures lent 474 (645 parameters)" |
 | corpus hwram008, lent | 0 checks failed, missing and said 4; "1543: 724 (975)" |
-SWEEPS
+| sweep grammar 1, 10,000 from 11,200,001 | 1 failing seed: 11202623 `n:map-way-back` (A7-211) |
+| sweep grammar 2, 10,000 from 11,200,001 | 2 failing seeds: 11203194, 11204379 `n:map-copy-store` (A7-210) |
+| sweep grammar 1, 10,000 from 12,120,001, caution deep | 2 failing seeds: 12128210 `v:folded-store-after-access` (A7-213), 12128747 `n:map-way-back` (A7-211) |
+| sweep grammar 2, 10,000 from 12,120,001, caution deep | 5 failing seeds, 11 findings: 12121815 `n:table-case`, 12123120 `n:map-copy-store` (A7-210), 12125265 `n:map-way-back` (A7-211), 12125921 `n:caution-unsaid` (r15 at a call of 060090B0), 12127788 `n:map-const-join` (A7-212) |
+
+None of the eight mapping seeds is this round's: each fails the same with A7-206 switched off (a temporary switch, removed), and the oracle rules only add excuses. The corpus token dumps were not compared with a master build (no base build was kept; the product change touches only which instruction a frame statement names at a call, no text, and every ledger count is 0).
 
 ### 4. Routed
 
-None new. Row numbers: this section holds A7-201 to A7-206; the round 28 branch holds A7-196 to A7-200 and 207 to 209, and oracle rules 196 to 199.
+A7-210 to A7-213 filed open (next area 7 fixer); grammar 2 12121815 (`table-case`) to area 3 or 4 (as 12060177), 12125921 (`caution-unsaid`, r15) to area 3. Row numbers: this section holds A7-201 to A7-206; the round 28 branch holds A7-196 to A7-200 and 207 to 209, and oracle rules 196 to 199.
