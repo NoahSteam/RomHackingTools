@@ -23296,6 +23296,7 @@ No generator-side failure (no emulator stop, no `generator:` signature).
 
 * **Area 3:** A3-240 (grammar 2 12237557), analysis in section 2.
 * **Area 7:** grammar 1 12212141 (`map-copy-store`, line `uRam06001017 = in_r0;`), 12250922 (`map-way-back`); grammar 2 12252055 (`map-const-join`), 12255565 (`map-copy-store`).
+
 ## Area 7, round 32
 
 Branch `review/7-round32` from master `5e741c49` (round 31 merged). RelWithDebInfo, `-j1`, `ulimit -v 3500000`. **One product change** (`RetargetHoistedConversions`, A7-253) and **no engine patch** (0096 stays free). Oracle rules 260 to 265 in `MappingOracle.h`, pins `TestArea7Round32Pins` (nine whole seeds), scripts `Docs/Decompiler/tools/a7_round32/final.sh`. Seven ledger rows closed or closed in part, new rows A7-270 to A7-274.
