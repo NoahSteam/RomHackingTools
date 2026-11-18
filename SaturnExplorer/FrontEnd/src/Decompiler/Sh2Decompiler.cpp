@@ -8809,7 +8809,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             selfCopy = stored;
         }
         std::map<const ghidra::AccessRecord*, bool> shown;
-        const auto shows = [&](const ghidra::AccessRecord* r) {
+        const auto showsRaw = [&](const ghidra::AccessRecord* r) {   // DBGTMP
             if (!valuesFound)
             {
                 values = StatementValues(o, flow.opsEnd);
@@ -8866,7 +8866,28 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     zero.varSize = out->getSize();
                     zero.storeAt = static_cast<int>(rel2);
                     for (int i = 0; i < r->size; ++i) zero.compared |= 1u << (static_cast<int>(rel2) + i);
-                    const bool v = StoreShowsValue(*r, flow, fd, zero);
+                    bool v = StoreShowsValue(*r, flow, fd, zero);
+                    // A7-301: not a store of a register no instruction wrote (a pointer parameter, `mov.b r5,@r6`): "may be 0" of an unknown
+                    // input is no reason to take the store for the zero extension's, which a store before it (`mov.w r3,@r6` of the 0 a
+                    // `dt` loop left) wrote; grammar 1 seed 12273194
+                    if (v && !std::getenv("SE_R34_OFF_301"))   // GATETMP
+                    {
+                        const auto pos = flow.ops.find(r->time);
+                        if (pos != flow.ops.end() && pos->second.first >= 0 && static_cast<size_t>(pos->second.first) < flow.blockOps.size() &&
+                            pos->second.second < flow.blockOps[static_cast<size_t>(pos->second.first)].size())
+                        {
+                            const FlowOp& st = flow.blockOps[static_cast<size_t>(pos->second.first)][pos->second.second];
+                            if (st.code == ghidra::CPUI_STORE && st.numIn >= 3 && !st.in[2].Constant() && st.in[2].space && st.in[2].space->getType() == ghidra::IPTR_PROCESSOR)
+                            {
+                                FlowVn whole = st.in[2];
+                                whole.offset &= ~static_cast<ghidra::uintb>(3);
+                                whole.size = 4;
+                                std::vector<const FlowOp*> lw;
+                                bool entry = false;
+                                if (FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), whole, lw, &entry, false) && entry && lw.empty()) v = false;
+                            }
+                        }
+                    }
                     shown[r] = v;
                     return v;
                 }
@@ -8932,9 +8953,11 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 part.compared = alone ? alone : mine;
             }
             const bool v = StoreShowsValue(*r, flow, fd, part);
+            if (std::getenv("SE_DBG_A7")) { std::fprintf(stderr, "DBG shows %06x at %06x -> %d: insns", (unsigned)InstructionOf(*r), (unsigned)at, (int)v); for (uint32_t i2 : part.insns) std::fprintf(stderr, " %06x", i2); std::fprintf(stderr, " n%zu i%zu l%zu rb%d partial%d storeSize %d varSize %d at %d cmp %x\n", part.numbers.size(), part.inputs.size(), part.locations.size(), (int)part.rebuilt, (int)part.partial, part.storeSize, part.varSize, part.storeAt, part.compared); } // DBGTMP
             shown[r] = v;
             return v;
         };
+        const auto shows = [&](const ghidra::AccessRecord* r) { const bool v = showsRaw(r); if (std::getenv("SE_DBG_A7")) std::fprintf(stderr, "DBG shows-wrap %06x at %06x -> %d selfCopy %d ownNumber %d callOutput %d\n", (unsigned)InstructionOf(*r), (unsigned)at, (int)v, (int)selfCopy, (int)ownNumber, (int)callOutput); return v; };   // DBGTMP
         bool ownOther = false;   // the statement's own instruction is a store of the variable that wrote another value
         // A7-32: a copy at a call or a return shows the value the callee or the caller sees there: when a store of the byte runs before
         // that instruction (before it in its flow block, or in a flow block from which the flow reaches it), only such a store is its,
@@ -9259,6 +9282,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             const auto take = [&](const ghidra::AccessRecord* r) {
                 if (!r || (beforeOnly && !runsBefore(r)) || overwritten(r) || !shows(r)) return false;
                 chosen.insert(r);
+                if (std::getenv("SE_DBG_A7")) std::fprintf(stderr, "DBG take %06x at %06x\n", (unsigned)InstructionOf(*r), (unsigned)at); // DBGTMP
                 return true;
             };
             // A7-300: a store whose stored register was last written, on every path, by the instructions the statement's value is made at
@@ -9795,6 +9819,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 atBranchInsn = last == ghidra::CPUI_BRANCH || last == ghidra::CPUI_CBRANCH;
             }
         }
+        if (std::getenv("SE_DBG_A7")) { std::fprintf(stderr, "DBG stmt at %06x code %d slot %d chosen:", (unsigned)at, (int)code, (int)o->isFromDelaySlot()); for (const ghidra::AccessRecord* r : chosen) std::fprintf(stderr, " %06x", (unsigned)InstructionOf(*r)); std::fprintf(stderr, " inputStores %zu loaded %zu ownOther %d\n", inputStores.size(), loadedInputStores.size(), (int)ownOther); } // DBGTMP
         if (chosen.empty())
         {
             // No store shows the value. A copy the engine put at the end of its block (a branch, or any instruction) is then the line of
@@ -10671,6 +10696,65 @@ bool MoveDrawnTokens(Line& l, uint32_t from, const std::set<uint32_t>& makers)
     for (const Token& t : l.tokens)
         if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
     return true;
+}
+
+// A7-292: a statement of a store's input -- `xRam2600210c = (char)param_1;` for the slot's `mov.b r4,@r6`, r4 the parameter -- whose
+// name is drawn at that store and whose operand is drawn at the next store of the same bytes (`mov.b r1,@r6`, the instruction after the
+// slot, which only the other way in runs): the engine's one narrowing of the parameter serves the slot's copies and sits at the
+// instruction after the slot. The store the name is at stores the input register unchanged (no instruction wrote it since the entry),
+// the one the operand is at another register: the operand is drawn at the store the name is (grammar 1 seed 11004012). Returns how many
+// tokens moved.
+int RetargetInputOperandToStore(std::vector<Line>& lines, const ghidra::Funcdata& fd, const FlowRecord& flow)
+{
+    if (std::getenv("SE_R34_OFF_303")) return 0;   // GATETMP
+    std::map<uint32_t, const ghidra::AccessRecord*> storeAt;
+    for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+        if (rec.fate == ghidra::fate_folded_ordinary && rec.store && !rec.addr.isInvalid() && rec.size > 0) storeAt.emplace(InstructionOf(rec), &rec);
+    if (storeAt.size() < 2) return 0;
+    const auto inputStore = [&](const ghidra::AccessRecord* r) {
+        const auto pos = flow.ops.find(r->time);
+        if (pos == flow.ops.end() || pos->second.first < 0 || static_cast<size_t>(pos->second.first) >= flow.blockOps.size() ||
+            pos->second.second >= flow.blockOps[static_cast<size_t>(pos->second.first)].size())
+            return false;
+        const FlowOp& st = flow.blockOps[static_cast<size_t>(pos->second.first)][pos->second.second];
+        if (st.code != ghidra::CPUI_STORE || st.numIn < 3 || st.in[2].Constant() || !st.in[2].space || st.in[2].space->getType() != ghidra::IPTR_PROCESSOR) return false;
+        FlowVn whole = st.in[2];
+        whole.offset &= ~static_cast<ghidra::uintb>(3);
+        whole.size = 4;
+        std::vector<const FlowOp*> writers;
+        bool entry = false;
+        return FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), whole, writers, &entry, false) && entry && writers.empty();
+    };
+    int moved = 0;
+    for (Line& l : lines)
+    {
+        const size_t eq = l.text.find(" = ");
+        if (eq == std::string::npos) continue;
+        uint32_t nameAt = 0;
+        for (const Token& t : l.tokens)
+            if (t.addr && t.begin < t.end && t.end <= eq && !nameAt) nameAt = t.addr;
+        const auto name = storeAt.find(nameAt);
+        if (!nameAt || name == storeAt.end() || !inputStore(name->second)) continue;
+        for (Token& t : l.tokens)
+        {
+            if (!t.addr || t.addr == nameAt || t.begin >= t.end || t.begin <= eq || t.end > l.text.size()) continue;
+            const std::string operand = l.text.substr(t.begin, t.end - t.begin);
+            if (operand.compare(0, 6, "param_") != 0 && operand.compare(0, 4, "in_r") != 0) continue;
+            const auto other = storeAt.find(t.addr);
+            if (other == storeAt.end() || other->second->addr.getSpace() != name->second->addr.getSpace() || other->second->addr.getOffset() != name->second->addr.getOffset() ||
+                inputStore(other->second))
+                continue;
+            t.addr = nameAt;
+            ++moved;
+        }
+        if (moved)
+        {
+            l.firstAddr = 0;
+            for (const Token& t : l.tokens)
+                if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+        }
+    }
+    return moved;
 }
 
 int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations& printed, const ghidra::Funcdata& fd, const FlowRecord& flow)
@@ -13882,11 +13966,19 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             }
         }
         r.accesses = Accesses(*fd, printed, CanonicalOf, flow);
+        const auto dbgLines = [&](const char* pass) {   // DBGTMP
+            if (const char* want = std::getenv("SE_DBG_LINE")) for (const Line& ln : r.lines) if (ln.text.find(want) != std::string::npos) { std::fprintf(stderr, "DBGL %s: %s |", pass, ln.text.c_str()); for (const Token& t : ln.tokens) if (t.addr) std::fprintf(stderr, " %06x%s", (unsigned)t.addr, t.materialised ? "m" : ""); std::fprintf(stderr, "\n"); } };   // DBGTMP
+        dbgLines("start");   // DBGTMP
         AddJoinConstantTokens(r.lines, printed, *fd, flow);
+        dbgLines("joinconst");   // DBGTMP
         AddFrameStoreTokens(r.lines, printed, *fd, flow);
+        dbgLines("framestore");   // DBGTMP
         RetargetTwinExtensions(r.lines, printed, flow);
         RetargetHoistedConversions(r.lines, printed, *fd, flow);   // A7-175
+        RetargetInputOperandToStore(r.lines, *fd, flow);   // A7-292
+        dbgLines("retarget");   // DBGTMP
         MarkMaterialisedReads(r.lines, printed, *fd, flow);
+        dbgLines("materialised");   // DBGTMP
         for (Line& l : r.lines)   // A7-12: the word flow halted at is no instruction; the line's hover text says so
             for (Token& t : l.tokens)
                 t.haltsFlow = t.addr != 0 && std::binary_search(r.badDataAt.begin(), r.badDataAt.end(), t.addr);

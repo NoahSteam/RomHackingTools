@@ -2664,7 +2664,26 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         pieceAtBranch = lb != std::string::npos && le != std::string::npos && le > lb && lt.compare(le + 3, 6, "CONCAT") == 0 &&
                                         IsRamGlobal(lt.substr(lb, le - lb)) && lt.find(lt.substr(lb, le - lb) + "._", le) != std::string::npos && word(t.addr, lw);
                     }
-                    ((copy || pieceAtLoad || pieceAtBranch) ? copyDrawn : ownDrawn)[t.addr].insert(li);
+                    // (A7-300 rule 302: the same merge drawn at a store of another variable -- `iRam2600218c = CONCAT11(xVar4,(xunknown1)iRam2600218c);`
+                    // naming the slot's byte store, drawn at `mov.l r1,@(0x18,r6)` that writes `iRam260021a4`: the product marks it a copy
+                    // materialised there (A7-25), for the store through a pointer that may alias the global; the store writes none of the global,
+                    // so its own statement is the other line, as at a load (rule 157) or a branch (rule 290); grammar 1 seed 12250922)
+                    bool pieceAtOtherStore = false;
+                    if (!A7RuleOff(302) && !plain && !named.empty() && !named.count(t.addr) && isStore(t.addr))
+                    {
+                        const std::string& lt = r.lines[li].text;
+                        const size_t lb = lt.find_first_not_of(' '), le = lt.find(" = ");
+                        uint32_t va = 0;
+                        if (lb != std::string::npos && le != std::string::npos && le > lb && lt.compare(le + 3, 6, "CONCAT") == 0 &&
+                            IsRamGlobal(lt.substr(lb, le - lb), &va) && lt.find(lt.substr(lb, le - lb), le + 3) != std::string::npos)
+                        {
+                            bool own = false;
+                            for (const AccessFate& f : r.accessFates)
+                                own = own || (f.insn == t.addr && f.write && !f.frame && (GlobalDelta(va, f.address) < f.size || storeInside(va, f)));
+                            pieceAtOtherStore = !own;
+                        }
+                    }
+                    ((copy || pieceAtLoad || pieceAtBranch || pieceAtOtherStore) ? copyDrawn : ownDrawn)[t.addr].insert(li);
                 }
         }
         const auto copyOnly = [&](uint32_t at, size_t li) {
