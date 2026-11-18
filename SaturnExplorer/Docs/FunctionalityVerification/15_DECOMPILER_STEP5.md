@@ -22663,3 +22663,24 @@ Read from the text: `uVar3 = *(int2 *)(param_2 + 0xe);` comes before both `Ram06
 ### Runs
 
 See the report of the fixer; the numbers are in the commit message of the last commit of the branch.
+
+### Runs (after the last code edit)
+
+| Run | Result |
+|---|---|
+| ctest, `-j1` | 117 of 117 passed |
+| fault matrix | 0 of 94 job(s) failed |
+| generator, 20,000 seeds (pins included) | failing seeds=0; findings=0 |
+| grammar 1, 10,000 from 11,300,001 | 1 failing seed: 11303278 (`map-way-back`, A7-25; emulator error on the shrunk fixture), area 7's |
+| grammar 2, 10,000 from 11,300,001 | 1 failing seed: 11304044 (`map-way-back`, A7-25), area 7's |
+| grammar 1, 10,000 from 12,130,001, `SE_GENERATED_CAUTION=deep` | 4 failing seeds, all area 7 mapping classes: 12132326 (`map-store-dead`, A7-158), 12133156 (`map-way-back`), 12133872 (`map-conversion-branch`), 12137810 (`map-way-back`) |
+| grammar 2, 10,000 from 12,130,001, `SE_GENERATED_CAUTION=deep` | 3 failing seeds: 12130995 (`read-after-folded-store`, **A5-154, open**), 12135074 (`map-store-after`, A7-32's class), 12136696 (`caution-unsaid-deep`, r15 at a call: A3-228's class) |
+| printed-C, 3,000 seeds | agrees=5196 |
+| corpus hwram007 / hwram008, alone and lent | `all passed` (every ledger count 0); token dumps byte-identical to the base tree in all six dumps |
+| lints | literal size ok; the vendored lint not run (no patch, no vendored file) |
+
+### Routed
+
+* **Area 5, next fixer:** A5-154 (P2, open): grammar 2 seed 12130995.
+* **Area 7:** grammar 1 11303278, 12132326, 12133156, 12133872, 12137810; grammar 2 11304044, 12135074; and the mapping of two-instance delay-slot stores (A5-153).
+* **Area 3:** grammar 2 12136696 (A3-228's class).
