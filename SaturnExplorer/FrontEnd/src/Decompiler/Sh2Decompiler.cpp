@@ -13216,18 +13216,20 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // one is the one the final p-code, the access fates and the printed text belong to (taken below, after the actions).
         FlowRecord restartedFlow;
         bool flowRestarted = false;
+        int flows = 0;
         {
-            int flows = 0;
             const ghidra::Funcdata* const entry = fd;
             fd->setFlowDone([&, entry](ghidra::Funcdata& f) {
-                if (&f != entry || ++flows < 2) return;
+                if (&f != entry || ++flows < 2 || std::getenv("SE_TMP_NOREC")) return;   // TMPTOGGLE
                 restartedFlow = RecordFlow(f, CanonicalOf, *snapshot);
                 flowRestarted = true;
+                if (std::getenv("SE_TMP_DBG")) fprintf(stderr, "DBG hook flow#%d insns=%zu 905C=%d\n", flows, restartedFlow.insnFirst.size(), (int)restartedFlow.insnFirst.count(0x0600905C));   // TMPDBG
             });
         }
         fd->followFlow(ghidra::Address(ram, 0), ghidra::Address(ram, ram->getHighest()));
         if (fd->hasNoCode()) return std::string();
         FlowRecord flow = RecordFlow(*fd, CanonicalOf, *snapshot);
+        if (std::getenv("SE_TMP_DBG")) fprintf(stderr, "DBG first insns=%zu 905C=%d\n", flow.insnFirst.size(), (int)flow.insnFirst.count(0x0600905C)); if (std::getenv("SE_TMP_DBG")) { for (auto& k : flow.insnFirst) fprintf(stderr, " %X", k.first); fprintf(stderr, "\n"); }   // TMPDBG
 
         const RawScan scan = [&] {
             RawScan raw = ScanRawPcode(*fd, *snapshot);
@@ -13297,6 +13299,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 r.warnings.push_back(std::string("engine rule ") + rule + " not found: access widths and counts may differ from the code");
         arch->allacts.getCurrent()->reset(*fd);
         arch->allacts.getCurrent()->perform(*fd);
+        if (std::getenv("SE_TMP_DBG")) { fprintf(stderr, "DBG after perform restarted=%d finsns:", (int)flowRestarted); for (const ghidra::FlowInsn& fi : fd->getFlowInsns()) fprintf(stderr, " %X", (unsigned)fi.addr.getOffset()); fprintf(stderr, "\n"); }   // TMPDBG
         if (flowRestarted) flow = std::move(restartedFlow);
         // The note of A3-28, but not at a call to a callee whose signature is lent: its arguments are what it reads, and r2 is no
         // input (the probe, run before the literals fold, took every `jsr @rN` for a callee that may read r2: A3-32).
