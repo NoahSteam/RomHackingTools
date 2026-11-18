@@ -2298,6 +2298,18 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const sfe::DisassembledInstruction d = sfe::Sh2Decode(x, w);
             return !d.IsValid || (d.IsBranch && !d.IsCall);
         };
+        // (A7-291 rule 291: a store that begins inside the global -- `mov.b r0,@(0x3,r6)` into the last byte of the word `uRam06001014`, whose
+        // width is the widest access of the function at its address -- is a store of it as one at its first byte is: `iVar2 =
+        // uRam06001014;`, the engine's copy of the word as that store left it (the `mov.l @r6,r0` after it reads it), drawn at the byte store,
+        // is no read copied at a store of another variable (A7-69, A7-190); the product keeps it there, A7-190's own-store case; grammar 1
+        // seed 11508679)
+        const auto storeInside = [&](uint32_t va, const AccessFate& f) {
+            if (A7RuleOff(291)) return false;
+            uint32_t width = 0;
+            for (const AccessFate& g : r.accessFates)
+                if (!g.frame && GlobalDelta(g.address, va) == 0) width = std::max<uint32_t>(width, g.size);
+            return width > 0 && width <= 8 && GlobalDelta(f.address, va) < width;
+        };
         const auto plainCopy = [](const std::string& text) {
             const size_t b = text.find_first_not_of(' ');
             const size_t eq = text.find(" = ");
@@ -2390,7 +2402,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         {
                             bool own = false;
                             for (const AccessFate& f : r.accessFates)
-                                own = own || (f.insn == t.addr && f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
+                                own = own || (f.insn == t.addr && f.write && !f.frame && (GlobalDelta(va, f.address) < f.size || storeInside(va, f)));
                             readAtStore = !own;
                         }
                         // (A7-250 rule 250: a hardware register the line assigns, `SMPC_OREG8 = cRam26001008;` with both the name and the value drawn at
@@ -2609,7 +2621,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 if (!IsRamGlobal(operand, &va)) continue;
                                 bool own = false;
                                 for (const AccessFate& f : r.accessFates)
-                                    own = own || (f.insn == t.addr && f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
+                                    own = own || (f.insn == t.addr && f.write && !f.frame && (GlobalDelta(va, f.address) < f.size || storeInside(va, f)));
                                 nameOfCopyAtStore = nameOfCopyAtStore || !own;
                             }
                     }
@@ -2637,7 +2649,22 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         pieceAtLoad = le != std::string::npos && lt.compare(le + 3, 6, "CONCAT") == 0 && word(t.addr, lw) &&
                                       sfe::Sh2Decode(t.addr, lw).PcRel != sfe::Sh2PcRel::None;
                     }
-                    ((copy || pieceAtLoad) ? copyDrawn : ownDrawn)[t.addr].insert(li);
+                    // (A7-290 rule 290: the same merge drawn at a branch -- `xRam0600200a = CONCAT22(iVar2,xRam0600200a._2_2_);`, the half-word
+                    // store in the slot of a `bt/s` merged into the global's word, put by the engine at the branch that ends the block and
+                    // naming the slot's store: a branch computes no value and writes no memory, so the line is the store's copy materialised
+                    // there (the product's A7-25 mark) and the branch's own statement is the `if`; the line was taken for one that begins
+                    // with the branch (a branch's token is never a copy, A7-34), and the way back answering the `if` was flagged; grammar 1
+                    // seed 12137810)
+                    bool pieceAtBranch = false;
+                    if (!A7RuleOff(290) && !plain && !named.empty() && !named.count(t.addr) && !isStore(t.addr) && isBranch(t.addr))
+                    {
+                        const std::string& lt = r.lines[li].text;
+                        const size_t lb = lt.find_first_not_of(' '), le = lt.find(" = ");
+                        uint16_t lw = 0;
+                        pieceAtBranch = lb != std::string::npos && le != std::string::npos && le > lb && lt.compare(le + 3, 6, "CONCAT") == 0 &&
+                                        IsRamGlobal(lt.substr(lb, le - lb)) && lt.find(lt.substr(lb, le - lb) + "._", le) != std::string::npos && word(t.addr, lw);
+                    }
+                    ((copy || pieceAtLoad || pieceAtBranch) ? copyDrawn : ownDrawn)[t.addr].insert(li);
                 }
         }
         const auto copyOnly = [&](uint32_t at, size_t li) {

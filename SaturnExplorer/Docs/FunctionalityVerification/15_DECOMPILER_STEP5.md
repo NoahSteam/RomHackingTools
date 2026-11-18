@@ -23429,3 +23429,82 @@ The corpus counts, lent counts and printed C are those of the merged base: neith
 * **Coordinator (A7-273/A7-250 overlap):** grammar 1 12246420, 12250922, 12273194, 12279930 (plus A7-273's list).
 * **Host (flow record):** grammar 2 12273885, 12274445, 12135074, A7-250's grammar 2 seeds.
 * **Next area 7 fixer:** A7-271 12151073, A7-262 12189580 and 12181915, A7-272, A7-220.
+
+## Area 7, A7-273 (overlap slot)
+
+Branch `review/7-a7273` from master with `review/7-round32` merged and the A7-197 guard `6435d169`. RelWithDebInfo, `-j1`, `ulimit -v 3500000`, one heavy binary at a time. **Two product changes** (both in `MarkMaterialisedReads`, both only set `Token::materialised`; no token moves, no text changes), **two oracle rules** (290, 291), **no engine patch**. Pins `TestArea7A7273Pins`, fixture in `TestArea7Round22`, script `Docs/Decompiler/tools/a7_a7273/final.sh`. Ledger: A7-273 fixed, new rows A7-290 to A7-294.
+
+| Seed (grammar 1) | Class | Outcome |
+|---|---|---|
+| 12133156 | the overlap slot (A7-273) | fixed, product |
+| 12137810 | a CONCAT merge at the branch before the slot (A7-290) | fixed, oracle rule 290 |
+| 11508679 | a word's copy at a byte store into its last byte (A7-291) | fixed, oracle rule 291 |
+| 11703213 | a temporary's copy at a store through a pointer (A7-293) | fixed, product |
+| 11004012 | `map-store-value`, the slot line's operand drawn after the slot (A7-292) | open, triaged |
+
+### 1. The coordinator's findings, checked
+
+All confirmed by replay. Only 12133156 fails at the instruction the decoder's `Instruction at ... overlaps instruction at ...` warning names. The whole seed prints, for the slot 0x06009028 (`mov.l r3,@r6`, the slot of `bt/s` 0x06009026 and the target of `bra` 0x06009042):
+
+```
+if ((iRam80002020 - in_r2 & in_r2) == 0) {
+  xRam80002010 = 0x80000000;        tokens 6009028 (marked), names 600902A (tas.b)
+  xVar1 = *(xunknown2 *)(param_2 + 0x1e);
+  xRam80002010 = 0x10000000;        tokens 6009028 (NOT marked), names 6009038 (mov.b r6,@r6)
+  return (int4)cRam06002013;
+}
+xRam80002010 = 0;                    tokens 6009028: the slot's own statement on the bt/s way
+return 0x10;
+```
+
+`way back 6009028: exact line 21 'xRam80002010 = 0x10000000;'` before the change, `'xRam80002010 = 0;'` after.
+
+### 2. Root cause (A7-273) and the product change
+
+The brief's guess (`ownStore` in the A7-25 block of `AddFrameStoreTokens`) is not where the two merged lines part. They part in the A7-145 pass at the end of `MarkMaterialisedReads` ("a copy the engine made of the stores of a variable that join into one value, drawn at the first store whose own statement is another line"). That pass looks for another line that is the store's own statement:
+
+* for `= 0x80000000;` the own statement `xRam80002010 = 0;` is accepted through A7-191's exception (this line names the store of the very next instruction, the `tas.b`), so its slot tokens are marked;
+* for `= 0x10000000;` the same own statement is refused by A7-200's rule (a `return` at the block's depth lies between the two lines: the statement is another path's, as the oracle's A7-166 takes it), and the first merged line is skipped because it names a store itself. No own line, no mark.
+
+The oracle's A7-129 reading disagrees only on the second point: a line of the same variable with another text, on the same path (no `return` between), that draws its name at the store makes this line's tokens there a copy, whether or not that line names a store. So the oracle takes both merged lines for copies and `= 0;` for the statement, while the product offered the unmarked merged line first.
+
+The change makes the product read it as the oracle does: in the A7-145 pass, another plain copy of the same variable that names a store, has another text (compared without the indent), draws its name at the store and has no `return` between it and this line is the store's statement ahead of this one; this line's tokens at the store are marked. Both merged lines are now marked and `InstructionLineIndex::Ordered` (unchanged) offers `xRam80002010 = 0;` first, the merged lines after it.
+
+Why the earlier attempts hit the fixtures and this does not: they changed what is offered or accepted at every slot-and-target instruction; this one adds a mark on one line shape. A7-147's fixture has one line of the variable at the slot (nothing to mark; its damaged form still violates). A7-166's 8901149 has `= 0x3e003e;` and `= 0x3e;` with a `return` between (another path, untouched). A7-166's 8909710 has the same statement three times at different depths; my first build compared the texts with their indentation, marked all three and failed lines 4978 and 4979 of `Sh2DecompilerTests.cpp`; comparing from the first non-blank (as the oracle does) leaves them one statement. All three fixtures pass unchanged.
+
+### 3. The other seeds
+
+* **12137810 (A7-290, oracle rule 290).** Fails at the `bt/s` 0x06009032, not at its overlapped slot, and the shrunk program has no overlap at all. `xRam0600200a = CONCAT22(iVar2,xRam0600200a._2_2_);`, the slot's half-word store merged into the word, is put by the engine at the branch; the product marks it (A7-25) and answers the `if`. The oracle never took a token at a branch for a copy, so it wanted the CONCAT line first. Rule 290: a CONCAT merge of a RAM global's own piece that names a store elsewhere and is drawn at a branch is a copy there (A7-157's rule for a literal load).
+* **11508679 (A7-291, oracle rule 291).** Fails at `mov.b r0,@(0x3,r6)` 0x0600902E; the overlap is elsewhere (0x0600903C). `iVar2 = uRam06001014;`, the word as the byte store left it, is drawn at the byte store, which the product leaves there on purpose (A7-190, a copy at a store of the global itself, seed 10605046). The oracle's "is this a store of the global" test was true only for a store at the global's first byte. Rule 291: a store that begins inside the global (width: the widest access at its address) is a store of it.
+* **11703213 (A7-293, product).** Fails at `mov.b r3,@-r4` 0x06009046, not overlapped. Token dump after each pass: the engine itself emits `iVar3` of `iRam06002010 = iVar3;` at 0x06009046, an implied COPY of a temporary (IPTR_INTERNAL input) taken at the store through the pointer. `MarkMaterialisedReads` marked such copies of memory and of pieces, not of a whole temporary. Now marked when the line's name is drawn at another store and a line that is no plain copy draws the instruction as its own.
+* **11004012 (A7-292, open).** `map-store-value`, not the way back. The slot line `xRam2600210c = (char)param_1;` has its name at the slot and `param_1` at the instruction after the slot, which only the other way in runs. Needs the operand drawn at the slot; not attempted.
+
+### 3a. Round 33's overlap seeds (sent by the coordinator during the final runs; A7-294)
+
+Replayed on the final build, grammar 1: **12279930** has no finding (rule 290 closes it: with `SE_A7_RULE_OFF=290` it fails again; it has no pin of its own, the test code was not changed after the final runs started). **12246420** (`map-store-twin`, A7-274's seed), **12250922** (`map-way-back` at 0x06009038, two instructions after the slot: the slot's CONCAT11 merge drawn, marked, at a store of another global; rule 290's reading at such a store would cover it, not attempted) and **12273194** (`map-store-value`, A7-292's kind) still fail and are not A7-273's root.
+
+### 4. Corpus and printed C
+
+An instrumented build (a `fprintf` at each new mark, removed before the final build) ran both images with lending: neither product rule fires on any corpus line (the only hits were the new unit fixture's two lines), and neither fires in generator seeds 1 to 3000 of both grammars. The corpus tokens and counts are therefore unchanged; the text cannot change (marks only).
+
+Mutation: the pins run with `SE_A7_RULE_OFF=290` fail 12137810 and with `=291` fail 11508679; the fixture's damaged form (second merged line unmarked) is flagged by the audit; 12133156 and 11703213 failed before their product changes (section 1 and the replay above).
+
+### 5. Runs (one binary at a time, after the last code edit)
+
+| Run | Result |
+|---|---|
+| `ctest -j1` | 117 of 117 passed (528 s) |
+| fault matrix | `fault matrix: 0 of 94 job(s) failed` |
+| 20,000-seed matrix | `failing seeds=0; findings=0` (627 s) |
+| printed-C | `agrees=5196` |
+| corpus hwram007, lent | 0 check(s) failed; 0 missing and said; "real entries 999: signatures lent 474 (645 parameters)" |
+| corpus hwram008, lent | 0 check(s) failed; 4 missing and said; "1543: 724 (975 parameters)" |
+| sweep grammar 1, 10,000 from 12,240,001 | 1 failing seed: 12246420 (`n:map-store-twin`), round 32's A7-274, unchanged |
+| sweep grammar 2, 10,000 from 12,240,001 | 1 failing seed: 12247189 (`n:read-after-folded-store`), round 32's A7-274 (area 5), unchanged |
+
+Lint `check-literal-size.py`: `raw string sizes: ok`. No vendored file touched.
+
+### 6. Routed
+
+* **Area 7 (next fixer):** A7-292 (11004012), A7-294 (12246420, 12250922, 12273194), and round 32's A7-271, A7-272, A7-274.
+* **Host (flow record after the restarts):** A7-250's grammar 2 seeds, A7-270.

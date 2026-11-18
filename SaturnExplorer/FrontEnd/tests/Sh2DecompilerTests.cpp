@@ -4978,6 +4978,33 @@ void TestArea7Round22()
         CHECK(dts::AuditMapping(r, word, "a7_166_8909710").Violations() == 0);
         CHECK(mutated(r, "166", "a7_166_8909710 mutated") >= 1);
     }
+    // A7-273 (product) `bt/s L ; mov.l r3,@r6 (the slot, which a `bra` enters too) ; tas.b @r6 ; ... ; mov.b r6,@r6`: on the path that goes on the slot's
+    // store is printed merged with the `tas.b` (`xRam80002010 = 0x80000000;`) and again with the byte store (`xRam80002010 = 0x10000000;`), and on the
+    // other way in as `xRam80002010 = 0` in the condition. Both merged lines are copies at the slot's store (the second has the first ahead of it on
+    // its path), and the way back from the slot answers the line that holds its own statement (grammar 1 seed 12133156, shrunk)
+    {
+        const std::vector<uint16_t> w = { 0xD607, 0xE301, 0x4310, 0x8BFD, 0x2218, 0x8907, 0x4015, 0x8D01, 0x2632, 0x461B, 0x855F, 0x2660, 0x000B, 0x0009, 0xAFF8, 0x0009,
+                                          0x8000, 0x2010 };
+        const DecompileResult r = d.Decompile(snapOf(w), Request(0x06009000u));
+        Print("A7-273 a slot's store merged twice on one path (grammar 1 seed 12133156)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam80002010 = 0x80000000;") != nullptr && LineWith(r, "xRam80002010 = 0x10000000;") != nullptr);
+        const LineLookup at = LineForInstruction(r, 0x06009010u);
+        CHECK(at.kind == LineLookup::Exact && !at.lines.empty() && r.lines[at.lines[0]].text.find("xRam80002010 = 0,") != std::string::npos);
+        CHECK(dts::AuditMapping(r, word, "a7_273_12133156").Violations() == 0);
+        // (damaged: the second merged line's tokens at the slot not marked, as before the fix)
+        DecompileResult before = r;
+        int n = 0;
+        for (Line& l : before.lines)
+            if (l.text.find("xRam80002010 = 0x10000000;") != std::string::npos)
+                for (Token& t : l.tokens)
+                    if (t.addr == 0x06009010u && t.materialised)
+                    {
+                        t.materialised = false;
+                        ++n;
+                    }
+        CHECK(n >= 1 && dts::AuditMapping(before, word, "a7_273_12133156 before").Violations() >= 1);
+    }
     // A7-167 `bsr F` (and `jsr @r3` with r3 the literal F) in a function that tail-jumps to F: `xStack_10 = unaff_r12;` is drawn at the call and names
     // the push of r12 in F, which runs when the call is made (grammar 2 seed 8900054, shrunk twice)
     {

@@ -19354,6 +19354,27 @@ void TestArea7Round33Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7, A7-273 (the overlap slot). Grammar 1 12133156 (product: of two merged statements of a delay slot's store on one path, the later is a copy at the
+// slot's store as the earlier is, and the way back answers the slot's own statement of the other way in), whole and shrunk; 12137810 (rule 290: a
+// CONCAT merge of a slot's store drawn at the branch is a copy there); 11508679 (rule 291: a byte store inside a global's word is a store of it);
+// 11703213 (A7-293, product: a temporary's copy the engine took at a store through a pointer, drawn there on another store's statement, is marked).
+void TestArea7A7273Pins(Sh2Decompiler& d)
+{
+    for (long seed : { 12133156L, 12137810L, 11508679L, 11703213L })
+    {
+        const Report rep = Evaluate(d, Generate(static_cast<uint64_t>(seed)), true);
+        std::printf("pin 'area 7 A7-273: grammar 1 seed %ld': %zu finding(s)\n", seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    // (replay: SE_GENERATED_WORDS="D607 E301 4310 8BFD 2218 8907 4015 8D01 2632 461B 855F 2660 000B 0009 AFF8 0009 8000 2010" SE_GENERATED_CANARY=0)
+    const Subject subject = RawSubjectWithEnv("D607 E301 4310 8BFD 2218 8907 4015 8D01 2632 461B 855F 2660 000B 0009 AFF8 0009 8000 2010", nullptr, nullptr, nullptr);
+    const Report rep = EvaluateSubject(d, subject, true);
+    std::printf("pin 'A7-273 grammar 1 seed 12133156 shrunk': %zu finding(s)\n", rep.findings.size());
+    for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+    CHECK(rep.findings.empty());
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21597,6 +21618,7 @@ void TestGenerated()
         RUN(TestArea7Round31Pins(d));
         RUN(TestArea7Round32Pins(d));
         RUN(TestArea7Round33Pins(d));
+        RUN(TestArea7A7273Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
