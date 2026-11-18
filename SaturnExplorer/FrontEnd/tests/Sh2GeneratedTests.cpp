@@ -19505,6 +19505,40 @@ void TestA5154Pins(Sh2Decompiler& d)
     CHECK(rep.text.find("xRam06001028 = 4;") == std::string::npos);
 }
 
+// A7-320 (patch 0096): a function that runs into other functions, or reaches code after a `jmp` the engine resolves late, is followed again by a restart in
+// the actions; the flow record the host's passes read (blockOps, insnFirst, accessesByInsn) was taken from the first flow only and had no ops for the code
+// the restart reached, so the oracle's way-back, conversion-branch and store findings stood in that code. The record is now the last flow's. Grammar 2
+// seeds 11304044, 11708927, 12020446 (A7-250), 11900473 (A7-270), 12273885 (A7-283) and 12274445 (A7-250) whole, and 11901051 (A7-262: the load
+// is in a delay slot, `MarkMaterialisedReads`' A7-124 case took no slot's copy), and two shrunk modules.
+void TestA7FlowRecordPins(Sh2Decompiler& d)
+{
+    for (const int seed : { 11304044, 11708927, 12020446, 11901051, 11900473, 12273885, 12274445 })
+    {
+        const Report rep = Evaluate(d, MakeV2(seed), true);
+        std::printf("pin 'A7-320 grammar 2 seed %d': %zu finding(s)\n", seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    const ModulePin pins[] = {
+        { "A7-320 grammar 2 seed 11900473 shrunk (code after a jmp the engine resolves late)",
+          "2F86 2F96 2FA6 4F22 6843 6953 6A63 2368 8B01 A002 0009 A000 E20B D103 4F26 6AF6 69F6 68F6 412B 0009 0600 902C 2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 D104 "
+          "4F26 6BF6 6AF6 69F6 68F6 412B 0009 0009 0600 9054 6346 E240 2632 2528 8B02 2530 A003 0009 2530 A000 0009 000B 0009",
+          "0/0/28,2c/2c/4e,54/54/6e", nullptr, "0,0,2", nullptr, nullptr },
+        { "A7-320 grammar 2 seed 12020446 shrunk (a function that runs into another's entry)",
+          "2F86 2F96 4F22 7FF4 6843 6953 2338 89FF D203 7F0C 4F26 69F6 68F6 422B 0009 0009 0600 9024 2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 D204 4F26 6BF6 6AF6 69F6 "
+          "68F6 422B 0009 0009 0600 904C 7FD0 525A 2520 D60D 451B E103 3712 8910 4708 C702 017E 412B 0009 0009 0600 907E 0600 9074 0600 9078 A003 0009 806F A000 0009 6053 "
+          "7F30 000B 0009 0009 25F8 008C",
+          "0/0/1e,24/24/46,4c/4c/86", "62:7:3:7e:7e,74,78", "1,1,1", "1000,1000,1000", "8,0,0" },
+    };
+    for (const ModulePin& pin : pins)
+    {
+        const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+        std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 // Area 5, round 3 (A5-162 to A5-164): four order-class oracle findings whose text is value-correct, each whole and shrunk. A5-162, grammar 1 seed 12183970:
 // a read whose register is overwritten at once (a `dt` loop's `mov.l @(r0,r7),r0`) has no statement, and the loop's copy of the later read is not its
 // own (`v:folded-read-after-access`). A5-161, 11007546: a `tas.b` between a word's read and its write-back. A5-163, 12128210: a word store of what a
@@ -21608,6 +21642,7 @@ void TestGenerated()
         RUN(TestA5Round2Pins(d));
         RUN(TestA5154Pins(d));
         RUN(TestA5162Pins(d));
+        RUN(TestA7FlowRecordPins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
         RUN(TestArea7Round26Pins(d));

@@ -10205,6 +10205,7 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         // the variable. Its tokens there are a copy materialised at the load (A7-25), which the way back offers after the load's line --
         // when the copy line's lowest address is the load, it came first. Only on a plain copy that names a store of another instruction
         // (as the oracle takes a copy) and when another line draws the instruction as its own; grammar 1 seed 6802425.
+        // A7-320: the load may be the instruction in a delayed branch's slot (`bt/s ; mov.w @r4,r0`), whose ops are flagged as the slot's; grammar 2 seed 11901051.
         if ((o->code() == ghidra::CPUI_INT_SEXT || o->code() == ghidra::CPUI_INT_ZEXT) && out && out->isImplied() &&
             o->getIn(0)->isWritten() && !o->getIn(0)->isImplied())
         {
@@ -13220,7 +13221,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         {
             const ghidra::Funcdata* const entry = fd;
             fd->setFlowDone([&, entry](ghidra::Funcdata& f) {
-                if (&f != entry || ++flows < 2 || !print || std::getenv("SE_TMP_NOREC")) return;   // TMPTOGGLE
+                if (&f != entry || ++flows < 2 || !print) return;
                 restartedFlow = RecordFlow(f, CanonicalOf, *snapshot);
                 flowRestarted = true;
             });
