@@ -8106,7 +8106,7 @@ bool StoreShowsValue(const ghidra::AccessRecord& r, const FlowRecord& flow, cons
                 break;
             }
     }
-    if (numbersOnly && isStore && !std::getenv("SE_R34_OFF_306") && !storedReg.Constant() && storedReg.space &&   // GATETMP
+    if (numbersOnly && isStore && !storedReg.Constant() && storedReg.space &&
         storedReg.space->getType() == ghidra::IPTR_PROCESSOR)
     {
         FlowVn whole = storedReg;
@@ -9347,7 +9347,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // adds (`mov.w r3,@r6` of the 0 a `dt` loop left): the statement is that store's value, and the next store (`mov.b r5,@r6`, an
             // input that "may be 0") writes what the word holds after it; grammar 1 seed 12273194
             bool priorZero = false;
-            if (conversion && code == ghidra::CPUI_INT_ZEXT && !std::getenv("SE_R34_OFF_301"))   // GATETMP
+            if (conversion && code == ghidra::CPUI_INT_ZEXT))
                 for (const ghidra::AccessRecord* pz : stores)
                 {
                     if (priorZero || !writes(pz) || key(pz->pc, pz->slot) >= before) continue;
@@ -9472,7 +9472,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // at another address: two loads may read the same value) is not the statement's when the flow after it has a store of the
             // register the statement's own instructions made: the engine hoisted that store's value to the branch (`mov.l @(0x28,r5),r1 ;
             // ... ; bf L ; ... L: mov.w r1,@r6` after the polled `mov.w r0,@r6`; grammar 1 seed 12246420)
-            if (prior && !std::getenv("SE_R34_OFF_300") && shows(prior) && !exactStore(prior))   // GATETMP
+            if (prior && shows(prior) && !exactStore(prior))
             {
                 const auto here = flow.insnBlock.find(at);
                 if (here != flow.insnBlock.end())
@@ -10362,7 +10362,7 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         // (as the oracle takes a copy) and when another line draws the instruction as its own; grammar 1 seed 6802425.
         // (A7-308: also the extension of a load made in a delay slot, `mov.b @r4,r1` in the slot of `bf/s`, whose copy line names a store after
         // the call; grammar 1 seed 12299659)
-        if ((o->code() == ghidra::CPUI_INT_SEXT || o->code() == ghidra::CPUI_INT_ZEXT) && out && out->isImplied() && (!o->isFromDelaySlot() || !std::getenv("SE_R34_OFF_308")) &&   // GATETMP
+        if ((o->code() == ghidra::CPUI_INT_SEXT || o->code() == ghidra::CPUI_INT_ZEXT) && out && out->isImplied() && true &&
             o->getIn(0)->isWritten() && !o->getIn(0)->isImplied())
         {
             const ghidra::PcodeOp* def = o->getIn(0)->getDef();
@@ -10779,7 +10779,6 @@ bool MoveDrawnTokens(Line& l, uint32_t from, const std::set<uint32_t>& makers)
 // tokens moved.
 int RetargetInputOperandToStore(std::vector<Line>& lines, const ghidra::Funcdata& fd, const FlowRecord& flow)
 {
-    if (std::getenv("SE_R34_OFF_303")) return 0;   // GATETMP
     std::map<uint32_t, const ghidra::AccessRecord*> storeAt;
     for (const ghidra::AccessRecord& rec : fd.getAccessFates())
         if (rec.fate == ghidra::fate_folded_ordinary && rec.store && !rec.addr.isInvalid() && rec.size > 0) storeAt.emplace(InstructionOf(rec), &rec);
