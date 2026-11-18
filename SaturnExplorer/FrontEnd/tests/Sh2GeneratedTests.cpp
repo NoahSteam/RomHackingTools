@@ -19333,6 +19333,27 @@ void TestArea7Round32Pins(Sh2Decompiler& d)
     gSpecialReads = savedSpecials;
 }
 
+// Area 7 round 33. A7-280 (product: a copy of a register's input at a call or a load names the store of the register a poll's load filled; the engine's
+// `in_r0` is the register's one variable over the entry's value and the polled one) grammar 1 12212141; the memory walk (A7-281: the low half of a
+// word read is the half of the memory a half-word store wrote) grammar 1 12205947. Oracle: rule 270 (`add #imm,Rn` of a number on one correlated path) grammar 2
+// 12252055; rule 271 (a statement of the input that names no instruction) grammar 2 12255565; rule 272 (`and Rn,Rn` keeps Rn) grammar 1 11905223; rule 273 (a
+// whole global read drawn at a byte read inside it) grammar 1 12188214; rule 270 also looks through `or Rn,Rn`/`and Rn,Rn` no-ops, grammar 1 12279304.
+void TestArea7Round33Pins(Sh2Decompiler& d)
+{
+    struct Whole
+    {
+        int grammar;
+        long seed;
+    };
+    for (const Whole& w : { Whole{ 1, 12212141 }, Whole{ 1, 12205947 }, Whole{ 2, 12252055 }, Whole{ 2, 12255565 }, Whole{ 1, 11905223 }, Whole{ 1, 12188214 }, Whole{ 1, 12279304 } })
+    {
+        const Report rep = Evaluate(d, w.grammar == 2 ? MakeV2(static_cast<int>(w.seed)) : Generate(static_cast<uint64_t>(w.seed)), true);
+        std::printf("pin 'area 7 round 33: grammar %d seed %ld': %zu finding(s)\n", w.grammar, w.seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -20546,16 +20567,26 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         CHECK(bad == 0);
     }
     {
-        // A11-40 (area 11, the shrinker): grammar 1 seed 12212141's own program has one finding (`n:map-copy-store`); its shrunk replay took out the
+        // A11-40 (area 11, the shrinker): grammar 1 seed 12212141's own program had one finding (`n:map-copy-store`); its shrunk replay took out the
         // push of PR and kept the pop (`mov.l @r15+,r3 ; lds r3,pr`), returned to 0 and reported an `emulator-error` the seed does not have. A step
-        // that makes a program stop the emulator is not taken when the program the shrink starts from does not stop.
-        const Program p = Generate(12212141);
-        Shrinker s{ d, p, "n:map-copy-store" };
-        const Program small = s.Run();
-        const Report again = Evaluate(d, small, false);
-        std::printf("pin 'A11-40 grammar 1 seed 12212141': seed stops %d; shrunk in %d evaluations, still %d, emulator-error %d, stops %d\n", int(StopsInEmulator(p)),
-                    s.evals, int(Has(again, "n:map-copy-store")), int(Has(again, "emulator-error")), int(StopsInEmulator(small)));
-        CHECK(!StopsInEmulator(p) && Has(again, "n:map-copy-store") && !Has(again, "emulator-error") && !StopsInEmulator(small));
+        // that makes a program stop the emulator is not taken when the program the shrink starts from does not stop. Area 7 round 33 (A7-280)
+        // fixed that seed's finding, so the pin takes the first of the seeds that still has a finding of its own (the seeds of A7-273's open
+        // overlap class, grammar 1), and the seed itself when it has one again.
+        for (const uint64_t seed : { 12212141ull, 12133156ull, 12137810ull, 11508679ull, 11703213ull })
+        {
+            const Program p = Generate(seed);
+            const Report base = Evaluate(d, p, false);
+            if (base.findings.empty() || StopsInEmulator(p)) continue;
+            const std::string sig = base.findings.front().sig;
+            Shrinker s{ d, p, sig };
+            const Program small = s.Run();
+            const Report again = Evaluate(d, small, false);
+            std::printf("pin 'A11-40 grammar 1 seed %llu': seed stops %d; shrunk in %d evaluations, still %d (%s), emulator-error %d, stops %d\n",
+                        static_cast<unsigned long long>(seed), int(StopsInEmulator(p)), s.evals, int(Has(again, sig)), sig.c_str(), int(Has(again, "emulator-error")),
+                        int(StopsInEmulator(small)));
+            CHECK(!StopsInEmulator(p) && Has(again, sig) && !Has(again, "emulator-error") && !StopsInEmulator(small));
+            break;
+        }
     }
     {
         // A3-193 (area 3, oracle): grammar 2 seed 8602477, `n:return-dropped`. Each arm of `tst r4,r4 ; bf` ends with `mov #7,r0 ; mov.b @(r0,r4),r1`
@@ -21565,6 +21596,7 @@ void TestGenerated()
         RUN(TestArea7Round30Pins(d));
         RUN(TestArea7Round31Pins(d));
         RUN(TestArea7Round32Pins(d));
+        RUN(TestArea7Round33Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
