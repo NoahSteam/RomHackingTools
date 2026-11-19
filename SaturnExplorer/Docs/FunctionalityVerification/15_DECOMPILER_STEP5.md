@@ -23679,3 +23679,74 @@ without showing that its definition reaches the use) of the kind the area 7 cont
 their classes and the branch keeps the repros for the link-model design review. Round 35's runs on its branch: ctest
 117/117, fault 0/94, 20k 0/0, printed-C 5196, corpus 474 (645) / 724 (975), missing and said 0 / 4; sweeps from 12,320,001
 in both grammars clean.
+
+## Area 7, external review findings
+
+Branch `review/7-reviewfix` from master `2cc295f7` (round 34). An external design review found three defects in round 34's work; rows **A7-340 to A7-342** (each cites "external review"), all fixed. No other area 7 row was taken.
+
+- **A7-340 (A7-301's prior zero).** Confirmed: the check scanned all folded stores of the byte and used address order. Now only the write that reaches the statement counts: the last store of the byte in its block before it, else, on every path in, the last store of the first block that stores it; all must write 0. A first version (one predecessor chain) broke grammar 1 seed 12273194, whose zero store is the delay slot of the `bf/s` before the join; the path version closed it.
+- **A7-341 (A7-292's retarget).** Confirmed: spelling-only recognition, same-start stores of any width, an unresolved source treated as another value. Now the token must be exactly `param_N` / `in_rN` and denote the register the name's store stores, the other store has the same start and width, and its source is proven another value; an unresolved source leaves the token.
+- **A7-342 (Folded fallback).** Confirmed: the panel said "was folded into the expression" for any unmapped instruction. The fallback is kept as navigation and labelled "nearest mapped line"; the codebase has no per-instruction fold record, so the claim is dropped.
+- **Fixtures** (`TestArea7ReviewFixPins`, Sh2GeneratedTests.cpp): two hand-written disjoint-arm programs and the seed 11004012 program with its second store and its slot's store widened. Stated limit: the oracle gives the same (empty) findings on these with the round 34 code, so they pin the shapes; they do not separate old from new (four attempts at a distinguishing program did not reach the divergence). The panel test asserts the new note and fails on the old text.
+
+
+## Area 7, external review findings, round 2
+
+Branch `review/7-reviewfix2` from master `a4da63b3` (round 1 of the review, `review/7-reviewfix`). The reviewer's follow-ups on A7-340 to A7-342; the three rows are updated, no new row.
+
+- **A7-342.** Confirmed: `InstructionLineIndex::Find` takes the next mapped instruction of the run before the previous one even when the previous is closer. The wording is "nearby mapped line" in the panel, `DecompilerPanelTests`, `DECOMPILER_GUIDE.md`, `Codebase/Systems/Decompiler.md`, `REVIEW_PROGRAM.md` and the `LineLookup` and `Find` comments (which now say next-then-previous). The lookup is unchanged.
+- **A7-340.** Confirmed: the reaching-zero check looked only at folded stores, so a zero store followed by a store through a pointer that may alias the byte (or a call) could still select the zero store. The decision is now `PriorWriteIsZero` (`Sh2FlowDecisions.h`, defined in Sh2Decompiler.cpp): from the statement's position in the recorded flow it walks back on every path to the nearest op that may write the byte (FlowLastReads' barrier logic: a store through a pointer the walk cannot place, a call, CALLOTHER end it as unknown; a placed store that overlaps the byte is the write) and requires that write to be a folded store of the number 0; a path that reaches the entry first has no prior zero. The old final-graph `lastIn` search is not used for this decision any more.
+- **A7-341.** Confirmed both shapes: a register that is the entry's on one path and a writer's on another, and `mov r4,r1 ; mov.b r1,@x`, were `Other`. The decision is now `OperandMovesToStore`: the other store's source is walked through register moves (`FlowLastWriters` gained an optional list of the registers paths hold at the entry), and the token stays unless the source is resolved and no path holds the operand's own input. The operand is identified by the varnode the markup decoder resolves for the token (VARREF, recorded per token as it is decoded: input in a processor register, whole register), not by parsing `param_N` / `in_rN`.
+  A first version keyed the recorded varnodes by decoded line index and moved nothing (the decoder drops the leading blank lines after recording; seed 11004012 then failed `v:map-store-value`); the keys are shifted with the lines.
+- **Tests.** Round 1's five replays stay as corpus coverage. `TestArea7DecisionPoints` (Sh2GeneratedTests.cpp) builds small FlowRecords and calls the two decisions directly: A7-340 (a reaching zero counts; not when the store is not a folded one; the last of two stores is the write; a zero on a disjoint arm does not; zero on every joining arm does; a nonzero write on one arm does not; an unplaced store, a call, CALLOTHER leave it unknown; a store elsewhere does not disturb it; a later nonzero store of the byte is the write; no write at all is no zero) and A7-341 (the token moves for a register an instruction wrote, a number, another input; stays for a missing flow op on either store, another width, another start, another register, a name that is not the input, 3a, 3b, an unresolved source, a source in a temporary; moves when a writer is on every path). With `SetDecisionGuardOffForTests(g)` each guard is switched off once and its case must fail; the test asserts that, and prints:
+
+| guard switched off | case(s) that fail |
+|---|---|
+| prior: unplaced store | a store through an unplaced pointer leaves it unknown |
+| prior: call | a call leaves it unknown |
+| prior: engine operation | an engine operation leaves it unknown |
+| prior: entry | a zero on a disjoint arm does not count; no write at all is no prior zero |
+| prior: overlap | a store of another place does not disturb it |
+| prior: folded | a store that is not folded does not count |
+| prior: zero | a later nonzero store of the byte is the write |
+| move: flow op | a missing flow op (the other / the name) stays |
+| move: same bytes | another start stays |
+| move: same width | a mismatched width stays |
+| move: operand register | a mismatched register stays |
+| move: name is input | a name that is no input stays |
+| move: other resolved | an unresolved source stays; a source in a temporary stays |
+| move: other not the input | 3a: the input on one path stays; 3b: a copy of the input stays |
+
+  Stated limit: "old" is the guards off (round 1 had no barrier for aliasing stores, calls or CALLOTHER, no same-input rule for 3a/3b); round 1's code itself no longer exists to be run beside the new, and the whole-program oracle still does not separate them.
+- **Runs** (sequential, `ulimit -v 3500000`, `-j1`): ctest 117 of 117 passed; fault matrix 0 of 94; generator 20000 seeds failing seeds=0, findings=0; printed-C agrees=5196; corpus with lending: hwram007 `[after] real entries 999: signatures lent 474 (645 parameters)`, 0 missing and said; hwram008 `1543: 724 (975)`, 4 missing and said; every ledger count 0. No token dump was compared with master (no master build was kept); the counts, printed-C and the 20k matrix are unchanged.
+
+## Area 7, external review findings, round 3
+
+The reviewer accepted A7-340 and A7-342 on PR #67 and kept A7-341 open on one gap. Agents had had two rounds on A7-341, so the coordinator fixed it on master.
+
+- **A7-341.** Confirmed: `OperandMovesToStore` followed the other store's source through register moves only. Any other op that made the value counted as an independent source, so `extu.b r4,r1 ; mov.b r1,@r6` and `or r4,r4` into r1 moved the token although both store the input's byte. The source proof is now `ValueExcludesInput` (Sh2Decompiler.cpp), which follows every path back to what made the value:
+  - a number, or another register held at the entry, excludes the input;
+  - the input register held at the entry, a load, a call or CALLOTHER does not (the memory may hold the input, which the name's own store put there);
+  - any other op must take only values that are themselves shown to exclude it. Failing that, every value its **stored bits** change with must be shown to exclude it.
+  - That last test is a new dependency mode of `FlowIdentitySources`. It builds the value on each path and puts test values in each value read, the others held. So `mov r4,r1 ; add r3,r1 ; sub r4,r1` (seed 11004012) changes with r3 only, and `(r4 & ~0xFF) | 5` stored as a byte changes with nothing.
+- **Tests.** New `TestArea7DecisionPoints` cases. Each stays: an extension of the input; an OR of the input with itself; a load; arithmetic that takes the input; `(r4 & 0xFF) | r5` stored as a byte. Each moves: an extension of another input; arithmetic on another input; the input cancelled (`r4 + r5 - r4`); only the input's other bytes. The five "stays" cases fail on round 2's code (built with the new tests: 5 wrong); the "moves" cases pass on both. With "move: other not the input" switched off, 7 cases fail.
+- **Runs:** the generated-tests binary passes in full, including both seed 11004012 replays. The full matrix follows on merge.
+
+## Area 7, external review findings, round 4
+
+The reviewer confirmed the round 3 extension fix and kept A7-341 open: the new dependency mode of `FlowIdentitySources` took "no sample value changed the output" as proof that the value does not depend on the input. `r4 == 0x1234`, zero-extended and stored as a byte, is 0 for all 17 test values, so the token moved although the byte changes with r4.
+
+- **Fix.** The dependency mode (`FlowIdentitySources` with `suspect`) no longer samples. It builds each path's value as before. `suspect` (`ValueExcludesInput` on each value read) says which reads may be the input. Then it computes, per node, which bits may change with a suspect read:
+  - a bitwise op keeps its inputs' bits;
+  - an AND or OR with a number clears the bits the number fixes;
+  - add, subtract and multiply spread a bit to every bit above it;
+  - a comparison or boolean op is tainted when any input is;
+  - every other op (arithmetic right shift included) is wholly tainted when an input is.
+- **Exact cancellation.** Sums, differences, negations and multiples or shifts by a number are also kept as a linear form over the reads, with coefficients modulo the size. A coefficient that cancels to 0 clears its read: `x + y - x` has no x, and `2 * x` leaves bit 0 alone.
+- **Rule.** The token moves only if no stored bit is tainted on any path. Unknown, an unbuilt path or more than 32 paths leave it in place.
+- **Tests.** New cases in `TestArea7DecisionPoints`:
+  - stays: the reviewer's fixture (`u = r4 == 0x1234 ; r1 = zext u`); a comparison of the input with another input;
+  - moves: `r4 << 8` stored as a byte; `r4 ^ r4`.
+  - The round 3 extension, cancellation and mask cases are kept. Built against round 3's code (4fcb3bec), exactly the reviewer's fixture fails (1 wrong). With "move: other not the input" switched off, 9 cases fail.
+- **Runs:** the generated-tests binary passes in full, including both seed 11004012 replays. The full matrix follows on merge.
+

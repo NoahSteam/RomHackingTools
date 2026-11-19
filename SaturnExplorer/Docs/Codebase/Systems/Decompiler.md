@@ -202,7 +202,7 @@ and lists these classes as open until they are fixed.
    that App handles. The way back is `AssemblyPanel`'s **Show in Pseudocode** (`Request::showPseudocode`)
    -> `DecompilerPanel::ShowInstruction`, which waits for the function to be shown and then
    selects and scrolls to the line `LineForInstruction`/`InstructionLineIndex` (Sh2Decompiler.h) names;
-   an instruction folded into another's line gets that line and a note. With Follow PC at a stop
+   an instruction no line names gets a nearby mapped line and a note that says only that (no claim it was folded). With Follow PC at a stop
    each installed result selects the PC's line.
    `DrawStatus` lays the status row out as wrapping text (`StatusRow`: a piece
    that does not fit starts the next row) and wraps the amber and red sentences, so the stale

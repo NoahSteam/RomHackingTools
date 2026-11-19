@@ -206,6 +206,14 @@ void CheckFollowingRequest(DecompilerRunner& runner, const char* after)
 struct Baseline { std::string text; double phaseMs[8] = {}; double totalMs = 0; };
 Baseline gBaseline[3];
 
+// How long to wait for a run of a big fixture after the baselines: four baseline runs, at least the
+// default 60 s. Under ASan on a slow runner the straight fixture's baseline was 34 s, and its rerun
+// after the cancellations did not arrive within a flat 60 s (A12-33).
+double BigWaitSeconds(int fixture)
+{
+    return std::max(60.0, gBaseline[fixture].totalMs * 4 / 1000.0);
+}
+
 // The phase log of a baseline run. Owned by shared pointer: the runner's worker copies the observer when a request
 // starts and calls it until that request ends, so what the observer writes to must live as long as any copy of it,
 // not as long as the function that submitted the request (A6-46: the log used to be locals the observer wrote to by
@@ -334,7 +342,7 @@ void CancelHeldAt(DecompilerRunner& runner, PhaseGate& gate, int fixture, Decomp
     const auto t0 = Clock::now();
     runner.Cancel(0);   // the worker is inside 'phase': it has begun and cannot have left
     gate.Release();
-    CHECK(WaitResult(runner, r));
+    CHECK(WaitResult(runner, r, BigWaitSeconds(fixture)));
     std::printf("  %-9s cancel at start of %-10s -> %-9s in %-10s flag->result %7.1f ms\n", kFixtures[fixture].name,
                 PhaseName(phase), r.status == DecompileStatus::Cancelled ? "cancelled" : "completed",
                 r.status == DecompileStatus::Cancelled ? PhaseName(r.cancelledIn) : "-", MsSince(t0));
@@ -364,7 +372,7 @@ bool CancelMidway(DecompilerRunner& runner, PhaseGate& gate, int fixture, Decomp
         const auto t0 = Clock::now();
         runner.Cancel(0);
         const DecompilePhase after = gate.Current();
-        CHECK(WaitResult(runner, r));
+        CHECK(WaitResult(runner, r, BigWaitSeconds(fixture)));
         const bool conclusive = before == phase && after == phase;
         std::printf("  %-9s cancel at 50%% of %-10s -> %-9s in %-10s flag->result %7.1f ms%s\n", kFixtures[fixture].name,
                     PhaseName(phase), r.status == DecompileStatus::Cancelled ? "cancelled" : "completed",
@@ -404,7 +412,7 @@ void TestCancelInFlowAndActions()
         gate.Reset();
         runner.Submit(0, gSnap, Big(kFixtures[i].entry));
         DecompileResult again;
-        CHECK(WaitResult(runner, again));
+        CHECK(WaitResult(runner, again, BigWaitSeconds(i)));
         CHECK(again.status == DecompileStatus::Ok && again.Text() == gBaseline[i].text);
         std::printf("  %-9s rerun after cancellations: %s (status %d, %.1f ms)\n", kFixtures[i].name,
                     again.Text() == gBaseline[i].text ? "identical" : "DIFFERENT", int(again.status), again.elapsedMs);
@@ -429,13 +437,38 @@ void TestCancelDuringPrint()
     CheckFollowingRequest(runner, "cancels during print");
 }
 
+// The worse of two Small() runs on a generous runner (the first is the slower one), for budgets that
+// follow-up Small() requests must fit in.
+double MeasureSmallMs()
+{
+    double smallMs = 0;
+    DecompilerRunner probe(gConfig, Generous());
+    for (int i = 0; i < 2; ++i)
+    {
+        const auto t0 = Clock::now();
+        probe.Submit(9, gSnap, Small());
+        DecompileResult r;
+        CHECK(WaitResult(probe, r));
+        smallMs = std::max(smallMs, MsSince(t0));
+    }
+    return smallMs;
+}
+
 void TestBudget()
 {
     // 100 ms against the 6k-instruction fixture (PLAN.md A4); a scaled-down fixture gets a tenth of
     // its own measured baseline instead (at least 50 ms, so fixture 1 afterwards fits), so the
     // budget still expires mid-decompilation.
+    //
+    // The Small() requests below run on this runner too, under the same budget, so the budget is
+    // also at least three measured Small() runs (A12-6's class): in Windows Debug a Small() run took
+    // 64 to 350 ms beside an 83 ms budget, came back "too large", and the following request was
+    // answered "too large" from the memo. The diamonds still take several times that.
+    const double smallMs = MeasureSmallMs();
     RunnerOptions options;
     options.budgetSeconds = kFixtureDivisor == 1 ? 0.1 : std::max(0.05, gBaseline[0].totalMs / 10000.0);
+    options.budgetSeconds = std::max(options.budgetSeconds, smallMs * 3 / 1000.0);
+    std::printf("  a Small() run takes %.1f ms: budget %.0f ms\n", smallMs, options.budgetSeconds * 1000);
     DecompilerRunner runner(gConfig, options);
     const auto t0 = Clock::now();
     runner.Submit(0, gSnap, Big(dts::kDiamondsBase));
@@ -637,18 +670,7 @@ void TestDisableOnUnacknowledgedCancel()
     // this runner too, under the same budget: a constant 50 ms is about one Small() run in a
     // Windows Debug build (61 ms measured: "too large", 1 in 20 runs, A12-6). So the budget is
     // ten times a measured Small() run on a generous runner, and 50 ms at least.
-    double smallMs = 0;
-    {
-        DecompilerRunner probe(gConfig, Generous());
-        for (int i = 0; i < 2; ++i)   // the first is the slower one; take the worse of two
-        {
-            const auto t0 = Clock::now();
-            probe.Submit(9, gSnap, Small());
-            DecompileResult r;
-            CHECK(WaitResult(probe, r));
-            smallMs = std::max(smallMs, MsSince(t0));
-        }
-    }
+    const double smallMs = MeasureSmallMs();
     RunnerOptions options;
     options.budgetSeconds = std::max(0.05, smallMs * 10 / 1000.0);
     options.cancelAckSeconds = 0.2;
