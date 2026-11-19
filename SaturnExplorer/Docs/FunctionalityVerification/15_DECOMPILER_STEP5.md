@@ -23656,3 +23656,26 @@ One binary at a time, after the last code edit (`final.sh`):
 | sweep grammar 2, 10,000 from 12,300,001 | 1 failing seed: 12304053 (`n:map-const-join`, `uVar1 = 0;` at `and #0x4,r0`, the first instruction of a join; shrunk replay has no finding, one guess at an oracle rule tried and reverted; A7-309, open) |
 
 Routed: grammar 2 12304053 (A7-309), 12268228 (A7-305, host: flow-record class), A7-272's seeds, A7-220 to the next area 7 fixer.
+
+## Area 7, round 35
+
+Branch review/7-round35 (base master 2cc295f7). Oracle rules 330 to 333 (ledger A7-330 to A7-333); no product or engine change, so corpus counts and printed-C are unchanged. Pins: `TestArea7Round35Pins` (grammar 2 12268228, 12304053, 12150363; grammar 1 11503597), each of the three rules failing its pin with `SE_A7_RULE_OFF=330|331|332`.
+
+- A7-305 (grammar 2 12268228): clean on the base, since the flow-record hook (patch 0096). Closed with a pin.
+- A7-309 (grammar 2 12304053): the whole seed (the shrunk replay has no finding) with the shrink off. Function 2 and function 1 share the code at 0x090EA: `and #0x4,r0 ; mov #-88,r2 ; tst #2,r0`. The block is entered only from the `bt` at 0x090B0 (the `bra`s of the cases land past the `and`); r0 there is not known, so rule 265 (the bits the paths bring in) could not say 0. The engine's `uVar1 = 0;` is the fold of `(r0 & 4) & 2`: the result's only use is a `tst` whose mask shares no bit with the `and`. Rule 330: an `and #imm,r0` line of 0 whose variable has a token at a `tst #k,r0`, k and the mask disjoint, is the `and`'s own.
+- A7-272 (const-join): grammar 2 12150363 (rule 331): `xStack_c = 0;` at the loop head `mov.b @r5,r0`; the `movt r1` two instructions on makes 0 because T is 0 on every path into the head (TBefore agrees on all edges). Rule 331 accepts a number of 0 or 1 at a join's head when a `movt` within three straight, non-T-setting instructions has the number as T. This is the oracle's half of round 31's class (round 31 tried the product's `MovtNumber`, with no effect). Grammar 1 11503597, volatile request (rule 332): `uRam06002308 = 2;` at `mov #2,r3`, the loop counter the engine printed as the global (the report's v:text-store says so), another line of the variable, `uRam06002308 = uVar2 - 1;`, having its token at `dt r3`; the number-store and const-join checks both excuse the register a `dt` of the variable counts. Specials 11602585 no longer reproduces on this base (rules 304, 307 of round 34). A7-272 closed.
+- A7-322 (grammar 2 12202641, rule 333): `pxStack_4 = (xunknown4 *)param_2;` drawn at the `jmp` the engine says it treated as a call (`Could not recover jumptable ... Too many branches`, `Treating indirect jump as call`): the conversion check skips a branch the warnings name as made a call. The product's placement of the conversion is unchanged.
+- A7-323 (grammar 2 12135074): triaged, open: `iStack_10 = (int4)Var7;` drawn at the call 0x0600900C, naming the push at 0x06009016; the call/store order class (A7-32). Not attempted. A7-220 (grammar 1 11102053) not attempted.
+
+Final runs (sequential, ulimit -v 3500000, -j1):
+
+| Run | Result |
+|---|---|
+| `ctest -j1` | 117 of 117 passed |
+| fault matrix | `fault matrix: 0 of 94 job(s) failed` |
+| 20,000-seed matrix | `failing seeds=0; findings=0` |
+| printed-C | `agrees=5196` |
+| corpus hwram007, lent | 839 of 839 ok, 0 missing and said; "real entries 999: signatures lent 474 (645 parameters)" |
+| corpus hwram008, lent | 1554 of 1554 ok, 4 missing and said; "1543: 724 (975 parameters)" |
+| sweep grammar 1, 10,000 from 12,320,001 | `failing seeds=0; findings=0` |
+| sweep grammar 2, 10,000 from 12,320,001 | `failing seeds=0; findings=0` |
