@@ -19463,6 +19463,16 @@ void TestArea7Round34Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7 round 35 (partial merge): grammar 2 12268228 (A7-305: clean since the flow record, patch 0096). Round 35's oracle rules 330-333 for
+// A7-309, A7-272 and A7-322 were not merged: they wait for the link-model design review (REVIEW_PROGRAM.md, "Area 7: contract and acceptance").
+void TestArea7Round35Pins(Sh2Decompiler& d)
+{
+    const Report rep = Evaluate(d, MakeV2(12268228), true);
+    std::printf("pin 'area 7 round 35: grammar 2 seed 12268228': %zu finding(s)\n", rep.findings.size());
+    for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+    CHECK(rep.findings.empty());
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21796,6 +21806,7 @@ void TestGenerated()
         RUN(TestArea7Round33Pins(d));
         RUN(TestArea7A7273Pins(d));
         RUN(TestArea7Round34Pins(d));
+        RUN(TestArea7Round35Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

@@ -23668,3 +23668,14 @@ Branch `review/sweep-12.4M` from master `d09218f8` (backup `backup/review-sweep-
 | grammar 2, `SE_GENERATED_ALPHABET=specials` | `failing seeds=1; findings=1`: 12403636 again (A7-325) |
 
 Runs on the final tree: `ctest -j1` 117 of 117 passed; fault matrix 0 of 94 failed; generator 20,000 seeds `failing seeds=0; findings=0`; printed-C `agrees=5196`; corpus with lending: hwram007 `lent 474 (645)`, 0 missing and said; hwram008 `lent 724 (975)`, 4 missing and said; every ledger count 0 in both. Lints ok.
+
+## Area 7, round 35 (partial merge)
+
+Branch `review/7-round35` (`0c9c146c`) ran under the pre-review brief. Merged: A7-305 (grammar 2 12268228) closed, clean since
+the flow record (patch 0096), pinned in `TestArea7Round35Pins` without any of the round's rules. Not merged: oracle rules
+330-333 for A7-309 (12304053), A7-272 (12150363, 11503597; specials 11602585 no longer reproduces) and A7-322 (12202641).
+They are seed-specific evidence (e.g. a `movt` within three instructions of a join's head taken as the number's maker,
+without showing that its definition reaches the use) of the kind the area 7 contract stops; the rows stay open under
+their classes and the branch keeps the repros for the link-model design review. Round 35's runs on its branch: ctest
+117/117, fault 0/94, 20k 0/0, printed-C 5196, corpus 474 (645) / 724 (975), missing and said 0 / 4; sweeps from 12,320,001
+in both grammars clean.
