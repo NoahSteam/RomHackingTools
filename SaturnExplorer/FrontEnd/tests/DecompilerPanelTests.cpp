@@ -808,7 +808,7 @@ void TestAssemblyBackToLine()
         f.panel.ShowInstruction(0, kMovR4);
         f.Idle(4);
         CHECK(Has(f.panel.InstructionNote(), "No line names 0x"));
-        CHECK(Has(f.panel.InstructionNote(), "nearest mapped line"));
+        CHECK(Has(f.panel.InstructionNote(), "nearby mapped line"));
         CHECK(!Has(f.panel.InstructionNote(), "folded"));   // (no evidence of a fold: the navigation fallback claims none)
         CHECK(f.panel.SelectedLine() == static_cast<int>(folded.lines[0]));
     }

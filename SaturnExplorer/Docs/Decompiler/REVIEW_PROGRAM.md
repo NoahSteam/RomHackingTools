@@ -108,7 +108,7 @@ separately which instruction did a statement's effect, which contributed its val
 - **The contract** a debugger user can rely on, which the oracle enforces: a direct link names a valid instruction or an
   explicitly identified bad-data location; a represented store or branch leads first to its own effect (for a store,
   the instruction that writes the displayed bytes); a reverse lookup offers every linked line, and the panel's
-  cycling reaches each of them; a fallback to a nearby line is labelled as the nearest mapped line, never as a proven
+  cycling reaches each of them; a fallback to a nearby line is labelled as a nearby mapped line, never as a proven
   origin.
 - **P2**: a wrong primary store or branch (the first answer is not the instruction that did the effect), or a link to
   an invalid instruction.

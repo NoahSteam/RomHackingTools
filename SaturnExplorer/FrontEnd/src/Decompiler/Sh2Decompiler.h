@@ -520,7 +520,9 @@ struct DecompileResult
 // every drawing token of it is a copy materialised there (Token::materialised, A7-25: the instruction's own statement comes first); then
 // the others.
 // 'Folded': the instruction is in the function's body and no token names it (a move or an operation that may be folded into the expression
-// that uses it, a literal load, a nop: nothing here says which, so the panel names it the nearest mapped line, not a fold): 'via' is the nearest instruction of the same run that has one, the next before the previous, and
+// that uses it, a literal load, a nop: nothing here says which, so the panel calls the line a nearby mapped line, not a fold): 'via' is the
+// first instruction of the same run after it that has a token and, when none does, the last before it (the next one is preferred even
+// when the previous is closer: the lookup is a navigation fallback, not a distance), and
 // 'lines' are its. 'Outside': the instruction is not in the body, and 'lines' is empty.
 struct LineLookup
 {

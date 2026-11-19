@@ -247,6 +247,7 @@
 #include "Decompiler/SaturnHardwareMap.h"
 #include "Debug/Sh2Disasm.h"
 #include "Decompiler/Sh2Decompiler.h"
+#include "Decompiler/Sh2FlowDecisions.h"
 #include "emulate.hh"
 #include "Sh2EmulatorHooks.h"
 #include "memstate.hh"
@@ -19507,6 +19508,267 @@ void TestArea7ReviewFixPins(Sh2Decompiler& d)
     }
 }
 
+
+// External review of area 7, round 2 (A7-340, A7-341): the two decisions, asked directly on a small recorded flow built by hand (Sh2FlowDecisions.h),
+// with each guard switched off once (SetDecisionGuardOffForTests) to show which case it alone separates.
+class DecisionFixture
+{
+public:
+    std::ostringstream errors;
+    SaturnArchitecture arch;
+    ghidra::Funcdata* fd = nullptr;
+    ghidra::AddrSpace* ram = nullptr;
+
+    DecisionFixture() : arch(dts::MakeSnapshot({}), &errors)
+    {
+        arch.Initialise(20000, nullptr);
+        ram = arch.getDefaultDataSpace();
+        fd = arch.symboltab->getGlobalScope()->addFunction(ghidra::Address(ram, 0x06004000), "decision")->getFunction();
+    }
+    FlowVn Reg(const char* name, int byteAt = 0, int size = 4) const
+    {
+        const ghidra::VarnodeData v = arch.translate->getRegister(name);
+        FlowVn r;
+        r.space = v.space;
+        r.offset = v.offset + static_cast<ghidra::uintb>(byteAt);
+        r.size = size;
+        return r;
+    }
+    FlowVn Num(ghidra::uintb value, int size = 4) const
+    {
+        FlowVn r;
+        r.space = arch.getConstantSpace();
+        r.offset = value;
+        r.size = size;
+        return r;
+    }
+    FlowVn Temp(int size = 4) const
+    {
+        FlowVn r;
+        r.space = arch.getUniqueSpace();
+        r.offset = 0x100;
+        r.size = size;
+        return r;
+    }
+    static FlowOp Copy(uint32_t insn, const FlowVn& out, const FlowVn& in)
+    {
+        FlowOp op;
+        op.insn = insn;
+        op.code = ghidra::CPUI_COPY;
+        op.hasOut = true;
+        op.out = out;
+        op.in[0] = in;
+        op.numIn = 1;
+        return op;
+    }
+    FlowOp Store(uint32_t insn, const FlowVn& pointer, const FlowVn& value) const
+    {
+        FlowOp op;
+        op.insn = insn;
+        op.code = ghidra::CPUI_STORE;
+        op.in[0] = Num(0, 4);
+        op.in[1] = pointer;
+        op.in[2] = value;
+        op.numIn = 3;
+        return op;
+    }
+    static FlowOp Plain(uint32_t insn, ghidra::OpCode code)
+    {
+        FlowOp op;
+        op.insn = insn;
+        op.code = code;
+        return op;
+    }
+    // blocks 0..n-1, block 0 the entry; edges as (from, to)
+    static FlowRecord Flow(size_t blocks, const std::vector<std::pair<int, int>>& edges)
+    {
+        FlowRecord f;
+        f.blockOps.resize(blocks);
+        f.successors.resize(blocks);
+        f.predecessors.resize(blocks);
+        for (const auto& e : edges)
+        {
+            f.successors[static_cast<size_t>(e.first)].push_back(e.second);
+            f.predecessors[static_cast<size_t>(e.second)].push_back(e.first);
+        }
+        return f;
+    }
+};
+
+// Each case: what the decision answers and what it must answer. Returns the names of the cases that answered wrongly.
+std::vector<std::string> RunDecisionCases(DecisionFixture& x)
+{
+    std::vector<std::string> wrong;
+    const auto expect = [&wrong](const char* name, bool got, bool want) {
+        if (got != want) wrong.push_back(name);
+    };
+    const FlowVn P0 = x.Num(0x06001024);   // (the pointer, a constant)
+    FlowVn byte;
+    byte.space = x.ram;
+    byte.offset = 0x06001025;
+    byte.size = 1;
+    const auto zeroStore = [&](uint32_t insn) { return x.Store(insn, P0, x.Reg("r3")); };
+    const auto zeroOfR3 = [&](uint32_t insn) { return DecisionFixture::Copy(insn, x.Reg("r3"), x.Num(0)); };
+    const std::set<std::pair<int, uint32_t>> counted = { { 0, 1 }, { 1, 1 }, { 2, 1 } };
+
+    // ---- A7-340: the write that reaches a statement is a store of 0 ----
+    {
+        // a zero store reaches the statement
+        FlowRecord f = DecisionFixture::Flow(1, {});
+        f.blockOps[0] = { zeroOfR3(0x100), zeroStore(0x102) };
+        expect("340 a reaching zero counts", PriorWriteIsZero(f, *x.fd, 0, 2, byte, counted), true);
+        // ...and not when it is not one of the folded stores
+        expect("340 a store that is not folded does not count", PriorWriteIsZero(f, *x.fd, 0, 2, byte, {}), false);
+        // a nonzero store of the byte, then a zero store of it: the later one is the write
+        FlowRecord f2 = DecisionFixture::Flow(1, {});
+        f2.blockOps[0] = { x.Store(0x0FE, P0, x.Reg("r6")), zeroOfR3(0x100), zeroStore(0x102) };
+        expect("340 the last write is the zero", PriorWriteIsZero(f2, *x.fd, 0, 3, byte, { { 0, 0 }, { 0, 2 } }), true);
+    }
+    {
+        // a zero store on an arm that returns (block 1) is no prior of the path through block 2 to the join
+        FlowRecord f = DecisionFixture::Flow(4, { { 0, 1 }, { 0, 2 }, { 2, 3 } });
+        f.blockOps[1] = { zeroOfR3(0x110), zeroStore(0x112) };
+        expect("340 a zero on a disjoint arm does not count", PriorWriteIsZero(f, *x.fd, 3, 0, byte, counted), false);
+        // a zero store on each arm that joins does
+        FlowRecord g = DecisionFixture::Flow(4, { { 0, 1 }, { 0, 2 }, { 1, 3 }, { 2, 3 } });
+        g.blockOps[1] = { zeroOfR3(0x110), zeroStore(0x112) };
+        g.blockOps[2] = { zeroOfR3(0x120), zeroStore(0x122) };
+        expect("340 a zero on every arm counts", PriorWriteIsZero(g, *x.fd, 3, 0, byte, counted), true);
+        // ...but not when one arm writes something else
+        g.blockOps[2] = { x.Store(0x122, P0, x.Reg("r6")) };
+        expect("340 a nonzero write on one arm does not", PriorWriteIsZero(g, *x.fd, 3, 0, byte, counted), false);
+    }
+    {
+        // a store through a pointer that may alias the byte, between the zero store and the statement
+        FlowRecord f = DecisionFixture::Flow(1, {});
+        f.blockOps[0] = { zeroOfR3(0x100), zeroStore(0x102), x.Store(0x104, x.Reg("r5"), x.Reg("r6")) };
+        expect("340 a store through an unplaced pointer leaves it unknown", PriorWriteIsZero(f, *x.fd, 0, 3, byte, counted), false);
+        // a store the walk places elsewhere does not
+        FlowRecord g = DecisionFixture::Flow(1, {});
+        g.blockOps[0] = { zeroOfR3(0x100), zeroStore(0x102), x.Store(0x104, x.Num(0x06001100), x.Reg("r6")) };
+        expect("340 a store of another place does not disturb it", PriorWriteIsZero(g, *x.fd, 0, 3, byte, counted), true);
+        // a placed store of the byte that writes another value is the write
+        FlowRecord h = DecisionFixture::Flow(1, {});
+        h.blockOps[0] = { zeroOfR3(0x100), zeroStore(0x102), x.Store(0x104, P0, x.Reg("r6")) };
+        expect("340 a later nonzero store of the byte is the write", PriorWriteIsZero(h, *x.fd, 0, 3, byte, { { 0, 1 }, { 0, 2 } }), false);
+        // a call, an engine operation
+        FlowRecord c = DecisionFixture::Flow(1, {});
+        c.blockOps[0] = { zeroOfR3(0x100), zeroStore(0x102), DecisionFixture::Plain(0x104, ghidra::CPUI_CALL) };
+        expect("340 a call leaves it unknown", PriorWriteIsZero(c, *x.fd, 0, 3, byte, counted), false);
+        FlowRecord o = DecisionFixture::Flow(1, {});
+        o.blockOps[0] = { zeroOfR3(0x100), zeroStore(0x102), DecisionFixture::Plain(0x104, ghidra::CPUI_CALLOTHER) };
+        expect("340 an engine operation leaves it unknown", PriorWriteIsZero(o, *x.fd, 0, 3, byte, counted), false);
+        // a path that never writes the byte holds the memory's own value
+        FlowRecord n = DecisionFixture::Flow(1, {});
+        n.blockOps[0] = { zeroOfR3(0x100) };
+        expect("340 no write at all is no prior zero", PriorWriteIsZero(n, *x.fd, 0, 1, byte, counted), false);
+    }
+
+    // ---- A7-341: the operand token moves to the store the name is at ----
+    const FlowVn r4 = x.Reg("r4");
+    const auto site = [](int blk, uint32_t pos, int size, ghidra::uintb offset, const ghidra::AddrSpace* space) {
+        StoreSite s;
+        s.space = space;
+        s.offset = offset;
+        s.size = size;
+        s.blk = blk;
+        s.pos = pos;
+        return s;
+    };
+    const ghidra::uintb G = 0x06001038;
+    const auto bytesOf = [&](const char* r) { return x.Reg(r, 3, 1); };   // (the low byte, as `mov.b rN,@rM` stores)
+    const auto nameStore = [&]() { return x.Store(0x100, x.Num(G), bytesOf("r4")); };
+    {
+        // the positive case: a store of r4 unchanged, and the other of r1 that a `mov #5,r1` wrote
+        FlowRecord f = DecisionFixture::Flow(1, {});
+        f.blockOps[0] = { nameStore(), DecisionFixture::Copy(0x102, x.Reg("r1"), x.Num(5)), x.Store(0x104, x.Num(G), bytesOf("r1")) };
+        const StoreSite name = site(0, 0, 1, G, x.ram), other = site(0, 2, 1, G, x.ram);
+        expect("341 the token moves", OperandMovesToStore(f, *x.fd, r4, name, other), true);
+        expect("341 the token moves, the other a number", [&] {
+            FlowRecord g = f;
+            g.blockOps[0][2] = x.Store(0x104, x.Num(G), x.Num(7, 1));
+            return OperandMovesToStore(g, *x.fd, r4, name, other);
+        }(), true);
+        expect("341 the token moves, the other another input", [&] {
+            FlowRecord g = f;
+            g.blockOps[0][1] = DecisionFixture::Copy(0x102, x.Reg("r1"), x.Reg("r5"));
+            return OperandMovesToStore(g, *x.fd, r4, name, other);
+        }(), true);
+        // a missing flow op, on either store
+        StoreSite none = other;
+        none.blk = -1;
+        expect("341 a missing flow op (the other) stays", OperandMovesToStore(f, *x.fd, r4, name, none), false);
+        StoreSite noName = name;
+        noName.blk = -1;
+        expect("341 a missing flow op (the name) stays", OperandMovesToStore(f, *x.fd, r4, noName, other), false);
+        // another width, another start
+        expect("341 a mismatched width stays", OperandMovesToStore(f, *x.fd, r4, name, site(0, 2, 2, G, x.ram)), false);
+        expect("341 another start stays", OperandMovesToStore(f, *x.fd, r4, name, site(0, 2, 1, G + 4, x.ram)), false);
+        // a token of another register than the name stores
+        expect("341 a mismatched register stays", OperandMovesToStore(f, *x.fd, x.Reg("r5"), name, other), false);
+    }
+    {
+        // the name's store is of a register an instruction wrote: not the input
+        FlowRecord f = DecisionFixture::Flow(1, {});
+        f.blockOps[0] = { DecisionFixture::Copy(0x0FE, r4, x.Num(9)), nameStore(), DecisionFixture::Copy(0x102, x.Reg("r1"), x.Num(5)),
+                          x.Store(0x104, x.Num(G), bytesOf("r1")) };
+        expect("341 a name that is no input stays", OperandMovesToStore(f, *x.fd, r4, site(0, 1, 1, G, x.ram), site(0, 3, 1, G, x.ram)), false);
+    }
+    {
+        // (3a) the other store's register is the entry's on one path and a writer's on the other
+        FlowRecord f = DecisionFixture::Flow(4, { { 0, 1 }, { 0, 3 }, { 1, 3 }, { 0, 2 } });
+        f.blockOps[0] = { nameStore() };
+        f.blockOps[1] = { DecisionFixture::Copy(0x110, r4, x.Num(9)) };
+        f.blockOps[3] = { x.Store(0x120, x.Num(G), bytesOf("r4")) };
+        expect("341 3a: the input on one path stays", OperandMovesToStore(f, *x.fd, r4, site(0, 0, 1, G, x.ram), site(3, 0, 1, G, x.ram)), false);
+        // ...and a writer on each path moves
+        f.blockOps[0] = { nameStore(), DecisionFixture::Copy(0x108, r4, x.Num(8)) };
+        // (the name is then still the entry's: its store is before the write)
+        expect("341 3a: a writer on every path moves", OperandMovesToStore(f, *x.fd, r4, site(0, 0, 1, G, x.ram), site(3, 0, 1, G, x.ram)), true);
+    }
+    {
+        // (3b) `mov r4,r1 ; mov.b r1,@G`: the move's source is the input
+        FlowRecord f = DecisionFixture::Flow(1, {});
+        f.blockOps[0] = { nameStore(), DecisionFixture::Copy(0x102, x.Reg("r1"), r4), x.Store(0x104, x.Num(G), bytesOf("r1")) };
+        expect("341 3b: a copy of the input stays", OperandMovesToStore(f, *x.fd, r4, site(0, 0, 1, G, x.ram), site(0, 2, 1, G, x.ram)), false);
+    }
+    {
+        // the other store's source is not resolved (its block is on no path from the entry)
+        FlowRecord f = DecisionFixture::Flow(2, {});
+        f.blockOps[0] = { nameStore() };
+        f.blockOps[1] = { x.Store(0x120, x.Num(G), bytesOf("r1")) };
+        expect("341 an unresolved source stays", OperandMovesToStore(f, *x.fd, r4, site(0, 0, 1, G, x.ram), site(1, 0, 1, G, x.ram)), false);
+        // ...nor one held in a temporary
+        FlowRecord g = DecisionFixture::Flow(1, {});
+        g.blockOps[0] = { nameStore(), x.Store(0x104, x.Num(G), x.Temp(1)) };
+        expect("341 a source in a temporary stays", OperandMovesToStore(g, *x.fd, r4, site(0, 0, 1, G, x.ram), site(0, 1, 1, G, x.ram)), false);
+    }
+    return wrong;
+}
+
+void TestArea7DecisionPoints()
+{
+    DecisionFixture x;
+    const std::vector<std::string> base = RunDecisionCases(x);
+    std::printf("decision cases: %zu wrong with every guard on\n", base.size());
+    for (const std::string& w : base) std::printf("  WRONG: %s\n", w.c_str());
+    CHECK(base.empty());
+    static const char* const kNames[] = { "none", "prior: unplaced store", "prior: call", "prior: engine operation", "prior: entry", "prior: overlap",
+                                          "prior: folded", "prior: zero", "move: flow op", "move: same bytes", "move: same width",
+                                          "move: operand register", "move: name is input", "move: other resolved", "move: other not the input" };
+    static_assert(sizeof kNames / sizeof *kNames == kGuardCount, "a name for each guard");
+    for (int g = 1; g < kGuardCount; ++g)
+    {
+        SetDecisionGuardOffForTests(g);
+        const std::vector<std::string> wrong = RunDecisionCases(x);
+        SetDecisionGuardOffForTests(0);
+        std::printf("guard off: %-28s -> %zu case(s) fail:", kNames[g], wrong.size());
+        for (const std::string& w : wrong) std::printf(" [%s]", w.c_str());
+        std::printf("\n");
+        CHECK(!wrong.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21842,6 +22104,7 @@ void TestGenerated()
         RUN(TestArea7Round34Pins(d));
         RUN(TestArea7Round35Pins(d));
         RUN(TestArea7ReviewFixPins(d));
+        RUN(TestArea7DecisionPoints());
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
