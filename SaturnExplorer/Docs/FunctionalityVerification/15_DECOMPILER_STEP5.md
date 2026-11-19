@@ -23656,3 +23656,12 @@ One binary at a time, after the last code edit (`final.sh`):
 | sweep grammar 2, 10,000 from 12,300,001 | 1 failing seed: 12304053 (`n:map-const-join`, `uVar1 = 0;` at `and #0x4,r0`, the first instruction of a join; shrunk replay has no finding, one guess at an oracle rule tried and reverted; A7-309, open) |
 
 Routed: grammar 2 12304053 (A7-309), 12268228 (A7-305, host: flow-record class), A7-272's seeds, A7-220 to the next area 7 fixer.
+
+## Area 7, external review findings
+
+Branch `review/7-reviewfix` from master `2cc295f7` (round 34). An external design review found three defects in round 34's work; rows **A7-340 to A7-342** (each cites "external review"), all fixed. No other area 7 row was taken.
+
+- **A7-340 (A7-301's prior zero).** Confirmed: the check scanned all folded stores of the byte and used address order. Now only the write that reaches the statement counts: the last store of the byte in its block before it, else, on every path in, the last store of the first block that stores it; all must write 0. A first version (one predecessor chain) broke grammar 1 seed 12273194, whose zero store is the delay slot of the `bf/s` before the join; the path version closed it.
+- **A7-341 (A7-292's retarget).** Confirmed: spelling-only recognition, same-start stores of any width, an unresolved source treated as another value. Now the token must be exactly `param_N` / `in_rN` and denote the register the name's store stores, the other store has the same start and width, and its source is proven another value; an unresolved source leaves the token.
+- **A7-342 (Folded fallback).** Confirmed: the panel said "was folded into the expression" for any unmapped instruction. The fallback is kept as navigation and labelled "nearest mapped line"; the codebase has no per-instruction fold record, so the claim is dropped.
+- **Fixtures** (`TestArea7ReviewFixPins`, Sh2GeneratedTests.cpp): two hand-written disjoint-arm programs and the seed 11004012 program with its second store and its slot's store widened. Stated limit: the oracle gives the same (empty) findings on these with the round 34 code, so they pin the shapes; they do not separate old from new (four attempts at a distinguishing program did not reach the divergence). The panel test asserts the new note and fails on the old text.

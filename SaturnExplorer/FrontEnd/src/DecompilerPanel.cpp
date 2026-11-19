@@ -282,7 +282,7 @@ void DecompilerPanel::ApplyWantedInstruction()
     mScrollToLine = mSelectedLine;
     if (k.kind == LineLookup::Folded)
     {
-        std::snprintf(b, sizeof b, "0x%08X was folded into the expression of another instruction; the line shown is 0x%08X's.", insn, k.via);
+        std::snprintf(b, sizeof b, "No line names 0x%08X; the nearest mapped line shown is 0x%08X's.", insn, k.via);
         mInsnNote = b;
     }
     else if (k.lines.size() > 1)
