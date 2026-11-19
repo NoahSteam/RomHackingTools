@@ -19544,6 +19544,44 @@ void TestArea10Round2()
     }
 }
 
+// ===== Area 10, round 3 (A10-20): patch 0085's RuleMultiCollapse hunk had no test that fails without it ==================================
+// A write of a global made in both arms of an `if` and again after the join (`g = v` three times in the code) is one MULTIEQUAL of two
+// COPYs of one value; without 0085's `globalWriteMovesPastAccess` in RuleMultiCollapse the join collapses to a copy at its end and the
+// writes of the arms go, so the write the code makes before the read through a pointer is printed after it (when the pointer is the global's
+// address the code reads the value written, the text reads the old one). Two of the area 7 fixtures drew it (A7-105, A7-171), but only
+// as a text the mapping checks look at, not as an order. This pins the order: the last write of the global is above the last read.
+void TestArea10Round3()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const auto run = [&](const std::vector<uint16_t>& w, uint32_t entry) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        return d.Decompile(MakeSnapshot(hw), Request(entry));
+    };
+    const auto lastWriteAboveRead = [](const std::string& t, const char* write, const char* read) {
+        const size_t r = t.rfind(read), w = t.rfind(write);
+        return r != std::string::npos && w != std::string::npos && w < r;
+    };
+    // A7-105 (grammar 1 seed 5000472): `xRam2600220c = 0;` in both arms, the read `xVar1 = *param_1;` after the join
+    {
+        const std::vector<uint16_t> w = { 0xD607, 0x2602, 0xE301, 0x4310, 0x8BFD, 0x2248, 0x8B06, 0x4215, 0x8D02, 0x2632, 0xE000, 0x004E, 0x000B, 0x0009, 0xAFF9, 0x0009, 0x2600, 0x220C };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A10 r3 a: the write of a global in both arms, the read through a pointer after the join (A7-105)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(lastWriteAboveRead(r.Text(), "xRam2600220c = 0;", "xVar1 = *param_1;"));   // FIXED by 0085 (without it the write is printed after the read)
+    }
+    // A7-171 (grammar 1 seed 9608430, shrunk): `cRam26001008 = cVar2;` in both arms, `iVar1 = *param_1;` after the join
+    {
+        const std::vector<uint16_t> w = { 0xD609, 0x6341, 0x3238, 0x2508, 0x8901, 0x3310, 0x8F01, 0x2630, 0x2400, 0x2418, 0x8B05, 0x3030, 0x8D01, 0x2620,
+                                          0x6241, 0x000B, 0x0009, 0xAFFA, 0x0009, 0x0009, 0x2600, 0x1008 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A10 r3 b: the same with a byte (A7-171)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(lastWriteAboveRead(r.Text(), "cRam26001008 = cVar2;", "iVar1 = *param_1;"));
+    }
+}
+
 // ===== Area 5, confirming round (REVIEW_LEDGER.md A5-101 to A5-107) ===================================================================
 // The reviewer's fixtures, pinned first as the head printed them (the checks then marked DEFECT); the area 5 confirming-round fixer turned
 // each of them round (marked FIXED, with the patch or the function that fixed it) and added the controls marked so. The words are the
@@ -20528,6 +20566,7 @@ int main(int argc, char** argv)
         RUN(TestA3182Fix());
         RUN(TestA3184Fix());
         RUN(TestArea10Round2());
+        RUN(TestArea10Round3());
         RUN(TestArea5Confirm());
         RUN(TestArea5Review());
         RUN(TestArea5ReviewAfter0090());
