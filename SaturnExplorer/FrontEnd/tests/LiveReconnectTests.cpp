@@ -52,7 +52,7 @@ using fakelive::Request;
 // Poll until 'predicate' holds or the budget runs out. Returns whether it held; the driver
 // paces its retries (100-250 ms), so this waits on the condition rather than on a guess.
 template <typename Fn>
-bool WaitFor(Fn predicate, int budgetMs = 5000)
+bool WaitFor(Fn predicate, int budgetMs = 60000)   // only bounds a broken run: a wait that is met returns at once (A12-39, A12-7)
 {
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::milliseconds(budgetMs);
@@ -545,7 +545,7 @@ void TestCaptureIsPinnedToOneSnapshot()
         // pinned) waits until the newest frame is past the one we hold.
         bool moved = false;
         std::thread other([&] {
-            moved = WaitFor([&] { return ds.frame_number(ds.user) > pinned; }, 3000);
+            moved = WaitFor([&] { return ds.frame_number(ds.user) > pinned; }, 60000);
         });
         other.join();
         CHECK(moved);
@@ -587,7 +587,7 @@ void TestFrameNumberIsTheCapturedFrame()
     CHECK(se_begin_frame(ctx) == SE_OK);
     const uint64_t shown = se_frame_number(ctx);
     CHECK(shown > 0);
-    CHECK(WaitFor([&] { return ds.frame_number(ds.user) > shown + 2; }, 3000));   // the emulator ran on
+    CHECK(WaitFor([&] { return ds.frame_number(ds.user) > shown + 2; }, 60000));   // the emulator ran on
     CHECK(se_frame_number(ctx) == shown);                                         // the capture did not
     CHECK(se_begin_frame(ctx) == SE_OK);
     CHECK(se_frame_number(ctx) > shown);
@@ -775,7 +775,7 @@ void TestPeerHangUpDuringSendDoesNotKillTheProcess()
 
     // If SIGPIPE killed the process we never get here. The driver should notice the dead
     // connection, drop it and attach to the next one.
-    CHECK(WaitFor([&] { return se_live_connection_generation(&ds) >= 2u; }, 8000));
+    CHECK(WaitFor([&] { return se_live_connection_generation(&ds) >= 2u; }, 60000));
 }
 
 

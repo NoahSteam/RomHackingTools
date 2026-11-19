@@ -80,7 +80,7 @@ jobs:
           cmake --build build --parallel 4 --target $targets
 
       - name: Run the Area 9 tests (the full-disk case must run)
-        run: ctest --test-dir build --output-on-failure -R "SaturnExplorerArea9"
+        run: ctest --test-dir build --output-on-failure --no-tests=error -R "SaturnExplorerArea9"
 
   # ---------------------------------------------------------------------------------------
   # Areas 6 and 12 (lifecycle, platforms): no memory error, leak or undefined behaviour in the
@@ -107,7 +107,10 @@ jobs:
     name: Decompiler tests under ASan + UBSan + LSan (Linux, gcc)
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # 150, not 90 (A12-34): the run step alone takes 54 to 75 minutes on the shared runners (the binaries run one after the other) and
+    # the build before it 11 to 17, so three of the twelve pushes of 2026-11-18/19 were cancelled at 1h30m ("exceeded the maximum
+    # execution time") and a fourth passed at 82 minutes. This is a hang catch; the step summary lists each binary's time.
+    timeout-minutes: 150
     strategy:
       fail-fast: false
     defaults:
@@ -246,11 +249,10 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------------------
-  # Areas 1-5 and 11 (breadth): the random-function generator, long run. The target is written on
-  # branch program/generator; until it is merged the probe step finds no such target, says so
-  # in a notice, and the build/run/upload steps are skipped, so the workflow is valid (and
-  # green) before the merge. Once the target exists the steps are ordinary hard steps
-  # (continue-on-error is left at its default, false): a generator violation fails the job.
+  # Areas 1-5 and 11 (breadth): the random-function generator, long run. The target is on master;
+  # the probe step fails the job when it is not there (it used to skip the run, before program/generator
+  # merged), and the steps are ordinary hard steps (continue-on-error is left at its default, false):
+  # a generator violation fails the job.
   #
   # RelWithDebInfo: optimised like the engine always is, with assertions kept (no NDEBUG
   # surprises) and symbols for the stack of a failure. No sanitizers: the sanitizers job owns
@@ -281,8 +283,11 @@ jobs:
           if cmake --build build --target help | grep -q -w 'SaturnExplorerSh2GeneratedTests'; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
+            # The target has been on master since program/generator merged. Not finding it now means a rename or a CMake condition
+            # that stopped holding, and the nightly would go green having run nothing (A12-37), so this fails the job.
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Generator skipped::SaturnExplorerSh2GeneratedTests is not defined in this checkout (branch program/generator is not merged yet); the nightly run is skipped."
+            echo "::error title=Generator missing::SaturnExplorerSh2GeneratedTests is not defined in this checkout; the nightly run would test nothing."
+            exit 1
           fi
 
       - name: Build the generator (timed)
