@@ -1,7 +1,7 @@
 #pragma once
 
 // The decompiler's record of the flow as first followed (before any action) and the two decisions of the click/token mapping that are
-// made from it alone, so that a test can build a small flow and ask them directly (area 7, external review rounds 1 and 2: A7-340,
+// made from it alone, so that a test can build a small flow and ask them directly (area 7, external review rounds 1 to 3: A7-340,
 // A7-341). Nothing here is part of the product's interface: the records are filled by Sh2Decompiler.cpp's RecordFlow.
 
 #include "funcdata.hh"
@@ -109,9 +109,10 @@ struct StoreSite
 
 // A7-341: may the token that names the input register `operand` (`param_1`, `in_r4`: the varnode the printer gave, the register's whole
 // width) and is drawn at the store `other` be drawn at the store `name` instead? Only when `name` stores that register, which no instruction
-// has written since the entry, `other` writes the same bytes with the same width, and `other`'s source is resolved and is on no path the
-// operand's own input, whether it is read from the register or through register moves ('may be the same input' is unknown, not another
-// value). The token must stay at `other` otherwise.
+// has written since the entry, `other` writes the same bytes with the same width, and `other`'s source is resolved and is shown, on every
+// path, not to come from the operand's own input: not read from the register or through register moves, and not made from it by any op
+// whose stored bits change with it (an extension, a mask, `or r4,r4`, a sum; a load, a call or an engine operation is never shown). 'May be
+// the same input' is unknown, not another value. The token must stay at `other` otherwise.
 bool OperandMovesToStore(const FlowRecord& flow, const ghidra::Funcdata& fd, const FlowVn& operand, const StoreSite& name, const StoreSite& other);
 
 }  // namespace decomp

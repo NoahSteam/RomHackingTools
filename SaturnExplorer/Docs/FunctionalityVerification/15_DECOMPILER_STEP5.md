@@ -23719,3 +23719,16 @@ Branch `review/7-reviewfix2` from master `a4da63b3` (round 1 of the review, `rev
 
   Stated limit: "old" is the guards off (round 1 had no barrier for aliasing stores, calls or CALLOTHER, no same-input rule for 3a/3b); round 1's code itself no longer exists to be run beside the new, and the whole-program oracle still does not separate them.
 - **Runs** (sequential, `ulimit -v 3500000`, `-j1`): ctest 117 of 117 passed; fault matrix 0 of 94; generator 20000 seeds failing seeds=0, findings=0; printed-C agrees=5196; corpus with lending: hwram007 `[after] real entries 999: signatures lent 474 (645 parameters)`, 0 missing and said; hwram008 `1543: 724 (975)`, 4 missing and said; every ledger count 0. No token dump was compared with master (no master build was kept); the counts, printed-C and the 20k matrix are unchanged.
+
+## Area 7, external review findings, round 3
+
+The reviewer accepted A7-340 and A7-342 on PR #67 and kept A7-341 open on one gap. Agents had had two rounds on A7-341, so the coordinator fixed it on master.
+
+- **A7-341.** Confirmed: `OperandMovesToStore` followed the other store's source through register moves only. Any other op that made the value counted as an independent source, so `extu.b r4,r1 ; mov.b r1,@r6` and `or r4,r4` into r1 moved the token although both store the input's byte. The source proof is now `ValueExcludesInput` (Sh2Decompiler.cpp), which follows every path back to what made the value:
+  - a number, or another register held at the entry, excludes the input;
+  - the input register held at the entry, a load, a call or CALLOTHER does not (the memory may hold the input, which the name's own store put there);
+  - any other op must take only values that are themselves shown to exclude it. Failing that, every value its **stored bits** change with must be shown to exclude it.
+  - That last test is a new dependency mode of `FlowIdentitySources`. It builds the value on each path and puts test values in each value read, the others held. So `mov r4,r1 ; add r3,r1 ; sub r4,r1` (seed 11004012) changes with r3 only, and `(r4 & ~0xFF) | 5` stored as a byte changes with nothing.
+- **Tests.** New `TestArea7DecisionPoints` cases. Each stays: an extension of the input; an OR of the input with itself; a load; arithmetic that takes the input; `(r4 & 0xFF) | r5` stored as a byte. Each moves: an extension of another input; arithmetic on another input; the input cancelled (`r4 + r5 - r4`); only the input's other bytes. The five "stays" cases fail on round 2's code (built with the new tests: 5 wrong); the "moves" cases pass on both. With "move: other not the input" switched off, 7 cases fail.
+- **Runs:** the generated-tests binary passes in full, including both seed 11004012 replays. The full matrix follows on merge.
+

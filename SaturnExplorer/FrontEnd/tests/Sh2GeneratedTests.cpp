@@ -19572,6 +19572,22 @@ public:
         op.numIn = 3;
         return op;
     }
+    static FlowOp Op(uint32_t insn, ghidra::OpCode code, const FlowVn& out, const FlowVn& a, const FlowVn* b = nullptr)
+    {
+        FlowOp op;
+        op.insn = insn;
+        op.code = code;
+        op.hasOut = true;
+        op.out = out;
+        op.in[0] = a;
+        op.numIn = 1;
+        if (b)
+        {
+            op.in[1] = *b;
+            op.numIn = 2;
+        }
+        return op;
+    }
     static FlowOp Plain(uint32_t insn, ghidra::OpCode code)
     {
         FlowOp op;
@@ -19731,6 +19747,51 @@ std::vector<std::string> RunDecisionCases(DecisionFixture& x)
         FlowRecord f = DecisionFixture::Flow(1, {});
         f.blockOps[0] = { nameStore(), DecisionFixture::Copy(0x102, x.Reg("r1"), r4), x.Store(0x104, x.Num(G), bytesOf("r1")) };
         expect("341 3b: a copy of the input stays", OperandMovesToStore(f, *x.fd, r4, site(0, 0, 1, G, x.ram), site(0, 2, 1, G, x.ram)), false);
+    }
+    {
+        // (review round 3) an op that makes the other store's value from the input keeps the input's bytes: `extu.b r4,r1 ; mov.b r1,@G`,
+        // `or r4,r4` into r1, and a load (the name's own store put the input in the memory it reads)
+        const StoreSite name = site(0, 0, 1, G, x.ram), other = site(0, 2, 1, G, x.ram);
+        const FlowVn r1 = x.Reg("r1");
+        const FlowVn r4low = bytesOf("r4");
+        const auto withMaker = [&](const FlowOp& maker) {
+            FlowRecord f = DecisionFixture::Flow(1, {});
+            f.blockOps[0] = { nameStore(), maker, x.Store(0x104, x.Num(G), bytesOf("r1")) };
+            return OperandMovesToStore(f, *x.fd, r4, name, other);
+        };
+        expect("341 an extension of the input stays", withMaker(DecisionFixture::Op(0x102, ghidra::CPUI_INT_ZEXT, r1, r4low)), false);
+        expect("341 an OR of the input with itself stays", withMaker(DecisionFixture::Op(0x102, ghidra::CPUI_INT_OR, r1, r4, &r4)), false);
+        expect("341 a load stays", [&] {
+            FlowRecord f = DecisionFixture::Flow(1, {});
+            FlowOp load = DecisionFixture::Op(0x102, ghidra::CPUI_LOAD, r1, x.Num(0, 4));
+            load.in[1] = x.Num(G);
+            load.numIn = 2;
+            f.blockOps[0] = { nameStore(), load, x.Store(0x104, x.Num(G), bytesOf("r1")) };
+            return OperandMovesToStore(f, *x.fd, r4, name, other);
+        }(), false);
+        // ...and one from another input or from numbers only does not: the token moves
+        const FlowVn r5 = x.Reg("r5");
+        expect("341 an extension of another input moves", withMaker(DecisionFixture::Op(0x102, ghidra::CPUI_INT_ZEXT, r1, x.Reg("r5", 3, 1))), true);
+        const FlowVn one = x.Num(1);
+        expect("341 arithmetic on another input moves", withMaker(DecisionFixture::Op(0x102, ghidra::CPUI_INT_ADD, r1, r5, &one)), true);
+        // a sum of the input and another stays
+        expect("341 arithmetic that takes the input stays", withMaker(DecisionFixture::Op(0x102, ghidra::CPUI_INT_ADD, r1, r5, &r4)), false);
+        // the stored bits are what count: `r1 = r4 + r5 - r4` is r5's value, and `(r4 & ~0xFF) | 5` stored as a byte is 5, whatever r4 is;
+        // `(r4 & 0xFF) | r5` as a byte is not
+        const auto withMakers = [&](std::vector<FlowOp> makers) {
+            FlowRecord f = DecisionFixture::Flow(1, {});
+            f.blockOps[0] = { nameStore() };
+            for (FlowOp& m : makers) f.blockOps[0].push_back(m);
+            f.blockOps[0].push_back(x.Store(0x110, x.Num(G), bytesOf("r1")));
+            return OperandMovesToStore(f, *x.fd, r4, name, site(0, static_cast<uint32_t>(f.blockOps[0].size() - 1), 1, G, x.ram));
+        };
+        expect("341 the input cancelled moves", withMakers({ DecisionFixture::Copy(0x102, r1, r4), DecisionFixture::Op(0x104, ghidra::CPUI_INT_ADD, r1, r1, &r5),
+                                                           DecisionFixture::Op(0x106, ghidra::CPUI_INT_SUB, r1, r1, &r4) }), true);
+        const FlowVn high = x.Num(0xFFFFFF00), low = x.Num(0xFF), five = x.Num(5);
+        expect("341 the input's other bytes only moves", withMakers({ DecisionFixture::Op(0x102, ghidra::CPUI_INT_AND, r1, r4, &high),
+                                                                     DecisionFixture::Op(0x104, ghidra::CPUI_INT_OR, r1, r1, &five) }), true);
+        expect("341 the input's stored byte stays", withMakers({ DecisionFixture::Op(0x102, ghidra::CPUI_INT_AND, r1, r4, &low),
+                                                                DecisionFixture::Op(0x104, ghidra::CPUI_INT_OR, r1, r1, &r5) }), false);
     }
     {
         // the other store's source is not resolved (its block is on no path from the entry)

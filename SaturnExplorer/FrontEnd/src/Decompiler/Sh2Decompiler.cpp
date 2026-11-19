@@ -7119,6 +7119,10 @@ bool FlowNumberBefore(const FlowRecord& flow, const ghidra::Funcdata& fd, int bl
 // `bytes` of the value are compared (the half a half-word store stores). Through a join, each path into it is
 // built on its own (`add #5` before a branch, `add #-5` after the paths meet: each path gives x back), up to 32 paths. `sources` gets,
 // for each path, that storage, its block and the op it is read before. False when a path does not give a value back.
+// With `dependsOn` (A7-341, review round 3), nothing is looked for: each path's value is built the same way and `dependsOn` gets the values
+// read at a block's start (or past an op the walk does not compute) that the compared bits change with, the others held at test values; a
+// value made of numbers only, or one whose reads cancel (`x + y - x` is y's), depends on fewer. False when a path cannot be built or there
+// are more than 32.
 struct IdentitySource
 {
     FlowVn vn;
@@ -7126,7 +7130,7 @@ struct IdentitySource
     int at;
 };
 bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, std::vector<IdentitySource>& sources,
-                         uint64_t bytes = ~0ull)
+                         uint64_t bytes = ~0ull, std::vector<IdentitySource>* dependsOn = nullptr)
 {
     if (blk < 0 || static_cast<size_t>(blk) >= flow.blockOps.size()) return false;
     if (pos < 0 || static_cast<size_t>(pos) >= flow.blockOps[static_cast<size_t>(blk)].size() ||
@@ -7389,6 +7393,51 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
     static const uint64_t tests[] = { 0, ~0ull, 1, 2, 0x7FFFFFFFull, 0x80000000ull, 0x55555555ull, 0xAAAAAAAAull, 0x12345678ull, 0x9ABCDEF0ull,
                                       0x0F0F0F0Full, 0xF0F0F0F0ull, 0x00010000ull, 0xDEADBEEFull, 0x00FF00FFull, 0x8000ull, 0x80ull };
     const size_t count = sizeof(tests) / sizeof(tests[0]);
+    if (dependsOn)
+    {
+        dependsOn->clear();
+        local = false;
+        choice.clear();
+        arity.clear();
+        const uint64_t mask = MaskToSize(bytes, top.out.size);
+        for (int path = 0; path < 32; ++path)
+        {
+            nodes.clear();
+            leaves.clear();
+            built.clear();
+            numbered.clear();
+            cursor = 0;
+            const int root = build(top.out, blk, pos + 1, 0);
+            if (root < 0) return false;
+            for (size_t x = 0; x < leaves.size(); ++x)
+            {
+                bool varies = false;
+                for (size_t k = 0; k < count && !varies; ++k)
+                    for (size_t round = 0; round < 2 && !varies; ++round)
+                    {
+                        for (size_t j = 0; j < leaves.size(); ++j) put[j] = tests[(k * (round ? 11 : 7) + j * 5 + 3 + round) % count];
+                        uint64_t first = 0;
+                        for (size_t t = 0; t < count && !varies; ++t)
+                        {
+                            put[x] = tests[t];
+                            const uint64_t v = eval(root) & mask;
+                            if (t == 0) first = v;
+                            else varies = v != first;
+                        }
+                    }
+                if (varies) dependsOn->push_back(IdentitySource{ leaves[x].s, leaves[x].b, leaves[x].at });
+            }
+            choice.resize(cursor);
+            arity.resize(cursor);
+            while (!choice.empty() && ++choice.back() == arity.back())
+            {
+                choice.pop_back();
+                arity.pop_back();
+            }
+            if (choice.empty()) return true;
+        }
+        return false;
+    }
     for (int mode = 0; mode < 2; ++mode)
     {
         local = mode == 1;
@@ -11344,6 +11393,70 @@ bool PriorWriteIsZero(const FlowRecord& flow, const ghidra::Funcdata& fd, int bl
     return true;
 }
 
+// A7-341 (review round 3): is the value `vn` holds before op `pos` of flow block `blk` shown not to come from the register `want` (its whole
+// width) held at the function's entry? Every path is followed back to what made the value (FlowLastWriters, through register moves). An op
+// that made it is shown not to pass the input on when every value it takes is itself shown so, or, failing that, when every value the bits
+// that are stored (`bits`) change with is shown so (FlowIdentitySources' dependency mode: `mov r4,r1 ; add r3,r1 ; sub r4,r1` changes with
+// r3 only, whatever r4 is). Only arithmetic on registers, temporaries and numbers is followed: a load (the memory may hold
+// the input; the name's own store put it there), a call or an engine operation, a path that reaches the entry in `want` or in anything but
+// a register, or the bound, cannot be shown to exclude it. An extension, a mask or an OR of the input with itself keeps the input's bytes,
+// so any use of the input that the identity test does not cancel is "may be". `onWalk` holds the ops the walk is inside: an op met again
+// there is a loop's own update, which adds no new source.
+static bool ValueExcludesInput(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, const FlowVn& want,
+                               uint64_t bits, std::set<const FlowOp*>& onWalk, int& budget)
+{
+    if (vn.Constant()) return true;
+    if (!vn.space || --budget < 0) return false;
+    std::vector<const FlowOp*> writers;
+    std::vector<FlowVn> entryRegs;
+    bool entry = false;
+    if (!FlowLastWriters(flow, fd, blk, pos, vn, writers, &entry, true, &entryRegs)) return false;
+    for (const FlowVn& r : entryRegs)
+        if (r.space != want.space || r.space->getType() != ghidra::IPTR_PROCESSOR || (r.offset & ~static_cast<ghidra::uintb>(3)) == want.offset)
+            return false;
+    for (const FlowOp* w : writers)
+    {
+        if (onWalk.count(w)) continue;
+        switch (w->code)
+        {
+        case ghidra::CPUI_LOAD:
+        case ghidra::CPUI_CALL:
+        case ghidra::CPUI_CALLIND:
+        case ghidra::CPUI_CALLOTHER:
+        case ghidra::CPUI_STORE:
+            return false;
+        default:
+            break;
+        }
+        int wblk = -1;
+        int wpos = -1;
+        for (size_t b = 0; b < flow.blockOps.size() && wblk < 0; ++b)
+        {
+            const std::vector<FlowOp>& ops = flow.blockOps[b];
+            if (!ops.empty() && w >= ops.data() && w < ops.data() + ops.size())
+            {
+                wblk = static_cast<int>(b);
+                wpos = static_cast<int>(w - ops.data());
+            }
+        }
+        if (wblk < 0) return false;
+        onWalk.insert(w);
+        bool shown = w->numIn <= 3;   // (an op whose inputs the record does not keep: not by its inputs)
+        for (int k = 0; shown && k < w->numIn; ++k)
+            shown = ValueExcludesInput(flow, fd, wblk, wpos, w->in[k], want, ~0ull, onWalk, budget);
+        if (!shown)
+        {
+            std::vector<IdentitySource> unused, reads;
+            shown = FlowIdentitySources(flow, fd, wblk, wpos, unused, bits, &reads);
+            for (size_t t = 0; shown && t < reads.size(); ++t)
+                shown = ValueExcludesInput(flow, fd, reads[t].blk, reads[t].at, reads[t].vn, want, ~0ull, onWalk, budget);
+        }
+        onWalk.erase(w);
+        if (!shown) return false;
+    }
+    return true;
+}
+
 bool OperandMovesToStore(const FlowRecord& flow, const ghidra::Funcdata& fd, const FlowVn& operand, const StoreSite& name, const StoreSite& other)
 {
     const auto opOf = [&flow](const StoreSite& s) -> const FlowOp* {
@@ -11383,8 +11496,17 @@ bool OperandMovesToStore(const FlowRecord& flow, const ghidra::Funcdata& fd, con
     const bool resolved = FlowLastWriters(flow, fd, other.blk, static_cast<int>(other.pos), otherReg, writers, &entry, true, &entryRegs);
     if (!resolved && GuardOn(kGuardMoveOtherResolved)) return false;
     if (GuardOn(kGuardMoveOtherNotInput))
-        for (const FlowVn& r : entryRegs)
-            if (r.space == want.space && (r.offset & ~static_cast<ghidra::uintb>(3)) == want.offset) return false;
+    {
+        // (round 3: not only a path that holds the input itself, through moves; an op that made the value from it, `extu.b r4,r1`, keeps
+        // the input's bytes as well)
+        // (the bits of the register the store stores: the low byte for `mov.b r1,@r6`)
+        const FlowVn& stored = otherOp->in[2];
+        const ghidra::uintb below = otherReg.offset + static_cast<ghidra::uintb>(otherReg.size) - (stored.offset + static_cast<ghidra::uintb>(stored.size));
+        const uint64_t bits = below >= 8 || stored.size >= 8 ? ~0ull : (~0ull >> (64 - 8 * stored.size)) << (8 * below);
+        std::set<const FlowOp*> onWalk;
+        int budget = 256;
+        if (!ValueExcludesInput(flow, fd, other.blk, static_cast<int>(other.pos), otherReg, want, bits, onWalk, budget)) return false;
+    }
     return true;
 }
 
