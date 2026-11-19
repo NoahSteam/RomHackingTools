@@ -23679,3 +23679,62 @@ without showing that its definition reaches the use) of the kind the area 7 cont
 their classes and the branch keeps the repros for the link-model design review. Round 35's runs on its branch: ctest
 117/117, fault 0/94, 20k 0/0, printed-C 5196, corpus 474 (645) / 724 (975), missing and said 0 / 4; sweeps from 12,320,001
 in both grammars clean.
+
+
+## Area 11, caution grammar (A11-37)
+
+Fixer, branch `review/11-caution-grammar` from master `7af01961`; Release build, `-j2`, `ulimit -v 3500000`. Row A11-37 (fixed); one new row, A3-243 (open, area 3). Only `FrontEnd/tests/Sh2GeneratedTests.cpp`, the ledger and this section changed; no product code.
+
+### 1. What was added
+
+A11-36 left eleven shapes of `tools/a3_round28/fixtures.src` (sections 1 and 2, and a210d of section 3) that the caution grammar (grammar 2, `SE_GENERATED_CAUTION=deep`) could not draw. They are drawn now, from `kCautionMoreFirst` = 12,500,001 on, on a stream of their own (`Gen::cautionMoreRng`), so no seed below 12,500,001 changes (checked: the pin below, and the 20,000-seed matrix, which never reaches the range). `SE_GENERATED_MORE=0` draws the programs the range had before. `SE_GENERATED_LISTONLY=1 SE_GENERATED_CENSUS=1` counts the shapes of a seed range without running it.
+
+| Shape | Production | Shape name counted |
+|---|---|---|
+| tb | the change `mov #imm,Rb` (or `ldc Rm,gbr/vbr`) in one case of the function's jump table, in 60 of 100 changes of a function that has a table and does not save the register (a table needs a function that returns) | `caution.change.table` |
+| pi | the change is `mov.b/w/l @Rb+,r1` (r1 or r2 that nothing reads on entry) behind the usual `tst ; bt/bf`, 20 in 100 of the changes of r8-r14 | `caution.change.postinc` |
+| pie | the same on every path, no test, 10 in 100 | `caution.change.postinc.every` |
+| th2 | a module with a thunk becomes four functions in half the cases: functions 1 and 2 are thunks, 3 the changer (`thunkLast`) | `caution.module.th2` |
+| mr2 | a module of three functions: 1 is `tst r4,r4 ; bt L ; bsr 2 ; tst r3,r3 ; b? L ; <change> ; L:`, 2 is `shlr r4 ; bsr 1`, both made whole (nothing else may write r4, which the recursion ends on), function 0 calls 1 with `mov #n,r4`, n 3 to 8 | `caution.module.mr2` (with `caution.mr2.recurse`) |
+| mx1, mx2 | a module of three functions: function 0 calls 1 (the changer, tests r3) and then 2, which changes the same register on a parameter's test (the runs never take it: the signature is lent) and the register is read after the second call | `caution.module.mx` |
+| a210d | a module of four functions: function 0 calls 1 (the changer) and 2; 2 is `push Rb ; call 3 ; pop Rb`, then `mov Rb,Rd ; mov.l Rd,@(disp,Rp)`; 3 changes Rb on every path; Rb is r12-r14 | `caution.module.a210d` (with `caution.a210d.spill`, `.read`) |
+| o1 | the copy of the changed register stored to a work-RAM global (a literal pointer in r6 or r7, `mov.l Rc,@Rn`) in place of the store through r4/r5, 12 in 100 of the reads | `caution.call.read.ram` |
+| o2 | the copy handed to a later call in r4 (that callee does not store through r4), 12 in 100 | `caution.call.handoff` |
+| o3 | the copy is the return value (`mov Rb,r0` as the return word), in a function that returns, ends with `rts`, does not save Rb and calls a changer of it, 40 in 100 | `caution.return.read` |
+
+The module shapes (th2, mx, a210d, mr2) are drawn for a module with the caution that has no function leaving r15 moved: one draw per module, 50 in 100 of the thunk modules become th2, 16 in 100 each of the others become mx, a210d and mr2.
+
+pi and pie, soundness: the A11-37 row asked for a pointer parameter that later items do not walk off its arena. The grammar needs none. A run enters with r8-r14 at 0x80MM00RR (RR the register's number twice), which is aligned for a byte in every register, a word in r10 and r14, a longword in r8 and r12; the post-increment load takes that width and steps by it (so every value the register can hold, a multiple of 4 from a `mov #imm`, an arena pointer from a saved argument, stays aligned for it); the loads read and the stores of later items go through r4-r7, whose arenas are 4 KiB with the start 0x100 in, and a call steps a register by one width. The load through an entry value is a read of it on purpose, so the function's `reads` has the bit (the first version had not, and the kept-read check named it: seeds 12600023, 12600061, 12600086, 12600206, 12600477, 12600782 passed after that).
+
+### 2. Draws
+
+Items per shape in 10,000 seeds of grammar 2 from 12,600,001 (`SE_GENERATED_LISTONLY=1 SE_GENERATED_CENSUS=1`, 10,000 modules):
+
+| Shape | Count |
+|---|---|
+| `caution.change.table` (tb) | 436 |
+| `caution.change.postinc` (pi) | 967 |
+| `caution.change.postinc.every` (pie) | 448 |
+| `caution.module.th2` | 248 |
+| `caution.mr2.recurse` (mr2 modules) | 895 |
+| `caution.module.mx` (mx1, mx2) | 862 |
+| `caution.module.a210d` | 856 |
+| `caution.call.read.ram` (o1) | 392 |
+| `caution.call.handoff` (o2) | 212 |
+| `caution.return.read` (o3) | 349 |
+
+Pins (the A11-37 block of `Sh2GeneratedTests.cpp`): no seed from 12,000,001 to 12,000,600 or from 12,100,001 to 12,100,600 holds any of the ten shapes (0); the first program of each shape from 12,500,001 whose runs require a caution passes with it said: tb 12500079, pi 12500024, pie 12500082, mx 12500249, th2 12500735, a210d 12500014, mr2 12500062, o1 12500079, o2 12500463, o3 12500083 (each: 0 findings, required and said equal).
+
+### 3. What the shapes found (A3-243)
+
+The sweep of 10,000 seeds from 12,600,001 (grammar 2, deep) has 23 failing seeds, every one of them in an a210d module and none with `SE_GENERATED_MORE=0`: 17 `n:caution-unsaid` and 6 `n:caution-elsewhere` (A3-240's class), all for a register r10-r14 of the module that a function changes on one path and then pushes, calls around and pops. Shrunk (seed 12607388): `tst r3,r3 ; bf L ; mov #0x14,r13 ; L: mov.l r13,@-r15 ; bsr G ; ... ; mov.l @r15+,r13`, called by a function that reads r13 afterwards. Filed as A3-243 (area 3) with the shrunk words; not exempted in the oracle, not avoided in the generator (the generator's contract holds: the callee-saved check passes, the function lists r13 as changed and as read). The other nine shapes have no failing seed in this range.
+
+### 4. Runs
+
+| Run | Result |
+|---|---|
+| default generator run (300 seeds and the pins) | **failing seeds=0; findings=0** |
+| `SE_GENERATED_SEEDS=20000` | **failing seeds=0; findings=0** (10,000 seeds of each grammar; the new shapes are not reached below 12,500,001) |
+| grammar 2 deep, 12,600,001-12,610,000 (10,000 seeds) | **23 failing seeds, 24 findings**, all A3-243 (above) |
+| `ctest -j1` | **116 of 117 passed**; `SaturnExplorerDecompilerFaultTests` failed with its pins' allocation coordinates STALE (`ActionRestartGroup::clone` and others): that suite pins stack coordinates of a RelWithDebInfo build and this Release build (as asked) moves them; it does not link the generator and no product code changed. Not rerun on a RelWithDebInfo build here |
+| `check-literal-size.py SaturnExplorer/FrontEnd` | raw string sizes: ok |
