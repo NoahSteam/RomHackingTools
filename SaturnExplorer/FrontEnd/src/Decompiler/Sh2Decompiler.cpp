@@ -4616,6 +4616,13 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                 if (at >= leading) moved.insert(at - leading);
             kv.second.first = std::move(moved);
         }
+    if (inputRegisters && leading)
+    {
+        TokenInputRegisters moved;
+        for (const auto& kv : *inputRegisters)
+            if (std::get<0>(kv.first) >= leading) moved[std::make_tuple(std::get<0>(kv.first) - leading, std::get<1>(kv.first), std::get<2>(kv.first))] = kv.second;
+        *inputRegisters = std::move(moved);
+    }
     return out;
 }
 
@@ -11344,12 +11351,11 @@ bool OperandMovesToStore(const FlowRecord& flow, const ghidra::Funcdata& fd, con
         const FlowOp& op = flow.blockOps[static_cast<size_t>(s.blk)][s.pos];
         return op.code == ghidra::CPUI_STORE && op.numIn >= 3 && op.in[2].space ? &op : nullptr;
     };
-    const FlowOp* nameOp = opOf(name);
-    const FlowOp* otherOp = opOf(other);
-    if ((!nameOp || !otherOp) && GuardOn(kGuardMoveFlowOp)) return false;
-    if (!nameOp || !otherOp) return false;   // (nothing to read below without them)
     if (GuardOn(kGuardMoveSameBytes) && (name.space != other.space || name.offset != other.offset)) return false;
     if (GuardOn(kGuardMoveSameWidth) && name.size != other.size) return false;
+    const FlowOp* nameOp = opOf(name);
+    const FlowOp* otherOp = opOf(other);
+    if (!nameOp || !otherOp) return !GuardOn(kGuardMoveFlowOp);   // (a store the flow does not have: nothing to read, the token stays)
     // the name's store: the operand's register, unchanged since the entry
     if (nameOp->in[2].Constant() || !nameOp->in[2].space || nameOp->in[2].space->getType() != ghidra::IPTR_PROCESSOR) return false;
     FlowVn nameReg = nameOp->in[2];
