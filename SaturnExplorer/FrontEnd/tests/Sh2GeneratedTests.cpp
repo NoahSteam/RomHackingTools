@@ -19792,6 +19792,15 @@ std::vector<std::string> RunDecisionCases(DecisionFixture& x)
                                                                      DecisionFixture::Op(0x104, ghidra::CPUI_INT_OR, r1, r1, &five) }), true);
         expect("341 the input's stored byte stays", withMakers({ DecisionFixture::Op(0x102, ghidra::CPUI_INT_AND, r1, r4, &low),
                                                                 DecisionFixture::Op(0x104, ghidra::CPUI_INT_OR, r1, r1, &r5) }), false);
+        // (review round 4) independence is computed, not sampled: `r4 == 0x1234` is 0 for every test value, yet the stored byte changes
+        // with r4; so does a comparison with another input. `r4 << 8` stored as a byte is 0, and `r4 ^ r4` is 0, whatever r4 is.
+        const FlowVn u = x.Temp(1), k1234 = x.Num(0x1234), eight = x.Num(8);
+        expect("341 a comparison of the input with a number stays", withMakers({ DecisionFixture::Op(0x102, ghidra::CPUI_INT_EQUAL, u, r4, &k1234),
+                                                                                DecisionFixture::Op(0x104, ghidra::CPUI_INT_ZEXT, r1, u) }), false);
+        expect("341 a comparison of the input with another stays", withMakers({ DecisionFixture::Op(0x102, ghidra::CPUI_INT_LESS, u, r5, &r4),
+                                                                               DecisionFixture::Op(0x104, ghidra::CPUI_INT_ZEXT, r1, u) }), false);
+        expect("341 the input shifted out of the stored byte moves", withMakers({ DecisionFixture::Op(0x102, ghidra::CPUI_INT_LEFT, r1, r4, &eight) }), true);
+        expect("341 the input XORed with itself moves", withMakers({ DecisionFixture::Op(0x102, ghidra::CPUI_INT_XOR, r1, r4, &r4) }), true);
     }
     {
         // the other store's source is not resolved (its block is on no path from the entry)

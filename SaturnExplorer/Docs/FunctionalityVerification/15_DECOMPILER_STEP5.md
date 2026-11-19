@@ -23732,3 +23732,21 @@ The reviewer accepted A7-340 and A7-342 on PR #67 and kept A7-341 open on one ga
 - **Tests.** New `TestArea7DecisionPoints` cases. Each stays: an extension of the input; an OR of the input with itself; a load; arithmetic that takes the input; `(r4 & 0xFF) | r5` stored as a byte. Each moves: an extension of another input; arithmetic on another input; the input cancelled (`r4 + r5 - r4`); only the input's other bytes. The five "stays" cases fail on round 2's code (built with the new tests: 5 wrong); the "moves" cases pass on both. With "move: other not the input" switched off, 7 cases fail.
 - **Runs:** the generated-tests binary passes in full, including both seed 11004012 replays. The full matrix follows on merge.
 
+## Area 7, external review findings, round 4
+
+The reviewer confirmed the round 3 extension fix and kept A7-341 open: the new dependency mode of `FlowIdentitySources` took "no sample value changed the output" as proof that the value does not depend on the input. `r4 == 0x1234`, zero-extended and stored as a byte, is 0 for all 17 test values, so the token moved although the byte changes with r4.
+
+- **Fix.** The dependency mode (`FlowIdentitySources` with `suspect`) no longer samples. It builds each path's value as before. `suspect` (`ValueExcludesInput` on each value read) says which reads may be the input. Then it computes, per node, which bits may change with a suspect read:
+  - a bitwise op keeps its inputs' bits;
+  - an AND or OR with a number clears the bits the number fixes;
+  - add, subtract and multiply spread a bit to every bit above it;
+  - a comparison or boolean op is tainted when any input is;
+  - every other op (arithmetic right shift included) is wholly tainted when an input is.
+- **Exact cancellation.** Sums, differences, negations and multiples or shifts by a number are also kept as a linear form over the reads, with coefficients modulo the size. A coefficient that cancels to 0 clears its read: `x + y - x` has no x, and `2 * x` leaves bit 0 alone.
+- **Rule.** The token moves only if no stored bit is tainted on any path. Unknown, an unbuilt path or more than 32 paths leave it in place.
+- **Tests.** New cases in `TestArea7DecisionPoints`:
+  - stays: the reviewer's fixture (`u = r4 == 0x1234 ; r1 = zext u`); a comparison of the input with another input;
+  - moves: `r4 << 8` stored as a byte; `r4 ^ r4`.
+  - The round 3 extension, cancellation and mask cases are kept. Built against round 3's code (4fcb3bec), exactly the reviewer's fixture fails (1 wrong). With "move: other not the input" switched off, 9 cases fail.
+- **Runs:** the generated-tests binary passes in full, including both seed 11004012 replays. The full matrix follows on merge.
+

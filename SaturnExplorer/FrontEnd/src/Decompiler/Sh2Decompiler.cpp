@@ -7119,10 +7119,29 @@ bool FlowNumberBefore(const FlowRecord& flow, const ghidra::Funcdata& fd, int bl
 // `bytes` of the value are compared (the half a half-word store stores). Through a join, each path into it is
 // built on its own (`add #5` before a branch, `add #-5` after the paths meet: each path gives x back), up to 32 paths. `sources` gets,
 // for each path, that storage, its block and the op it is read before. False when a path does not give a value back.
-// With `dependsOn` (A7-341, review round 3), nothing is looked for: each path's value is built the same way and `dependsOn` gets the values
-// read at a block's start (or past an op the walk does not compute) that the compared bits change with, the others held at test values; a
-// value made of numbers only, or one whose reads cancel (`x + y - x` is y's), depends on fewer. False when a path cannot be built or there
-// are more than 32.
+// With `suspect` (A7-341, review rounds 3 and 4), nothing is looked for: each path's value is built the same way, `suspect` says which of
+// the values read at a block's start (or past an op the walk does not compute) may be the operand's input, and the answer is whether, on
+// every path, no compared bit may change with a suspect one (IndependentBits). False when a path cannot be built or there are more than 32.
+static int CountTrailingZeros(uint64_t v)   // (v nonzero)
+{
+    int n = 0;
+    while (!(v & 1))
+    {
+        v >>= 1;
+        ++n;
+    }
+    return n;
+}
+static int CountLeadingZeros(uint64_t v)   // (v nonzero)
+{
+    int n = 0;
+    while (!(v >> 63))
+    {
+        v <<= 1;
+        ++n;
+    }
+    return n;
+}
 struct IdentitySource
 {
     FlowVn vn;
@@ -7130,7 +7149,7 @@ struct IdentitySource
     int at;
 };
 bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, std::vector<IdentitySource>& sources,
-                         uint64_t bytes = ~0ull, std::vector<IdentitySource>* dependsOn = nullptr)
+                         uint64_t bytes = ~0ull, const std::function<bool(const IdentitySource&)>* suspect = nullptr)
 {
     if (blk < 0 || static_cast<size_t>(blk) >= flow.blockOps.size()) return false;
     if (pos < 0 || static_cast<size_t>(pos) >= flow.blockOps[static_cast<size_t>(blk)].size() ||
@@ -7393,13 +7412,17 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
     static const uint64_t tests[] = { 0, ~0ull, 1, 2, 0x7FFFFFFFull, 0x80000000ull, 0x55555555ull, 0xAAAAAAAAull, 0x12345678ull, 0x9ABCDEF0ull,
                                       0x0F0F0F0Full, 0xF0F0F0F0ull, 0x00010000ull, 0xDEADBEEFull, 0x00FF00FFull, 0x8000ull, 0x80ull };
     const size_t count = sizeof(tests) / sizeof(tests[0]);
-    if (dependsOn)
+    if (suspect)
     {
-        dependsOn->clear();
+        // A7-341, review round 4: which bits of each node may change with a suspect value, computed, not sampled (17 test values miss
+        // `r4 == 0x1234`). A node's `taint` is a sound over-approximation: a bitwise op keeps its inputs' bits, an AND or OR with a number
+        // clears the bits the number fixes, a carry (add, subtract, multiply) spreads a bit to every bit above it, a comparison is tainted
+        // when any input is, and any other op is wholly tainted when an input is. Sums, differences and multiples by a number are also kept
+        // exactly as a linear form over the values read (coefficients modulo the size), so `x + y - x` has no x and `2 * x` leaves bit 0 alone.
         local = false;
         choice.clear();
         arity.clear();
-        const uint64_t mask = MaskToSize(bytes, top.out.size);
+        const uint64_t compared = MaskToSize(bytes, top.out.size);
         for (int path = 0; path < 32; ++path)
         {
             nodes.clear();
@@ -7409,24 +7432,105 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
             cursor = 0;
             const int root = build(top.out, blk, pos + 1, 0);
             if (root < 0) return false;
-            for (size_t x = 0; x < leaves.size(); ++x)
+            std::vector<bool> isSuspect(leaves.size());
+            for (size_t x = 0; x < leaves.size(); ++x) isSuspect[x] = (*suspect)(IdentitySource{ leaves[x].s, leaves[x].b, leaves[x].at });
+            struct Facts
             {
-                bool varies = false;
-                for (size_t k = 0; k < count && !varies; ++k)
-                    for (size_t round = 0; round < 2 && !varies; ++round)
+                bool done = false;
+                uint64_t taint = 0;
+                bool linear = false;
+                uint64_t coef[4] = { 0, 0, 0, 0 };
+            };
+            std::vector<Facts> facts(nodes.size());
+            const auto above = [](uint64_t t) { return t ? ~0ull << CountTrailingZeros(t) : 0; };   // (a carry: every bit from the lowest up)
+            std::function<const Facts&(int)> analyse = [&](int k) -> const Facts& {
+                Facts& f = facts[static_cast<size_t>(k)];
+                if (f.done) return f;
+                const Node& n = nodes[static_cast<size_t>(k)];
+                const uint64_t mask = MaskToSize(~0ull, n.size);
+                Facts r;
+                r.done = true;
+                if (n.kind == 0)
+                    r.linear = true;
+                else if (n.kind == 1)
+                {
+                    r.linear = true;
+                    r.coef[n.value] = 1;
+                    r.taint = isSuspect[static_cast<size_t>(n.value)] ? mask : 0;
+                }
+                else
+                {
+                    const Facts a = analyse(n.in[0]);
+                    const Facts b = n.in[1] >= 0 ? analyse(n.in[1]) : Facts{};
+                    const Node* nb = n.in[1] >= 0 ? &nodes[static_cast<size_t>(n.in[1])] : nullptr;
+                    const bool numB = nb && nb->kind == 0;
+                    const uint64_t vb = numB ? nb->value : 0;
+                    const uint64_t inMask = MaskToSize(~0ull, n.inSize);
+                    const uint64_t ta = a.taint & inMask, tb = b.taint;
+                    const bool any = (ta | tb) != 0;
+                    switch (n.code)
                     {
-                        for (size_t j = 0; j < leaves.size(); ++j) put[j] = tests[(k * (round ? 11 : 7) + j * 5 + 3 + round) % count];
-                        uint64_t first = 0;
-                        for (size_t t = 0; t < count && !varies; ++t)
+                    case ghidra::CPUI_COPY: r.taint = ta; break;
+                    case ghidra::CPUI_INT_ZEXT: r.taint = ta; break;
+                    case ghidra::CPUI_INT_SEXT: r.taint = ta | (n.inSize < 8 && (ta >> (8 * n.inSize - 1) & 1) ? ~inMask : 0); break;
+                    case ghidra::CPUI_INT_NEGATE: r.taint = ta; break;
+                    case ghidra::CPUI_INT_AND: r.taint = n.in[0] == n.in[1] ? ta : numB ? ta & vb : (ta | tb); break;
+                    case ghidra::CPUI_INT_OR: r.taint = n.in[0] == n.in[1] ? ta : numB ? ta & ~vb : (ta | tb); break;
+                    case ghidra::CPUI_INT_XOR: r.taint = n.in[0] == n.in[1] ? 0 : (ta | tb); break;
+                    case ghidra::CPUI_INT_ADD:
+                    case ghidra::CPUI_INT_SUB:
+                    case ghidra::CPUI_INT_2COMP:
+                    case ghidra::CPUI_INT_MULT: r.taint = above(ta | tb); break;
+                    case ghidra::CPUI_INT_LEFT: r.taint = numB ? (vb >= 64 ? 0 : ta << vb) : tb ? (any ? ~0ull : 0) : above(ta); break;
+                    case ghidra::CPUI_INT_RIGHT:
+                        r.taint = numB ? (vb >= 64 ? 0 : ta >> vb) : tb ? (any ? ~0ull : 0) : (ta ? ~0ull >> CountLeadingZeros(ta) : 0);
+                        break;
+                    case ghidra::CPUI_SUBPIECE: r.taint = numB ? (vb >= 8 ? 0 : ta >> (8 * vb)) : (any ? ~0ull : 0); break;
+                    case ghidra::CPUI_INT_EQUAL:
+                    case ghidra::CPUI_INT_NOTEQUAL:
+                    case ghidra::CPUI_INT_LESS:
+                    case ghidra::CPUI_INT_LESSEQUAL:
+                    case ghidra::CPUI_INT_SLESS:
+                    case ghidra::CPUI_INT_SLESSEQUAL:
+                    case ghidra::CPUI_BOOL_NEGATE:
+                    case ghidra::CPUI_BOOL_AND:
+                    case ghidra::CPUI_BOOL_OR:
+                    case ghidra::CPUI_BOOL_XOR: r.taint = any ? 1 : 0; break;
+                    default: r.taint = any ? ~0ull : 0; break;   // (INT_SRIGHT and anything else: all of it)
+                    }
+                    // the exact linear form, for ops of one size
+                    const bool sameSize = n.inSize == n.size && (!nb || nb->size == n.size);
+                    if (sameSize && a.linear && (n.in[1] < 0 || b.linear))
+                    {
+                        r.linear = true;
+                        for (int x = 0; x < 4; ++x)
                         {
-                            put[x] = tests[t];
-                            const uint64_t v = eval(root) & mask;
-                            if (t == 0) first = v;
-                            else varies = v != first;
+                            switch (n.code)
+                            {
+                            case ghidra::CPUI_COPY: r.coef[x] = a.coef[x]; break;
+                            case ghidra::CPUI_INT_ADD: r.coef[x] = a.coef[x] + b.coef[x]; break;
+                            case ghidra::CPUI_INT_SUB: r.coef[x] = a.coef[x] - b.coef[x]; break;
+                            case ghidra::CPUI_INT_2COMP: r.coef[x] = 0 - a.coef[x]; break;
+                            case ghidra::CPUI_INT_MULT: r.linear = r.linear && numB; r.coef[x] = a.coef[x] * vb; break;
+                            case ghidra::CPUI_INT_LEFT: r.linear = r.linear && numB && vb < 64; r.coef[x] = vb < 64 ? a.coef[x] << vb : 0; break;
+                            default: r.linear = false; break;
+                            }
+                            r.coef[x] = MaskToSize(r.coef[x], n.size);
+                        }
+                        if (r.linear)
+                        {
+                            uint64_t low = 0;   // (c * x leaves the bits below c's lowest set bit alone)
+                            for (size_t x = 0; x < leaves.size(); ++x)
+                                if (isSuspect[x] && r.coef[x]) low |= r.coef[x] & (0 - r.coef[x]);
+                            r.taint &= above(low);
                         }
                     }
-                if (varies) dependsOn->push_back(IdentitySource{ leaves[x].s, leaves[x].b, leaves[x].at });
-            }
+                }
+                r.taint &= mask;
+                f = r;
+                return f;
+            };
+            if (analyse(root).taint & compared) return false;
             choice.resize(cursor);
             arity.resize(cursor);
             while (!choice.empty() && ++choice.back() == arity.back())
@@ -11395,12 +11499,12 @@ bool PriorWriteIsZero(const FlowRecord& flow, const ghidra::Funcdata& fd, int bl
 
 // A7-341 (review round 3): is the value `vn` holds before op `pos` of flow block `blk` shown not to come from the register `want` (its whole
 // width) held at the function's entry? Every path is followed back to what made the value (FlowLastWriters, through register moves). An op
-// that made it is shown not to pass the input on when every value it takes is itself shown so, or, failing that, when every value the bits
-// that are stored (`bits`) change with is shown so (FlowIdentitySources' dependency mode: `mov r4,r1 ; add r3,r1 ; sub r4,r1` changes with
-// r3 only, whatever r4 is). Only arithmetic on registers, temporaries and numbers is followed: a load (the memory may hold
+// that made it is shown not to pass the input on when every value it takes is itself shown so, or, failing that, when no bit that is
+// stored (`bits`) may change with a value that is not shown so (FlowIdentitySources with `suspect`: a computed bit-dependency and exact
+// linear form, never sampled; `mov r4,r1 ; add r3,r1 ; sub r4,r1` has no r4, `(r4 & ~0xFF) | 5` stored as a byte has none). Only arithmetic on registers, temporaries and numbers is followed: a load (the memory may hold
 // the input; the name's own store put it there), a call or an engine operation, a path that reaches the entry in `want` or in anything but
 // a register, or the bound, cannot be shown to exclude it. An extension, a mask or an OR of the input with itself keeps the input's bytes,
-// so any use of the input that the identity test does not cancel is "may be". `onWalk` holds the ops the walk is inside: an op met again
+// and a comparison with it may change with it, so any use of the input that the analysis does not clear is "may be". `onWalk` holds the ops the walk is inside: an op met again
 // there is a loop's own update, which adds no new source.
 static bool ValueExcludesInput(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, const FlowVn& want,
                                uint64_t bits, std::set<const FlowOp*>& onWalk, int& budget)
@@ -11446,10 +11550,11 @@ static bool ValueExcludesInput(const FlowRecord& flow, const ghidra::Funcdata& f
             shown = ValueExcludesInput(flow, fd, wblk, wpos, w->in[k], want, ~0ull, onWalk, budget);
         if (!shown)
         {
-            std::vector<IdentitySource> unused, reads;
-            shown = FlowIdentitySources(flow, fd, wblk, wpos, unused, bits, &reads);
-            for (size_t t = 0; shown && t < reads.size(); ++t)
-                shown = ValueExcludesInput(flow, fd, reads[t].blk, reads[t].at, reads[t].vn, want, ~0ull, onWalk, budget);
+            std::vector<IdentitySource> unused;
+            const std::function<bool(const IdentitySource&)> suspect = [&](const IdentitySource& read) {
+                return !ValueExcludesInput(flow, fd, read.blk, read.at, read.vn, want, ~0ull, onWalk, budget);
+            };
+            shown = FlowIdentitySources(flow, fd, wblk, wpos, unused, bits, &suspect);
         }
         onWalk.erase(w);
         if (!shown) return false;
