@@ -23826,3 +23826,207 @@ The sweep of 10,000 seeds from 12,600,001 (grammar 2, deep) has 23 failing seeds
 | grammar 2 deep, 12,600,001-12,610,000 (10,000 seeds) | **23 failing seeds, 24 findings**, all A3-243 (above) |
 | `ctest -j1` | **116 of 117 passed**; `SaturnExplorerDecompilerFaultTests` failed with its pins' allocation coordinates STALE (`ActionRestartGroup::clone` and others): that suite pins stack coordinates of a RelWithDebInfo build and this Release build (as asked) moves them; it does not link the generator and no product code changed. Not rerun on a RelWithDebInfo build here |
 | `check-literal-size.py SaturnExplorer/FrontEnd` | raw string sizes: ok |
+
+## Area 12, round 1
+
+Reviewer of area 12 (`REVIEW_PROGRAM.md`: oracle "the CI matrix, a release checklist on a tagged build"), first round. Branch `review/12-round1`, cut at master `b077b88a` (the worktree HEAD `7af01961` was fast-forwarded to master, which already carried A12-32 and A12-33 from PR #67). The Actions history was read through the GitHub API (read only: nothing was posted, pushed or re-run). Nothing was built with MSVC or on macOS; every workflow change below is unverified on a hosted runner. Rows **A12-34 to A12-44**.
+
+**Verdict, area 12: not clean.** Two P2 rows: **A12-34** (the ASan job is cancelled by its own 90-minute limit on a third of master pushes) and **A12-35** (the macOS bundle's "no Homebrew reference" check cannot fail). Both are fixed on this branch, so the next round starts from a fixed tree, but the round found them, so it is not one of the two consecutive clean rounds (this is round 1 of area 12). Nine P3 rows (A12-36 to A12-44), four of them open with a proposal (A12-38, A12-42, A12-43, A12-44) and A12-39 and A12-40 partly open.
+
+### 1. CI matrix coverage
+
+Registered tests: 117 on Linux (`ctest -N`, RelWithDebInfo, no SDL2, as the Linux jobs configure), 110 on macOS (the 7 Linux-only: Area 9 rounds 3 to 7 with the full-disk case, and the loader fuzz), 95 on Windows (the 8 Live tests and ExportAttach, DataSearchWalk, PosixSpawn, LaunchPath, Settings, AIInvestigationLint, DecompilerFault and PrintedC are POSIX-only, plus `SaturnExplorerExportShutdownTests`, which only Windows registers); both counts are the ones the jobs print (macOS 110, Windows 95, run 44582869748). The jobs:
+
+* **Linux plain:** no job runs `ctest` on Linux. Linux gets: `area9-stores` (Debug, `ctest -R SaturnExplorerArea9`, the six Area 9 tests), `generator-nightly` (RelWithDebInfo, the generator and printed-C binaries run directly), and `sanitizers` (below). `PLAN.md` says Linux gates nothing; the cells are `area9` and `nightly` where those jobs run the test.
+* **Linux ASan/UBSan/LSan:** `sanitizers`, 15 binaries run directly (not through `ctest`, with the arguments `CMakeLists.txt` gives ctest).
+* **macOS arm64** and **Windows Debug:** `native`, the whole `ctest` in Debug; the eleven decompiler tests with `-V` (once, after A12-36).
+* **Rosetta:** `macos-x86_64-decompiler`, 12 named tests (the list drives build, `-R` and the built-check).
+* **Windows Release:** three decompiler tests after `build-release` of those targets. **MSBuild:** builds only; `build-release.bat` builds all (tests included) and runs none.
+
+Every registered test is run by at least one gating job (the macOS arm64 and Windows Debug jobs run the whole of their registration). Y = runs, - = registered there and not run by any job, n/a = not registered on that platform; Linux plain says which Linux-only job runs it.
+
+| test | Linux plain | Linux ASan/UBSan/LSan | macOS arm64 | macOS x86_64 Rosetta | Windows Debug | Windows Release | MSBuild |
+|---|---|---|---|---|---|---|---|
+| SavestateShapeTests | - | - | Y | Y | Y | - | - |
+| YssFixtureTests | - | - | Y | - | Y | - | - |
+| ExportAttachTests | - | - | Y | - | n/a | n/a | - |
+| StateSharedTests | - | - | Y | - | Y | - | - |
+| CapturedValueInspectionTests | - | - | Y | - | Y | - | - |
+| SlaFreshnessTests | - | Y | Y | Y | Y | - | - |
+| Sh2DecompilerEngineTests | - | Y | Y | Y | Y | - | - |
+| GenerateSpecDataFailureTests | - | - | Y | - | Y | - | - |
+| Sh2DecompilerTests | - | Y | Y | Y | Y | Y | - |
+| DecompilerRunnerTests | - | Y | Y | Y | Y | Y | - |
+| Sh2SemanticsTests | - | Y | Y | Y | Y | - | - |
+| Sh2DecodeTests | - | Y | Y | Y | Y | - | - |
+| Sh2GeneratedTests | nightly | Y | Y | Y | Y | - | - |
+| HardwareWidthTableTests | - | - | Y | - | Y | - | - |
+| CapturedInspectionMetadataTests | - | - | Y | - | Y | - | - |
+| DecompilerFaultTests | - | Y | Y | - | n/a | n/a | - |
+| Sh2DecompilerFixtureTests | - | Y | Y | Y | Y | - | - |
+| MemorySnapshotTests | - | - | Y | Y | Y | - | - |
+| Sh2FunctionFinderTests | - | - | Y | Y | Y | - | - |
+| Sh2PrintedCTests | nightly | Y | Y | - | n/a | n/a | - |
+| ThemeTests | - | - | Y | - | Y | - | - |
+| Vdp2Tests | - | - | Y | - | Y | - | - |
+| Vdp1PreviewTests | - | - | Y | - | Y | - | - |
+| CramWrapTests | - | - | Y | - | Y | - | - |
+| AbiNoThrowTests | - | - | Y | - | Y | - | - |
+| Geometry3DTests | - | - | Y | - | Y | - | - |
+| VramMapTests | - | - | Y | - | Y | - | - |
+| TopBarTests | - | - | Y | - | Y | - | - |
+| ConditionEvalTests | - | - | Y | - | Y | - | - |
+| BytePatternSearchTests | - | - | Y | - | Y | - | - |
+| MemorySearchTests | - | - | Y | - | Y | - | - |
+| MemoryCompareTests | - | - | Y | - | Y | - | - |
+| MemorySearchRunnerTests | - | - | Y | - | Y | - | - |
+| DataSearchRunnerTests | - | - | Y | - | Y | - | - |
+| PrsSearchTests | - | - | Y | - | Y | - | - |
+| DataSearchWalkTests | - | - | Y | - | n/a | n/a | - |
+| ExpressionResolverTests | - | - | Y | - | Y | - | - |
+| AccessLogTests | - | - | Y | - | Y | - | - |
+| ExecutionActionsTests | - | - | Y | - | Y | - | - |
+| StepHaltMachineTests | - | - | Y | - | Y | - | - |
+| BreakpointManagerTests | - | - | Y | - | Y | - | - |
+| FunctionNamesTests | - | - | Y | - | Y | - | - |
+| FileLockTests | - | - | Y | - | Y | - | - |
+| Area9Round3Tests | area9 | - | n/a | n/a | n/a | n/a | - |
+| CallStackHeuristicTests | - | - | Y | - | Y | - | - |
+| M68kDisasmTests | - | - | Y | - | Y | - | - |
+| IsoFsTests | - | - | Y | - | Y | - | - |
+| IsoBuilderTests | - | - | Y | - | Y | - | - |
+| CdSectorTests | - | - | Y | - | Y | - | - |
+| CueSheetTests | - | - | Y | - | Y | - | - |
+| DiscBuilderTests | - | - | Y | - | Y | - | - |
+| SeStateCodecTests | - | - | Y | - | Y | - | - |
+| ControllerPanelTests | - | - | Y | - | Y | - | - |
+| PanelInteractionTests | - | - | Y | - | Y | - | - |
+| LogPanelTests | - | - | Y | - | Y | - | - |
+| HexEditorPanelTests | - | - | Y | - | Y | - | - |
+| DecompilerPanelTests | - | Y | Y | Y | Y | Y | - |
+| DecompilerModelTests | - | Y | Y | - | Y | - | - |
+| DecompilerTrustTests | - | - | Y | - | Y | - | - |
+| LoaderFuzzTests | - | Y | n/a | n/a | n/a | n/a | - |
+| Area9Round4Tests | area9 | - | n/a | n/a | n/a | n/a | - |
+| Area9Round5Tests | area9 | - | n/a | n/a | n/a | n/a | - |
+| Area9Round5FullDisk | area9 | - | n/a | n/a | n/a | n/a | - |
+| Area9Round6Tests | area9 | - | n/a | n/a | n/a | n/a | - |
+| Area9Round7Tests | area9 | - | n/a | n/a | n/a | n/a | - |
+| ScrubStateTests | - | - | Y | - | Y | - | - |
+| CompareMarkersTests | - | - | Y | - | Y | - | - |
+| MemoryComparePanelTests | - | - | Y | - | Y | - | - |
+| AssemblyPanelTests | - | - | Y | - | Y | - | - |
+| MemoryBackendTests | - | - | Y | - | Y | - | - |
+| AsmCodeWindowTests | - | - | Y | - | Y | - | - |
+| AsmScrollTargetTests | - | - | Y | - | Y | - | - |
+| Sh2OperandHoverTests | - | - | Y | - | Y | - | - |
+| DiffToolTests | - | - | Y | - | Y | - | - |
+| Utf8PathTests | - | - | Y | - | Y | - | - |
+| PosixSpawnTests | - | - | Y | - | n/a | n/a | - |
+| LaunchPathTests | - | - | Y | - | n/a | n/a | - |
+| LauncherEmulatorsTests | - | - | Y | - | Y | - | - |
+| SettingsTests | - | - | Y | - | n/a | n/a | - |
+| Sh2DumpTests | - | - | Y | - | Y | - | - |
+| SavestateSlotsTests | - | - | Y | - | Y | - | - |
+| FrameRecorderTests | - | - | Y | - | Y | - | - |
+| ScspMixTests | - | - | Y | - | Y | - | - |
+| Sh2RegInfoTests | - | - | Y | - | Y | - | - |
+| PatchLibraryTests | - | - | Y | - | Y | - | - |
+| Sha256Tests | - | - | Y | - | Y | - | - |
+| UpdateCheckerTests | - | - | Y | - | Y | - | - |
+| JsonTests | - | - | Y | - | Y | - | - |
+| AIEncodingTests | - | - | Y | - | Y | - | - |
+| CanonicalTargetTests | - | - | Y | - | Y | - | - |
+| WriteIntervalTests | - | - | Y | - | Y | - | - |
+| SourceKeyTests | - | - | Y | - | Y | - | - |
+| ResponseValidatorTests | - | - | Y | - | Y | - | - |
+| ActionRegistryTests | - | - | Y | - | Y | - | - |
+| PackageManifestTests | - | - | Y | - | Y | - | - |
+| AIInvestigationEndToEndTests | - | - | Y | - | Y | - | - |
+| AIInvestigationLintTests | - | - | Y | - | n/a | n/a | - |
+| FileWriteTests | - | - | Y | - | Y | - | - |
+| LayerExportTests | - | - | Y | - | Y | - | - |
+| LayerPanelTests | - | - | Y | - | Y | - | - |
+| DemoScriptTests | - | - | Y | - | Y | - | - |
+| ShadowCallStackTests | - | - | Y | - | Y | - | - |
+| PackageRelease | - | - | Y | - | Y | - | - |
+| BuildInfo | - | - | Y | - | Y | - | - |
+| MednafenHaltOrdering | - | - | Y | - | Y | - | - |
+| MednafenPadInjection | - | - | Y | - | Y | - | - |
+| MednafenVdp1Latch | - | - | Y | - | Y | - | - |
+| MednafenVdpPoke | - | - | Y | - | Y | - | - |
+| ByteQueueTests | - | - | Y | - | Y | - | - |
+| LiveReconnectTests | - | - | Y | - | n/a | n/a | - |
+| LiveRestoreSignalTests | - | Y | Y | - | n/a | n/a | - |
+| LiveDecompilerCaptureTests | - | Y | Y | - | n/a | n/a | - |
+| RewindPipelineTests | - | - | Y | - | n/a | n/a | - |
+| LivePokeTests | - | - | Y | - | n/a | n/a | - |
+| MemoryRoundTripTests | - | - | Y | - | n/a | n/a | - |
+| LiveExporterRobustnessTests | - | - | Y | - | n/a | n/a | - |
+| LiveHaltRaceTests | - | - | Y | - | n/a | n/a | - |
+| ExportShutdownTests (Windows registers it; Linux does not) | n/a | n/a | n/a | n/a | Y | - | - |
+
+Gaps read off the table (A12-38): on Rosetta, no run of PrintedC, DecompilerModel, DecompilerTrust, HardwareWidthTable, CapturedInspectionMetadata, CapturedValueInspection, GenerateSpecDataFailure, DecompilerFault; on Windows, no PrintedC (UNIX only) and no Fault suite (recorded in A12-14); on macOS arm64, Fault runs without glibc's backtrace pins; Linux-only tests have a recorded reason (CMakeLists comments, A12-14). Registered-test drift: the Rosetta list, `-R` and the built-check come from one variable (A12-10, sound); the sanitizer build list, runner and checker's EXPECTED list are three lists, and the checker fails on a binary the runner did not run, and the runner on a binary not built (sound); the Area 9 job greps its targets from `cmake --help`; before A12-37 a loss of registration passed silently (now a floor).
+
+Steps whose failure would not fail the job: found and fixed A12-35 (negated pipeline), A12-37 (nightly probe skip; `ctest -R` matching nothing; no test-count check). No `continue-on-error` anywhere. The `|| true` on `sysctl` and `brew uninstall` and on the intermediate-certificate import are benign by design.
+
+### 2. CI health, last 15 runs of each workflow
+
+Runs read: `saturn-explorer-verify.yml` 44322550506 (run 537) to 44597703757 (551), on master and PR #67; `saturn-explorer-decompiler.yml` 44331685949 (305) to 44597703295 (319); the 20 newest scheduled runs of the decompiler workflow.
+
+| Run (commit) | Job | Result | Cause (from the log) | Ledger |
+|---|---|---|---|---|
+| verify 537 (eeff89d9) | Windows Debug | failed, ctest 935 s | Sh2DecompilerTests and Sh2GeneratedTests aborted: MSVC `cannot dereference end map/set iterator` | none; fixed 1f8ddf3b; A12-40 |
+| verify 537 | macOS arm64 | cancelled at 15 min | "not acquired by Runner of type hosted" | infrastructure, A12-40 |
+| verify 538 (0ff611ae) | macOS arm64 | cancelled | same | A12-40 |
+| verify 539 (38b2f7f4) | Rosetta, macOS bundle | cancelled | same | A12-40 |
+| verify 540 (bf576e7a) | Rosetta | failed | DecompilerPanelTests: ImGui `font_size > 0.0f` assertion, once | A12-40 (cause open) |
+| verify 548 attempt 1 (4fcb3bec, PR) | Windows Debug | failed at 1h44 | "hosted runner lost communication"; attempt 2 passed | infrastructure |
+| verify 549 (cd5be6ae, PR) | Windows Debug | failed in the repeated decompiler step | DecompilerRunnerTests `TestBudget` (budget below a `Small()` run); its first run in "Run CTest" passed | A12-32; the double run A12-36 |
+| decompiler 307, 309, 311 (bf576e7a, c94cd6c9, d09218f8) | sanitizers | cancelled at 1h30m | `exceeded the maximum execution time of 1h30m0s` | A12-34 |
+| decompiler 318 (bb2086c0, PR) | sanitizers | failed | DecompilerRunnerTests `straight rerun after cancellations: DIFFERENT (status 3)`, baseline 34 s vs a flat 60 s wait | A12-33 |
+| all others | | green | | |
+
+The head of PR #67, `8c281a61`: decompiler run 44597703295 green (sanitizers 65 minutes: run step 19:33 to 20:27); verify run 44597703757 was in progress when read (Windows Debug "Run CTest" green after 74 minutes, the repeated step running; macOS arm64, Rosetta, the bundle, `build-release.bat` and both MSBuild jobs green). Its ledger rows A12-32 and A12-33 are on master.
+
+Nightly `Generator, long run (Linux)`: the full step list (build, generator 20,000 seeds, printed-C differential, upload) last ran green on **2026-11-19 10:43 UTC** (run 44508250655, 31 minutes, `SUMMARY: seeds=20000`, `all passed`) and has been green every night since 2026-11-07 (13 nights); the last red nights were 2026-11-01 to 2026-11-06 (A10-13, A12-24, fixed 1286d48b). It reruns seeds 1 to 20,000 every night (A12-43).
+
+Durations against limits (Debug unless named; `ctest` ceilings are 10 times the Release value in a Debug or multi-config build):
+
+| Job | Typical | Worst seen | Limit | Per test |
+|---|---|---|---|---|
+| sanitizers | 65 to 77 min | 82 min passed; three at 90 min cancelled | 90 (now 150) | the binaries run directly: no per-binary limit (a hang uses the whole job) |
+| Windows Debug (`native`) | 120 min | 157 min (two decompiler passes) | none (360 default; now 240) | Sh2Generated 1,411 s and Sh2Decompiler 1,206 s of 3,000 s; Engine 226 of 1,200; Trust 156 of 3,000 |
+| macOS arm64 (`native`) | 56 to 57 min | 57 | none (now 240) | Sh2Generated 650 s of 3,000 |
+| Rosetta | 25 to 37 min | 37 | none (now 120) | |
+| Windows `build-release.bat` | 14 to 20 min | 20 | none (now 90) | |
+| nightly | 25 to 38 min (31 latest) | 38 | 300 | the generator is run directly, no `ctest` limit |
+
+The two longest Windows Debug tests use 47 and 40 percent of their ceiling on a green run; a runner 2 times slower passes it. With A12-36 the Windows Debug job loses its second decompiler pass (about 70 minutes).
+
+### 3. Timing-sensitive tests
+
+A12-39 is the class. The remaining fixed constants a slow runner can exceed, by kind (the proposal in the row is one mechanism for all): flat live-test waits of 3 to 15 s (fixed to 60 s on this branch); small fixed budgets under which follow-up requests also run (`DecompilerPanelTests` 0.3 s and 0.05 s, `DecompilerModelTests` `kShortBudget` 1.0 s and `kShortCancelAck` 0.5 s); flat 60 s waits and the 120 s `Generous()` budget in `DecompilerRunnerTests` that do not scale with the measured baseline (A12-33's shape); upper bounds on elapsed time (`pollMs < 50`, `Area9Round4` to `7`, `FileLockTests` on all platforms, `PosixSpawnTests`); the 300 ms "stopped" window of `LiveExporterRobustnessTests`; `kWaitMs` keyed to `NDEBUG`. A12-6 (disable test), A12-32 (`TestBudget`) and A12-33 (big waits) are in place and read sound.
+
+### 4. Release checklist
+
+Status: **was missing, now written**: `Docs/Decompiler/RELEASE_CHECKLIST.md` (A12-41), 54 steps in five parts: the commit and the CI matrix before tagging (A), the tagged build and what `saturn-explorer-release.yml` does (B), the archives opened (C, with a section on the decompiler in the package), a clean-machine smoke test (D), publishing and the record (E). It has not been run on a tag: the user tags. What it found missing in the workflow is A12-42 (no CI gate on the tag, the Windows exe never started in packaging, no decompiler first-run check, the version grep reads the header) and is marked manual in the checklist. Signing: macOS Developer ID and notarization are a CI job that needs the `release` environment's secrets (it has not run on GitHub, per `DISTRIBUTION.md`); Windows is unsigned by choice.
+
+### 5. Changes on this branch
+
+* `.github/workflows/saturn-explorer-verify.yml`: one run of the decompiler tests (`SE_DECOMPILER_TESTS`, `-E` then `-V -R`), `--no-tests=error`, the test-count floor step, explicit `timeout-minutes` on all five jobs, `.github/scripts/**` in both triggers, the real Homebrew check. Every job is kept; the Windows job gets shorter, not longer.
+* `.github/workflows/saturn-explorer-decompiler.yml`: sanitizers `timeout-minutes: 150`, the nightly probe fails, `--no-tests=error` on the Area 9 job.
+* `.github/scripts/check-test-count.sh` (new).
+* `FrontEnd/tests/LiveReconnectTests.cpp`, `LiveExporterRobustnessTests.cpp`: wait budgets 60 s (A12-39 (a)).
+* `Docs/Decompiler/RELEASE_CHECKLIST.md` (new), the ledger rows, this section.
+
+### 6. What I ran
+
+| Run | Result |
+|---|---|
+| `LiveReconnectTests`, `LiveExporterRobustnessTests` rebuilt (`-j2`, `ulimit -v 3500000`) and run by `ctest` | both passed (12.1 s and 3.3 s) |
+| `check-literal-size.py` on `SaturnExplorer/FrontEnd` | `raw string sizes: ok` |
+| `check-test-count.sh` on this build (117 tests): floor 100, floor 200, a missing build directory, `-R Fault` | exit 0; exit 1 with the error line; exit 1; exit 1 (1 test) |
+| `ctest -N` | 117 tests |
+| `ctest -j1`, whole registration, in three parts because the shared disk filled during the first full build (`No space left on device`, a link error in `SaturnExplorerSh2DecompilerTests`; other agents had the volume at 100 percent) and the heavy binaries had to be built and run one at a time, deleting each one's objects after it | 104 tests (every test whose binary was built) in one `ctest -j1 -E <11 heavy>`: 103 passed, **`SaturnExplorerDecompilerRunnerTests` timed out at 300 s** in `TestBaselinesTimeoutLeavesNothingRunning` (the first case) while the box was at load 2.5 to 3 with the disk nearly full; run again by itself it passed in 58.7 s under `ctest` and in 59.0 s directly, both times `all passed`; not reproduced and not explained, noted here and not filed. The other 13, built and run one at a time: Sh2Decode, SlaFreshness, CapturedInspectionMetadata, Sh2DecompilerFixture, DecompilerPanel, DecompilerModel, DecompilerTrust, LiveDecompilerCapture, Sh2Decompiler (70.4 s), Sh2Generated (112 s) with PrintedC (33.6 s), DecompilerFault (84.5 s), GenerateSpecDataFailure: **all passed**. So 117 of 117 passed, but not in one uninterrupted `ctest -j1` invocation, and one test needed a re-run. |
+| Not run | Any workflow change on a hosted runner (nothing pushed); MSVC, macOS, Rosetta; `SE_FAULT_FULL`; the game corpus; the generator beyond the ctest default. |

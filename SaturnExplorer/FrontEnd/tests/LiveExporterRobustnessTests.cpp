@@ -41,7 +41,7 @@ void Check(bool ok, const char* what)
 void Sleep(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
 
 template <typename Fn>
-bool WaitFor(Fn pred, int budgetMs = 5000)
+bool WaitFor(Fn pred, int budgetMs = 60000)   // only bounds a broken run: a wait that is met returns at once (A12-39, A12-7)
 {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(budgetMs);
     while (std::chrono::steady_clock::now() < deadline)
@@ -59,7 +59,7 @@ void WaitUntilStopped(const std::atomic<uint32_t>& ran, int stillMs = 300)
 {
     uint32_t last = ran.load();
     auto since = std::chrono::steady_clock::now();
-    const auto deadline = since + std::chrono::seconds(15);
+    const auto deadline = since + std::chrono::seconds(60);
     while (std::chrono::steady_clock::now() < deadline)
     {
         Sleep(10);
@@ -237,7 +237,7 @@ void TestEveryRequestedStepRuns(se_data_source& ds)
         ds.frame_step(ds.user, 1);
         if (i % 3 == 0) Sleep(1);
     }
-    Check(WaitFor([&] { return emu.ran.load() >= before + kSteps; }, 8000),
+    Check(WaitFor([&] { return emu.ran.load() >= before + kSteps; }, 60000),
           "every requested step was run");
     Sleep(200);   // and none beyond what was asked
     Check(emu.ran.load() == before + kSteps, "no step ran twice");
@@ -287,7 +287,7 @@ void TestStepCompletionIsObserved(se_data_source& ds, se_context* ctx)
     posted = true;
     Check(ds.frame_step(ds.user, kSteps) == 0, "step posted");
     bool zeroTooEarly = false;
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
     for (;;)
     {
         const int pending = se_live_capture_pending(&ds);
