@@ -8137,6 +8137,26 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             if (ab >= fr.reach.size() || mb >= fr.reach.size() || bb >= fr.reach.size()) return true;
                             return (ab == mb ? mo > ao : fr.reach[ab][mb] != 0) && (mb == bb ? mo < bo : fr.reach[mb][bb] != 0);
                         };
+                        // (A5-168: ...a write between that stores the very register the store writes back, the register unchanged from the read to
+                        // it, stores the value the bytes hold wherever it lands, unless it overlaps them without being the same bytes: `mov.l @r7,r2
+                        // ; mov.l r2,@(0x2c,r6) ; ... ; mov.l r2,@r4` with r4 the global's address when the store runs, grammar 2 seed 12173135, whose
+                        // text writes the word back after the pointer read. A run that shows a partial overlap keeps the write a change.)
+                        const auto sameWrite = [&](uint32_t wi) {
+                            if (dts::A7RuleOff(5168)) return false;
+                            int wsize = 0;
+                            std::set<uint32_t> there;
+                            std::set<int> thereEntry;
+                            uint16_t ww = 0;
+                            if (!word(wi, ww) || dts::StoredRegister(ww, wsize) != reg || wsize != ssize ||
+                                !dts::RegisterMakers(r, word, dts::BranchSources(r, word), wi, reg, there, false, &thereEntry) || !thereEntry.empty() || there != makers)
+                                return false;
+                            for (const RunOut& run : runs)
+                                for (const TraceRec& t : run.trace)
+                                    if (t.depth == 0 && t.write && t.insn == wi && t.addr < f.address + f.size && f.address < t.addr + static_cast<uint32_t>(t.size) &&
+                                        t.addr != f.address)
+                                        return false;
+                            return true;
+                        };
                         bool back = true;
                         for (uint32_t mk : makers)
                         {
@@ -8152,12 +8172,14 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             }
                             const size_t rb = static_cast<size_t>(read->origBlock), fb = static_cast<size_t>(f.origBlock);
                             for (const MemoryAccess& m : got)
-                                if (m.write && (m.origBlock < 0 || mayBetween(rb, read->origOrder, static_cast<size_t>(m.origBlock), m.origOrder, fb, f.origOrder)))
+                                if (m.write && (m.origBlock < 0 || mayBetween(rb, read->origOrder, static_cast<size_t>(m.origBlock), m.origOrder, fb, f.origOrder)) &&
+                                    !sameWrite(m.insn))
                                     back = false;
                             for (const AccessFate& o : r.accessFates)
                                 if (o.write && o.insn != f.insn && (o.origBlock < 0 || !o.constantAddress ||
                                                                     (o.address < f.address + f.size && f.address < o.address + o.size)) &&
-                                    (o.origBlock < 0 || mayBetween(rb, read->origOrder, static_cast<size_t>(o.origBlock), o.origOrder, fb, f.origOrder)))
+                                    (o.origBlock < 0 || mayBetween(rb, read->origOrder, static_cast<size_t>(o.origBlock), o.origOrder, fb, f.origOrder)) &&
+                                    !sameWrite(o.insn))
                                     back = false;
                             if (!back) break;
                         }
@@ -20056,6 +20078,26 @@ void TestA5162Pins(Sh2Decompiler& d)
     CHECK(rep.findings.empty());
 }
 
+// Area 5, A7-255 (A5-168): grammar 2 seed 12173135 (`n:folded-store-after-access`), whole and shrunk. `x = g ; if (p == &g) *p3 = x ; *p = x` -- the
+// store through r4 is made only when r4 is the global's address, writes back the word read, and a write between stores the same register; the text
+// writes the word back after the read through r5, which no value shows. Fails with SE_A7_RULE_OFF=5168.
+void TestA5168Pins(Sh2Decompiler& d)
+{
+    {
+        const Report rep = Evaluate(d, MakeV2(12173135), true);
+        std::printf("pin 'A5-168 grammar 2 seed 12173135': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const ModulePin pin = { "A5-168 grammar 2 seed 12173135 shrunk", "D704 3740 8F02 6272 162B 2422 6255 000B 0009 0009 2600 2080", "0/0/e,e/e/12", nullptr, "0,0", nullptr, nullptr };
+        const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+        std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 // Area 5, round 4 (A5-165, A5-166): two order-class oracle findings whose text is value-correct, each whole and shrunk. A5-165, grammar 2 seed 12247189
 // (`n:read-after-folded-store`): `mov.l r0,@r6 ; mov.w @r7,r1 ; mov.l r0,@r6`, the second store the same value at the same address as the first, which
 // the engine joins into it. A5-166, grammar 1 seed 12260346 (`v:folded-read-after-pointer-write`): a read in the slot of `bf/s` whose register is
@@ -22155,6 +22197,7 @@ void TestGenerated()
         RUN(TestA5154Pins(d));
         RUN(TestA5162Pins(d));
         RUN(TestA5165Pins(d));
+        RUN(TestA5168Pins(d));
         RUN(TestA7FlowRecordPins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
