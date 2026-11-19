@@ -19473,6 +19473,40 @@ void TestArea7Round35Pins(Sh2Decompiler& d)
     CHECK(rep.findings.empty());
 }
 
+// External review of area 7 (A7-340 to A7-342). Hand-written fixtures, replayed whole by the oracle. A7-340: the prior zero store of a zero extension
+// is the write that reaches the statement; the first program has a zero store (`mov.w r3,@r6`, r3 0 after the `dt` loop) on an arm that returns
+// (`cmp/pl r4 ; bf ; mov.w r3,@r6 ; rts`), disjoint from the join's statement `uRam06001024 = (uint4)uVar1;`, the second the same without the
+// zero store the path itself writes. A7-342: the operand of an input's copy moves to the store the name is at only for stores of the same bytes
+// and a proven other value: grammar 1 seed 11004012's program (A7-292) with the second store a halfword, and with the slot's store a halfword.
+// (Neither pair of fixtures separates the round 34 code from this one in the oracle: the text and the mapping the oracle audits agree; they hold the
+// shapes, which the printed-C and generator matrices also run.)
+void TestArea7ReviewFixPins(Sh2Decompiler& d)
+{
+    struct Fixture
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* volatileRange;
+        const char* poll;
+    };
+    const Fixture kFixtures[] = {
+        { "A7-340 a zero store on an arm that returns", "D614 D714 2522 6072 C801 8BFB 2611 C100 E301 4310 8BFD 6161 2548 8B17 4415 8B02 2631 000B 0009 0009 4215 8F01 2631 171D E01C 0536 2650 D608 E169 2611 032A 2F36 0009 0009 63F6 432A 000B 0009 AFEE 0009 0600 1024 0600 1024 0600 3010 D101 2122 000B 0009 0600 304C", "5:06003C18", "26001020-2600102f", "6001024" },
+        { "A7-340 the same without the zero store on the path", "D614 D714 2522 6072 C801 8BFB 2611 C100 E301 4310 8BFD 6161 2548 8B17 4415 8B02 2631 000B 0009 0009 4215 8F01 0009 171D E01C 0536 2650 D608 E169 2611 032A 2F36 0009 0009 63F6 432A 000B 0009 AFEE 0009 0600 1024 0600 1024 0600 3010 D101 2122 000B 0009 0600 304C", "5:06003C18", "26001020-2600102f", "6001024" },
+        { "A7-342 grammar 1 seed 11004012 shrunk", "D114 6212 E32E 2432 7243 2122 D612 D713 6060 4320 E302 6143 204B 4310 8BFB 8173 C40E E283 D60E 2228 8900 313C 3148 817F 4321 D60C 2208 8901 3550 8D09 2640 D70A E001 2702 6072 C801 8BFC 2610 000B 0009 000B 0009 2600 3C1C FFFF FE12 2600 1038 2610 1038 2600 210C 2600 1038", "4:26003C1C", "26001030-2600103f", "26001038" },
+        { "A7-342 the second store a halfword", "D114 6212 E32E 2432 7243 2122 D612 D713 6060 4320 E302 6143 204B 4310 8BFB 8173 C40E E283 D60E 2228 8900 313C 3148 817F 4321 D60C 2208 8901 3550 8D09 2640 D70A E001 2702 6072 C801 8BFC 2611 000B 0009 000B 0009 2600 3C1C FFFF FE12 2600 1038 2610 1038 2600 210C 2600 1038", "4:26003C1C", "26001030-2600103f", "26001038" },
+        { "A7-342 the slot's store a halfword", "D114 6212 E32E 2432 7243 2122 D612 D713 6060 4320 E302 6143 204B 4310 8BFB 8173 C40E E283 D60E 2228 8900 313C 3148 817F 4321 D60C 2208 8901 3550 8D09 2641 D70A E001 2702 6072 C801 8BFC 2610 000B 0009 000B 0009 2600 3C1C FFFF FE12 2600 1038 2610 1038 2600 210C 2600 1038", "4:26003C1C", "26001030-2600103f", "26001038" },
+    };
+    for (const Fixture& p : kFixtures)
+    {
+        const Subject subject = RawSubjectWithEnv(p.words, p.volatileRange, p.poll, p.alias);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin '%s': %zu finding(s)\n", p.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestArea7Round25Pins(Sh2Decompiler& d)
 {
     struct Whole
@@ -21807,6 +21841,7 @@ void TestGenerated()
         RUN(TestArea7A7273Pins(d));
         RUN(TestArea7Round34Pins(d));
         RUN(TestArea7Round35Pins(d));
+        RUN(TestArea7ReviewFixPins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
