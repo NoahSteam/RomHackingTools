@@ -206,6 +206,14 @@ void CheckFollowingRequest(DecompilerRunner& runner, const char* after)
 struct Baseline { std::string text; double phaseMs[8] = {}; double totalMs = 0; };
 Baseline gBaseline[3];
 
+// How long to wait for a run of a big fixture after the baselines: four baseline runs, at least the
+// default 60 s. Under ASan on a slow runner the straight fixture's baseline was 34 s, and its rerun
+// after the cancellations did not arrive within a flat 60 s (A12-33).
+double BigWaitSeconds(int fixture)
+{
+    return std::max(60.0, gBaseline[fixture].totalMs * 4 / 1000.0);
+}
+
 // The phase log of a baseline run. Owned by shared pointer: the runner's worker copies the observer when a request
 // starts and calls it until that request ends, so what the observer writes to must live as long as any copy of it,
 // not as long as the function that submitted the request (A6-46: the log used to be locals the observer wrote to by
@@ -334,7 +342,7 @@ void CancelHeldAt(DecompilerRunner& runner, PhaseGate& gate, int fixture, Decomp
     const auto t0 = Clock::now();
     runner.Cancel(0);   // the worker is inside 'phase': it has begun and cannot have left
     gate.Release();
-    CHECK(WaitResult(runner, r));
+    CHECK(WaitResult(runner, r, BigWaitSeconds(fixture)));
     std::printf("  %-9s cancel at start of %-10s -> %-9s in %-10s flag->result %7.1f ms\n", kFixtures[fixture].name,
                 PhaseName(phase), r.status == DecompileStatus::Cancelled ? "cancelled" : "completed",
                 r.status == DecompileStatus::Cancelled ? PhaseName(r.cancelledIn) : "-", MsSince(t0));
@@ -364,7 +372,7 @@ bool CancelMidway(DecompilerRunner& runner, PhaseGate& gate, int fixture, Decomp
         const auto t0 = Clock::now();
         runner.Cancel(0);
         const DecompilePhase after = gate.Current();
-        CHECK(WaitResult(runner, r));
+        CHECK(WaitResult(runner, r, BigWaitSeconds(fixture)));
         const bool conclusive = before == phase && after == phase;
         std::printf("  %-9s cancel at 50%% of %-10s -> %-9s in %-10s flag->result %7.1f ms%s\n", kFixtures[fixture].name,
                     PhaseName(phase), r.status == DecompileStatus::Cancelled ? "cancelled" : "completed",
@@ -404,7 +412,7 @@ void TestCancelInFlowAndActions()
         gate.Reset();
         runner.Submit(0, gSnap, Big(kFixtures[i].entry));
         DecompileResult again;
-        CHECK(WaitResult(runner, again));
+        CHECK(WaitResult(runner, again, BigWaitSeconds(i)));
         CHECK(again.status == DecompileStatus::Ok && again.Text() == gBaseline[i].text);
         std::printf("  %-9s rerun after cancellations: %s (status %d, %.1f ms)\n", kFixtures[i].name,
                     again.Text() == gBaseline[i].text ? "identical" : "DIFFERENT", int(again.status), again.elapsedMs);
