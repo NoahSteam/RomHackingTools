@@ -588,6 +588,7 @@ struct Func
     uint32_t effClobbers = 0;      // ...and what its callees, a function it jumps to or runs on into leave changed too
     uint32_t reads = 0;            // registers whose entry value it reads on purpose (r1-r3, r8-r14, gbr, vbr, mach, macl)
     std::vector<Item> afterExit;   // (A11-33) after the epilogue's pops, before `rts` (Rts only): a saved register changed on one path
+    const char* moreShape = "";    // (A11-37) the module shape this function stands for (counted once per function)
 };
 
 struct Program
@@ -663,6 +664,20 @@ struct Gen
     Rng cautionRng;
     Rng cautionLoopRng;           // (A11-36) the productions of the seeds from kCautionLoopFirst on: a change through a loop, a read by a branch
     bool cautionLoopOn = false;
+    // (A11-37) ...and the shapes A11-36 left (a post-increment load, a jump table, a chain of thunks, mutual recursion, a lent callee after the changer,
+    // a popped saved word after an inner call, a hand-off in r4, a store to work RAM, a read by the return), from kCautionMoreFirst on, on a stream of
+    // its own: no seed below it changes.
+    Rng cautionMoreRng;
+    bool cautionMoreOn = false;
+    enum MoreKind { MoreNone = 0, MoreMx = 1, MoreTh2 = 2, MoreA210d = 3, MoreMr2 = 4 };
+    int moreKind = MoreNone;      // the module's shape (set in Module)
+    int moreReg = -1;             // mx, a210d, mr2: the register the module's changers change
+    int moreCalls = 0;            // calls of function 0 made so far (mx, a210d: the first goes to function 1, the second to function 2)
+    int thunkLast = 2;            // the function the chain of thunks (functions 1 up) ends in: the changer
+    int curFn = 0;                // the function being made (MakeFunc)
+    bool moreNoRead = false;      // MakeCall: no read of a changed register after this call (a210d's inner call: the read is the popped word's)
+    int moreOKind = 0;            // MakeCall's answer: 0 none, 1 the copy is stored to work RAM (o1), 2 it is handed to a later call in r4 (o2)
+    int moreOReg = 0;             // ...and the scratch register that holds the copy
     bool bareSpillOn = true;      // SE_GENERATED_BARESPILL=0 makes the programs the seeds made before A11-35's fix (to replay them)
     int bareSpills = 0;           // (A11-35) the spills made bare, for the notes
     bool cautionSpPops = false;   // the function that leaves r15 moved has `add #4,r15` (a pop of its caller's word)
@@ -692,7 +707,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull), postJoinRng(seed ^ 0x706F73744A6F696Eull), modPollRng(seed ^ 0x6D6F64506F6C6C21ull), ptrAliasRng(seed ^ 0x707472416C696173ull), cautionRng(seed ^ 0x6361757469306E21ull), cautionLoopRng(seed ^ 0x6C6F6F7043617574ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull), postJoinRng(seed ^ 0x706F73744A6F696Eull), modPollRng(seed ^ 0x6D6F64506F6C6C21ull), ptrAliasRng(seed ^ 0x707472416C696173ull), cautionRng(seed ^ 0x6361757469306E21ull), cautionLoopRng(seed ^ 0x6C6F6F7043617574ull), cautionMoreRng(seed ^ 0x6D6F72654361757Aull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -1744,6 +1759,7 @@ struct Gen
         Item it;
         it.type = Item::Call;
         it.callee = callee;
+        moreOKind = 0;
         it.viaJsr = rng.Chance(40);
         // ...a bsrf for some of the calls through a register (A2-20): the literal is the distance to the callee from the bsrf + 4, known only
         // after layout. Drawn from a stream of its own, so no other draw of a program moves.
@@ -1843,22 +1859,35 @@ struct Gen
         int cautionRead = 0;
         bool cautionStack = false;   // ...of r15: the copy is a stack address, which no later item may take for a pointer (a store through it
                                      // writes the caller's saved registers: seed 12005835, before this)
-        if (cautionModule && !it.observes)
+        if (cautionModule && !it.observes && !moreNoRead)
         {
             const uint32_t eff = fns[callee].effClobbers & (cautionKept | (1u << 15));
-            if (eff && cautionRng.Chance(65))
+            // (A11-37, mx) the call of the lent callee after the changer: the register the module's changers change is read after it
+            const bool mxRead = moreKind == MoreMx && callee == 2 && ((eff >> moreReg) & 1u);
+            if (eff && (cautionRng.Chance(65) || mxRead))
             {
                 std::vector<int> bits;
                 for (int b = 0; b < 32; ++b)
                     if ((eff >> b) & 1u) bits.push_back(b);
-                const int b = bits[cautionRng.Below(static_cast<uint32_t>(bits.size()))];
+                int b = bits[cautionRng.Below(static_cast<uint32_t>(bits.size()))];
+                if (mxRead) b = moreReg;
                 cautionRead = 1 + static_cast<int>(cautionRng.Below(3));
                 cautionStack = b == 15;
                 it.after.push_back(ReadRegisterInto(b, cautionRead));
                 int ptr[2], np = 0;
                 for (const std::pair<int, int>& sv : saves)
                     if (sv.first == 4 || sv.first == 5) ptr[np++] = sv.first;
-                if (np && cautionRng.Chance(80))
+                // (A11-37) the read made another way, from a stream of its own: the copy stored to a global of work RAM (o1: a store the runs' memory
+                // sees outside the scratch arenas), or handed to a later call in r4 (o2: the text prints it as the argument); no store through r4/r5.
+                // MakeFunc places them (PlaceMore), where the registers hold what they should.
+                if (cautionMoreOn && !cautionStack && !mxRead)
+                {
+                    const uint32_t od = cautionMoreRng.Below(100);
+                    if (od < 12) moreOKind = 1;
+                    else if (od < 24) moreOKind = 2;
+                    moreOReg = cautionRead;
+                }
+                if (np && cautionRng.Chance(80) && !moreOKind)
                 {
                     const int rp = ptr[cautionRng.Below(static_cast<uint32_t>(np))];
                     const uint32_t disp = cautionRng.Below(4);
@@ -1880,8 +1909,72 @@ struct Gen
         for (const std::pair<int, int>& s : saves) defined |= 1u << s.first;
         if (fns[callee].returns) defined |= 1u;
         if (observed) defined |= 1u << observed;
-        if (cautionRead && !cautionStack) defined |= 1u << cautionRead;
+        if (cautionRead && !cautionStack && moreOKind != 2) defined |= 1u << cautionRead;
         return it;
+    }
+
+    // (A11-37, mr2) The call of the recursing pair is given a count in r4, small, as the pair ends on r4 >> 1 being 0: any other set-up of r4 is dropped.
+    void SetRecursionCount(Item& call)
+    {
+        auto dropsR4 = [](uint16_t w) { return (((w & 0xF000) == 0xE000) || ((w & 0xF00F) == 0x6003)) && ((w >> 8) & 0xF) == 4; };
+        call.setup.erase(std::remove_if(call.setup.begin(), call.setup.end(), dropsR4), call.setup.end());
+        call.slotWords.erase(std::remove_if(call.slotWords.begin(), call.slotWords.end(), dropsR4), call.slotWords.end());
+        call.setup.push_back(uint16_t(0xE400 | (3 + cautionMoreRng.Below(6))));   // mov #n,r4
+    }
+
+    // (A11-37) What MakeCall asked for after the call (moreOKind), appended to 'list' right after the call item: o1, a literal pointer to a global of
+    // work RAM (r6 or r7, not the jump table's integer) and the copy stored through it, whole word; o2, a call to a later function that does not store
+    // through r4, with the copy as its r4 (the set-up the call made for r4 dropped).
+    void PlaceMore(std::vector<Item>& list, const std::vector<Func>& fns)
+    {
+        const int kind = moreOKind;
+        moreOKind = 0;
+        if (!kind) return;
+        const int copy = moreOReg;
+        if (kind == 1)
+        {
+            int reg = 6 + static_cast<int>(cautionMoreRng.Below(2));
+            if (reg == selReg) reg = 13 - reg;
+            if (reg == selReg) return;
+            Lit l;
+            l.kind = LitKind::Ram;
+            l.value = (cautionMoreRng.Chance(75) ? 0x26000000u : 0x06000000u) + 0x2000u + 0x80u * cautionMoreRng.Below(8) + 4u * cautionMoreRng.Below(4);
+            l.width = 4;
+            Item lp;
+            lp.type = Item::LitPtr;
+            lp.reg = reg;
+            lp.lit = static_cast<int>(p.lits.size());
+            lp.shape = "litptr.ram";
+            p.lits.push_back(l);
+            align[reg] = std::min(align[reg], Alignment(l.value));
+            pref[reg] = l.width;
+            if (disc) defined |= 1u << reg;
+            Item st;
+            st.type = Item::Mem;
+            st.shape = "caution.call.read.ram";
+            st.base = reg;
+            st.width = 4;
+            st.words = { uint16_t(0x2002 | reg << 8 | copy << 4) };   // mov.l Rcopy,@Rreg
+            list.push_back(lp);
+            list.push_back(st);
+            return;
+        }
+        std::vector<int> cands;
+        for (int g = curFn + 1; g < static_cast<int>(fns.size()); ++g)
+        {
+            std::set<int> seen;
+            if (!((PointerArgs(g, fns, seen) >> 4) & 1u)) cands.push_back(g);
+        }
+        if (cands.empty()) return;
+        const int g = cands[cautionMoreRng.Below(static_cast<uint32_t>(cands.size()))];
+        Item call = MakeCall(g, fns);
+        moreOKind = 0;
+        auto dropsR4 = [](uint16_t w) { return (((w & 0xF000) == 0xE000) || ((w & 0xF00F) == 0x6003)) && ((w >> 8) & 0xF) == 4; };
+        call.setup.erase(std::remove_if(call.setup.begin(), call.setup.end(), dropsR4), call.setup.end());
+        call.slotWords.erase(std::remove_if(call.slotWords.begin(), call.slotWords.end(), dropsR4), call.slotWords.end());
+        call.setup.push_back(uint16_t(0x6003 | 4 << 8 | copy << 4));   // mov Rcopy,r4
+        call.shape = "caution.call.handoff";
+        list.push_back(call);
     }
 
     // A switch through mova + shll2 + mov.l @(r0,Rn) + jmp @Rn with a bound check.
@@ -1950,19 +2043,29 @@ struct Gen
     // fixtures) three times in four, else a parameter. Put first among the items when the function does not save the register; after its
     // epilogue (Func::afterExit, before `rts`) when it does (A3-199: a register restored and then changed on one path). The function that leaves
     // r15 moved (cautionSpFn) does it last among its items: `add #4,r15` (a pop of its caller's word), `add #-4,r15` or `mov.l r3,@-r15`.
+    // (A11-37) The width a post-increment load through r8-r14 may have: the register's value on entry to a run (0x80MM00RR, RR the register's
+    // number twice) is aligned for it, and so is every value the grammar gives it (an arena, a multiple of 4): r8 and r12 take a longword, r10
+    // and r14 a word, the rest a byte. A step of that width keeps the alignment.
+    static int PostIncWidth(int b) { return (b & 3) == 0 ? 4 : (b & 1) == 0 ? 2 : 1; }
+
     void AddCautionChange(Func& f, int idx, size_t at)
     {
         const bool sp = idx == cautionSpFn;
-        if (!sp && !(cautionThunk && idx == 2) && !cautionRng.Chance(55)) return;
+        // (A11-37) the functions of the mx, a210d and mr2 modules that change the module's register, whatever the draw
+        const bool forced = (moreKind == MoreMx && (idx == 1 || idx == 2)) || ((moreKind == MoreA210d || moreKind == MoreMr2) && idx == 1);
+        if (!sp && !(cautionThunk && idx == thunkLast) && !forced && !cautionRng.Chance(55)) return;
         std::vector<int> pool;
         for (int b = 0; b < 32; ++b)
             if ((cautionKept >> b) & 1u) pool.push_back(b);
+        if (forced) pool.assign(1, moreReg);
         if (pool.empty() && !sp) return;
         Item sk;
         sk.type = Item::Skip;
-        const int t = cautionRng.Chance(75) ? 3 : 4 + static_cast<int>(cautionRng.Below(4));
+        int t = cautionRng.Chance(75) ? 3 : 4 + static_cast<int>(cautionRng.Below(4));
+        if (forced) t = moreKind == MoreMx && idx == 2 ? 4 + static_cast<int>(cautionMoreRng.Below(4)) : 3;   // mx: the lent callee tests a parameter
         sk.cond = uint16_t(0x2008 | t << 8 | t << 4);   // tst Rt,Rt
         sk.onTrue = cautionRng.Chance(50);
+        const uint32_t readsBefore = f.reads;
         if (t == 3) f.reads |= 1u << 3;
         Item c;
         c.type = Item::Alu;
@@ -1980,16 +2083,64 @@ struct Gen
             return;
         }
         const int b = pool[cautionRng.Below(static_cast<uint32_t>(pool.size()))];
-        if (b == 17 || b == 18)
+        const bool saved = std::find(f.pushed.begin(), f.pushed.end(), b) != f.pushed.end();
+        // (A11-37, tb) the change in a case of the function's jump table: `mov #imm,Rb` where only the index that goes there reaches it. The register
+        // the table's index lives in (f.sel) is no source for a gbr or vbr load: it is an integer.
+        if (cautionMoreOn && !forced && !saved && cautionMoreRng.Chance(60))
+        {
+            Item* table = nullptr;
+            for (Item& it : f.items)
+                if (it.type == Item::Table && !it.cases.empty()) table = &it;
+            if (table)
+            {
+                int src = 4 + static_cast<int>(cautionMoreRng.Below(4));
+                if (src == f.sel) src = 4 + ((src - 3) & 3);
+                if (src == f.sel) src = -1;
+                if (b < 17 || src >= 0)
+                {
+                    if (b == 17 || b == 18) c.words = { uint16_t((b == 17 ? 0x401E : 0x402E) | src << 8) };
+                    else c.words = { uint16_t(0xE000 | b << 8 | (4 * cautionMoreRng.Below(32))) };
+                    c.shape = "caution.change.table";
+                    table->cases[cautionMoreRng.Below(static_cast<uint32_t>(table->cases.size()))].push_back(c);
+                    f.clobbers |= 1u << b;
+                    f.reads = readsBefore;   // no test of r3 here
+                    return;
+                }
+            }
+        }
+        f.clobbers |= 1u << b;
+        // (A11-37, pi and pie) the change a post-increment load through the register (`mov.l @Rb+,r1`: the register moves on by the width; the loaded
+        // word goes to r1 or r2, which nothing reads on entry): behind the test (pi) or on every path (pie). Not a register a convention's change
+        // sets to a constant, and not in the modules of the forced changers.
+        bool postInc = false, every = false;
+        const uint32_t postDraw = cautionMoreOn && !forced && b >= 8 && b <= 14 ? cautionMoreRng.Below(100) : 100;
+        if (postDraw < 30 && !(convModule && clobberReg == b) && (f.end == Func::Rts || !saved))
+        {
+            uint32_t used = f.reads | leftScratch;
+            if (at && !f.items.empty() && !f.items[0].words.empty()) used |= 1u << ((f.items[0].words[0] >> 8) & 0xF);
+            int dst[2], nd = 0;
+            for (int q = 1; q <= 2; ++q)
+                if (!((used >> q) & 1u)) dst[nd++] = q;
+            if (nd)
+            {
+                const int w = PostIncWidth(b);
+                c.words = { uint16_t((w == 4 ? 0x6006 : w == 2 ? 0x6005 : 0x6004) | dst[cautionMoreRng.Below(static_cast<uint32_t>(nd))] << 8 | b << 4) };
+                every = postDraw < 10;
+                c.shape = every ? "caution.change.postinc.every" : "caution.change.postinc";
+                postInc = true;
+            }
+        }
+        if (postInc) {}
+        else if (b == 17 || b == 18)
         {
             const int src = 4 + static_cast<int>(cautionRng.Below(4));
-            c.words = { uint16_t((b == 17 ? 0x401E : 0x402E) | src << 8) };   // ldc Rm,gbr / ldc Rm,vbr (a parameter: scratch memory)
+            c.words = { uint16_t((b == 17 ? 0x401E : 0x402E) | (moreKind == MoreMr2 ? 5 : src) << 8) };   // ldc Rm,gbr / ldc Rm,vbr (a parameter: scratch memory)
         }
         else c.words = { uint16_t(0xE000 | b << 8 | (4 * cautionRng.Below(32))) };   // mov #imm,Rn (a multiple of 4: no address error through it)
-        c.shape = "caution.change";
+        if (!postInc) c.shape = "caution.change";
         // (A11-36) From kCautionLoopFirst on, on a stream of its own: the change made inside a loop (`mov #n,Rc ; L: <change> ; dt Rc ; bf L`), the counter
         // r1 or r2 that nothing reads on entry (not the convention's read, A3-5, nor r3, the skip's test).
-        if (cautionLoopOn && cautionLoopRng.Chance(35))
+        if (!postInc && cautionLoopOn && cautionLoopRng.Chance(35))
         {
             uint32_t used = f.reads;
             if (at && !f.items.empty() && !f.items[0].words.empty()) used |= 1u << ((f.items[0].words[0] >> 8) & 0xF);
@@ -2010,8 +2161,19 @@ struct Gen
             else sk.kids.push_back(c);
         }
         else sk.kids.push_back(c);
-        f.clobbers |= 1u << b;
-        const bool saved = std::find(f.pushed.begin(), f.pushed.end(), b) != f.pushed.end();
+        if (every)
+        {
+            // on every path: the change itself, no test (its `t == 3` read is not made)
+            f.reads = readsBefore | (1u << b);   // the load through the register reads its value on entry on purpose
+            if (saved)
+            {
+                if (f.end != Func::Rts) return;
+                f.afterExit.push_back(c);
+            }
+            else f.items.insert(f.items.begin() + static_cast<std::ptrdiff_t>(std::min(at, f.items.size())), c);
+            return;
+        }
+        if (postInc) f.reads |= 1u << b;
         if (saved)
         {
             if (f.end != Func::Rts) return;
@@ -2033,18 +2195,67 @@ struct Gen
         wideClobbers = wideReads = 0;
         f.end = static_cast<Func::End>(ends[idx]);
         // (A11-33) A thunk (A3-205's shape): nothing but the load of the target's address and the jump.
-        if (cautionThunk && idx == 1)
+        curFn = idx;
+        if (cautionThunk && idx >= 1 && idx < thunkLast)   // (A11-37: th2 has two of them, a thunk to a thunk to the changer)
         {
-            f.tailTo = 2;
-            f.returns = fns[2].returns;
+            f.tailTo = idx + 1;
+            f.returns = fns[idx + 1].returns;
             f.noR0 = !f.returns;
             f.tailReg = 1 + static_cast<int>(cautionRng.Below(3));
             Lit l;
             l.kind = LitKind::Fn;
-            l.fn = 2;
+            l.fn = idx + 1;
             f.tailLit = static_cast<int>(p.lits.size());
             p.lits.push_back(l);
-            f.effClobbers = fns[2].effClobbers;
+            f.effClobbers = fns[idx + 1].effClobbers;
+            return f;
+        }
+        // (A11-37, mr2) Two functions that call each other. The second (a shift of r4, then the call of the first) and the first (`tst r4,r4 ; bt L ;
+        // call the second ; tst r3,r3 ; b? L ; <change> ; L:`) are made whole: nothing else may write r4, which the recursion ends on (r4 >> 1 is 0 after
+        // at most 32 passes). Neither has a frame or a push but PR.
+        if (moreKind == MoreMr2 && idx >= 1)
+        {
+            f.end = Func::Rts;
+            f.returns = false;
+            f.noR0 = true;
+            f.savePr = true;
+            leftScratch = 0;
+            saves.clear();
+            if (idx == 2)
+            {
+                Item sh;
+                sh.type = Item::Alu;
+                sh.shape = "caution.mr2.shift";
+                sh.words = { 0x4401 };   // shlr r4
+                Item call;
+                call.type = Item::Call;
+                call.callee = 1;
+                call.shape = "call.bsr";
+                f.items = { sh, call };
+                f.effClobbers = 1u << moreReg;
+                return f;
+            }
+            Item rs;
+            rs.type = Item::Skip;
+            rs.shape = "caution.mr2.recurse";
+            rs.cond = 0x2448;   // tst r4,r4
+            rs.onTrue = true;
+            Item call;
+            call.type = Item::Call;
+            call.callee = 2;
+            call.shape = "call.bsr";
+            rs.kids.push_back(call);
+            AddCautionChange(f, 1, 0);   // forced: the skip with the change, in f.items
+            for (size_t i = 0; i < f.items.size(); ++i)
+                if (f.items[i].type == Item::Skip && std::strcmp(f.items[i].shape, "caution.skip") == 0)
+                {
+                    rs.kids.push_back(f.items[i]);   // the change is made after the recursive call, inside the pass that made it
+                    f.items.erase(f.items.begin() + static_cast<std::ptrdiff_t>(i));
+                    break;
+                }
+            f.items.insert(f.items.begin(), rs);
+            f.effClobbers = f.clobbers | fns[2].effClobbers;
+            f.moreShape = "caution.module.mr2";
             return f;
         }
         const bool falls = f.end == Func::Fall;
@@ -2057,6 +2268,9 @@ struct Gen
         int nCalls = 0;
         if (!falls && idx < nFn - 1 && rng.Chance(65)) nCalls = 1 + static_cast<int>(rng.Below(2));
         if (cautionModule && idx == 0 && nFn > 1 && !falls && nCalls == 0) nCalls = 1;   // (A11-33) the caller of the module's changers
+        // (A11-37) mx and a210d: function 0 calls function 1 (the changer) and then function 2; in a210d function 2 calls function 3 once
+        if ((moreKind == MoreMx || moreKind == MoreA210d) && idx == 0 && !falls) nCalls = 2;
+        if (moreKind == MoreA210d && idx == 2) nCalls = 1;
         f.savePr = !falls && (nCalls > 0 || (f.end == Func::TailJump && rng.Chance(50)));
         if (f.savePr && rng.Chance(30))
         {
@@ -2211,20 +2425,58 @@ struct Gen
                 int callee = idx + 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(nFn - idx - 1)));
                 if (cautionThunk && idx == 0) callee = 1;   // (A11-33) the thunk
                 else if (cautionSpFn > idx && cautionRng.Chance(50)) callee = cautionSpFn;
-                if (rng.Chance(25))
+                // (A11-37) mx, a210d, mr2: the callees the module's shape names
+                const bool a210 = moreKind == MoreA210d && idx == 2;
+                if ((moreKind == MoreMx || moreKind == MoreA210d) && idx == 0) callee = moreCalls++ == 0 ? 1 : 2;
+                else if (moreKind == MoreMr2 && idx == 0) callee = 1;
+                else if (a210) callee = 3;
+                const bool wrap = rng.Chance(25);
+                if (wrap && !a210)
                 {
                     // A conditional call: the skipped part of a branch.
                     Item sk = MakeSkip();
                     const uint32_t before = defined;
                     Item call = MakeCall(callee, fns);
+                    if (moreKind == MoreMr2 && idx == 0) SetRecursionCount(call);
                     uint32_t restored = 0;
                     for (const std::pair<int, int>& s : saves) restored |= 1u << s.first;
                     defined = (before & ~0xFFu) | (before & restored);
                     sk.kids.clear();
                     sk.kids.push_back(call);
+                    PlaceMore(sk.kids, fns);
                     f.items.push_back(sk);
                 }
-                else f.items.push_back(MakeCall(callee, fns));
+                else if (a210)
+                {
+                    // (A11-37, a210d) `push Rb ; call G ; pop Rb`, then Rb copied and stored through r4 or r5 (restored by the call): the popped word
+                    // is the register as this function was entered with it, what the changer (function 1) left, and not what G (function 3) set
+                    moreNoRead = true;
+                    Item call = MakeCall(callee, fns);
+                    moreNoRead = false;
+                    Item sp;
+                    sp.type = Item::Spill;
+                    sp.shape = "caution.a210d.spill";
+                    sp.spillReg = moreReg;
+                    sp.kids.push_back(call);
+                    f.items.push_back(sp);
+                    const int d = 1 + static_cast<int>(cautionMoreRng.Below(3));
+                    const int rp = 4 + static_cast<int>(cautionMoreRng.Below(2));
+                    Item rd;
+                    rd.type = Item::Mem;
+                    rd.shape = "caution.a210d.read";
+                    rd.base = rp;
+                    rd.width = 4;
+                    rd.words = { ReadRegisterInto(moreReg, d), uint16_t(0x1000 | rp << 8 | d << 4 | cautionMoreRng.Below(4)) };   // mov Rb,Rd ; mov.l Rd,@(disp,Rp)
+                    f.items.push_back(rd);
+                    f.reads |= 1u << moreReg;
+                    defined |= 1u << d;
+                }
+                else
+                {
+                    f.items.push_back(MakeCall(callee, fns));
+                    if (moreKind == MoreMr2 && idx == 0) SetRecursionCount(f.items.back());
+                    PlaceMore(f.items, fns);
+                }
                 break;
             }
             }
@@ -2265,6 +2517,19 @@ struct Gen
         AddModulePoll(f, idx);
         if (hasConvRead) f.items.insert(f.items.begin(), convRead);   // first: before anything can write what it reads
         if (cautionModule) AddCautionChange(f, idx, hasConvRead ? 1 : 0);
+        // (A11-37) a210d's last function (G) changes the register on every path; function 0 stands for each module shape (counted once)
+        if (moreKind == MoreA210d && idx == 3)
+        {
+            Item g;
+            g.type = Item::Alu;
+            g.shape = "caution.change.a210d";
+            g.words = { uint16_t(0xE000 | moreReg << 8 | (4 * cautionMoreRng.Below(32))) };   // mov #imm,Rb
+            f.clobbers |= 1u << moreReg;
+            if (std::find(f.pushed.begin(), f.pushed.end(), moreReg) != f.pushed.end()) f.afterExit.push_back(g);   // after the epilogue's pops
+            else f.items.insert(f.items.begin() + (hasConvRead ? 1 : 0), g);
+        }
+        if (idx == 0 && moreKind != MoreNone && moreKind != MoreMr2)   // (mr2's is function 1's)
+            f.moreShape = moreKind == MoreMx ? "caution.module.mx" : moreKind == MoreA210d ? "caution.module.a210d" : moreKind == MoreTh2 ? "caution.module.th2" : "caution.module.mr2";
         // (A11-35) A push between calls after the callee that pops its caller's word (`add #4,r15`, cautionSpFn): each call leaves r15 four bytes
         // higher on a path, and the push then lands at r14 + 4k - 4, over the saved registers once that is past the locals (seed 12018405: two calls,
         // frame 4, the saved PR: the return went to 0x06021100). Such a spill is made without its push and pop. Only these spills change: no seed
@@ -2391,6 +2656,29 @@ struct Gen
             f.retInSlot = false;
             f.slotPop = retRng.Chance(70);
         }
+        // (A11-37, o3) The value a call left in a register the changers change is the return value: `mov Rb,r0` (or `stc gbr,r0`) as the return
+        // word, in a function that returns, ends with rts and calls a function that may change a register of the module's list that it does not save.
+        // Not in a function that stands for a module shape (its marker is the shape's), nor in a slot: the pops of the epilogue come before.
+        if (cautionMoreOn && cautionModule && *f.moreShape == '\0' && f.returns && f.end == Func::Rts && !f.retIsCall && f.choiceBy < 0 && !f.partial &&
+            moreKind != MoreA210d)
+        {
+            uint32_t eff = 0;
+            std::vector<int> callees;
+            CalleesOf(f.items, callees);
+            for (int c : callees) eff |= fns[c].effClobbers & cautionKept;
+            for (int q : f.pushed) eff &= ~(1u << q);
+            std::vector<int> bits;
+            for (int b = 0; b < 32; ++b)
+                if ((eff >> b) & 1u) bits.push_back(b);
+            if (!bits.empty() && cautionMoreRng.Chance(40))
+            {
+                const int b = bits[cautionMoreRng.Below(static_cast<uint32_t>(bits.size()))];
+                f.retWord = ReadRegisterInto(b, 0);
+                f.retInSlot = false;
+                f.reads |= 1u << b;
+                f.moreShape = "caution.return.read";
+            }
+        }
         if (f.end == Func::TailJump)
         {
             f.tailReg = 1 + static_cast<int>(rng.Below(3));
@@ -2416,7 +2704,7 @@ struct Gen
         convModule = convRng.Chance(35);
         clobberReg = 12 + static_cast<int>(convRng.Below(3));
         const uint32_t r = rng.Below(100);
-        const int nFn = r < 30 ? 1 : r < 75 ? 2 : 3;
+        int nFn = r < 30 ? 1 : r < 75 ? 2 : 3;
         std::vector<int> ends(nFn, Func::Rts);
         for (int i = 0; i + 1 < nFn; ++i)
         {
@@ -2447,6 +2735,58 @@ struct Gen
                 cautionThunk = true;
                 ends[0] = Func::Rts;
                 ends[1] = Func::TailJump;
+            }
+        }
+        // (A11-37) The shapes A11-36 left, for the seeds from kCautionMoreFirst on, on a stream of their own (one draw per module with the caution, so
+        // the shapes that follow stay where they are): in a module that has a thunk, a chain of two (th2: functions 1 and 2 are thunks, 3 the changer);
+        // in one that has no function leaving r15 moved and no thunk, mx (function 0 calls the changer, then a callee that changes the same register on
+        // a parameter's test, which the runs never take: it is lent a signature that does not keep the register), a210d (function 0 calls the changer,
+        // then a function that pushes the register, calls one that changes it on every path, pops it and stores it) or mr2 (the changer is one of two
+        // functions that call each other, a shift of r4 ending the recursion), each 16 modules in 100.
+        if (cautionMoreOn && cautionModule)
+        {
+            const uint32_t k = cautionMoreRng.Below(100);
+            if (cautionThunk)
+            {
+                if (k < 50)
+                {
+                    moreKind = MoreTh2;
+                    nFn = 4;
+                    ends.assign(4, Func::Rts);
+                    ends[1] = ends[2] = Func::TailJump;
+                    thunkLast = 3;
+                }
+            }
+            else if (cautionSpFn < 0 && k < 48)
+            {
+                const int kind = k < 16 ? MoreMx : k < 32 ? MoreA210d : MoreMr2;
+                std::vector<int> regs;
+                for (int b = 0; b < 32; ++b)
+                {
+                    const bool gpr = b >= 8 && b <= 14;
+                    // a210d pushes and pops the register with the ordinary push: a general register, one of r12-r14 (the saves of a function are r8-r11)
+                    // that the convention's own change (convModule) does not use
+                    const bool ok = kind == MoreA210d ? b >= 12 && b <= 14 && !(convModule && clobberReg == b) : (b == 17 || b == 18 || gpr);
+                    if (ok && ((cautionKept >> b) & 1u)) regs.push_back(b);
+                }
+                if (regs.empty())
+                {
+                    // (no register of the kind in the module's list: one more, as the grammar's kPool draws one)
+                    int b = kind == MoreA210d ? 12 + static_cast<int>(cautionMoreRng.Below(3)) : 8 + static_cast<int>(cautionMoreRng.Below(7));
+                    if (kind == MoreA210d && convModule && clobberReg == b) b = 12 + ((b - 11) % 3);
+                    if (!(kind == MoreA210d && convModule && clobberReg == b))
+                    {
+                        cautionKept |= 1u << b;
+                        regs.push_back(b);
+                    }
+                }
+                if (!regs.empty())
+                {
+                    moreKind = kind;
+                    moreReg = regs[cautionMoreRng.Below(static_cast<uint32_t>(regs.size()))];
+                    nFn = kind == MoreA210d ? 4 : 3;
+                    ends.assign(nFn, Func::Rts);
+                }
             }
         }
         std::vector<Func> fns(nFn);
@@ -3049,6 +3389,8 @@ constexpr uint64_t kPtrAliasFirst = 6400001;
 constexpr uint64_t kCautionFirst = 12000001;
 // ...and A11-36's (a change through a loop, a read by a branch; Gen::cautionLoopRng), likewise: the fresh range from 12,100,001.
 constexpr uint64_t kCautionLoopFirst = 12100001;
+// ...and A11-37's (the caution grammar's remaining shapes; Gen::cautionMoreRng), likewise: the fresh range from 12,500,001.
+constexpr uint64_t kCautionMoreFirst = 12500001;
 
 Program Generate(uint64_t seed)
 {
@@ -3074,6 +3416,7 @@ Program Generate2(uint64_t seed, int attempt)
         g.modPollOn = seed >= kModPollFirst;
         g.cautionOn = seed >= kCautionFirst;
         g.cautionLoopOn = seed >= kCautionLoopFirst;
+        { const char* mo = std::getenv("SE_GENERATED_MORE"); g.cautionMoreOn = seed >= kCautionMoreFirst && !(mo && std::string(mo) == "0"); }   // =0: A11-36's programs
         g.bareSpillOn = bare;
         Program prog = g.Module();
         bareSpills = g.bareSpills;
@@ -10105,6 +10448,7 @@ void CountProgram(const Program& p, std::map<std::string, int>& shapes)
         CountShapes(f.pathA, shapes);
         CountShapes(f.pathB, shapes);
         CountShapes(f.afterExit, shapes);   // (A11-33)
+        if (*f.moreShape) ++shapes[f.moreShape];   // (A11-37)
         if (!f.tail.empty()) ++shapes["rts.slot_insn"];
         if (!f.v2) continue;
         ++shapes["fn"];
@@ -21476,6 +21820,45 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(found != 0 && rep.findings.empty());
         }
     }
+    // Area 11, A11-37: the caution grammar's remaining shapes, for the seeds from kCautionMoreFirst on only and on their own stream
+    // (Gen::cautionMoreRng): no seed from kCautionFirst to kCautionFirst + 599 or from kCautionLoopFirst to kCautionLoopFirst + 599 holds one; and the first
+    // program of each shape from kCautionMoreFirst whose runs require a caution passes with it said, within 3,000 seeds.
+    {
+        static const char* const kMoreShapes[] = { "caution.change.table", "caution.change.postinc", "caution.change.postinc.every", "caution.module.mx",
+                                                    "caution.module.th2", "caution.module.a210d", "caution.module.mr2", "caution.call.read.ram",
+                                                    "caution.call.handoff", "caution.return.read" };
+        int old = 0;
+        for (uint64_t first : { kCautionFirst, kCautionLoopFirst })
+            for (uint64_t seed = first; seed < first + 600; ++seed)
+            {
+                std::map<std::string, int> sh;
+                CountProgram(MakeV2(seed), sh);
+                for (const char* shape : kMoreShapes) old += sh[shape];
+            }
+        std::printf("pin 'A11-37 new shapes below kCautionMoreFirst': %d in grammar 2 seeds from %llu and %llu (600 each)\n", old,
+                    static_cast<unsigned long long>(kCautionFirst), static_cast<unsigned long long>(kCautionLoopFirst));
+        CHECK(old == 0);
+        for (const char* shape : kMoreShapes)
+        {
+            long found = 0;
+            int tried = 0;
+            Report rep;
+            for (uint64_t seed = kCautionMoreFirst; seed < kCautionMoreFirst + 3000 && !found; ++seed)
+            {
+                const Program p = MakeV2(seed);
+                std::map<std::string, int> sh;
+                CountProgram(p, sh);
+                if (!sh[shape]) continue;
+                ++tried;
+                rep = Evaluate(d, p, false);
+                if (count(rep, "caution.required") > 0) found = static_cast<long>(seed);
+            }
+            std::printf("pin 'A11-37 grammar, %s': %d program(s) of the shape tried, first requiring a caution: seed %ld, %zu finding(s), required %d, said %d\n", shape, tried,
+                        found, rep.findings.size(), count(rep, "caution.required"), count(rep, "caution.said") + count(rep, "caution.said.likewise"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(found != 0 && rep.findings.empty());
+        }
+    }
     // Area 3, round 28 review (`tools/a3_round28/fixtures.src`). A3-215: an unlent U clears r12 when r3 = 0, then a lent L (it clears r12 when
     // r5 = 0, so its signature does not keep r12), and the caller stores r12 after both (mx2, the shape of grammar 2 seed 12010219): the lent
     // call's new value lost U's mark and no caution was said. A3-219: a later callee F2 pushes r10, calls G, pops r10 and stores it (a210d): the
@@ -22243,7 +22626,11 @@ void TestGenerated()
         const bool v2 = grammar == 2 || (grammar == 0 && seed % 2 == 0);
         const Program p = v2 ? MakeV2(static_cast<uint64_t>(seed)) : Generate(static_cast<uint64_t>(seed));
         (v2 ? v2seeds : v1seeds) += 1;
-        if (listOnly) continue;   // SE_GENERATED_LISTONLY=1: only make the programs (with SE_GENERATED_TRACE_A11_35=1, to list what A11-35's fix changes)
+        if (listOnly)   // SE_GENERATED_LISTONLY=1: only make the programs (with SE_GENERATED_TRACE_A11_35=1, to list what A11-35's fix changes)
+        {
+            if (EnvNumber("SE_GENERATED_CENSUS", 0)) CountProgram(p, shapes);   // (A11-37) ...and, with SE_GENERATED_CENSUS=1, count the shapes drawn
+            continue;
+        }
         CountProgram(p, shapes);
         if (coverage) CountProgramMnemonics(p, mnemonics);
         const bool detail = verbose || failing < detailLimit;
