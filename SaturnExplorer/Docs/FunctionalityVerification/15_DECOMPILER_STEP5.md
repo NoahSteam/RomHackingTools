@@ -23765,6 +23765,6 @@ Branch `review/5-fold-order` from master `7af01961`. Release build, `-j2`, `ulim
 | Run | Result |
 |---|---|
 | 20k | failing seeds=0; findings=0 |
-| g1 | failing seeds=5; findings=6 |
+| g1 (10,000 from 12,500,001, canary off) | failing seeds=5; findings=6: 12504564, 12505271, 12509692 `map-way-back` and 12509811 `map-const-join` (area 7); 12506097 `v:pointer-effect-unsaid` (1-byte SH2_SAR0 read through a derived pointer, not analysed; not from this change, which only removes findings) |
 | g2 | failing seeds=0; findings=0 |
-| ctest | 	 16 - SaturnExplorerDecompilerFaultTests (Failed) Errors while running CTest Output from these tests are in: /home/user/RomHackingTools/.claude/worktrees/agent-aaea5ada34bc7c237/SaturnExplorer/build/Testing/Temporary/LastTest.log Use "--rerun-failed --output-on-failure" to re-run the failed cases verbosely.  |
+| ctest -j1 (Release) | 116 of 117; `SaturnExplorerDecompilerFaultTests` failed with 3 of 94 jobs `FAIL:stale-pin` on the allocation-count pins of `alloc jumptable` and `alloc mailbox` (A6-4, A6-5, A6-7). That binary does not build the changed file; the merge matrix (RelWithDebInfo) is the record for it. |
