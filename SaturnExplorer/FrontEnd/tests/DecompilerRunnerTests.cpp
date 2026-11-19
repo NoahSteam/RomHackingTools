@@ -429,13 +429,38 @@ void TestCancelDuringPrint()
     CheckFollowingRequest(runner, "cancels during print");
 }
 
+// The worse of two Small() runs on a generous runner (the first is the slower one), for budgets that
+// follow-up Small() requests must fit in.
+double MeasureSmallMs()
+{
+    double smallMs = 0;
+    DecompilerRunner probe(gConfig, Generous());
+    for (int i = 0; i < 2; ++i)
+    {
+        const auto t0 = Clock::now();
+        probe.Submit(9, gSnap, Small());
+        DecompileResult r;
+        CHECK(WaitResult(probe, r));
+        smallMs = std::max(smallMs, MsSince(t0));
+    }
+    return smallMs;
+}
+
 void TestBudget()
 {
     // 100 ms against the 6k-instruction fixture (PLAN.md A4); a scaled-down fixture gets a tenth of
     // its own measured baseline instead (at least 50 ms, so fixture 1 afterwards fits), so the
     // budget still expires mid-decompilation.
+    //
+    // The Small() requests below run on this runner too, under the same budget, so the budget is
+    // also at least three measured Small() runs (A12-6's class): in Windows Debug a Small() run took
+    // 64 to 350 ms beside an 83 ms budget, came back "too large", and the following request was
+    // answered "too large" from the memo. The diamonds still take several times that.
+    const double smallMs = MeasureSmallMs();
     RunnerOptions options;
     options.budgetSeconds = kFixtureDivisor == 1 ? 0.1 : std::max(0.05, gBaseline[0].totalMs / 10000.0);
+    options.budgetSeconds = std::max(options.budgetSeconds, smallMs * 3 / 1000.0);
+    std::printf("  a Small() run takes %.1f ms: budget %.0f ms\n", smallMs, options.budgetSeconds * 1000);
     DecompilerRunner runner(gConfig, options);
     const auto t0 = Clock::now();
     runner.Submit(0, gSnap, Big(dts::kDiamondsBase));
@@ -637,18 +662,7 @@ void TestDisableOnUnacknowledgedCancel()
     // this runner too, under the same budget: a constant 50 ms is about one Small() run in a
     // Windows Debug build (61 ms measured: "too large", 1 in 20 runs, A12-6). So the budget is
     // ten times a measured Small() run on a generous runner, and 50 ms at least.
-    double smallMs = 0;
-    {
-        DecompilerRunner probe(gConfig, Generous());
-        for (int i = 0; i < 2; ++i)   // the first is the slower one; take the worse of two
-        {
-            const auto t0 = Clock::now();
-            probe.Submit(9, gSnap, Small());
-            DecompileResult r;
-            CHECK(WaitResult(probe, r));
-            smallMs = std::max(smallMs, MsSince(t0));
-        }
-    }
+    const double smallMs = MeasureSmallMs();
     RunnerOptions options;
     options.budgetSeconds = std::max(0.05, smallMs * 10 / 1000.0);
     options.cancelAckSeconds = 0.2;
