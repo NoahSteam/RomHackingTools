@@ -23679,3 +23679,22 @@ without showing that its definition reaches the use) of the kind the area 7 cont
 their classes and the branch keeps the repros for the link-model design review. Round 35's runs on its branch: ctest
 117/117, fault 0/94, 20k 0/0, printed-C 5196, corpus 474 (645) / 724 (975), missing and said 0 / 4; sweeps from 12,320,001
 in both grammars clean.
+
+## Area 5, folded-store order (A5-160, A7-255, A5-112)
+
+Branch `review/5-fold-order` from master `7af01961`. Release build, `-j2`, `ulimit -v 3500000`, one heavy binary at a time. One oracle change, no product or engine change.
+
+**A5-160 (A7-208, grammar 1 seed 11007546).** Already fixed on master as A5-161 (`5ea47298`, merged with `review/5-round3`); the ledger row had stayed open through a merge. Reproduced: the shrunk replay prints `xRam26001030 = in_r1; iVar1 = *(int2 *)(param_4 + 6); xRam26001030 = CONCAT11(param_1,(char)in_r1);`, and the whole seed gives 0 findings; with `SE_A7_RULE_OFF=5161` the seed gives the two `n:folded-store-after-access` findings the row describes (0x06009024 and 0x06009008). The word store at 0x06009008 writes back the word read at 0x06009004 across a `tas.b`, so it is joined into the later byte store as A5-112's piece; every value is the code's. Row closed as fixed 5ea47298.
+
+**A7-255 (grammar 2 seed 12173135), filed as A5-168.** Shrunk: `mov.l @r7,r2 ; cmp/eq r4,r7 ; bf/s ; mov.l @r7,r2 ; mov.l r2,@(0x2c,r6) ; mov.l r2,@r4 ; mov.w @r5+,r2`, r7 the literal 0x26002080. The text is `xVar2 = xRam26002080; if (param_1 == 0x26002080) { *(param_3 + 0x2c) = xRam26002080; } xVar1 = *param_2; xRam26002080 = xVar2;`. The store `*r4 = r2` runs only when r4 is the global's address, in which case it writes back the word just read; the engine drops it as a copy of the global to itself and the write-back at the end is the remaining statement. No value differs: the write between stores the same register, so whatever it hits holds the same word. It is not A5-114's class (no piece, no join of a narrower store). The oracle's rule for a store no run makes (`unrun-write-back`, A5-138) treated every write between the read and the store as a change; a write of the very register the store writes back, with the register unchanged from the read (same makers), is not one unless a run shows it overlapping the bytes without being exactly them. That is a class (a conditional write-back across a write of the same value), not the seed. Change: `sameWrite` in `Sh2GeneratedTests.cpp`, counted under the existing `order.folded-store.unrun-write-back`; mutation switch `SE_A7_RULE_OFF=5168`. Pinned in `TestA5168Pins`, whole and shrunk; with the switch set the pins fail (whole 2 findings, shrunk 1), without it 0. Commit 288daa97.
+
+**A5-112 accepted.** Replayed at HEAD: both programs print the narrow store as a store of the whole word, as in the row (`xRam26002008 = CONCAT11(in_r2,(xunknown1)xRam26002008);`, `uRam26001004 = (uint4)uRam26001004._2_2_;`). The widening is heritage's range model: `Heritage::normalizeWriteSize` makes the wide access the range and the narrow write a piece of it. Fixing it means refining heritage's ranges for every global, a change to the vendored engine (a new numbered patch under `patches/` through `VENDOR.md`) whose effect reaches every folded global in every function, for a width no value, order or access shows. Patch 0090 already removed the observable part (the wide write is printed whole where the code makes it). Accepted: value-preserving, order-preserving, width-only; ordinary memory is a variable by design and a hardware register is volatile and never folded. The four seeds stay counted as `order.folded-store.piece-split`.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| 20k | failing seeds=0; findings=0 |
+| g1 | failing seeds=5; findings=6 |
+| g2 | failing seeds=0; findings=0 |
+| ctest | 	 16 - SaturnExplorerDecompilerFaultTests (Failed) Errors while running CTest Output from these tests are in: /home/user/RomHackingTools/.claude/worktrees/agent-aaea5ada34bc7c237/SaturnExplorer/build/Testing/Temporary/LastTest.log Use "--rerun-failed --output-on-failure" to re-run the failed cases verbosely.  |
