@@ -24470,3 +24470,42 @@ The generator draws none of the shapes of A3-259 (its stores of callee-saved reg
 * Not run: the local game corpus (not in the repository), so no corpus text before and after was compared; the sanitizer jobs (CI).
 
 **Verdict, area 3 round 37: not clean.** P2: A3-259 (round 36's own-store rule kept an entry after the word was overwritten, narrowed or reached through another address of the same register, and a call; found by hand fixtures, fixed with pins) and A3-263 (a copy of a kept register in r1 or r3 handed to an inner call was not read; found by the deep sweep, older than round 36, fixed with pins). No P1. P3: A3-260 and A3-261 (accepted), A3-262 (routed). By REVIEW_PROGRAM.md's rule the count of consecutive clean rounds restarts.
+
+## Area 3, round 38
+
+Branch `review/3-round38` from master (`5bcf1d89`, round 37's A3-259 and A3-263 merged). RelWithDebInfo, `-j2`, `ulimit -v 3500000`. A review of round 37's product changes in `Sh2Decompiler.cpp`: A3-259 (`State::own` made only by a whole-word store of one register's entry value, `NoteOwnStore`, the clear at `Call`, the word-wide restore, the cap of 16) and A3-263 (`entryReadAtCall` read before `Apply`), with hand fixtures (`Docs/Decompiler/tools/a3_round38/`, round 37's tooling moved with `git mv`; `mk.py` now writes 335 fixtures: the n, q, pw, jn, gx and t11 to t16 series are new), then fresh sweeps. Three P2 misses found and fixed in `Sh2Decompiler.cpp`: A3-264 (found in the A3-259 rule), A3-265 (older), A3-266 (A3-259's restore). P3: A3-267 (over-warnings of the fixes, accepted by class), A3-268 (routed).
+
+### 1. Review
+
+* **The "one register's entry value" test (`mayEntry`, joins).** The store's value must be the register itself, a `mayEntry` word an inner call's model may have written over, or a join with it on one side and nothing shown changed, minus `SureChanged` and `innerChanged`. A join of the entry value with `add #1`, `extu.b`, `swap.w`, a load through the arena, a copy of another register (jn1 to jn6) is said or silent as the runs need; no changed value passed as an entry. The test holds, but the value the restore gives after it did not (A3-266).
+* **Alias of the address (A3-264).** The rule took another register's address, a loaded pointer, GBR or an absolute address as another word, and a store that never reached `NoteOwnStore` (an exact store at or above the entry r15, a pointer with only stack origins) cleared nothing. Fixtures hand the alias in: F0 stores r4 at `@r5` (n1) or at an absolute stash (n1e), passes it on the stack (n2), loads GBR with it (n4c, n4d), passes its own outgoing word (n5, n5b), or r5 = r4 (n6); n7 stores at the arena address r4 starts at. Each was `n:caution-unsaid`. A pointer a callee returns in r0 (n3) was said (the call cleared the set), and the same through an `@(r0,r1)` index of GBR or r4 (n4, n4e, n4f, b36 to b45) was said or already A3-261 (b).
+* **The cap of 16 and its eviction (q12).** 17 saved words through one base: the oldest is evicted and its restore noted; no eviction made a store silent. The saved words of nine registers (k13) stay silent.
+* **Stores a callee makes that the `Call` clear may miss (q16 to q19).** A store in a call's delay slot (runs before the callee), a callee that stores in its own `rts` slot, a thunk, `bsrf`: all said. `trapa` cannot be run by the generator's emulator (q9 not kept). A tail jump ends the path.
+* **Joins and loops with `own` (q7, q13 to q15, jn1 to jn7).** The intersection and the loop's re-walk are right; the loop of save, step and restore with a final step was a miss through the restore's value (A3-266), not the join.
+* **A3-263's ordering (t11 to t16).** A kept call between the copy and the reading call, the copy after it, a thunk to the reading callee, a second callee that reads r3, a literal `jsr`, the copy in a call's delay slot: all said, before and after.
+* **A3-265, found by the mayEntry spot.** F2 pushes r10, calls G3 which writes the pushed word (`mov #7,r1 ; mov.l r1,@r15`), pops r10: no caution, though the walk knows the exact word G3 writes (pw1 to pw5). Older than round 37 and no `State::own` involved.
+
+### 2. Fixes
+
+* **A3-264.** `NoteOwnStore`: an entry survives a store only when it is told to miss it (the same register at an offset that does not overlap, two absolute constants that do not); every other store through memory not tracked clears all entries. `OwnStore::org` is removed. `Store` clears all entries at an exact store at or above the entry r15 and at an address that may be a word of the caller's frame.
+* **A3-265.** `Call`: after `Apply`, in a walk of a callee's code, the words of this function's frame the called function writes at exact offsets (its walk's frame words, or a lent callee's) that held a register's entry value or may still are marked `innerChanged` for that register.
+* **A3-266.** `Load`: a restore's value carries the register as `mayEntry`, so the ops after it step it as they step a popped word.
+* **Evidence.** Pins, `TestA3RoutedPins`: the A3-264 block (nine pins, controls n1c, n4e, n3), the A3-265 block (pw1 to pw5), the A3-266 block (jn7 to jn12, jn14; controls gx2, jn13). Old code, A3-264: the branch parent's `Sh2Decompiler.cpp` with the same tests, swapped and rebuilt, not committed: the nine pins `required 1, said 0`, controls silent; new code: all pass. A3-265 off (the new block's `if` made false): the five pins `required 1, said 0`. A3-266 off (the two `mayEntry` lines): the seven pins `required 1, said 0`; gx1 (GBR stepped after its restore) was said without the change and is not pinned. The 314 fixtures of the file at the time were run with the code before and after A3-264: the two that changed besides the pinned ones are b12 and n3c, each a hedge (`caution.unchanged`, A3-267); the final 335 run with no FAILED and the same finding set (b40, b41 by A3-261 (b), n7's `n:dropped`, the generator-class ones by design).
+* **Expected changes in game code text** (the local corpus is not in the repository): a caution at a call whose callee saves a callee-saved register through a pointer, writes memory through another base register or an absolute address before restoring it (A3-264), restores it and then changes it (A3-266), or whose callee writes a word the walked function saved a register in (A3-265). Notes only; no statement, prototype or ledger count changes. All are hand-written context code; compiled code pushes.
+
+### 3. Sweeps (`SE_GENERATED_CANARY=0`, `SE_GENERATED_PINS=0` for the ranges)
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep` | 13,800,001, 10,000 seeds | failing seeds=0, findings=0 |
+| Grammar 1 | 13,900,001, 10,000 seeds | failing seeds=1, findings=1: 13905074 `v:map-way-back` (and `n:` in the second request; A7-25, area 7; the same with the branch parent's binary): routed (A3-268) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | | 10,000 seeds of each grammar: failing seeds=0, findings=0 (798 s with the machine shared; the canary and 979 pin lines in it) |
+
+The sweeps draw none of the shapes of A3-264 to A3-266 (callee-saved registers stored through a pointer and restored, an alias handed by the caller, a callee writing a word its caller pushed), so they neither found nor tested them; the hand fixtures and pins did.
+
+### 4. Runs
+
+* `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`): **117 of 117 passed** (685 s). `python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include`: raw string sizes ok (7 raw strings in 315 files). `tools/a3_round38/selftest.sh`: ok. `run.sh` over all 335 fixtures: exit 0, none FAILED. C++17 only.
+* Not run: the local game corpus (not in the repository), so no corpus text before and after was compared; the sanitizer jobs (CI).
+
+**Verdict, area 3 round 38: not clean.** P2: A3-264 (round 37's own-store rule took another register's address, a loaded pointer, GBR, an absolute address and the caller's frame as another word; found by hand fixtures, fixed with pins), A3-265 (a callee that writes the word a saved register was pushed in; older than round 37, found by hand, fixed with pins) and A3-266 (the value of a restore was no entry value for the ops after it; found by hand, fixed with pins). No P1. P3: A3-267 (accepted), A3-268 (routed). The sweeps are clean for area 3. By REVIEW_PROGRAM.md's rule the count of consecutive clean rounds restarts.

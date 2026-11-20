@@ -1,4 +1,4 @@
-# Area 3 round 37 review (mk.py): A3-255 and A3-256's change. Run: W=<SaturnExplorer> S=<scratch> run.sh [name]
+# Area 3 round 38 review (mk.py): A3-259's own-store rule and A3-263's ordering. Run: W=<SaturnExplorer> S=<scratch> run.sh [name]
 # s1: over: pop after an inner call, step by 2 and back by 2: r10 comes back as it went in
 name s1
 ret 0,0,0
@@ -8740,6 +8740,2161 @@ bf K1
 mov.w @r14+,r1
 K1:
 mov.l r1,@r4
+mov r5,r13
+rts
+nop
+# n0: baseline: `mov.l @(12,r4),r10` (a plain load into r10, never stored)
+name n0
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l @(12,r4),r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n1: a pointer the caller stashed in memory at @r5 (= r4) and F2 loads from @r5: r10 stored through r4, 7 stored through the loaded pointer, load through r4
+name n1
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+mov.l r4,@r5
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l @r5,r1
+mov #7,r2
+mov.l r2,@r1
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n1c: control for n1: no store through the loaded pointer
+name n1c
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+mov.l r4,@r5
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l @r5,r1
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n1d: n1 with the pointer loaded from @(8,r4) (the address names r4)
+name n1d
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l @(8,r4),r1
+mov #7,r2
+mov.l r2,@r1
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n1e: n1 with the pointer loaded from the absolute stash at 0x06030000
+name n1e
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+mov.l =0x06030000,r1
+mov.l r4,@r1
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l =0x06030000,r3
+mov.l @r3,r1
+mov #7,r2
+mov.l r2,@r1
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n2: a pointer passed on the stack (F0 pushes r4 as an outgoing word): F2 loads it from @(4,r15), stores 7 through it
+name n2
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+add #-4,r15
+mov.l r4,@r15
+bsr F2
+nop
+add #4,r15
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l @(4,r15),r1
+mov #7,r2
+mov.l r2,@r1
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n3: the pointer comes back from a callee in r0 (GP: `mov r4,r0`); base kept in r11
+name n3
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r11,@-r15
+mov r4,r11
+bsr GP
+nop
+mov.l r10,@r11
+mov #7,r2
+mov.l r2,@r0
+mov.l @r11,r10
+mov.l @r15+,r11
+.word 0x4F26
+rts
+mov r3,r0
+fn
+GP:
+rts
+mov r4,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n3c: control for n3: GP returns 0x06030000 in r0
+name n3c
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r11,@-r15
+mov r4,r11
+bsr GP
+nop
+mov.l r10,@r11
+mov #7,r2
+mov.l r2,@r0
+mov.l @r11,r10
+mov.l @r15+,r11
+.word 0x4F26
+rts
+mov r3,r0
+fn
+GP:
+mov.l =0x06030000,r0
+rts
+nop
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n4: r4 copied through GBR: F0 loads gbr = r4; F2 `stc gbr,r1` stores r10 through it, 7 through `@(r0,r1)` with r0 = 0 loaded from memory (an index)
+name n4
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+ldc r4,gbr
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l @(12,r4),r6
+stc gbr,r1
+mov.l r10,@r1
+mov r6,r0
+mov #7,r2
+mov.l r2,@(r0,r1)
+mov.l @r1,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n4b: n4 with the 7 stored by `mov.l r0,@(0,gbr)` (r0 = 7)
+name n4b
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+ldc r4,gbr
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+stc gbr,r1
+mov.l r10,@r1
+mov #7,r0
+mov.l r0,@(0,gbr)
+mov.l @r1,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n4c: n4 with r10 stored through r4 and 7 through gbr (F0's gbr = r4): `mov.l r10,@r4 ; mov #7,r0 ; mov.l r0,@(0,gbr)`
+name n4c
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+ldc r4,gbr
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov #7,r0
+mov.l r0,@(0,gbr)
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n4d: n4c with a byte store `mov.b r0,@(1,gbr)`
+name n4d
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+ldc r4,gbr
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov #7,r0
+mov.b r0,@(1,gbr)
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n5: F0 passes its own outgoing word as r4 (r4 = r15 - 4 after `add #-4,r15`); F2 stores r10 through r4 and 7 through its stack argument @(4,r15) (the same word)
+name n5
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+add #-4,r15
+mov r4,r6
+mov r15,r4
+bsr F2
+nop
+mov r6,r4
+add #4,r15
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov #7,r2
+mov.l r2,@(4,r15)
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n5b: n5 with the 7 stored through a joined stack pointer r1 = r15 + 4 or + 8 (a pointer with only stack origins)
+name n5b
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+add #-4,r15
+mov r4,r6
+mov r15,r4
+bsr F2
+nop
+mov r6,r4
+add #4,r15
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov #7,r2
+mov r15,r1
+add #4,r1
+tst r3,r3
+bt K1
+mov r15,r1
+add #4,r1
+K1:
+mov.l r2,@r1
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n6: r10 stored through r11, r11 = r4 (kept by a push) and r4 reloaded as another pointer r5: store 7 through r5 (a stash makes r5 = r4)
+name n6
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+mov r4,r5
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r11,@-r15
+mov r4,r11
+mov.l r10,@r11
+mov #7,r2
+mov.l r2,@r5
+mov.l @r11,r10
+mov.l @r15+,r11
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n7: r10 stored through r4; 7 stored at the absolute address 0x06020100 (r4's start in every run)
+name n7
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l =0x06020100,r1
+mov #7,r2
+mov.l r2,@r1
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n4e: n4 without F0's ldc: GBR as the run starts it; F2 `stc gbr,r1`, stores r10 through it, 7 through `@(r0,r1)` with r0 = a word loaded from the arena
+name n4e
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+stc gbr,r1
+mov.l r10,@r1
+mov.l @(12,r4),r6
+mov r6,r0
+mov #7,r2
+mov.l r2,@(r0,r1)
+mov.l @r1,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# n4f: n4e with the 7 stored through `@(0,gbr)` (`mov.l r0,@(0,gbr)`)
+name n4f
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+stc gbr,r1
+mov.l r10,@r1
+mov #7,r0
+mov.l r0,@(0,gbr)
+mov.l @r1,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q1: delay slot: `bt/s K1 ; mov.l r2,@r4` (the store runs on both paths), r10 saved before and loaded back at K1
+name q1
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov #7,r2
+tst r3,r3
+bt/s K1
+mov.l r2,@r4
+nop
+K1:
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q2: delay slot of bf/s
+name q2
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov #7,r2
+tst r3,r3
+bf/s K1
+mov.l r2,@r4
+nop
+K1:
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q3: delay slot of bra
+name q3
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov #7,r2
+bra K1
+mov.l r2,@r4
+nop
+K1:
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q4: a call whose delay slot stores 7 through r4 (the store runs before the callee), then load
+name q4
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov #7,r2
+bsr G
+mov.l r2,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q5: a call whose delay slot loads r10 from r4 (before the callee runs): a restore
+name q5
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+bsr G
+mov.l @r4,r10
+nop
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q6: r10 stored through r4 in the delay slot of a branch around a store of 7: the slot's store on the taken path
+name q6
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+tst r3,r3
+mov #7,r2
+bt/s K1
+mov.l r10,@r4
+mov.l r2,@r4
+K1:
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q7: the call in a loop: save, store 7 on the second pass of the loop through the pointer, load
+name q7
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov #2,r5
+K1:
+mov.l r10,@r4
+mov #7,r2
+mov.l @r4,r10
+mov.l r2,@r4
+dt r5
+bf K1
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q8: tas.b @r4 over the saved word's top byte, then load the word
+name q8
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+tas.b @r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q10: mov.l r2,@(r0,r4) with r0 = 0 (exact), a store of 7 over the saved word
+name q10
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov #7,r2
+mov #0,r0
+mov.l r2,@(r0,r4)
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q11: the store of 7 through @(2,r4) as a word-size store at an odd-sized offset (misaligned halves): `mov.w r2,@(2,r4)` then `mov.w r2,@r4`
+name q11
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov #7,r0
+mov.w r0,@(2,r4)
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q12: 17 entries: r10 stored through r4, then 16 other registers' words (r11..r14, gbr-copies through r1...) at other offsets, then 7 over r4's word through r4 as a no-op (the key evicted), load
+name q12
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l r11,@(4,r4)
+mov.l r11,@(8,r4)
+mov.l r11,@(12,r4)
+mov.l r11,@(16,r4)
+mov.l r11,@(20,r4)
+mov.l r11,@(24,r4)
+mov.l r11,@(28,r4)
+mov.l r11,@(32,r4)
+mov.l r11,@(36,r4)
+mov.l r11,@(40,r4)
+mov.l r11,@(44,r4)
+mov.l r11,@(48,r4)
+mov.l r11,@(52,r4)
+mov.l r11,@(56,r4)
+mov.l r11,@(60,r4)
+mov.l r11,@(64,r4)
+mov.l r11,@(68,r4)
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q13: r10 stored through r4 and through r4+4; then 7 stored over r4+0 by a byte store; load r10 through r4+4
+name q13
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l r10,@(4,r4)
+mov #7,r0
+mov.b r0,@r4
+mov.l @(4,r4),r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q14: a loop whose body overwrites the word through a pointer that is r4 on entry (r4 stepped by 0): save before, overwrite and restore in the body
+name q14
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov #2,r5
+K1:
+mov.l @r4,r10
+mov #7,r2
+mov.l r2,@r4
+dt r5
+bf K1
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q15: the entry made on one path only, the overwrite on the other, the load after the join
+name q15
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+tst r3,r3
+bt K1
+mov.l r10,@r4
+bra K2
+nop
+K1:
+mov #7,r2
+mov.l r2,@r4
+K2:
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q16: r10 stored through r4 in the delay slot of a call whose callee G3 writes 7 through r4; load after
+name q16
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+bsr G3
+mov.l r10,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G3:
+mov #7,r1
+mov.l r1,@r4
+rts
+nop
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q17: r10 stored through r4, a call whose callee G3 writes 7 through r4 in its delay slot (`rts ; mov.l r1,@r4`); load after
+name q17
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+bsr G3
+nop
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G3:
+mov #7,r1
+rts
+mov.l r1,@r4
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q18: r10 stored through r4, a call through a thunk T (`bra G3`) whose callee writes 7 through r4; load after
+name q18
+ret 0,0,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,0,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+bsr T
+nop
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+T:
+bra G3
+nop
+fn
+G3:
+mov #7,r1
+mov.l r1,@r4
+rts
+nop
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q19: r10 stored through r4, a bsrf call whose callee writes 7 through r4; load after
+name q19
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l =@G3-@Q,r2
+.word 0x0203
+nop
+Q:
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G3:
+mov #7,r1
+mov.l r1,@r4
+rts
+nop
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# pw1: baseline: push r10, call G3 that overwrites the pushed word with 7, pop r10 (the word an inner call wrote over)
+name pw1
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G3
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G3:
+mov #7,r1
+mov.l r1,@r15
+rts
+nop
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# pw2: pw1, then r10 stored through r4 and loaded back (the may-entry word as an entry)
+name pw2
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G3
+nop
+mov.l @r15+,r10
+mov.l r10,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G3:
+mov #7,r1
+mov.l r1,@r15
+rts
+nop
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# pw3: pw2 with the pop after the store-restore: save, call that overwrites the pushed word, restore from @r4, pop
+name pw3
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+mov.l r10,@r4
+bsr G3
+nop
+mov.l @r4,r10
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G3:
+mov #7,r1
+mov.l r1,@r15
+rts
+nop
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# pw4: pw1 with the callee spilling its argument r4 into the word (`mov.l r4,@r15`: lent, a home-area spill)
+name pw4
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G3
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G3:
+mov.l r4,@r15
+rts
+nop
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# pw5: pw1 through a thunk (`bra G3`)
+name pw5
+ret 0,0,0,0,0
+env SE_GENERATED_CLOBBERS=0,400,0,0,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr T
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+T:
+bra G3
+nop
+fn
+G3:
+mov #7,r1
+mov.l r1,@r15
+rts
+nop
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn8: save r10 through r4, restore it, then `add #1,r10` (an op on the restored value)
+name jn8
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l @r4,r10
+add #1,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn9: save, restore, `extu.b r10,r10`
+name jn9
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l @r4,r10
+extu.b r10,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn10: save, restore, `shll r10`
+name jn10
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l @r4,r10
+shll r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn11: save, restore, `neg r10,r10`
+name jn11
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l @r4,r10
+neg r10,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn12: the same through an absolute address: save, restore, add #1
+name jn12
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l =0x06030000,r1
+mov.l r10,@r1
+mov.l @r1,r10
+add #1,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn13: push, pop (exact slot), add #1 (the frame's own rule, for comparison)
+name jn13
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+mov.l @r15+,r10
+add #1,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn14: save, restore through the same address, a store of r10 through r5 (an op value stored after)
+name jn14
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@r4
+mov.l @r4,r10
+add #1,r10
+mov.l r10,@r5
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# gx1: F2: `stc gbr,r1 ; mov.l r1,@r4 ; mov.l @r4,r1 ; add #4,r1 ; ldc r1,gbr` (restored from memory, then stepped)
+name gx1
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,20000,20000
+.word 0x4F22
+bsr F2
+nop
+stc gbr,r0
+mov.l r0,@r4
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+stc gbr,r1
+mov.l r1,@r4
+mov.l @r4,r1
+add #4,r1
+ldc r1,gbr
+rts
+nop
+fn
+G:
+rts
+nop
+fn
+G2:
+rts
+nop
+# gx2: control: gx1 without the step
+name gx2
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,20000,20000
+.word 0x4F22
+bsr F2
+nop
+stc gbr,r0
+mov.l r0,@r4
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+stc gbr,r1
+mov.l r1,@r4
+mov.l @r4,r1
+ldc r1,gbr
+rts
+nop
+fn
+G:
+rts
+nop
+fn
+G2:
+rts
+nop
+# jn1: r10 on one path, r10 + 1 on the other, the join stored through r4 and loaded back
+name jn1
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+tst r3,r3
+bt K1
+add #1,r10
+K1:
+mov.l r10,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn2: r10 on one path, a word loaded from @(12,r4) on the other, the join stored and loaded back
+name jn2
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+tst r3,r3
+bt K1
+mov.l @(12,r4),r10
+K1:
+mov.l r10,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn3: r10 on one path, r11 copied into it on the other
+name jn3
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+tst r3,r3
+bt K1
+mov r11,r10
+K1:
+mov.l r10,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn4: r10 on one path, `extu.b r10,r10` on the other (changed in the high bits)
+name jn4
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+tst r3,r3
+bt K1
+extu.b r10,r10
+K1:
+mov.l r10,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn5: r10 on one path, `swap.w r10,r10` on the other
+name jn5
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+tst r3,r3
+bt K1
+swap.w r10,r10
+K1:
+mov.l r10,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn6: r10 on one path, `shll2 r10` then `shlr2 r10` on the other (back, high bits lost), join stored and restored
+name jn6
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+tst r3,r3
+bt K1
+shll2 r10
+shlr2 r10
+K1:
+mov.l r10,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# jn7: a loop: r10 stepped by 1 in the body on the second pass only (r5 counts), saved through r4 before and restored after each pass
+name jn7
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+mov.l r4,@r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov #2,r5
+K1:
+mov.l r10,@r4
+add #1,r10
+mov.l @r4,r10
+dt r5
+bf K1
+add #1,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# t11: t7 with a lent callee F4 that keeps r3 called between the copy and the call of F3
+name t11
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,0,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov r13,r3
+bsr F4
+nop
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F4:
+rts
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov.l r3,@r4
+mov r5,r13
+rts
+nop
+# t12: t7 with F2 calling F3 through a thunk T (`bra F3`)
+name t12
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,0,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov r13,r3
+bsr T
+nop
+.word 0x4F26
+rts
+nop
+fn
+T:
+bra F3
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov.l r3,@r4
+mov r5,r13
+rts
+nop
+# t13: t7 with F3 calling F5 which reads r3 (F3 sets r13 after the call)
+name t13
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000,0
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov r13,r3
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+.word 0x4F22
+bsr F5
+nop
+mov r5,r13
+.word 0x4F26
+rts
+nop
+fn
+F5:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov.l r3,@r4
+rts
+nop
+# t14: t7 with F2 calling F3 through `jsr @r2` (literal)
+name t14
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov r13,r3
+mov.l =@F3,r2
+jsr @r2
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov.l r3,@r4
+mov r5,r13
+rts
+nop
+# t15: t7 with the copy made after F4: F2 calls F4 then `mov r13,r3` then F3
+name t15
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,0,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+bsr F4
+nop
+mov r13,r3
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F4:
+rts
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov.l r3,@r4
+mov r5,r13
+rts
+nop
+# t16: t7 with a call in the delay slot of F2's branch: `bsr F3` taking the copy in r3 as set in the call's delay slot
+name t16
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+bsr F3
+mov r13,r3
+.word 0x4F26
+rts
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov.l r3,@r4
 mov r5,r13
 rts
 nop
