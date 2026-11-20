@@ -19,7 +19,11 @@ LIMIT = 16000   # a margin under MSVC's 16,380 (CRLF checkouts lengthen a piece 
 
 
 def raw_strings(text):
-    """Yield (line, byte length) for each raw string literal, scanning linearly."""
+    """Yield (line, byte length) for each raw string literal, scanning linearly.
+
+    An opener with no closing delimiter yields (line, None): the rest of the file cannot be scanned, and stopping
+    silently let any long raw string after it pass (A12-56).
+    """
     i = 0
     n = len(text)
     while True:
@@ -41,6 +45,7 @@ def raw_strings(text):
             continue
         close = text.find(')' + delim + '"', open_paren + 1)
         if close < 0:
+            yield text.count('\n', 0, i) + 1, None
             return
         body = text[open_paren + 1:close]
         yield text.count('\n', 0, i) + 1, len(body.encode('utf-8')) + body.count('\n')
@@ -76,6 +81,9 @@ def main(argv):
                 files += 1
                 root_files += 1
                 for line, size in raw_strings(text):
+                    if size is None:
+                        print(f'{path}:{line}: raw string opener with no closing delimiter; the rest of the file was not checked')
+                        return 2
                     strings += 1
                     if size > LIMIT:
                         print(f'{path}:{line}: raw string of {size} bytes (with CRLF) exceeds {LIMIT}; '

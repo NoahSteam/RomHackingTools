@@ -66,6 +66,16 @@ jobs:
         shell: bash
         run: bash ../.github/scripts/check-test-count.sh build ${{ runner.os == 'Windows' && '90' || '105' }} -- -C Debug
 
+      # The two -R steps below end green on a partial selection (--no-tests=error fails only when nothing matches), so each
+      # selection is counted first: SE_DECOMPILER_TESTS names 11 tests, the Windows Release step 3 (A12-56).
+      - name: Check the decompiler suites are all registered
+        shell: bash
+        run: |
+          bash ../.github/scripts/check-selected-count.sh build "${{ env.SE_DECOMPILER_TESTS }}" 11 -- -C Debug
+          if [ "${{ runner.os }}" = Windows ]; then
+            bash ../.github/scripts/check-selected-count.sh build "SaturnExplorer(DecompilerRunner|Sh2Decompiler|DecompilerPanel)Tests" 3 -- -C Release
+          fi
+
       # The runner's default shell, not bash (A12-45): under Git Bash on Windows, SaturnExplorerSh2DecompilerEngineTests'
       # icacls deny-write ACE was not enforced (TestUnwritableConfigDir, PR #68 run 44640816333), where it is under the default
       # shell. The regex comes in as an expression so the line reads the same in pwsh and bash.

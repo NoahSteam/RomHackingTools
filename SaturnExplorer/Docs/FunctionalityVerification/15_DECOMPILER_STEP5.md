@@ -24503,3 +24503,27 @@ A12-40 (2) (the Rosetta ImGui font assertion, once, cause unknown), A12-42 (the 
 ### 4. Validation
 
 `python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include` prints `ok (7 raw strings in 315 files)`; the harness self-test passes (21 cases with `hang`); the workflows parse as YAML; a configure with `SE_FAIL_ON_SKIP` ON and OFF works (117 tests each). Built RelWithDebInfo, `-j2`, `ulimit -v 3500000`, with `-D_GLIBCXX_ASSERTIONS`: the fourteen suites above passed under `ctest -j1`. Not verified: any workflow change on a hosted runner (Windows or macOS with `SE_FAIL_ON_SKIP`, the sanitizers job with the new flag and timeout).
+
+## Area 12, round 4
+
+Reviewer of area 12, fourth round. Branch `review/12-round4`, cut at round 3's head `8355f280`. Read only on the Actions side (`gh api`: the run list and the three job logs of master run 44726279374: native macOS, native Windows, Rosetta); nothing was dispatched or pushed, so every workflow change below is unverified on a hosted runner. Rows **A12-56 and A12-57** new, both P3 and fixed.
+
+**Verdict, area 12 round 4: clean** (no P1 or P2 found). Round 3's changes hold; the two findings are P3 gaps of the same class as before (a gate that can be green on less than it names). Round 3 was clean, so the count of consecutive clean rounds is two.
+
+### 1. Round 3's changes, re-checked
+
+* **`SE_FAIL_ON_SKIP`.** It cannot turn a job red for a legitimate skip: the four tests that exit 77 are `YssFixture` (game save states in the checkout), `Sh2DecompilerFixture` (same), `DecompilerFault` (POSIX only; registered under `if(UNIX)`, so never on Windows) and `Sh2PrintedC` (UNIX, a C compiler). In master run 44726279374 `YssFixture` Passed on both macOS and Windows (not Skipped), `DecompilerFault` and `PrintedC` Passed on macOS (154 s, 125 s), the fixture suite's "SKIPPED" string appears nowhere, and `.yss` files are binary under `.gitattributes` `text=auto`. The in-test "SKIPPED in an MSVC Debug build" lines are cell-level skips inside a passing run and exit 0. `Area9Round5FullDisk` keeps its fixed `SKIP_RETURN_CODE 77` (Linux user namespace; its own job requires it) and no verify job runs it on Windows or macOS. A configure with the option ON and OFF: the generated `YssFixture` test carries `SKIP_RETURN_CODE` only with OFF; 117 tests either way, so `check-test-count.sh`'s floors are unaffected. Both configure steps that run tests pass the option; the sanitizers and nightly jobs run binaries directly and do not need it (the nightly already treats 77 as a failure).
+* **`timeout --kill-after=60` in `run-decompiler-sanitizers.sh`.** The script is used by one job only, `sanitizers` on `ubuntu-latest` (GNU coreutils `timeout` present); macOS and Windows never run it, and where `timeout` is missing the script falls back to running the binary unbounded, silently (a `command -v` guard). `timeout` runs the binary in its own process group and signals the group on expiry, so a forked child (the fault matrix's cells) dies with it; no test uses `killpg`, `kill(0,...)`, `setpgid`, `setsid` or reads stdin (grep), so the background group changes nothing. The self-test passes (21 cases, `hang`: rc 124, checker fails, 2 s). The slowest binary took 1278 s against 3600 s.
+* **`check-literal-size.py`.** Re-ran the workflow's exact command: `ok (7 raw strings in 341 files)`. `errors='replace'` makes a bad byte count as 3 bytes (U+FFFD), a harmless over-count. Found one more way to read less than claimed: A12-57.
+* **`Core` in the sparse checkout and the gate.** Present (17 `.cpp`/`.h` in `Core/src`, 8 in `Core/tests`, 1 in `Core/tools`). Not scanned: `Integration/Common` (three C headers, no raw strings; MSVC compiles them) and `Docs/` spikes (not built). Not filed.
+* **`-D_GLIBCXX_ASSERTIONS` with ASan.** The two flags do not interact (libstdc++'s container annotations are a separate macro, `_GLIBCXX_SANITIZE_VECTOR`, not set). Round 3's untried part, the two live tests, was built here in RelWithDebInfo with the flag; see section 3.
+* **`REVIEW_PROGRAM.md` timings** agree with run 44707039518 (sanitizers 72 minutes).
+
+### 2. Fixes
+
+* **A12-56.** The "Windows Release `-R` would pass with two of three tests missing" observation was real, and applies as well to `SE_DECOMPILER_TESTS` (eleven tests, run once by `-R` after the full run excluded them with `-E`). New `.github/scripts/check-selected-count.sh <build> <regex> <n> [-- ctest args]`, a step before both with 11 and, on Windows with `-C Release`, 3. Evidence: with a regex naming a test that is not registered, `ctest -N -R` lists 2 and exits 0, while the new script prints `selects 2 tests (expected 3)`, exit 1; the two real selections give 3 and 11 in a configure of the tree.
+* **A12-57.** `check-literal-size.py` returned silently at a raw-string opener with no closer, so everything after it in the file went unmeasured. Scratch file `R"x(never closed` then a 20,000-byte `R"zz(...)zz"`: old `ok (0 raw strings in 1 files)`, exit 0; new `raw string opener with no closing delimiter`, exit 2. The real tree is unchanged (`ok`; no file has such an opener).
+
+### 3. Validation
+
+Workflow YAML parsed; `check-selected-count.sh` run on a real configure (SDL off, 117 tests). The ASan-with-assertions build of the whole sanitizers job was not run (disk), so that job's first run with the flag is the test of it. Not verified: any workflow change on a hosted runner.
