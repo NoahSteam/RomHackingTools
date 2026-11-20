@@ -700,3 +700,249 @@ G:
 mov #4,r10
 rts
 mov r3,r0
+# e1: extu.b after the pop (entry value with high bits)
+name e1
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov.l =0x12345678,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+extu.b r10,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# e2: extu.w after the pop
+name e2
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov.l =0x12345678,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+extu.w r10,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# e3: exts.b after the pop
+name e3
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov.l =0x12345678,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+exts.b r10,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# e4: swap.w after the pop
+name e4
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov.l =0x12345678,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+swap.w r10,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# e5: and of a constant register after the pop
+name e5
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov.l =0x12345678,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+mov #15,r1
+and r1,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# e6: shlr16 after the pop
+name e6
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov.l =0x12345678,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+shlr16 r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# e7: control: nothing after the pop
+name e7
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov.l =0x12345678,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# e8: extu.b after the pop, popped through a joined push (A3-243's shape)
+name e8
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov.l =0x12345678,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+tst r3,r3
+bf K1
+mov #9,r10
+K1:
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+extu.b r10,r10
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0

@@ -22188,6 +22188,19 @@ void TestA3RoutedPins(Sh2Decompiler& d)
               "6B73 E104 3412 8913 4408 C701 014E 412B 0009 0600 90A0 0600 90A0 0600 90A4 0600 90AA A005 0009 EC1C A002 0009 A000 0009 2FC6 B010 0009 6483 6593 66A3 67B3 "
               "6CF6 62C3 1421 6050 4F26 6DF6 6BF6 6AF6 69F6 68F6 000B 0009 6071 000B 0009",
               "0/0/3e,3e/3e/6c,6c/6c/d4,d4/d4/da", "8c:4:4:ae:a0,a0,a4,aa", "1,0,1,1", "41000,41000,41000,41000", "8,8,1000,20008" },
+            // A3-245 (external review of PR #69): A3-243's marks, then an op that is not a COPY. The walk carried an operand's
+            // Value::innerChanged to an op's output only once an inner call had marked a register, which G (it keeps r8-r14) never does:
+            // 12607388 shrunk with `extu.b r13,r13` after the pop (the Clobber mark), and 12600844 shrunk with `extu.w r10,r10` in the rts slot
+            // after the step `mov.w @r10+,r2` (the step mark). Both `caution-unsaid` with that propagation off.
+            { "A3-245 12607388 shrunk, extu.b after the pop",
+              "2F86 2F96 4F22 7FF8 6843 6953 B00A 0009 6483 6593 62D3 6023 7F08 4F26 69F6 68F6 000B 0009 2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 2338 8B00 ED14 2FD6 B00D "
+              "6463 6483 6593 66A3 63D3 6DF6 6DDC 4F26 6BF6 6AF6 69F6 68F6 000B 0009 7FF4 E009 CDE7 604C 7F0C 000B 0009",
+              "0/0/24,24/24/5c,5c/5c/6a", nullptr, "1,0,1", "103000,3000,3000", "8,3008,120000" },
+            { "A3-245 12600844 shrunk, extu.w after the step",
+              "2F86 2F96 2FA6 4F22 7FF0 6843 6953 6A63 B021 6583 6483 6593 66A3 E104 3612 8911 4608 C702 016E 412B 0009 0009 0600 903C 0600 903C 0600 9044 0600 9040 A003 0009 "
+              "A001 0009 C607 605C 7F10 4F26 6AF6 69F6 68F6 000B 0009 2F86 2F96 2FA6 4F22 7FE8 6843 6953 6A63 B00D 0009 6483 6593 66A3 7F18 4F26 6AF6 69F6 68F6 2338 8B00 "
+              "62A5 000B 6AAD 6073 000B 0009",
+              "0/0/56,56/56/84,84/84/8a", "26:6:4:44:3c,3c,44,40", "1,0,1", "104400,4400,4400", "20000,4408,20000" },
         };
         for (const ModulePin& m : cases)
         {
@@ -22203,23 +22216,27 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") + count(clean, "caution.said.likewise") > 0 && flagged);
         }
     }
-    // A3-245 (area 3 round 34; hand fixtures, tools/a3_round34): A3-243 marked the add or subtract of a constant to a word that may still hold
+    // A3-246 (area 3 round 34; hand fixtures, tools/a3_round34): A3-243 marked the add or subtract of a constant to a word that may still hold
     // a register's entry value (a saved word an inner call's model wrote over, popped back) as the register's change; the other ops that give
-    // another value for any nonzero operand did not. F2 pushes r10, calls G, pops r10 and then `not`s, negates, shifts (`shll2`), xors or ors
-    // a constant register into it: the runs return r10 changed, and the text said no caution. Each as printed: no finding, the caution required
+    // another value for any nonzero operand did not. F2 pushes r10, calls G, pops r10 and then `not`s, negates, shifts (`shll2`), xors, ors or ands
+    // a constant register into it, or extends a part of it (`extu.b`, `extu.w`, `exts.b`): the runs return r10 changed, and the text said no caution. Each as printed: no finding, the caution required
     // and said; with every caution taken out, `caution-unsaid`.
     {
         const char* funcs = "0/0/14,20/20/34,40/40/46";
         const std::string head = "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 ";
         const std::string tailw = " 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009";
-        const struct { const char* name; const char* op; } ops[] = { { "not", "6AA7" }, { "neg", "6AAB" }, { "shll2", "4A08" }, { "xor", "E103 2A1A" }, { "or", "E108 2A1B" } };
+        // (the last four start r10 at 0x12345678, from a literal at the end: a mask or an extension changes a value with high bits)
+        const struct { const char* name; const char* op; bool big; } ops[] = { { "not", "6AA7", false }, { "neg", "6AAB", false }, { "shll2", "4A08", false },
+                                                                              { "xor", "E103 2A1A", false }, { "or", "E108 2A1B", false }, { "extu.b", "6AAC", true },
+                                                                              { "extu.w", "6AAD", true }, { "exts.b", "6AAE", true }, { "and", "E10F 2A19", true } };
         for (const auto& o : ops)
         {
             // (F2 is padded to sixteen words: a two-word op leaves one nop less)
             std::string pad = tailw;
             if (std::strlen(o.op) > 4) pad.erase(pad.find(" 0009", pad.find("6033")), 5);
-            const std::string words = head + o.op + pad;
-            ModulePin pm = { "A3-245", nullptr, funcs, nullptr, "0,0,0", "0,400,400", nullptr };
+            std::string words = head + o.op + pad;
+            if (o.big) words = words.replace(words.find("EA05"), 4, "DA16") + " 1234 5678";
+            ModulePin pm = { "A3-246", nullptr, funcs, nullptr, "0,0,0", "0,400,400", nullptr };
             pm.words = words.c_str();
             const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
             const std::string kept = gMutateKind;
@@ -22227,7 +22244,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
             gMutateKind = kept;
             const bool flagged = Has(cut, "n:caution-unsaid");
-            std::printf("pin 'A3-245 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", o.name, clean.findings.size(),
+            std::printf("pin 'A3-246 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", o.name, clean.findings.size(),
                         count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
             for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
             CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);

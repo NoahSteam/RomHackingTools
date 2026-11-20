@@ -24144,3 +24144,77 @@ Ranges 12,700,001 and 12,800,001 had not been used by any round. No area 3 findi
 * Not run: the local game corpus (two save states, not in the repository), so corpus caution counts before and after the change were not compared; the sanitizer jobs (CI); the printed-C suite beyond what `ctest` runs. The change adds cautions only where a register's change is now seen, so corpus text could gain a caution; that is untested here.
 
 **Verdict, area 3 round 33: clean** (no P1 or P2 found by the round's sweeps on the fresh ranges; A3-243, a P2, was found by A11-37's sweep before the round and is fixed here with pins, its own deep sweep clean). The coordinator decides whether the product change in this branch restarts the two-clean-rounds count: round 32 was clean on code without it.
+
+## Area 3, A3-245: A3-243's marks survive the next operation (PR #69 review)
+
+The external review of PR #69 (`4d5b57ba`) found that A3-243's two new producers of `Value::innerChanged` did not set `mInnerSeen`. Those producers are `Clobber`, which keeps a pushed join's change, and the constant step of a `mayEntry` word. The walk carries an operand's mark to an op's output only when that flag is set, and only `Call` set it, when an inner callee's walk reports a changed kept register. An inner callee that keeps r8-r14 left the flag false, so the next op that is not a COPY lost the mark.
+
+**Fix** (`Sh2Decompiler.cpp`): the propagation is no longer gated, and `mInnerSeen` is removed. `Call` always set the flag when it made a mark, so for the marks that existed before, the behaviour is unchanged.
+
+**Pins** (A3-243 block of `TestA3RoutedPins`), with propagation switched off for the old-code evidence, then restored:
+
+| Pin | Propagation off | With the fix |
+|---|---|---|
+| `A3-245 12607388 shrunk, extu.b after the pop` | `n:caution-unsaid` | caution required 1, said 1, 0 findings |
+| `A3-245 12600844 shrunk, extu.w after the step` (in the rts slot) | `n:caution-unsaid` | caution required 1, said 1, 0 findings |
+
+With the fix, taking the cautions out makes the oracle flag `caution-unsaid` on both pins.
+
+## Area 3, round 34
+
+Branch `review/3-round34` from master, with master merged in again before the final runs (it carries A3-243 from round 33 and A3-245, the PR #69 review fix: `innerChanged` carried through every op except LOAD, the calls, branches and RETURN, `mInnerSeen` removed). RelWithDebInfo, `-j2`, `ulimit -v 3500000`. One product change in `Sh2Decompiler.cpp` (the walk of a callee's code, A3-246; the id A3-245 was taken by master while this round ran, so this round's rows are A3-246 to A3-248), no engine patch. Fixtures: `Docs/Decompiler/tools/a3_round34/` (`mk.py` writes `fixtures.src`; `run.sh` runs a fixture through the generator's `SE_GENERATED_WORDS` replay, so A11-33's oracle judges it). Pins: the A3-246 block of `TestA3RoutedPins`.
+
+### 1. Review of A3-243's change (and of A3-245's ungated propagation)
+
+Three pieces now: `Clobber` keeps the marks of a joined word (`innerChanged |= SureChanged(was)`, `mayEntry |= entryJoin`); the add or subtract of a nonzero constant to a `mayEntry` word marks the result `innerChanged`; and (A3-245) a mark is carried through every op that computes from it. Each suspicion was built as a fixture (F0 pushes r10 and sets it to 5, or to 0x12345678 for the masks, calls F2 not lent, stores r10 through r4; F2 pushes r10, calls G which sets r10, pops r10, then the op under test) and run before filing.
+
+Over-warning (a note naming a register the callee does not change), with the ungated propagation on:
+
+| Fixture | F2 | Result |
+|---|---|---|
+| j1 | save A, change on a path, save B (the join), call, pop B, pop A | no note; right (the second pop restores the entry value) |
+| j2, j3 | the joined word popped into r2 or r11, r10 restored from A | no note; right |
+| s3, s4 | the step is on a copy (`r1 = r10 + 4`), or on r11 (saved and restored) | no note; right (a mark carries its register's bit; a copy in another register is not read as r10's) |
+| e7 | pop only (control) | no note; right |
+| s5 | `add #2` on one path, `add #-2` after the join | note said and required: the paths do not restore |
+| s1, s2p | pop r10, `add #2,r10 ; add #-2,r10`, or `mov.l @r10+,r2 ; add #-4,r10` | **note said, no run changes r10**: the step is marked for certain, not tracked as an offset. P3 noise (A3-247), accepted by class |
+
+Why the ungated propagation adds no over-warning by itself: the marks exist only where A3-243 and A3-246 make them (a pushed join's change, a step of a may-entry word), each is a bit for one register, and a value only counts for the register of its bit when it sits in that register at the return (`ChangedAtReturn`); LOAD is excluded, so a reload from the stack (the epilogue's pop of the saved word) gives the register clean. Checked on the 12,700,001 deep range below (counts identical with the new rule on and off).
+
+How the oracle counts an over-warning: `caution.unchanged` in `CheckCautions` is incremented for each register of a said note that no run changes at that call (and `caution.call-unrun` for a note whose call no run made). Both are counters, not findings: a "may change" note on a path the finite runs did not take is not a violation.
+
+Under-warning (ops other than add or subtract that step a `mayEntry` word): the add or subtract of a register that holds a constant (u3, u7, u10), `dt` (u4), a step on a copy moved back (u11), `swap.w` (e4) and `shlr16` (e6) were said. **`not` (u1), `shll2` (u2), `neg` (u5), `xor` with a constant register (u6), `or` with one (u8), and, with 0x12345678 going in, `extu.b` (e1), `extu.w` (e2), `exts.b` (e3) and `and` with a constant register (e5) were not**: the runs return r10 changed, the text said no caution, `n:caution-unsaid`. **A3-246, P2**, fixed: a `mayEntry` word (not stale, r8-r14, GBR, VBR) put through xor, or, and, multiply, negate, two's complement, a shift by a constant, or a part of the word and its extension (SUBPIECE, ZEXT, SEXT), with no zero operand (and no all-ones mask), marks the result `innerChanged`; A3-245's propagation then carries it. With the change switched off (a temporary test, not committed) the nine pins fail (5 of 5 first checked; the extension and mask ones show `caution-unsaid` in the fixtures without it).
+
+Marks that may still be lost (read in the code, **not built as fixtures**): a part store into a pushed word (`mov.b r13,@r15` over a marked word), and a marked value that passes through memory by a store through a pointer and a load of the same address. Not tested; the deep sweeps below are clean.
+
+### 2. Sweeps (merged code; fresh ranges; `SE_GENERATED_CANARY=0`; `SE_GENERATED_PINS=0` for the first two)
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep` | 12,900,001, 10,000 seeds | **failing seeds=1; findings=2**: 12908713 `n:` and `v:folded-store-after-access` (area 5; the same with A3-243 and A3-246 switched off), routed (A3-248) |
+| Grammar 1 | 13,000,001, 10,000 seeds | **failing seeds=2; findings=2**: 13004986 `v:map-way-back` and 13005195 `n:map-const-join`: area 7, routed (A3-248) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on (the A3-246 pins in it) | 1 on | **failing seeds=0; findings=0** (620,409 ms) |
+| Grammar 2 deep, A3-243's range | 12,700,001, 10,000 seeds | **failing seeds=0; findings=0**, with A3-246 on and with it off |
+
+The same three seeds failed on the first (pre-merge) sweeps of these ranges. No area 3 finding in the sweeps; A3-246 came from the hand review.
+
+### 3. Caution counts, 12,700,001 deep, 10,000 seeds
+
+The round 33 section recorded no caution counts, so the baseline was run here with temporary environment switches in the host (not committed).
+
+| Code | notes | required | said | said by "likewise" | unchanged | call-unrun | findings |
+|---|---|---|---|---|---|---|---|
+| A3-243 off (pre-round 33) | 4516 | 1883 | 1691 | 170 | 1441 | 751 | 22 (20 seeds, the A3-243 class) |
+| round 33 code (A3-243 on) | 4579 | 1883 | 1710 | 173 | 1460 | 763 | 0 |
+| merged master, A3-246 off (A3-245's propagation on) | 4579 | 1883 | 1710 | 173 | 1460 | 763 | 0 |
+| this branch (A3-246 on) | 4579 | 1883 | 1710 | 173 | 1460 | 763 | 0 |
+
+A3-245's propagation and A3-246 add no note to this range (counts identical). A3-243 adds 63 notes and 19 `caution.unchanged` (1441 to 1460); required stays 1883 and all are said. The 19 seeds were found by printing the seed and call of each `caution.unchanged` with and without A3-243 (a temporary print in the test, not committed): 12700011, 12701161, 12701430, 12701491, 12701563, 12701604, 12701848, 12702064, 12702520, 12702725, 12702945, 12704720, 12705011, 12705204, 12706322, 12706932, 12707851, 12708430, 12708948. Read in full: 12700011 (r12 set by the callee on the r3 = 0 path), 12701430 (r9 stepped by `mov.b @r9+,r1` after the epilogue on a path that always runs; the callee ends in a poll, so no run returns), 12702520 (r14 set on a path and never saved), 12704720 (r10 stepped by `mov.w @r10+,r2` after the epilogue on the r3 = 0 path). Each names a register the callee's code changes on a path that exists, none restored later; the runs took no changing return. The other 15 were not read. No newly said caution was found that the code does not support, other than the step-and-back shape of section 1 (A3-247).
+
+### 4. Runs
+
+* `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`, after merging master): **117 of 117 passed**.
+* `check-literal-size.py SaturnExplorer/FrontEnd`: raw string sizes ok. No C++ feature beyond what the files already use.
+* Not run: the local game corpus (not in the repository), so corpus text before and after A3-243, A3-245 and A3-246 was not compared; sanitizer jobs (CI); the printed-C suite beyond what `ctest` runs. The 15 of 19 seeds of section 3 not read in full are listed in A3-247.
+
+**Verdict, area 3 round 34: not clean.** One P2, A3-246 (a caution the runs need is missing for a may-entry word put through not, neg, shifts, and, or, xor, extu or exts; the op that makes the mark, where A3-245 fixed the ops after it), found by the review of A3-243's step rule and fixed here with pins; no P1. The sweeps on the fresh ranges found no area 3 finding. By REVIEW_PROGRAM.md's rule (two consecutive rounds without P1 or P2) the count restarts after this fix, on the coordinator's decision.

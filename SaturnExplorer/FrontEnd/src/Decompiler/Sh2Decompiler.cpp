@@ -478,7 +478,6 @@ public:
         mKeptSeen = false;
         mUnkeptSeen = false;
         mUnkeptSites.clear();
-        mInnerSeen = false;
         mHanded = 0;
         mEntryRead = 0;
         std::map<uint32_t, State> in;
@@ -1693,7 +1692,6 @@ private:
                 auto f = s.vars.find(KeyOf(mReg[r]));
                 if (f == s.vars.end()) continue;
                 f->second.innerChanged |= 1u << r;
-                mInnerSeen = true;
             }
         }
         // (area 3, A3-210) ...and, for the caution's "read after it", what this inner call reads of the walked function's entry values (the
@@ -3111,20 +3109,25 @@ private:
                     mEntryRead |= EntryOf(Get(s, vn));
                 }
             uint32_t inner = 0;
-            if (mInnerSeen && op.hasOut && op.code != ghidra::CPUI_LOAD && op.code != ghidra::CPUI_CALL && op.code != ghidra::CPUI_CALLIND &&
+            // (A3-245) Not gated on an inner call having marked a register: A3-243's marks (Clobber keeping a pushed join's change, a constant
+            // step of a mayEntry word) are made without one, and an op after them (`extu.b r13,r13` after the pop) dropped the mark.
+            if (op.hasOut && op.code != ghidra::CPUI_LOAD && op.code != ghidra::CPUI_CALL && op.code != ghidra::CPUI_CALLIND &&
                 op.code != ghidra::CPUI_CALLOTHER)
                 for (const ghidra::VarnodeData& vn : op.in)
                     if (vn.space->getType() != ghidra::IPTR_CONSTANT) inner |= Get(s, vn).innerChanged;
-            // (area 3, round 34, A3-245) A word that may still hold a register's entry value (Value::mayEntry), put through an op that gives another
-            // value for any nonzero operand (xor, or, negate, not, a shift by a constant, a product): the step A3-243 marks for add and subtract.
+            // (area 3, round 34, A3-246) A word that may still hold a register's entry value (Value::mayEntry), put through an op that gives another
+            // value for any nonzero operand (xor, or, and, negate, not, a shift by a constant, a product, a part of the word and its extension): the step A3-243 marks for add and subtract.
             // The result is the register's change on the paths that run it (`not r10` after the epilogue's pop). Marked as an inner call's change is.
             uint32_t stepped = 0;
             if (op.hasOut)
             {
                 const bool shift = op.code == ghidra::CPUI_INT_LEFT || op.code == ghidra::CPUI_INT_RIGHT || op.code == ghidra::CPUI_INT_SRIGHT;
                 const bool unary = op.code == ghidra::CPUI_INT_2COMP || op.code == ghidra::CPUI_INT_NEGATE;
-                const bool binary = op.code == ghidra::CPUI_INT_XOR || op.code == ghidra::CPUI_INT_OR || op.code == ghidra::CPUI_INT_MULT;
-                if ((shift || unary || binary) && op.in.size() >= 1)
+                const bool binary = op.code == ghidra::CPUI_INT_XOR || op.code == ghidra::CPUI_INT_OR || op.code == ghidra::CPUI_INT_MULT ||
+                                    op.code == ghidra::CPUI_INT_AND;
+                // (a part of the word, `extu.b r10,r10` is a zero-extension of one: the narrowing is the step, its zero-extension carries it on)
+                const bool part = op.code == ghidra::CPUI_SUBPIECE || op.code == ghidra::CPUI_INT_ZEXT || op.code == ghidra::CPUI_INT_SEXT;
+                if ((shift || unary || binary || part) && op.in.size() >= 1)
                 {
                     bool zeroOperand = false;
                     uint32_t may = 0;
@@ -3132,7 +3135,8 @@ private:
                     {
                         if (op.in[k].space->getType() == ghidra::IPTR_CONSTANT)
                         {
-                            zeroOperand = zeroOperand || (op.in[k].offset == 0 && (k > 0 || binary));
+                            if (!part) zeroOperand = zeroOperand || (op.in[k].offset == 0 && (k > 0 || binary)) ||
+                                                  (op.code == ghidra::CPUI_INT_AND && op.in[k].offset == (op.out.size >= 8 ? ~0ull : ((1ull << (8 * op.out.size)) - 1)));
                             continue;
                         }
                         const Value v = Get(s, op.in[k]);
@@ -3682,7 +3686,6 @@ private:
     bool mFrameOut = false;     // (area 3 round 12 fix) a possible frame address went out to code that may keep it (HandOut)
     bool mKeptSeen = false;     // (area 3, A3-192) a call marked a register Value::kept in this run
     bool mUnkeptSeen = false;   // (area 3, A3-197) ...and one of r8-r14 Value::unkept
-    bool mInnerSeen = false;    // (area 3, A3-207) a walked callee's inner call marked a register Value::innerChanged
     std::map<uint32_t, uint32_t> mUnkeptSites;   // (A3-197) UnkeptSites
     std::map<uint32_t, uint32_t> mLostSites;     // (A3-214) LostSites
     uint32_t mHanded = 0;       // ...and, of a walked callee, the registers it lets out or writes through (CalleeHanded)

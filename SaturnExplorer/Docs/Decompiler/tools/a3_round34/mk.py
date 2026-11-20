@@ -54,6 +54,16 @@ for n, why, body in [("s2p", "over: post-increment load through a real pointer, 
                      ("u9p", "under: pre-decrement store through the popped pointer", callg + "mov.l @r15+,r10\nmov.l r2,@-r10\n"),
                      ("u12", "under: post-increment store-free read, pointer left stepped", callg + "mov.l @r15+,r10\nmov.l @r10+,r2\n")]:
     out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, ptr + body + tail.rstrip("\n")))
+big = head.replace("mov #5,r10\n", "mov.l =0x12345678,r10\n")
+for n, why, body in [("e1", "extu.b after the pop (entry value with high bits)", callg + "mov.l @r15+,r10\nextu.b r10,r10\n"),
+                     ("e2", "extu.w after the pop", callg + "mov.l @r15+,r10\nextu.w r10,r10\n"),
+                     ("e3", "exts.b after the pop", callg + "mov.l @r15+,r10\nexts.b r10,r10\n"),
+                     ("e4", "swap.w after the pop", callg + "mov.l @r15+,r10\nswap.w r10,r10\n"),
+                     ("e5", "and of a constant register after the pop", callg + "mov.l @r15+,r10\nmov #15,r1\nand r1,r10\n"),
+                     ("e6", "shlr16 after the pop", callg + "mov.l @r15+,r10\nshlr16 r10\n"),
+                     ("e7", "control: nothing after the pop", callg + "mov.l @r15+,r10\n"),
+                     ("e8", "extu.b after the pop, popped through a joined push (A3-243's shape)", "tst r3,r3\nbf K1\nmov #9,r10\nK1:\nmov.l r10,@-r15\n" + callg + "mov.l @r15+,r10\nextu.b r10,r10\nmov.l @r15+,r2\n")]:
+    out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, big + body + tail.rstrip("\n")))
 out = ["# Area 3 round 34 review (mk.py): A3-243's change. Run: W=<SaturnExplorer> S=<scratch> run.sh [name]"]
 for n, why, body in fx:
     out.append("# %s: %s" % (n, why))
