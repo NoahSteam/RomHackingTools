@@ -248,7 +248,7 @@ instruction, over the four corpus dumps and the generator's pins.
 | 2b | (if the count passes the threshold) the Twin, Merged and Forwarded records | | +80 engine, patch record | the count falls below the threshold; vendored lint and reproduction job pass |
 | 3 | `ForwardLookup`, `ReverseLookup`, `LinkCursor`; the panel, hover text and menu use them; the fallback label. **The old fields stay authoritative**: the old oracle still judges them, and the new functions are added beside them, not derived into them | `LineInstructions`, `LineOriginText`, `InstructionLineIndex` | +350, -200 | panel tests; new contract checks (section 5) run beside the old oracle |
 | 4a | Delete (i) `MarkMaterialisedReads` and the A7-145 block; (ii) `RetargetTwinExtensions`, `RetargetHoistedConversions`, `RetargetInputOperandToStore`, `MoveDrawnTokens`; (iii) `AddJoinConstantTokens`, `MovtNumber`; one commit each, diffing dumps before and after | the passes | -345, -620, -330 | the pins of each pass's rows hold under the contract; pins are rewritten only under section 7's rule (question 7) and listed |
-| 5 | Oracle: remove the value reconstruction and the rules tuned to it; keep structure, coverage, the contract, the narrowed value check (8) and the execution witness (9); rebase the mutations, including the two-arm join mutation, which must be rejected. **Before step 4b**, so a deleted walker is never the only check of its class | 87 rules | 5,945 to about 2,400, with a ceiling of 2,800 | every mutation kind is reported; SE_A7_RULE_OFF list empty |
+| 5 | Oracle: remove the value reconstruction and the rules tuned to it; keep structure, coverage, the contract, the narrowed value check (8) and the execution witness (9); rebase the mutations, including the two-arm join mutation, which must be rejected, and the valid two-arm and partial-store controls, which must pass. **Before step 4b**, so a deleted walker is never the only check of its class | 87 rules | 5,945 to about 2,400, with a ceiling of 2,800 | every mutation kind is reported; SE_A7_RULE_OFF list empty |
 | 4b | Delete (iv) `AddFrameStoreTokens` and (v) the value walkers, **split by statement kind** (stores at a call, at a return, at a block's end, frame stores; then each walker once unused), one commit each with dumps diffed | the rest | -1,750, -1,890, in about six commits | as 4a |
 | 6 | Remove the old fields; acceptance per the policy (two clean rounds, the overnight run) | `Token::addr` and friends | -150 | policy's done criterion |
 
@@ -327,7 +327,10 @@ Rules that become unnecessary: `firstAddrWrong`, the address-set round trip (`ro
    Effects of paths not taken in that run are not required to execute. It is bounded (the runs the generator makes
    anyway) and independent of the engine's records and of the product's walk. It rejects the two-arm mutation below:
    on a run that takes the statement's arm, the store the mutation links is on the other arm, does not execute in the
-   window, and the displayed bytes are not covered. Candidate links are not checked by it.
+   window, and the displayed bytes are not covered. A **valid two-arm control** must pass beside it: a statement after
+   a join with one proven `Effect` per arm (each arm storing a different value), run on inputs that take each arm; and
+   a **partial-store control** (a word built by two byte stores, `kLinkPartial`), where each store is checked only
+   against its own byte range. Candidate links are not checked by it.
 
 The oracle keeps a size ceiling (2,800 lines after step 5) so that it does not grow back into a second
 reconstruction; a new rule that would cross it needs a design note.
@@ -450,7 +453,9 @@ product code changes until these decisions are approved.
 - **Third review (PR #73, Codex).** The witness as first written required every proven `Effect` to run on every
   execution, which a statement with one effect per join input can never meet. Check 9 is now path-aware: per
   execution, the displayed bytes must be covered by the statement's proven effects that ran in that execution's
-  window (partial links jointly), and no proven effect that ran may have written other bytes.
+  window (partial links jointly), and no proven effect that ran may have written other bytes. ChatGPT's re-review
+  found the same gap and asked for a valid two-arm control that must pass beside the wrong-arm mutation that must
+  fail; both are now in check 9 and in step 5's acceptance.
 
 It also asked that the 85 to 95% survival band be defined (step 1's census now does) and noted that the plan can
 reduce the heuristic tail but does not yet show that it ends it; the census and check 9's results on fresh seeds are
