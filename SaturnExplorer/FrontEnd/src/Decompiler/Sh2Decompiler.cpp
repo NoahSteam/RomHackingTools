@@ -1221,6 +1221,12 @@ private:
                 // inner call that may have changed it keeps the mark
                 if (SavedRegister(was) && was.v == kPr) slot.second.mayEntry |= 1u << kPr;
                 slot.second.innerChanged = was.innerChanged;
+                // (area 3, round 39, A3-270) A saved register's word that a lent or walked callee was handed the exact address of (`mov r15,r5`
+                // before the call, the callee stores through r5): the callee's store is at that word, so the register popped back from it is
+                // the callee's change (pw7), as A3-265's frame word it writes at an exact offset is. Only an exact address, not a frame address no form bounds.
+                if (spare && exact != nullptr && SavedRegister(was) && was.v >= 0 && was.v < 32 && ((kModelKept >> was.v) & 1u))
+                    for (int64_t address : *exact)
+                        if (Reaches(address, slot.first)) slot.second.innerChanged |= 1u << was.v;
                 // (area 3, round 33, A3-243) ...and what it held is still what it may hold, with what that showed: a register's change on one path,
                 // pushed (the join of the change and the entry value, Merge), and written over by an inner call's model, kept only the join's
                 // origins, which name the register, so the pop gave it back as no change for certain (SureChanged) and as no entry value (EntryOf).
@@ -2872,6 +2878,14 @@ private:
     // constant) that does not overlap, or two constants that do not. Every other address may be the same word at run time (a pointer loaded
     // from memory, another argument, GBR or an absolute address that holds the register's value, a base made with an index, n1 to n7), and
     // the runs show it when a caller hands them so.
+    // Whether a 4-byte word and 'width' bytes at 'delta' from it (a 32-bit wrapped distance) are told apart on every bus the program can run on:
+    // within a page of each other (past it a repeat of the memory may put one on the other) and not overlapping.
+    static bool ApartOnBus(int64_t delta, int64_t width)
+    {
+        const int64_t d = Wrap(delta);
+        return d > -0x1000 && d < 0x1000 && (d >= 4 || d <= -width);
+    }
+
     void NoteOwnStore(State& s, const Value& addr, const Value* value, int64_t width)
     {
         State::OwnStore k;
@@ -2887,10 +2901,14 @@ private:
             {
                 // the same register at offsets, or two constants: told apart by the bytes they cover; another register or a constant against a
                 // register is not told apart
+                // (area 3, round 39, A3-269) ...and only when they are near each other: memory repeats on the bus (the cache-through partition, the 1 MiB
+                // of work RAM up to 0x08000000, the low work RAM's second megabyte), so 0x06030000 and 0x26030000, 0x06030000 and 0x06130000, or
+                // a pointer and the pointer plus 0x100000 are one word in the runs (m1, m4, m6). Within a page of each other no repeat of a memory
+                // of 4 KiB or more puts them on one word.
                 if (it->kind == 100 && k.kind == 100 && it->v == k.v)
-                    hit = static_cast<int64_t>(k.def) < static_cast<int64_t>(it->def) + 4 && static_cast<int64_t>(it->def) < static_cast<int64_t>(k.def) + width;
+                    hit = !ApartOnBus(static_cast<int64_t>(k.def) - static_cast<int64_t>(it->def), width);
                 else if (it->kind == k.kind && it->kind != 100)
-                    hit = k.v < it->v + 4 && it->v < k.v + width;
+                    hit = !ApartOnBus(k.v - it->v, width);
             }
             if (hit) it = s.own.erase(it);
             else ++it;

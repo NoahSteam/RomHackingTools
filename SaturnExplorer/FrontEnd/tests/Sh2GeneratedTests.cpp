@@ -22713,6 +22713,70 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(!Has(rep, "n:caution-unsaid") && count(rep, "caution.required") == count(rep, "caution.said"));
         }
     }
+    // A3-269 (area 3 round 39 review, tools/a3_round39 fixtures mr1, mr1b, mr1d, mr1f, mr4, mr6): A3-264's "provably disjoint" took two constants that differ
+    // as two words, and the same register at offsets that do not overlap as two words, though memory repeats on the bus: 0x06030000 and its cache-through
+    // mirror 0x26030000 (mr1, mr1b, mr1d), 0x06030000 and 0x06130000 (mr1f), 0x00203000 and 0x00303000 (mr6), a pointer and the pointer plus 0x100000 (mr4).
+    // The run returns r10 changed (7) and the text said no caution (`n:caution-unsaid`). Now only accesses within a page of each other, not overlapping,
+    // are told apart. Controls: mr1c (the next word), mr4a (a word 0x400 on), mr2 (pre-decrement words): silent before and after.
+    {
+        const struct { const char* name; const char* funcs; const char* returns; const char* clobbers; const char* words; } pins[] = {
+            { "mr1", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 D60F E207 2622 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0603 0000 2603 0000" },
+            { "mr1b", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 D60F E007 2600 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0603 0000 2603 0002" },
+            { "mr1d", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 D60F E207 2622 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2603 0000 0603 0000" },
+            { "mr1f", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 D60F E207 2622 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0603 0000 0613 0000" },
+            { "mr4", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 D10E 314C E207 2122 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0010 0000" },
+            { "mr6", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 D60F E207 2622 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0020 3000 0030 3000" },
+        };
+        for (const auto& p : pins)
+        {
+            ModulePin pm = { "A3-269", p.words, p.funcs, nullptr, p.returns, p.clobbers, nullptr };
+            const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin 'A3-269 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", p.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
+        }
+        const struct { const char* name; const char* funcs; const char* returns; const char* clobbers; const char* words; } controls[] = {
+            { "mr1c", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 D60F E207 2622 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0603 0000 0603 0004" },
+            { "mr4a", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 D10E 314C E207 2122 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0000 0400" },
+            { "mr2", "0/0/18,20/20/32,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 6643 26A6 E207 2626 5A61 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+        };
+        for (const auto& c : controls)
+        {
+            ModulePin pm = { "A3-269", c.words, c.funcs, nullptr, c.returns, c.clobbers, nullptr };
+            const Report rep = EvaluateSubject(d, ModuleSubject(pm), true);
+            std::printf("pin 'A3-269 control %s': %zu finding(s), required %d, said %d, notes %d\n", c.name, rep.findings.size(), count(rep, "caution.required"), count(rep, "caution.said"), count(rep, "caution.notes"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(!Has(rep, "n:caution-unsaid") && count(rep, "caution.required") == count(rep, "caution.said"));
+        }
+    }
+    // A3-270 (area 3 round 39 review, tools/a3_round39 fixture pw7): F2 pushes r10, hands r15 (the pushed word's address) to G3 in r5, G3 stores 7 through
+    // r5, F2 pops r10: Clobber's word a callee was handed the exact address of was left as one that may still hold the entry value. The run returns r10
+    // changed, the text said no caution. Now the register popped from such a word is the callee's change.
+    {
+        const struct { const char* name; const char* funcs; const char* returns; const char* clobbers; const char* words; } pins[] = {
+            { "pw7", "0/0/18,20/20/32,40/40/48,60/60/66", "0,0,0,0", "0,400,0,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 65F3 B00B 0009 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 E107 2512 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+        };
+        for (const auto& p : pins)
+        {
+            ModulePin pm = { "A3-270", p.words, p.funcs, nullptr, p.returns, p.clobbers, nullptr };
+            const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin 'A3-270 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", p.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
+        }
+    }
     // A3-251 (grammar 2 seed 13102045, `SE_GENERATED_CAUTION=deep`, whole and shrunk): a callee F3 loads GBR (`tas.b @r5 ; ldc r5,gbr`), reached
     // through two tail-jumping thunks; the caller reads GBR after the call (`stc gbr,r3`) and calls it again, and F3 branches on r3 (`tst r3,r3 ;
     // bt`). The caution's "read after it" at the first call took the registers a later callee reads as it finds them from r8-r14, GBR and VBR
