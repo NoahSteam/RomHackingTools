@@ -24470,3 +24470,74 @@ The generator draws none of the shapes of A3-259 (its stores of callee-saved reg
 * Not run: the local game corpus (not in the repository), so no corpus text before and after was compared; the sanitizer jobs (CI).
 
 **Verdict, area 3 round 37: not clean.** P2: A3-259 (round 36's own-store rule kept an entry after the word was overwritten, narrowed or reached through another address of the same register, and a call; found by hand fixtures, fixed with pins) and A3-263 (a copy of a kept register in r1 or r3 handed to an inner call was not read; found by the deep sweep, older than round 36, fixed with pins). No P1. P3: A3-260 and A3-261 (accepted), A3-262 (routed). By REVIEW_PROGRAM.md's rule the count of consecutive clean rounds restarts.
+
+## Area 8, done check
+
+Branch `review/8-done` from master `5bcf9284`. **WORK IN PROGRESS: paused at the coordinator's request with the overnight run about one tenth done. No verdict yet; area 8 is not declared done.** Changed: test code only (`RunProbeDone` in `DecompilerTrustTests.cpp`, behind `SE_TRUST_PROBE_DONE=1`), `Docs/Decompiler/tools/a8_done/longrun.sh`, the ledger (A8-52 filed, A8-45's status cell given its word) and this section. No product code.
+
+### The criteria, against the record
+
+| Criterion | Finding |
+|---|---|
+| Two consecutive review rounds with no P1 or P2 | **Met by rounds 7 and 8.** Round 6 filed A8-36 and A8-37 (P2). Round 7 (master `21c0ed1d`): clean, four P3 rows (A8-42 to A8-45). Round 8 (master `b26f913b`): clean, six P3 rows (A8-46 to A8-51). Product code changed between them (the fixer for A8-42 to A8-45), and round 8 attacked those fixes, so the two rounds are consecutive in the program's sense |
+| A fix after the last round that no reviewer saw | **Yes: the fixer for A8-46, A8-50 and A8-51 changed `DecompilerPanel.cpp` and `.h` after round 8** (the entry box: `mBoxCleanText`, `mBoxPrevText`, the restore in `IsItemEdited`, the refusal clearing the pending sync, the box's second tooltip; about 45 lines, mutation-checked by the fixer, in the component that gave A8-42, A8-46 and A8-50 in consecutive rounds). The cycle says the next round's reviewer verifies the previous fix, and no round followed. Everything else that touched the panel since (`git diff b26f913b 5bcf9284`): area 9's one-full-stop line for A8-48, area 7's wording of the folded fallback and its `noOrigin` tooltip; none of them a trust indicator's logic. **This check made that look itself** (below): no P1 or P2, one P3 (A8-52, accepted). It is a short look by the done check's owner, not a full round; whether it stands in for round 9 is the coordinator's call |
+| Every P3 fixed or accepted with a reason | **Met.** All 52 rows have 8 cells. A8-1 to A8-51: fixed, or accepted with a reason (A8-16, A8-26, A8-32, A8-40, parts of A8-15 and A8-23). Two cells were not in the ledger's words: A8-34 reads "closed (area 8 fixer; the rest is A8-40)", which is a reason and was left; A8-45 (the instrument record) had no status word and now reads "accepted", with what it leaves to A8-40. A8-52 (new, below): accepted |
+| No open P1 or P2 rows | **Met.** The four P2 rows (A8-17, A8-30, A8-36, A8-37) are fixed; area 8 never had a P1 |
+| Rows routed out of area 8 | A8-43 (area 9's popup): fixed by the area 8 fixer. A8-44 (area 1's oracle): fixed by the area 8 fixer. A8-47 (area 1's oracle): fixed on `review/open-p3`, the three scripts in `kPinned`. A8-48 (area 9's popup texts): fixed on `review/9-round3-fix`. None unresolved |
+| Rows routed into area 8 | A11-15 (area 11, to the Follow rig): fixed `9522bb1b` (five `kFollowScriptPins`). No open row of another area names area 8, the trust test or the trust model (A7-17, open, is area 7's Assembly-follow toggle in the same panel) |
+| The generator run overnight once with no violation | **Not met yet.** No earlier record has a run of that length (the longest: round 8's, about 1.1 million operations over several ranges). The run below was started and paused |
+
+### The fixes after round 8, attacked (`RunProbeDone`, `SE_TRUST_PROBE_DONE=1`)
+
+Read first: the restore in `DrawHeader`'s `IsItemEdited` branch, `EnterTarget`, `Install`'s `sameFunction`, `SetTarget`'s refusal reset. From the reading: `mEntry` is the address as typed (a mirror stays a mirror), so A8-51's comparison of the box's number with `EnterTarget`'s address cannot call a mirror "an older address"; the only place that ends a refusal is `SetTarget`, which sets the sync again, so A8-50's cleared sync cannot leave the refused text behind. Then seven hand-built sequences on the small rig, each printing the label, the Entry line, the box, the tooltips and the error:
+
+| # | Sequence | Result |
+|---|---|---|
+| D1 | Follow PC on C; the box clicked, '1' typed and deleted (untouched again, A8-46); the PC to A with the box focused; Enter | A asked as a pin, "rts scan, 60%" with the line, the box rewritten to A. Right (A8-42 holds after a restore) |
+| D2 | the box clicked, all selected, the last seven digits of C typed, Home, the first digit; Enter | **A8-52**: "rts scan, 60%" and the Entry line, a pin, where the user typed the whole address |
+| D3 | `zz` refused; the box clicked, all selected, C's address put in in one frame (a paste); Enter | **A8-52**, the same. (Before the Enter the refusal and its tooltip stay though the box now holds an address: A8-4's rule, the refusal is the question until Enter, unchanged by the fix) |
+| D4 | the box kept C while A is shown: its tooltip; '1' typed and deleted: its tooltip; Enter | "The box still holds an older address ..." while untouched; "Decompile the function starting at this address ..." once the text is the user's; Enter asks C, "user-set entry". Both tooltips true |
+| D5 | `zz` refused in the box that had the focus when A installed; the box clicked, 'q' typed, Escape; Follow PC off, on | `zz` stays through all of it with the refusal; the box's tooltip is the plain one; the Follow PC click ends the refusal and the box reads A. Right |
+| D6 | Enter on the focused box that kept C (A asked, the box rewritten to A); the box clicked, Ctrl+Z; Enter | the undo brings nothing back; a pin of A with its doubt. Right |
+| D7 | the box kept C while A is shown, '1' typed and deleted (the user's C); the PC back in C with the box focused; '1' typed and deleted; Enter | a pin of C, "rts scan, 60%" with the line: the text is the shown output's again. Right |
+
+**A8-52 (P3, accepted).** An address entered in full by the user, but not left to right (a paste, or the first digit last), that equals the text the panel last wrote for the function shown counts as an edit taken back: Enter asks the function shown as the finder's guess, not as "user-set entry". The panel claims less than the user gave, never more; the direction opposite to A8-30, A8-36 and A8-46. Accepted with the reason in the row.
+
+No P1 and no P2 from the look.
+
+### The overnight run (paused)
+
+RelWithDebInfo, gcc, the worktree's build at `5bcf9284`, the binaries copied aside before the first job, one job at a time under `ulimit -v 3500000`, each with its own log (`Docs/Decompiler/tools/a8_done/longrun.sh <build dir> <log dir> <chunk>`; the logs are not in the repository). Seeds from 2,000,000: no earlier record uses a Follow rig seed above 1,451,000.
+
+| Job | Seeds | Sequences | Operations | Failures | Wall / CPU (user + sys) |
+|---|---|---|---|---|---|
+| mix 8, `SE_TRUST_FOLLOW_FOCUS=1`, hover on | 2,000,000 to 2,004,475 | 4,476 | 200,007 | 0 | 709 s / 656 s |
+| mix 9, the same | 2,000,000 to 2,004,475 | 4,476 | 200,007 | 0 | 775 s / 661 s |
+| mix 8, focus, `SE_TRUST_NOHOVER=1` | 2,100,000 to 2,104,471 | 4,472 | 200,024 | 0 | 1,066 s / 524 s |
+| mix 9, the same | 2,100,000 to 2,104,471 | 4,472 | 200,024 | 0 | 1,070 s / 530 s |
+| **Done so far** | | **17,896** | **800,062** | **0** | 3,620 s wall, about 40 minutes of CPU |
+| mix 8, focus, `SE_TRUST_FOLLOW_CPU=1`, hover on, from 2,200,000 (chunk 2) | | | | | stopped by the pause after 12 minutes, before it printed anything: **not counted, to be run again** |
+
+Still to run for an overnight length (about 6 hours of CPU): chunk 2 (focus, CPU, hover on, from 2,200,000), chunk 3 (focus, CPU, no hover, from 2,300,000), chunk 4 (no focus operation, hover on, from 2,400,000), chunk 5 (no focus operation, CPU, no hover, from 2,500,000), each 400,000 operations for mix 8 and for mix 9; chunk 6, the model run `SE_MODEL_SEEDS=10000` (not started; the model has no start seed, seeds 1 to 1,200 were run by the fixer); chunk 7, mixes 0 to 7 with `SE_TRUST_HIDDEN_RENAME=1` from 2,600,000.
+
+To resume (one chunk at a time, each fits two hours):
+
+```
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+( ulimit -v 3500000; cmake --build build -j2 --target SaturnExplorerDecompilerTrustTests SaturnExplorerDecompilerModelTests )
+for c in 2 3 4 5 6 7; do Docs/Decompiler/tools/a8_done/longrun.sh build <log dir> $c; done
+```
+
+A failing job prints `FOLLOW FAILURE, seed N` (replay with `SE_TRUST_FOLLOW_SEED=N`, `SE_TRUST_FOLLOW_AUTO=1` for mix 9, and the job's knobs), `MODEL FAILURE` (mixes 0 to 7) or `seed N: FAILED` (the model, `SE_MODEL_SEED=N`); the output is to be kept before any rerun.
+
+### What was run besides
+
+| Run | Result |
+|---|---|
+| calibration: mix 8 with focus from 1,999,000 (3,049 operations); `SE_MODEL_SEEDS=100` | 0 failing (15 s); 100 seeds, 0 failed (44 s) |
+| `SE_TRUST_PROBE_DONE=1` | the table above |
+| `ctest` | not run: no product code changed, and the default trust run is unchanged (the probe is behind its variable) |
+
+### Verdict
+
+**Not given yet (paused).** As the record stands: the review-round, P3 and open-row criteria are met; the fix after round 8 had no reviewer's round, and the look made here found one P3 (A8-52, accepted); the overnight run has 800,062 operations of the Follow rig with no failure and is to be finished (chunks 2 to 7) before area 8 can be called done.
