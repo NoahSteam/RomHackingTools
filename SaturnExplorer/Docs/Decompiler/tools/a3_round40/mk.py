@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Area 3 round 38 (round 37's fixtures plus the r38 block): writes fixtures.src (A3-243's change under review). Each fixture: F0 pushes r10, sets it to 5, calls F2 (the callee
+"""Area 3 round 39 (round 38 fixtures plus the r39 block): writes fixtures.src (A3-243's change under review). Each fixture: F0 pushes r10, sets it to 5, calls F2 (the callee
 under test, not lent), stores r10 through r4, pops, returns; G (the last function) sets r10 to 4. The body of F2 is given per fixture."""
 import os
 head = """.word 0x4F22
@@ -116,7 +116,7 @@ for n, why, body in [
   ("q8", "control, no pop: r10 = r3 stored through r4 and loaded back", "mov r3,r10\nmov.l r10,@r4\nmov.l @r4,r10\nmov.l @r15+,r2\n"),
   ("q4", "control: pop; store r10 through r10; load it back (unchanged)", callg + "mov.l @r15+,r10\nmov.l r10,@r10\nmov.l @r10,r10\n"),
   ]:
-    out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, ptr + body + tail.rstrip("\n")))
+    out_extra.append("# oq%s (round 35's q%s; renamed in round 39: round 38's q1 to q19 took the same names): %s\nname oq%s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n[1:], n[1:], why, n[1:], ptr + body + tail.rstrip("\n")))
 ptr3 = ptr.replace('add #8,r10\n', 'add #8,r10\nmov.l r4,@r10\n')
 # l*: no push at all in F2 (r10 is a pointer going in and the callee's code uses it): the load's address names r10
 for n, why, body in [
@@ -608,7 +608,114 @@ raw("t13", "t7 with F3 calling F5 which reads r3 (F3 sets r13 after the call)", 
 raw("t14", "t7 with F2 calling F3 through `jsr @r2` (literal)", t_f0n % "bsr F2\nnop" + t_f2.replace("bsr F3\nnop\n", "mov.l =@F3,r2\njsr @r2\nnop\n") + t_f3b, "0,0,0", "0,2000,2000")
 raw("t15", "t7 with the copy made after F4: F2 calls F4 then `mov r13,r3` then F3", t_f0n % "bsr F2\nnop" + t_f2.replace("mov r13,r3\nbsr F3\nnop\n", "bsr F4\nnop\nmov r13,r3\nbsr F3\nnop\n") + t_f4 + t_f3b, "0,0,0,0", "0,2000,0,2000")
 raw("t16", "t7 with a call in the delay slot of F2's branch: `bsr F3` taking the copy in r3 as set in the call's delay slot", t_f0n % "bsr F2\nnop" + t_f2.replace("mov r13,r3\nbsr F3\nnop\n", "bsr F3\nmov r13,r3\n") + t_f3b, "0,0,0", "0,2000,2000")
-out = ["# Area 3 round 38 review (mk.py): A3-259's own-store rule and A3-263's ordering. Run: W=<SaturnExplorer> S=<scratch> run.sh [name]"]
+# --- round 39: A3-264's "provably disjoint", A3-265's frame words, A3-266's restored value under review (m*: disjointness and aliases; pw6 to pw10: frame words; jr*: restored values) ---
+r39 = r38
+sv = "mov.l r10,@r4\n"
+# m1*: two constants that are one memory word (the cache-through mirror, the 1 MB work RAM mirror) stored over the saved word
+mc = "mov.l =0x06030000,r1\nmov.l r10,@r1\n"
+r39("mr1", "save through the constant 0x06030000, 7 stored through its cache-through mirror 0x26030000, restore from 0x06030000", mc + "mov.l =0x26030000,r6\nmov #7,r2\nmov.l r2,@r6\nmov.l @r1,r10\n")
+r39("mr1a", "m1 with the mirror 0xA6030000 (cache-through, bit 31 too)", mc + "mov.l =0xA6030000,r6\nmov #7,r2\nmov.l r2,@r6\nmov.l @r1,r10\n")
+r39("mr1b", "m1 with a byte store through the mirror 0x26030002 (partly over the word)", mc + "mov.l =0x26030002,r6\nmov #7,r0\nmov.b r0,@r6\nmov.l @r1,r10\n")
+r39("mr1c", "control for m1: 7 stored at 0x06030004 (another word)", mc + "mov.l =0x06030004,r6\nmov #7,r2\nmov.l r2,@r6\nmov.l @r1,r10\n")
+r39("mr1d", "m1 with the save through the mirror and the store through the plain address", "mov.l =0x26030000,r1\nmov.l r10,@r1\nmov.l =0x06030000,r6\nmov #7,r2\nmov.l r2,@r6\nmov.l @r1,r10\n")
+r39("mr1e", "m1 with the restore through the mirror (save 0x06030000, store 7 at 0x06030000 +0, restore 0x26030000)", mc + "mov #7,r2\nmov.l r2,@r1\nmov.l =0x26030000,r6\nmov.l @r6,r10\n")
+r39("mr1f", "the 1 MB work RAM mirror: 7 stored at 0x06130000 (the same word as 0x06030000 in a 1 MB RAM)", mc + "mov.l =0x06130000,r6\nmov #7,r2\nmov.l r2,@r6\nmov.l @r1,r10\n")
+# m2*: the same register at offsets, through pre-decrement and a rewritten register
+r39("mr2", "control: r6 = r4; save through @-r6 (r4 - 4), 7 through @-r6 (r4 - 8), restore through @(4,r6)", "mov r4,r6\nmov.l r10,@-r6\nmov #7,r2\nmov.l r2,@-r6\nmov.l @(4,r6),r10\n")
+r39("mr2a", "save through @-r6 (r4 - 4), r6 stepped to r4 - 1, byte store at r6 (inside the saved word), restore", "mov r4,r6\nmov.l r10,@-r6\nadd #3,r6\nmov #7,r0\nmov.b r0,@r6\nmov.l @(-1,r6),r10\n".replace("mov.l @(-1,r6),r10", "add #-3,r6\nmov.l @r6,r10"))
+r39("mr2b", "save through @r4, r6 = r4 + 4, a byte store at @-r6 (the last byte of the word: r4 + 3), restore through r4", "mov r4,r6\nadd #4,r6\n" + sv + "mov #7,r0\nmov.b r0,@-r6\nmov.l @r4,r10\n")
+r39("mr2c", "control: save through @r4, r6 = r4 + 4, a byte store at @-r6 after r6 + 1 (r4 + 4: past the word), restore", "mov r4,r6\nadd #5,r6\n" + sv + "mov #7,r0\nmov.b r0,@-r6\nmov.l @r4,r10\n")
+r39("mr2d", "save through @r4, r4 rewritten to r5, 7 stored through r4 (=r5), restore through the old pointer kept in r6", "mov r4,r6\n" + sv + "mov r5,r4\nmov #7,r2\nmov.l r2,@r4\nmov.l @r6,r10\n", stash="mov.l r4,@r5\n")
+# m3*: stores through the own frame, the saved word's address a pointer that may be a word of it
+r39("mr3", "own frame: r1 = r15 + r6 (r6 = a word loaded from the arena, 0), r10 stored through r1, 7 stored over it by `mov.l r2,@r15`, restore through r1", "add #-8,r15\nmov.l @(12,r4),r6\nmov r15,r1\nadd r6,r1\nmov.l r10,@r1\nmov #7,r2\nmov.l r2,@r15\nmov.l @r1,r10\nadd #8,r15\n")
+r39("mr3a", "m3 with the over-store through @(0,r15) as a byte (`mov.b r0,@r15`)", "add #-8,r15\nmov.l @(12,r4),r6\nmov r15,r1\nadd r6,r1\nmov.l r10,@r1\nmov #7,r0\nmov.b r0,@r15\nmov.l @r1,r10\nadd #8,r15\n")
+r39("mr3b", "m3 with the over-store through a joined stack pointer (r15 or r15 + 4)", "add #-8,r15\nmov.l @(12,r4),r6\nmov r15,r1\nadd r6,r1\nmov.l r10,@r1\nmov r15,r7\ntst r3,r3\nbt K1\nadd #4,r7\nK1:\nmov #7,r2\nmov.l r2,@r7\nmov.l @r1,r10\nadd #8,r15\n")
+r39("mr3c", "control for m3: the over-store at @(4,r15) (another word)", "add #-8,r15\nmov.l @(12,r4),r6\nmov r15,r1\nadd r6,r1\nmov.l r10,@r1\nmov #7,r2\nmov.l r2,@(4,r15)\nmov.l @r1,r10\nadd #8,r15\n")
+r39("mr3d", "m3 with the over-store by a push (`mov.l r2,@-r15` after r1 was made: r1 = the old r15, the push is another word)", "add #-8,r15\nmov.l @(12,r4),r6\nmov r15,r1\nadd r6,r1\nmov.l r10,@r1\nmov #7,r2\nmov.l r2,@-r15\nmov.l @r1,r10\nadd #12,r15\n")
+# pw6 to pw10: the word a saved register is in, written by a callee the walk cannot place at one offset
+pwh = "bsr G3\nnop\nmov.l @r15+,r10\n"
+r39("pw6", "push r10, call G3 which calls H, H writes 7 at its `@(4,r15)` (G3's entry word: the pushed r10), pop", pwh, pre="push", extra="G3:\n.word 0x4F22\nbsr H\nnop\n.word 0x4F26\nrts\nnop\nfn\nH:\nmov #7,r1\nmov.l r1,@(4,r15)\nrts\nnop\n", clobs="0,400,0,0,400")
+r39("pw7", "push r10, hand r15 in r5 to G3, which stores 7 through r5 (the pushed word), pop", "mov r15,r5\nbsr G3\nnop\nmov.l @r15+,r10\n", pre="push", extra="G3:\nmov #7,r1\nmov.l r1,@r5\nrts\nnop\n", clobs="0,400,0,400")
+r39("pw8", "pw1 through a tail jump `mov.l =@G3,r1 ; jmp @r1` in T", "bsr T\nnop\nmov.l @r15+,r10\n", pre="push", extra="T:\nmov.l =@G3,r1\njmp @r1\nnop\nfn\nG3:\nmov #7,r1\nmov.l r1,@r15\nrts\nnop\n", clobs="0,400,0,0,400")
+r39("pw9", "push r10, 256 bytes of locals, G3 writes 7 at its r15 + 256 (the pushed word: 64 words above, past the 31 the frame records), pop", "add #-128,r15\nadd #-128,r15\nbsr G3\nnop\nadd #127,r15\nadd #127,r15\nadd #2,r15\nmov.l @r15+,r10\n", pre="push", extra="G3:\nmov r15,r1\nadd #127,r1\nadd #127,r1\nadd #2,r1\nmov #7,r2\nmov.l r2,@r1\nrts\nnop\n", clobs="0,400,0,400")
+r39("pw10", "push r10, G3 writes 7 at an index it loads (`mov.l @(12,r4),r6` = 0; r15 + r6 + 4: the pushed word), pop", pwh, pre="push", extra="G3:\nmov.l @(12,r4),r6\nmov r15,r1\nadd r6,r1\nmov #7,r2\nmov.l r2,@r1\nrts\nnop\n", clobs="0,400,0,400")
+# jr*: the value a restore gives, kept or lost on its way
+r39("jr1", "save, restore, spill it to the frame and reload (`add #-4,r15 ; mov.l r10,@r15 ; mov.l @r15,r10 ; add #4,r15`), then add #1", sv + "mov.l @r4,r10\nadd #-4,r15\nmov.l r10,@r15\nmov.l @r15,r10\nadd #4,r15\nadd #1,r10\n")
+r39("jr2", "save, restore, `swap.w r10,r10`", sv + "mov.l @r4,r10\nswap.w r10,r10\n")
+r39("jr3", "save, restore, `xtrct r13,r10`", sv + "mov.l @r4,r10\nxtrct r13,r10\n")
+r39("jr4", "save; restore on one path; add #1 after the join", sv + "tst r3,r3\nbt K1\nmov.l @r4,r10\nK1:\nadd #1,r10\n")
+r39("jr5", "save, restore, spill through the arena (r4 + 16) and reload, add #1", sv + "mov.l @r4,r10\nmov.l r10,@(16,r4)\nmov.l @(16,r4),r10\nadd #1,r10\n")
+r39("jr6", "r13 saved through r4 + 16, loaded back into r10 (another register's entry value in r10)", "mov.l r13,@(16,r4)\nmov.l @(16,r4),r10\n")
+r39("jr7", "save r10, restore, then move the restored value to r1 and back with an add: `mov r10,r1 ; add #1,r1 ; mov r1,r10`", sv + "mov.l @r4,r10\nmov r10,r1\nadd #1,r1\nmov r1,r10\n")
+r39("jr8", "save r10, restore through a half-word load (`mov.w @r4,r10`: not the word)", sv + "mov.w @r4,r10\n")
+r39("jr9", "save r10 twice at r4 and r4 + 4, restore from r4 + 4, then add #1", sv + "mov.l r10,@(4,r4)\nmov.l @(4,r4),r10\nadd #1,r10\n")
+r39("jr10", "save, restore, then `mov.l r10,@-r15 ; mov.l @r15+,r10 ; extu.b r10,r10` (push and pop of the restored value)", sv + "mov.l @r4,r10\nmov.l r10,@-r15\nmov.l @r15+,r10\nextu.b r10,r10\n")
+r39("mr4", "save through @r4, 7 stored at r4 + 0x100000 (r4 = 0x06020100 in the runs: the 1 MB work RAM repeat), restore through r4", sv + "mov.l =0x00100000,r1\nadd r4,r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
+r39("mr4a", "control for m4: 7 stored at r4 + 0x400 (another word)", sv + "mov.l =0x00000400,r1\nadd r4,r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
+r39("mr4b", "m4 with the gap as the negative offset -0x100000 (r4 - 0x100000 = 0x05F20100: not memory, a control)", sv + "mov.l =0xFFF00000,r1\nadd r4,r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
+r39("mr5", "save at the constant 0x06030000, tas.b at 0x06030003, restore", mc + "mov.l =0x06030003,r6\ntas.b @r6\nmov.l @r1,r10\n")
+r39("mr5a", "save at the constant 0x06030000, pre-decrement store through r6 = 0x06030004, restore", mc + "mov.l =0x06030004,r6\nmov #7,r2\nmov.l r2,@-r6\nmov.l @r1,r10\n")
+r39("mr6", "constants in the 0x0020xxxx low work RAM and its repeat: save at 0x00203000, store 7 at 0x00303000, restore", "mov.l =0x00203000,r1\nmov.l r10,@r1\nmov.l =0x00303000,r6\nmov #7,r2\nmov.l r2,@r6\nmov.l @r1,r10\n")
+def pwx(n, why, g3):
+    r39(n, why, pwh, pre="push", extra="G3:\n" + g3 + "rts\nnop\n", clobs="0,400,0,400")
+pwx("pw11", "pw1 with a byte store over the pushed word (`mov #7,r0 ; mov.b r0,@(1,r15)`)", "mov #7,r0\nmov.b r0,@(1,r15)\n")
+pwx("pw12", "pw1 with `tas.b @r15` over the pushed word's top byte", "tas.b @r15\n")
+pwx("pw13", "pw1 with a half-word store `mov.w r0,@(2,r15)`", "mov #7,r0\nmov.w r0,@(2,r15)\n")
+pwx("pw14", "pw1 with the word written through a pre-decrement `mov r15,r1 ; add #4,r1 ; mov.l r2,@-r1`", "mov r15,r1\nadd #4,r1\nmov #7,r2\nmov.l r2,@-r1\n")
+pwx("pw15", "pw1 with the callee changing the word by an or (`mov.l @r15,r1 ; or #1... ` as `mov #1,r2 ; mov.l @r15,r1 ; or r2,r1 ; mov.l r1,@r15`)", "mov #1,r2\nmov.l @r15,r1\nor r2,r1\nmov.l r1,@r15\n")
+# ow*: what A3-264's clearing costs on the shapes compiled code has (a save through a pointer, work between, the restore)
+r39("ow1", "save r10 at @r4, copy a word from @r5 to @r6 (r6 = r4 + 64), restore", sv + "mov.l @r5,r1\nmov r4,r6\nadd #64,r6\nmov.l r1,@r6\nmov.l @r4,r10\n")
+r39("ow2", "save r10 at @r4, store a word at @(32,r4) (the same register, apart), restore", sv + "mov.l @r5,r1\nmov.l r1,@(32,r4)\nmov.l @r4,r10\n")
+r39("ow3", "save r10 at @r4, a copy loop of 4 words from @r5+ to @r6+ (r6 = r4 + 64), restore", sv + "mov r4,r6\nadd #64,r6\nmov #4,r7\nK1:\nmov.l @r5+,r1\nmov.l r1,@r6\nadd #4,r6\ndt r7\nbf K1\nmov.l @r4,r10\n")
+r39("ow4", "save r10, r11, r12 at @r4, @(4,r4), @(8,r4); a store at @(16,r4); restore in reverse (the setjmp shape; r11 and r12 saved too)", "mov.l r10,@r4\nmov.l r11,@(4,r4)\nmov.l r12,@(8,r4)\nmov.l r1,@(16,r4)\nmov.l @(8,r4),r12\nmov.l @(4,r4),r11\nmov.l @r4,r10\n")
+r39("ow5", "save r10 at @r4, a store through a pointer loaded from the arena (@(12,r4), 0 in the runs: another word of memory it does not track), restore", sv + "mov.l @(12,r4),r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
+r39("ow2b", "ow2 without the load: a constant stored at @(32,r4), restore (silent: A3-264 keeps the entry)", sv + "mov #3,r1\nmov.l r1,@(32,r4)\nmov.l @r4,r10\n")
+r39("ow1b", "ow1 without the load: a constant stored through r6 = r4 + 64 (another register: A3-264 clears the entry), restore", sv + "mov r4,r6\nadd #64,r6\nmov #3,r1\nmov.l r1,@r6\nmov.l @r4,r10\n")
+r39("mr3e", "mr3 with the index a register xor itself (r6 = r3 ^ r3 = 0: origins r3, no memory)", "add #-8,r15\nmov r3,r6\nxor r3,r6\nmov r15,r1\nadd r6,r1\nmov.l r10,@r1\nmov #7,r2\nmov.l r2,@r15\nmov.l @r1,r10\nadd #8,r15\n")
+r39("mr3f", "mr3e with the over-store `mov.l r2,@r1` through a second copy of the same address (r7 = r15 + r6 made again)", "add #-8,r15\nmov r3,r6\nxor r3,r6\nmov r15,r1\nadd r6,r1\nmov.l r10,@r1\nmov r15,r7\nadd r6,r7\nmov #7,r2\nmov.l r2,@r7\nmov.l @r1,r10\nadd #8,r15\n")
+# --- round 40: A3-269's ApartOnBus window and A3-270's exact address handed to a callee under review (ab*: the window; ph*: the handed address) ---
+r40 = r39
+r40("ab1", "cache data array (4 KiB under 0xC...): save at 0xC0000FFC, 7 stored at 0xC0000000 (d = -0xFFC: another word of the 4 KiB), restore", "mov.l =0xC0000FFC,r1\nmov.l r10,@r1\nmov.l =0xC0000000,r6\nmov #7,r2\nmov.l r2,@r6\nmov.l @r1,r10\n")
+r40("ab2", "save at 0xC0000FFC, 7 stored at 0xC0001000 (the next 4 KiB: byte 0 of the array, another word), restore", "mov.l =0xC0000FFC,r1\nmov.l r10,@r1\nmov.l =0xC0001000,r6\nmov #7,r2\nmov.l r2,@r6\nmov.l @r1,r10\n")
+r40("ab3", "save at 0xC0000000, 7 stored at 0xC0001000 (one 4 KiB later: the same word)", "mov.l =0xC0000000,r1\nmov.l r10,@r1\nmov.l =0xC0001000,r6\nmov #7,r2\nmov.l r2,@r6\nmov.l @r1,r10\n")
+r40("ab4", "save at 0xC0000FFC, a byte store at 0xC0001000 (byte 0 of the array), restore", "mov.l =0xC0000FFC,r1\nmov.l r10,@r1\nmov.l =0xC0001000,r6\nmov #7,r0\nmov.b r0,@r6\nmov.l @r1,r10\n")
+r40("ab5", "save at 0xC0000FFC, a byte store at 0xC0000FFF (the last byte of the word)", "mov.l =0xC0000FFC,r1\nmov.l r10,@r1\nmov.l =0xC0000FFF,r6\nmov #7,r0\nmov.b r0,@r6\nmov.l @r1,r10\n")
+r40("ab6", "save through @r4 (r4 = 0x06020100), 7 stored through r4 + 0xFFC (the end of the window), restore", sv + "mov.l =0x00000FFC,r1\nadd r4,r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
+r40("ab7", "save through @r4, 7 stored through r4 - 0xFFC (the other end), restore", sv + "mov.l =0xFFFFF004,r1\nadd r4,r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
+r40("ab8", "save through @r4, 7 stored through r4 + 0x1000 (r4 = 0x06020100: another word of memory, not a mirror: a hedge)", sv + "mov.l =0x00001000,r1\nadd r4,r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
+r40("ab9", "save at 0x06030000 as a word, a half-word store at 0x06030002 (inside), restore", mc + "mov.l =0x06030002,r6\nmov #7,r0\nmov.w r0,@r6\nmov.l @r1,r10\n")
+r40("ab11", "constants at the top of the address space and zero: save at 0xFFFFFFFC (on-chip registers), 7 stored at 0 (d = 4 wrapped), restore", "mov.l =0xFFFFFFFC,r1\nmov.l r10,@r1\nmov #0,r6\nmov #7,r2\nmov.l r2,@r6\nmov.l @r1,r10\n")
+# ph*: the exact address of a saved word handed to a callee (A3-270): which register, how deep, how made
+def phx(n, why, pre_call, g3, extra2="", post=""):
+    r40(n, why, pre_call + "bsr G3\nnop\n" + post + "mov.l @r15+,r10\n", pre="push", extra="G3:\n" + g3 + "rts\nnop\n" + extra2, clobs="0,400,0,400" if not extra2 else "0,400,0,0,400")
+phx("ph1", "pw7 with the address in r4", "mov r15,r4\n", "mov #7,r1\nmov.l r1,@r4\n")
+phx("ph2", "pw7 with the address in r6", "mov r15,r6\n", "mov #7,r1\nmov.l r1,@r6\n")
+phx("ph3", "pw7 with the address in r7", "mov r15,r7\n", "mov #7,r1\nmov.l r1,@r7\n")
+phx("ph4", "pw7 with the address in r13 (a callee-saved register used as a pointer without saving it)", "mov r15,r13\n", "mov #7,r1\nmov.l r1,@r13\n")
+phx("ph5", "the address in r5; the callee passes it on to H (second level: bsr H, r5 untouched), H stores 7 through r5", "mov r15,r5\n", ".word 0x4F22\nbsr H\nnop\n.word 0x4F26\n", extra2="fn\nH:\nmov #7,r1\nmov.l r1,@r5\nrts\nnop\n")
+phx("ph6", "the address in r5; the callee tail-jumps to H through a literal, H stores 7 through r5", "mov r15,r5\n", "mov.l =@H,r1\njmp @r1\nnop\n", extra2="fn\nH:\nmov #7,r1\nmov.l r1,@r5\nrts\nnop\n")
+phx("ph7", "r5 = r15 + 4 handed, the callee steps it back (`add #-4,r5`) and stores through it (the pushed word)", "mov r15,r5\nadd #4,r5\n", "add #-4,r5\nmov #7,r1\nmov.l r1,@r5\n")
+phx("ph8", "r5 = r15 - 4 handed (the word below), the callee steps it up (`add #4,r5`) and stores", "mov r15,r5\nadd #-4,r5\n", "add #4,r5\nmov #7,r1\nmov.l r1,@r5\n")
+phx("ph9", "r5 = r15 + 8, `sub r6,r5` with r6 = 8 (a constant register) before the call, the callee stores through r5", "mov r15,r5\nadd #8,r5\nmov #8,r6\nsub r6,r5\n", "mov #7,r1\nmov.l r1,@r5\n")
+phx("ph10", "r5 = r15 handed in a copy r8 -> r5 (`mov r15,r8 ; mov r8,r5`)", "mov r15,r8\nmov r8,r5\n", "mov #7,r1\nmov.l r1,@r5\n")
+phx("ph11", "r5 = r15 - 4 handed (the word below), the callee stores at @(4,r5) (the pushed word)", "mov r15,r5\nadd #-4,r5\n", "mov #7,r1\nmov.l r1,@(4,r5)\n")
+phx("ph12", "the address in r5, the callee stores 7 as a byte through it (`mov.b r1,@r5`)", "mov r15,r5\n", "mov #7,r1\nmov.b r1,@r5\n")
+phx("ph13", "the address in r5, the callee stores through `@(r0,r5)` with r0 = 0", "mov r15,r5\n", "mov #0,r0\nmov #7,r1\nmov.l r1,@(r0,r5)\n")
+phx("ph14", "the address in r5; G3 copies it to the global 0x06030000, a later callee G4 loads it and stores 7 through it", "mov r15,r5\n", "mov.l =0x06030000,r1\nmov.l r5,@r1\n", extra2="fn\nG4:\nmov.l =0x06030000,r1\nmov.l @r1,r1\nmov #7,r2\nmov.l r2,@r1\nrts\nnop\n", post="bsr G4\nnop\n")
+r40("ph16", "the address pushed as a stack argument: F2 pushes r15 (the pushed r10's address), G3 loads it from @r15 and stores 7 through it, F2 pops both", "mov r15,r1\nmov.l r1,@-r15\nbsr G3\nnop\nadd #4,r15\nmov.l @r15+,r10\n", pre="push", extra="G3:\nmov.l @r15,r1\nmov #7,r2\nmov.l r2,@r1\nrts\nnop\n", clobs="0,400,0,400")
+r40("ph17", "the pushed r10 word's address handed, G3 stores 7 through it; F2 pops r10 and pushes and pops it again", "mov r15,r5\nbsr G3\nnop\nmov.l @r15+,r10\nmov.l r10,@-r15\nmov.l @r15+,r10\n", pre="push", extra="G3:\nmov #7,r1\nmov.l r1,@r5\nrts\nnop\n", clobs="0,400,0,400")
+r40("ph18", "own frame word, not a push: `add #-8,r15`, r10 saved at @(4,r15), r15 + 4 handed to G3 which stores 7, r10 loaded back", "add #-8,r15\nmov.l r10,@(4,r15)\nmov r15,r5\nadd #4,r5\nbsr G3\nnop\nmov.l @(4,r15),r10\nadd #8,r15\n", pre="none", extra="G3:\nmov #7,r1\nmov.l r1,@r5\nrts\nnop\n", clobs="0,400,0,400")
+phx("ph3b", "ph3 with r4, r5, r6 set and read by the callee (a lent callee: the engine shows r7), the address in r7", "mov r4,r1\nadd #4,r1\nmov r1,r4\nmov r4,r5\nmov r4,r6\nmov r15,r7\n", "mov #7,r1\nmov.l r1,@r7\nmov r4,r0\nadd r5,r0\nmov.l r0,@r6\n", post="add #-4,r4\n")
+phx("ph19", "the address in r5; the callee returns it in r0 (`mov r5,r0`), F2 stores 7 through the returned pointer", "mov r15,r5\n", "mov r5,r0\n", post="mov #7,r1\nmov.l r1,@r0\n")
+phx("ph20", "the address in r5 to a callee that only reads through it (control: a load, `mov.l @r5,r1`)", "mov r15,r5\n", "mov.l @r5,r1\n")
+phx("ph21", "the address in r7 to a callee that only reads through it (control: unlent, a load)", "mov r15,r7\n", "mov.l @r7,r1\n")
+phx("ph23", "pw7 with a callee that is not lent (it returns r3, which no signature passes: `mov r3,r0`)", "mov r15,r5\n", "mov #7,r1\nmov.l r1,@r5\nmov r3,r0\n")
+phx("ph24", "pw7 where the callee reads r5 and r6 only as the address and does not store through them but passes both to H which stores through r5 (unlent: `mov r3,r0`)", "mov r15,r5\n", ".word 0x4F22\nbsr H\nnop\n.word 0x4F26\nmov r3,r0\n", extra2="fn\nH:\nmov #7,r1\nmov.l r1,@r5\nrts\nnop\n")
+r40("ab11b", "ab11 without the store: save at the on-chip address 0xFFFFFFFC, restore (hardware, not memory: the run reads the register default)", "mov.l =0xFFFFFFFC,r1\nmov.l r10,@r1\nmov.l @r1,r10\n")
+r40("ov1", "two globals 8 KiB apart: r10 saved at 0x06030000, 3 stored at 0x06032000, restore (the window's cost: a hedge)", mc + "mov.l =0x06032000,r6\nmov #3,r2\nmov.l r2,@r6\nmov.l @r1,r10\n")
+r40("ov2", "a struct copy of 6 KiB between the save and the restore: r10 saved at @r4, one word stored at r4 + 0x1800 (the same pointer, 6 KiB on), restore", sv + "mov.l =0x00001800,r1\nadd r4,r1\nmov #3,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
+r40("ov3", "the same through a copy loop: r10 saved at @r4, 4 words copied from @r5+ to @r6+ with r6 = r4 + 0x2000, restore", sv + "mov.l =0x00002000,r6\nadd r4,r6\nmov #4,r7\nK1:\nmov.l @r5+,r1\nmov.l r1,@r6\nadd #4,r6\ndt r7\nbf K1\nmov.l @r4,r10\n")
+out = ["# Area 3 round 40 review (mk.py): A3-264 to A3-266 (round 38's changes) under review. Run: W=<SaturnExplorer> S=<scratch> run.sh [name]"]
 for n, why, body in fx:
     out.append("# %s: %s" % (n, why))
     out.append("name %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400" % n)

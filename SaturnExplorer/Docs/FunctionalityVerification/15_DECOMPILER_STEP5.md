@@ -24646,3 +24646,226 @@ Builds that fail with one hunk reverted (the declaration or helper of a header o
 * Unmutated baseline before the second pass was not run separately: the first mutant of each pass (0001-g1 `pc`, `engine`, `unit`, `gen` all `ok`) and the fault matrix (`fault matrix: 0 of 94 job(s) failed, 137.7 s` with one job) show the tree passes; the final `ctest` is below.
 * Not done: the mutation of 0001 to 0058's multi-hunk patches per group (the earlier agent's second pass did 0059 on; the whole-patch pass 1 killed 38 of them by the named test); hand-made reverts of the nine that do not build (the later patches' groups cover the code); the LeakSanitizer reading of 0040 (`fault` under the sanitizers job; no sanitizer build here); a fixture for 0086 h8 and h9 (signed division of a CONCAT), 0066 h5 (the cap of 256); nothing filed upstream (A10-24 stays open).
 * `ctest --test-dir build -j1` (RelWithDebInfo, under `ulimit -v 3500000`), after the final build: `100%% tests passed, 0 tests failed out of 117`, 702 s. `check-vendored-tree.py lint`: `vendored tree: ok (lint)`; `check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include`: `raw string sizes: ok`. `git status` clean under `third_party/` after every mutant and at the end.
+## Area 3, round 39
+
+Branch `review/3-round39` from round 38's head (`4373fb37`, not yet merged). RelWithDebInfo, `-j2`, `ulimit -v 3500000`. A review of round 38's product changes in `Sh2Decompiler.cpp` (A3-264 `NoteOwnStore` and `Store`'s clears, A3-265 `Call`'s frame words, A3-266 `Load`'s restored value) with hand fixtures (`Docs/Decompiler/tools/a3_round39/`, round 38's tooling moved with `git mv`; `mk.py` now writes 387 fixtures: the mr, pw6 to pw15, jr, ow series are new), then fresh sweeps. Two P2 misses found and fixed (A3-269, A3-270), one miss accepted by class as P3 on the user's decision (A3-271), P3: A3-272 (over-warnings, accepted by class), A3-273 (sweeps routed, a fixture-name collision of the tooling fixed).
+
+### 1. Review
+
+* **"Provably disjoint" (A3-264).** The same register at an offset that does not overlap, and two constants that do not, were taken as two words. Both are wrong where memory repeats on the bus, and the generator's emulator repeats it as Mednafen does: 0x06030000 and its cache-through mirror 0x26030000 (mr1, mr1b a byte store, mr1d the save through the mirror), the 1 MiB work RAM repeat 0x06030000 and 0x06130000 (mr1f), the low work RAM repeat 0x00203000 and 0x00303000 (mr6), and a pointer against the pointer plus 0x100000 (mr4). Each returned r10 changed (7) and the text said no caution: A3-269. Controls (the next word mr1c, +0x400 mr4a, pre-decrement words mr2) silent. A sign or wrap of offsets: offsets are wrapped to 32 bits when made (`MoveRegConst`), so a negative gap compares right; the only wrapped overlap needs an unaligned word at offset 0x7FFFFFFF, an address error in a run. A register rewritten between the store and the load: the key is the entry value plus the offset, so `mov r5,r4` or `add #4,r4` between them gives another key (mr2d, mr2a to mr2c: said or silent as the runs need).
+* **Stores that bypass `NoteOwnStore`.** Pre-decrement (mr2, mr2a to mr2c), `tas.b` through a register or a constant (q8, mr5), `mov.l r2,@-r6` through a constant (mr5a), a joined or own-frame stack pointer with a register index over an entry made through the same pointer (mr3, mr3a to mr3f: said), a store in a branch's or a call's delay slot (q1 to q6, round 38): all clear or are told apart right. `mac.l` and `mac.w` only load. A callee's store through `Apply` is cleared by `Call` (the clear is the first thing it does); the user ops that call `Apply` without `Call` (`Write_SR` and the like are excluded; `trapa` is a call) hold no store. `and.b`, `or.b` and `xor.b` through `@(r0,gbr)` have an address with an index (not exact: clears).
+* **A3-265.** The words a callee writes at exact offsets are marked; the walk's other writes are not. Said (no change needed): a second-level callee (pw6), a thunk (pw5), a tail jump through a literal (pw8), a byte, half-word, `tas.b`, pre-decrement and read-modify-write store of the word (pw11 to pw15). Missed: the address handed in a register (pw7, A3-270, fixed), an exact word 64 words up (pw9) and an index the walk cannot place (pw10) (A3-271, accepted by class: the rule leaves out `kFrameAny`; a "no change" can be wrong in this one shape).
+* **A3-266.** The restored value's `mayEntry` survives a spill to the frame and a reload (jr1), a spill through the arena and a reload (jr5, jr9), `swap.w` and `xtrct` (jr2, jr3), a join with the restore on one path (jr4), a copy through another register and back (jr7), a push and pop with `extu.b` (jr10); another register's entry value loaded into r10 (jr6) and a half-word load (jr8) are said. No miss.
+* **Wrong restores.** None beyond A3-269: every restore a run shows changed was either said or is in A3-269's list.
+* **Over-warnings.** ow1 to ow5 (A3-272): the setjmp shape (ow4) and a store at another offset of the pointer (ow2b, ow1b) are silent; a copy through other registers (ow1, ow3) and a store through a loaded pointer (ow5) are hedges; ow2's is A3-250's load mark, not A3-264's clear. Accepted by class.
+
+### 2. Fixes
+
+* **A3-269.** `NoteOwnStore`: two accesses are told apart (`ApartOnBus`) only within 0x1000 bytes of each other, as a 32-bit wrapped distance, and not overlapping; every other pair clears the entry.
+* **A3-270.** `Clobber`: a saved register's word that a callee was handed the exact address of (`exact`, `Reaches`) is marked `innerChanged` for the register.
+* **Evidence.** Pins, `TestA3RoutedPins`: the A3-269 block (mr1, mr1b, mr1d, mr1f, mr4, mr6; controls mr1c, mr4a, mr2) and the A3-270 block (pw7). Old code (round 38's `Sh2Decompiler.cpp`, same tests, swapped and rebuilt, not committed): the seven pins `required 1, said 0`, the controls silent; new code: all pass. The 387 fixtures of the file run with no FAILED; the findings are b40 and b41 (A3-261 (b)) and pw9 and pw10 (A3-271, recorded as fixtures of the accepted miss, not as pins), and the generator-class ones by design.
+* **Expected changes in game text:** a caution at a call whose callee saves a register through a pointer or an absolute address and stores 4 KiB or more away before restoring it, or hands a callee the address of a word it pushed a register in. Hand-written context code; notes only, no statement, prototype or ledger count changes. The local corpus is not in the repository: no corpus text was compared.
+
+### 3. Sweeps (`SE_GENERATED_CANARY=0`, `SE_GENERATED_PINS=0` for the first two)
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep` | 14,000,001, 10,000 seeds | failing seeds=2, findings=2: 14007491 `map-way-back` (A7-25), 14008671 `map-copy-store`: area 7, routed (A3-273) |
+| Grammar 1 | 14,100,001, 10,000 seeds | failing seeds=4, findings=6: 14102304 and 14107841 `map-way-back`, 14104677 `map-store-value`, 14105350 `map-const-join`: area 7, routed (A3-273) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | | 10,000 seeds of each grammar: failing seeds=0, findings=0, all passed (989 pin lines in it) |
+
+No area 3 class (`caution-unsaid`, `callee-saved`, `state-saved`) in either sweep. As in round 38 the sweeps draw none of the shapes under review.
+
+### 4. Runs
+
+* `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`): **117 of 117 passed** (657 s).
+* `python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include SaturnExplorer/Core`: raw string sizes ok (7 raw strings in 341 files). `tools/a3_round39/selftest.sh`: ok. `run.sh` over all 387 fixtures: exit 0, none FAILED. C++17 only.
+* Not run: the local game corpus (not in the repository); the sanitizer jobs (CI).
+
+**Verdict, area 3 round 39 (A3-269 and A3-270 fixed): not clean.** P2: A3-269 (round 38's "provably disjoint" ignored that memory repeats on the bus: mirrors and a 1 MiB gap; found by hand fixtures, fixed with pins), A3-270 (an exact address of a saved word handed to a callee; found by hand, fixed with pins); A3-271 as a P3 accepted by class (frame words a callee writes that the walk cannot place look the same as an index store into the callee's own frame, so flagging them would warn at nearly every such call, and compiled code does not write its caller's saved registers this way; a "no change" can be wrong in this one shape, and a bit telling an own-frame index store from one above the entry r15 is the way to revisit it). No P1. P3: A3-272 (accepted), A3-273 (routed). The sweeps are clean for area 3. The count of consecutive clean rounds restarts.
+
+## Area 8, done check
+
+Branch `review/8-done` from master `5bcf9284`. **WORK IN PROGRESS: paused at the coordinator's request with the overnight run about one tenth done. No verdict yet; area 8 is not declared done.** Changed: test code only (`RunProbeDone` in `DecompilerTrustTests.cpp`, behind `SE_TRUST_PROBE_DONE=1`), `Docs/Decompiler/tools/a8_done/longrun.sh`, the ledger (A8-52 filed, A8-45's status cell given its word) and this section. No product code.
+
+### The criteria, against the record
+
+| Criterion | Finding |
+|---|---|
+| Two consecutive review rounds with no P1 or P2 | **Met by rounds 7 and 8.** Round 6 filed A8-36 and A8-37 (P2). Round 7 (master `21c0ed1d`): clean, four P3 rows (A8-42 to A8-45). Round 8 (master `b26f913b`): clean, six P3 rows (A8-46 to A8-51). Product code changed between them (the fixer for A8-42 to A8-45), and round 8 attacked those fixes, so the two rounds are consecutive in the program's sense |
+| A fix after the last round that no reviewer saw | **Yes: the fixer for A8-46, A8-50 and A8-51 changed `DecompilerPanel.cpp` and `.h` after round 8** (the entry box: `mBoxCleanText`, `mBoxPrevText`, the restore in `IsItemEdited`, the refusal clearing the pending sync, the box's second tooltip; about 45 lines, mutation-checked by the fixer, in the component that gave A8-42, A8-46 and A8-50 in consecutive rounds). The cycle says the next round's reviewer verifies the previous fix, and no round followed. Everything else that touched the panel since (`git diff b26f913b 5bcf9284`): area 9's one-full-stop line for A8-48, area 7's wording of the folded fallback and its `noOrigin` tooltip; none of them a trust indicator's logic. **This check made that look itself** (below): no P1 or P2, one P3 (A8-52, accepted). It is a short look by the done check's owner, not a full round; whether it stands in for round 9 is the coordinator's call |
+| Every P3 fixed or accepted with a reason | **Met.** All 52 rows have 8 cells. A8-1 to A8-51: fixed, or accepted with a reason (A8-16, A8-26, A8-32, A8-40, parts of A8-15 and A8-23). Two cells were not in the ledger's words: A8-34 reads "closed (area 8 fixer; the rest is A8-40)", which is a reason and was left; A8-45 (the instrument record) had no status word and now reads "accepted", with what it leaves to A8-40. A8-52 (new, below): accepted |
+| No open P1 or P2 rows | **Met.** The four P2 rows (A8-17, A8-30, A8-36, A8-37) are fixed; area 8 never had a P1 |
+| Rows routed out of area 8 | A8-43 (area 9's popup): fixed by the area 8 fixer. A8-44 (area 1's oracle): fixed by the area 8 fixer. A8-47 (area 1's oracle): fixed on `review/open-p3`, the three scripts in `kPinned`. A8-48 (area 9's popup texts): fixed on `review/9-round3-fix`. None unresolved |
+| Rows routed into area 8 | A11-15 (area 11, to the Follow rig): fixed `9522bb1b` (five `kFollowScriptPins`). No open row of another area names area 8, the trust test or the trust model (A7-17, open, is area 7's Assembly-follow toggle in the same panel) |
+| The generator run overnight once with no violation | **Not met yet.** No earlier record has a run of that length (the longest: round 8's, about 1.1 million operations over several ranges). The run below was started and paused |
+
+### The fixes after round 8, attacked (`RunProbeDone`, `SE_TRUST_PROBE_DONE=1`)
+
+Read first: the restore in `DrawHeader`'s `IsItemEdited` branch, `EnterTarget`, `Install`'s `sameFunction`, `SetTarget`'s refusal reset. From the reading: `mEntry` is the address as typed (a mirror stays a mirror), so A8-51's comparison of the box's number with `EnterTarget`'s address cannot call a mirror "an older address"; the only place that ends a refusal is `SetTarget`, which sets the sync again, so A8-50's cleared sync cannot leave the refused text behind. Then seven hand-built sequences on the small rig, each printing the label, the Entry line, the box, the tooltips and the error:
+
+| # | Sequence | Result |
+|---|---|---|
+| D1 | Follow PC on C; the box clicked, '1' typed and deleted (untouched again, A8-46); the PC to A with the box focused; Enter | A asked as a pin, "rts scan, 60%" with the line, the box rewritten to A. Right (A8-42 holds after a restore) |
+| D2 | the box clicked, all selected, the last seven digits of C typed, Home, the first digit; Enter | **A8-52**: "rts scan, 60%" and the Entry line, a pin, where the user typed the whole address |
+| D3 | `zz` refused; the box clicked, all selected, C's address put in in one frame (a paste); Enter | **A8-52**, the same. (Before the Enter the refusal and its tooltip stay though the box now holds an address: A8-4's rule, the refusal is the question until Enter, unchanged by the fix) |
+| D4 | the box kept C while A is shown: its tooltip; '1' typed and deleted: its tooltip; Enter | "The box still holds an older address ..." while untouched; "Decompile the function starting at this address ..." once the text is the user's; Enter asks C, "user-set entry". Both tooltips true |
+| D5 | `zz` refused in the box that had the focus when A installed; the box clicked, 'q' typed, Escape; Follow PC off, on | `zz` stays through all of it with the refusal; the box's tooltip is the plain one; the Follow PC click ends the refusal and the box reads A. Right |
+| D6 | Enter on the focused box that kept C (A asked, the box rewritten to A); the box clicked, Ctrl+Z; Enter | the undo brings nothing back; a pin of A with its doubt. Right |
+| D7 | the box kept C while A is shown, '1' typed and deleted (the user's C); the PC back in C with the box focused; '1' typed and deleted; Enter | a pin of C, "rts scan, 60%" with the line: the text is the shown output's again. Right |
+
+**A8-52 (P3, accepted).** An address entered in full by the user, but not left to right (a paste, or the first digit last), that equals the text the panel last wrote for the function shown counts as an edit taken back: Enter asks the function shown as the finder's guess, not as "user-set entry". The panel claims less than the user gave, never more; the direction opposite to A8-30, A8-36 and A8-46. Accepted with the reason in the row.
+
+No P1 and no P2 from the look.
+
+### The overnight run (paused)
+
+RelWithDebInfo, gcc, the worktree's build at `5bcf9284`, the binaries copied aside before the first job, one job at a time under `ulimit -v 3500000`, each with its own log (`Docs/Decompiler/tools/a8_done/longrun.sh <build dir> <log dir> <chunk>`; the logs are not in the repository). Seeds from 2,000,000: no earlier record uses a Follow rig seed above 1,451,000.
+
+| Job | Seeds | Sequences | Operations | Failures | Wall / CPU (user + sys) |
+|---|---|---|---|---|---|
+| mix 8, `SE_TRUST_FOLLOW_FOCUS=1`, hover on | 2,000,000 to 2,004,475 | 4,476 | 200,007 | 0 | 709 s / 656 s |
+| mix 9, the same | 2,000,000 to 2,004,475 | 4,476 | 200,007 | 0 | 775 s / 661 s |
+| mix 8, focus, `SE_TRUST_NOHOVER=1` | 2,100,000 to 2,104,471 | 4,472 | 200,024 | 0 | 1,066 s / 524 s |
+| mix 9, the same | 2,100,000 to 2,104,471 | 4,472 | 200,024 | 0 | 1,070 s / 530 s |
+| **Done so far** | | **17,896** | **800,062** | **0** | 3,620 s wall, about 40 minutes of CPU |
+| mix 8, focus, `SE_TRUST_FOLLOW_CPU=1`, hover on, from 2,200,000 (chunk 2) | | | | | stopped by the pause after 12 minutes, before it printed anything: **not counted, to be run again** |
+
+Still to run for an overnight length (about 6 hours of CPU): chunk 2 (focus, CPU, hover on, from 2,200,000), chunk 3 (focus, CPU, no hover, from 2,300,000), chunk 4 (no focus operation, hover on, from 2,400,000), chunk 5 (no focus operation, CPU, no hover, from 2,500,000), each 400,000 operations for mix 8 and for mix 9; chunk 6, the model run `SE_MODEL_SEEDS=10000` (not started; the model has no start seed, seeds 1 to 1,200 were run by the fixer); chunk 7, mixes 0 to 7 with `SE_TRUST_HIDDEN_RENAME=1` from 2,600,000.
+
+To resume (one chunk at a time, each fits two hours):
+
+```
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+( ulimit -v 3500000; cmake --build build -j2 --target SaturnExplorerDecompilerTrustTests SaturnExplorerDecompilerModelTests )
+for c in 2 3 4 5 6 7; do Docs/Decompiler/tools/a8_done/longrun.sh build <log dir> $c; done
+```
+
+A failing job prints `FOLLOW FAILURE, seed N` (replay with `SE_TRUST_FOLLOW_SEED=N`, `SE_TRUST_FOLLOW_AUTO=1` for mix 9, and the job's knobs), `MODEL FAILURE` (mixes 0 to 7) or `seed N: FAILED` (the model, `SE_MODEL_SEED=N`); the output is to be kept before any rerun.
+
+### What was run besides
+
+| Run | Result |
+|---|---|
+| calibration: mix 8 with focus from 1,999,000 (3,049 operations); `SE_MODEL_SEEDS=100` | 0 failing (15 s); 100 seeds, 0 failed (44 s) |
+| `SE_TRUST_PROBE_DONE=1` | the table above |
+| `ctest` | not run: no product code changed, and the default trust run is unchanged (the probe is behind its variable) |
+
+### Verdict
+
+**Not given yet (paused).** As the record stands: the review-round, P3 and open-row criteria are met; the fix after round 8 had no reviewer's round, and the look made here found one P3 (A8-52, accepted); the overnight run has 800,062 operations of the Follow rig with no failure and is to be finished (chunks 2 to 7) before area 8 can be called done.
+
+## Area 8, round 9
+
+Branch `review/8-round9` from `73377fef` (the done check's WIP branch). An adversarial round on the area 8 fixer's change to the entry box (A8-46, A8-50, A8-51: `mBoxCleanText`, `mBoxPrevText`, the restore of `mBoxTargetValid` and `mBoxShowsShown` on `IsItemEdited`, the refusal clearing `mSyncEntryBox`, the second tooltip), read and attacked independently of the fixer's and the done check's conclusions. **No product code changed. No P1 and no P2: the round is clean.** Three P3 rows (A8-53 to A8-55), all accepted.
+
+### What was read, and the argument for no over-claim
+
+The box text can reach "untouched, the panel's" (`mBoxTargetValid`) by exactly three doors: the sync (box inactive, text written from the shown answer), an accepted Enter (text and `mBoxTarget` are what was asked), and the restore. The restore fires only when the text equals the text the panel last left (`mBoxCleanText`) and, for the shown answer's text, only while that text still equals `%08X` of `mShown.requestedEntry` (`mShownValid` guarded); for an Enter's text, only through `mBoxTarget`, whose address `EnterTarget` compares with the text. So whenever the box counts as untouched, its text is what the panel would write for what Enter then asks, and the label, the Entry line and the pin are those of the output asked for. The only way to be wrong is toward the doubtful side (a user's whole entry taken as the panel's text, A8-52). Checked in the code:
+
+* `mBoxPrevText` is written at the end of every Draw and read only on the frame of an edit; a hidden panel draws nothing and changes no text, so it cannot go stale. A programmatic write (the sync, the rewrite after an Enter on the panel's text) is followed in the same Draw by the copy, so the next edit compares against the right text.
+* A multi-character commit (IME, paste) over a shorter text that is a prefix of the panel's text is "typed out" (user's); over the same or an unrelated text it is a restore (panel's) or the user's. Both directions err to the cautious side.
+* The refusal branch clears the sync; the only places that end a refusal are `SetTarget` (which sets the sync again) and an accepted Enter (which clears it); a result cannot install under a refusal (`mEntryOk` false, `Accept` discards it), so no path writes the box over refused text.
+* The tooltip compares the box's number with the address `EnterTarget` gives. A mirror entered stays a mirror in `mEntry`, `mShownTarget.address` and `requestedEntry`, so a mirror is never called "an older address" (G2).
+* `SetCpu` touches neither the box nor a refusal; a refused entry followed by a CPU switch stays refused (G3).
+* ImGui 1.92 semantics seen on the harness: Escape reverts to the text at activation and raises `IsItemEdited` (restore reached, G6 shows it for an entered entry); Enter deactivates the single-line box, so the post-Enter rewrite of the text is not fought by the widget; Ctrl+Z reaches the restore (done check D6); focus loss keeps the text.
+
+### Probe (`RunProbe9`, `SE_TRUST_PROBE9=1`, test-only, prints)
+
+| # | Sequence | Result |
+|---|---|---|
+| G1 | Follow PC on C; End, 'g', Enter (refused); End, Backspace; Enter | the restore makes the box untouched; the refusal's tooltip and red line stay until Enter (A8-53, P3, accepted); Enter asks C as the finder's guess, refusal ended, right |
+| G2 | the mirror of C entered; '1' typed and deleted; Enter | label "user-set entry", the plain tooltip, never "older address"; right |
+| G3 | `zz` refused; CPU switched to one whose PC is in A; Enter on `zz`; Follow PC clicked | `zz` and the refusal stay through the switch and Enter; the click ends the refusal and the box reads C; right |
+| G4 | a draft `060041000` left with a click elsewhere; A installs | the draft is overwritten by A's entry (A8-54, P3, accepted) |
+| G5 | Enter twice on the untouched box | one pin of C, the finder's origin kept |
+| G6 | A typed and entered; '1' typed and Escape; Enter | "user-set entry" (the restore returns to the Enter's target, Typed); right |
+| G7 | A entered, Follow PC on, the PC walks to A, '1' typed and deleted, Enter | a pin of A with the doubt; the text is the shown output's; right |
+| G8 | the panel's own text put over itself in one frame; Enter | the finder's guess (A8-52's class, under-claim) |
+| G9 | `zz` refused, box focused, the PC to A | no install under the refusal; `zz` stays; right |
+
+### A8-52 re-judged
+
+Accepted stands, P3. The restore needs the text to equal what the panel wrote for the output shown, so a user's whole entry that is taken as the panel's names the function that is on screen; the panel then keeps its finder doubt (60%, "no symbol, call or user entry confirms it") where the user gave certainty. That is the doubtful side: nothing is shown as confirmed that was not. It never over-claims (G8, done check D2 and D3).
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SE_TRUST_PROBE9=1` | the table above |
+| `ctest --test-dir build -j1` | 117 of 117 passed (671 s) |
+| `check-literal-size.py` | ok |
+
+Product code is unchanged; the default trust run is unchanged (the probe is behind its variable). The long Follow-rig and model runs were left to the other job.
+
+### Verdict
+
+**Clean: no P1, no P2.** With rounds 7 and 8 and this round attacking the fixer's change, the done check's concern (a fix no reviewer saw) is met for the entry box. The overnight run's remaining chunks are the other job's.
+
+## Area 10, round 5
+
+Branch `review/10-round5` from `8f418cd6` (round 4's head), merged with area 3 round 38 (`4373fb37`) and area 5 round 36 (`55abe4e5`, which brings patch 0099); patches 0001 to 0099 (89 files). Reviewer of area 10, round 5, independent of rounds 1 to 4. Method as round 4: `tools/a10_round4/mut.py` with `jobs_gen.py` groups, hand-made edits for the hand reverts; jobs, logs and results in `tools/a10_round5/`. RelWithDebInfo, `-j2`, `ulimit -v 3500000`; `git status --porcelain -- SaturnExplorer/FrontEnd/third_party` empty after every mutant. **Verdict, area 10: clean. No P1 or P2 found.** Three P3 rows (A10-30 to A10-32): two corrections to round 4's acceptances (A10-27, A10-28) and the round's survivors. The round is partial: see "Not done".
+
+### 1. Round 4's work checked
+
+* `TestArea10Round4` a and b: 0052 hunk 3 reverted alone fails exactly `TestArea10Round4` (2 checks), 0090 hunk 13 likewise (2 checks); nothing else fails in `Sh2DecompilerTests`. Both are robust: a asserts the bad-data halt at the odd entry, the absence of any "overlaps instruction" warning and `halt_baddata();`; b counts the two writes and refuses the joined boolean. Neither depends on a name the engine numbers.
+* A10-27: the "cap of 256" is 64 hops (A10-30); no hidden P2 found, the layered hunks are fail-closed. A10-28: the reason given was false (restarts happen inside a request, A10-31); re-judged on the real reason, still P3. A10-29: 0086 hunk 8 is pinned now (below); the rest stands (0064 hunks 23 and 24 are unreachable on SH-2, A10-32).
+
+### 2. Patch 0099 (A5-173), one review against the pinned upstream
+
+`opCollapseIndirectsForCopy` keeps the guard INDIRECT of an address-forced global when the COPY's output is volatile (`iter = previter; continue;` steps past the kept op, as the loop's other branches advance by moving it); `replaceVolatile` moves the kept guards (the INDIRECTs right before the COPY whose iop names it) before the user op that takes the COPY's place, because the COPY is then dead code and its iop would dangle. Read for ownership (no allocation but one iop varnode), bounds (the scan stops at the block's start or the first op that is not such a guard), failure paths (none added; the `Volatile memory was propagated` check is before it) and cancel (no loop that can run long). The guards move in reverse order, which does not matter: each sits on a different global. Mutants: hunk 1 reverted fails `TestA5173Pins` (2 checks); hunk 2 reverted crashes the generated tests (rc -11, the dangling iop). No finding.
+
+### 3. New and hand-made mutants
+
+* 0086 hunk 8 (`TypeOpIntSdiv`): survived in round 4, killed now by the new `TestArea10Round5` a (`xStack_4` built from two pieces, then the signed division by 7 of A2-21's control: `(int4)xStack_4 / 7`; without the hunk the text has no cast and is an unsigned division as C). Hunk 9 (`TypeOpIntSrem`) has no fixture: the engine does not recover `%` from the shapes tried (A10-32). `TestArea10Round5` c is a control only.
+* Hand-made reverts: 0028 (`setEffects` made a no-op; the host's calls stay): killed by 6 unit tests; 0057 (the forward walk keyed on the varnode alone, as 0056 left it): killed by `TestArea3Round10Fix`; 0057's offset mask: survives (A10-32); 0044 (the `in_` register-piece suffix removed): killed by `TestArea2Round4` and `TestArea2Round5`.
+* Per-group mutation of the multi-hunk patches before 0059 that round 4 had not done: 25 groups of 0012, 0014, 0015, 0017, 0018, 0021, 0033, 0054 and 0055 (`jobs_D.json`, each run with the oracle that killed the whole patch; 0021 group 1 does not build); 7 survived that oracle and then passed all five (`runE.log`): A10-32.
+* 0064 hunks 23 and 24 alone: survive `unit`; unreachable (A10-32).
+
+### 4. Not done
+
+Hand-made reverts of 0056, 0065, 0066, 0072 and 0076 (they overlap one another, and with no upstream checkout to replay the stack their later dependants cannot be separated; round 4's per-group runs and the family's pins stand); the groups of 0006, 0023, 0032 and 0050 (spec regeneration and the fault matrix, about 30 mutants) and the re-runs of 0001, 0040, 0052 and 0060; 0066's cap fixture (unreachable, A10-30); 0086 hunk 9's fixture. The two consecutive clean rounds the program asks for are not yet met by this round alone (round 4 was not clean).
+
+### 5. A10-24
+
+Stays open: the drafts are in the record, nothing was filed (none can be from here). Patch 0099 adds no upstream defect of its own; its collapse of a STORE's guard into a register write is the family of item (6) (a global's guard against an access to a register).
+
+### 6. Runs
+
+EOF
+`ctest --test-dir build -j1` (RelWithDebInfo, `-j2`, `ulimit -v 3500000`) after the final build: `100% tests passed, 0 tests failed out of 117`. `check-vendored-tree.py lint`: `vendored tree: ok (lint)`. `check-literal-size.py`: `raw string sizes: ok (7 raw strings in 341 files)`. `git status` clean under `third_party/` after every mutant.
+## Area 3, round 40
+
+Branch `review/3-round40` from the coordinator's master with round 39 merged (`77a452a1`). RelWithDebInfo, `-j2`, `ulimit -v 3500000`. A review of round 39's product changes in `Sh2Decompiler.cpp` (A3-269 `NoteOwnStore`/`ApartOnBus`, A3-270 `Clobber`'s `innerChanged` for an exact address handed to a callee) with hand fixtures (`Docs/Decompiler/tools/a3_round40/`, round 39's tooling moved with `git mv`; `mk.py` now writes 424 fixtures: the ab, ph and ov series are new), then fresh sweeps. One P2 miss found and fixed (A3-274); P3: A3-275 (in A3-271's accepted class), A3-276 (the window's cost, accepted), A3-277 (a register saved in a hardware address, accepted), A3-278 (sweeps routed). A3-271 not reopened.
+
+### 1. Review
+
+* **A3-269, `ApartOnBus`.** No miss. The generator's bus repeats the 4 KiB cache data array under partitions 4 and 6 and the 1 MiB work RAMs; nothing it repeats is tighter than 0x1000. Words at 0xC0000FFC and 0xC0000000 or 0xC0001000 (ab1, ab2, ab4) are different words and silent; 0xC0000000 and 0xC0001000 (ab3) are one and said. An aliased store inside the window needs a start 0x1000 + j from the word with j between minus the width and 3, and a distance below 0x1000 makes j negative: an aligned store cannot (an unaligned one is an address error). Overlapping byte and half-word stores (ab5, ab9) are said; the window's two ends at r4 plus and minus 0xFFC (ab6, ab7) are other words. A distance wrapped at 32 bits compares right (`Wrap`), a register base plus a negative offset likewise, and a store of another width than the word is judged by its own width. Hardware repeats tighter than 0x1000 (SMPC every 0x80 bytes, the SCU and VDP registers) are no memory a register is saved in. Mednafen's `ss.cpp` was not read (`_emu/mednafen` is absent here); the generator's own map was used.
+* **A3-270, exact address handed to a callee.** Said: r5 and r6 (ph2), an address copied through r8 (ph10), a lent callee with r4 to r7 shown (ph3b), a second-level callee (ph5), a tail jump through a literal (ph6), a caller-made `sub` (ph9), a byte store (ph12), `@(r0,r5)` (ph13), a re-pushed word (ph17), an own-frame word that is no push (ph18). **Missed, P2 (A3-274):** the address in r7 to a callee that is not lent (ph3), `pw7` with a callee that returns r3 (ph23, ph24 through a second level), the address stored by a lent callee in a global and written by a later callee (ph14), handed back in r0 and written through by the caller (ph19), and handed in a stack word (ph16). In each r10 came back 7 and the text said no caution. Cause: for a callee that is not lent `Apply`'s frame clobber (the default effects write at and above the call's r15) wrote the word over as one that may still hold the entry value before A3-270's rule in `Clobber` looked for a saved register; a lent callee that keeps or returns the address does not "store through" the register.
+* **Misses left, in A3-271's class (A3-275, P3 accepted by class):** the callee steps the handed pointer (ph7, ph8) or stores past the object (ph11), and an address in r13 (ph4).
+* **Interaction with A3-264 to A3-266.** No new miss: the frame words and restored values of rounds 38 and 39 are unchanged on all fixtures of the file but ph*.
+* **Over-warnings.** A3-276: a store 4 KiB or more from the saved word (two globals 8 KiB apart, a pointer plus 6 KiB, a copy loop 8 KiB on: ov1 to ov3, ab8) is a hedge, `caution.unchanged`, a "may". A3-274's fix adds the same hedge where a callee only reads through the handed address (ph20, ph21). No wrong statement.
+
+### 2. Fix
+
+* **A3-274.** `NoteHandedSavedWords`, called from `Call` before `Apply` in the probe and the walked callees: a saved register's word (r8-r14, GBR, VBR) that an exact stack address handed to the call lies in is marked `innerChanged` for the register. The addresses: for a lent callee those in r0-r7 named by `storesThrough`, `leaks` or `outOrigins`; for a callee that is not lent the convention's (r2, r4-r7) and what its walk shows it hands on (`CalleeHanded`, r0-r7 only: r8-r14 hold the frame pointer); and an exact stack address in a word at or above the call's r15, for a callee not lent or one that loads from memory.
+* **Evidence.** Pins, `TestA3RoutedPins`: the A3-274 block (ph3, ph14, ph16, ph19, ph23; control ph20). Old code (round 39's head, same fixtures, the generator binary kept and run beside the new one; not committed): ph3, ph14, ph16, ph19, ph23, ph24 `n:caution-unsaid`, required 1, said 0; new code: all said, no finding. Each pin runs with cautions taken out and is then `caution-unsaid`. A diff of the file's 418 run lines between the two binaries: only ph3, ph14, ph16, ph19, ph23, ph24 (said now) and ph20, ph21 (a hedge) differ.
+* **Expected changes in game text:** none from compiled code (no local is the address of a saved register's word; a frame pointer r14 = r15 is not handed); notes only, no statement, prototype or ledger count changes. The local corpus is not in the repository: no corpus text was compared.
+
+### 3. Sweeps (`SE_GENERATED_CANARY=0`, `SE_GENERATED_PINS=0` for the first two)
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep` | 14,200,001, 10,000 seeds | failing seeds=1, findings=2: 14204452 `map-const-join`: area 7, routed (A3-278) |
+| Grammar 1 | 14,300,001, 10,000 seeds | failing seeds=2, findings=5: 14307638 `map-way-back` (A7-25), 14309635 `map-copy-store`: area 7, routed (A3-278) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | | 10,000 seeds of each grammar: all passed (canary 240 programs, 0 failing; 999 pin lines, six of A3-274) |
+
+No area 3 class (`caution-unsaid`, `callee-saved`, `state-saved`) in either sweep. As in rounds 38 and 39 the sweeps draw none of the shapes under review.
+
+### 4. Runs
+
+* `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`): **117 of 117 passed** (696 s).
+* `python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include SaturnExplorer/Core`: raw string sizes ok (7 raw strings in 341 files). `tools/a3_round40/selftest.sh`: ok. `run.sh` over all 424 fixtures: exit 0, none FAILED (findings: A3-261 (b) b40 and b41, A3-271 pw9 and pw10, A3-275 ph4, ph7, ph8, ph11, A3-277 ab11 and ab11b, and the generator-class ones by design). C++17 only.
+* Not run: the local game corpus (not in the repository); the sanitizer jobs (CI).
+
+**Verdict, area 3 round 40 (A3-274 fixed): not clean.** P2: A3-274 (round 39's A3-270 reached only a lent callee that stores through a register; the exact address of a pushed word handed to a callee that is not lent, kept by one in memory, returned, or put in a stack word still came back changed with no caution; found by hand, fixed with pins). No P1. P3: A3-275 (in A3-271's class, accepted), A3-276 and A3-277 (accepted), A3-278 (routed). A3-269's window holds: no miss. The sweeps are clean for area 3. The count of consecutive clean rounds restarts.

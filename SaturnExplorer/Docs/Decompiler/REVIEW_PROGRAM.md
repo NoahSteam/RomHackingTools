@@ -121,6 +121,29 @@ separately which instruction did a statement's effect, which contributed its val
 Priority 1 areas (1 to 6) run first, as two or three parallel tracks; Priority 2 areas (7 to 10)
 are mostly single sessions once CI exists; 11 is the generator and the mutation audit; 12 is CI.
 
+### Area 3: scope and acceptance
+
+Set by the project owner on 2026-11-20, after rounds 36 to 40. Each of those rounds found new P2 misses in one
+mechanism, whether a call can change a register through the caller's saved copy of it, and each fix closed a few
+shapes for the next round to find others. Every one of those findings came from hand-built probes; the generator's
+sweeps (20,000 to 40,000 programs a round) found none in rounds 38 to 40.
+
+- **Accepted class (P3 by class, not filed one by one):** a callee that writes its caller's pushed saved-register
+  words (r8 to r14, GBR, VBR) through any route: a handed pointer or index, an offset the walk cannot place, a stack
+  word, a global, an address handed back in r0, a second-level callee; and a register saved to memory and restored
+  around a store that reaches the same bytes through a bus mirror or repeat (the cache-through 0x2xxxxxxx area, the
+  work-RAM and low-RAM repeats). In these shapes a "this call leaves rN unchanged" can be wrong.
+- **Why:** a C compiler for the SH-2 saves and restores each callee-saved register in the callee's own frame, never
+  hands out a pointer into a caller's save area, and does not save through one alias and restore through another. The
+  shapes need hand-written assembly (context switches, setjmp-style code, some BIOS or driver code), and even there
+  they are unusual. The fixes already merged (A3-249 to A3-274) stay; nothing is reverted.
+- **What reopens it:** a hit in the game corpus or in a generator sweep (a `caution-unsaid` of this shape on code the
+  generator or a compiler made), or a user report from a real game.
+- **Area 3 rounds from round 41** cover what compiled code does: calling conventions, prototypes, lent signatures,
+  returns and the convention registers, on generated sweeps and on fixtures shaped like compiled code, not hand-built
+  probes of the accepted class.
+- **Done for area 3**: as for every area, with the accepted class recorded (A3-279) and not counted against a round.
+
 ## Done, overall
 
 All twelve areas done; the CI matrix green for a week with the nightly generator running; one

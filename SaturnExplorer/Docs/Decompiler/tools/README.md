@@ -31,6 +31,8 @@ Kept here:
   trust test's own knobs for them: `SE_TRUST_FOLLOW_SCRIPT`, `SE_TRUST_FOLLOW_DUMP`, `SE_TRUST_FOLLOW_CPU`, `SE_TRUST_HIDDEN_RENAME`.
   `a8_round5/`: `probe5.sh` (A8-32 and A8-33: `SE_TRUST_PROBE5=1`). `a8_round6/`: `probe6.sh` (A8-36 to A8-39, and A8-32's variant without an
   amber line: `SE_TRUST_PROBE6=1`, the trust test's `RunProbe6`, not in the default run).
+  `a8_done/`: `longrun.sh <build dir> <log dir> <chunk>` (area 8's done check: the overnight-length run of the Follow rig, the model and
+  mixes 0 to 7 in seven chunks, one job at a time, a log per job).
   `a9_round1/`: `run_pieces.sh` (a long run of `SaturnExplorerLoaderFuzzTests` in pieces of at most 20 minutes) and
   `wasm32_yss_wrap.sh` with `yss_wrap32.cpp` (the 32-bit repro of A9-7; needs an emsdk and node).
 * `a3_round16/` (area 3 round 16): `frame16.py SEED COUNT` (twelve frame-attack modes: 4 to 6 slot chains, pointers through globals, mixed widths at odd offsets,

@@ -1,0 +1,18 @@
+0052-h3: applied [3] named_hit=False unit:FAIL(rc1,TestArea10Round4=2)
+0090-h13: applied [13] named_hit=False unit:FAIL(rc1,TestArea10Round4=2)
+0086-h8: applied [8] named_hit=False unit:FAIL(rc1,TestArea10Round5=1)
+0086-h9: applied [9] named_hit=False unit:ok(rc0,)
+0099-g1: applied [1] named_hit=False gen:FAIL(rc1,TestA5173Pins=2)
+Traceback (most recent call last):
+  File "/home/user/RomHackingTools/.claude/worktrees/agent-a285aa6983641c17d/SaturnExplorer/Docs/Decompiler/tools/a10_round4/mut.py", line 221, in <module>
+    main()
+    ~~~~^^
+  File "/home/user/RomHackingTools/.claude/worktrees/agent-a285aa6983641c17d/SaturnExplorer/Docs/Decompiler/tools/a10_round4/mut.py", line 215, in main
+    h.job(job)
+    ~~~~~^^^^^
+  File "/home/user/RomHackingTools/.claude/worktrees/agent-a285aa6983641c17d/SaturnExplorer/Docs/Decompiler/tools/a10_round4/mut.py", line 165, in job
+    txt = open(full, encoding="utf-8").read()
+          ~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/user/RomHackingTools/.claude/worktrees/agent-a285aa6983641c17d/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/fspec.cc'
+0099-g2: applied [2] named_hit=False gen:FAIL(rc-11,)
+finished
