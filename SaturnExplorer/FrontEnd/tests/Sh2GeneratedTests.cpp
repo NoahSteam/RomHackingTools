@@ -22351,6 +22351,75 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
         }
     }
+    // A3-250 (area 3 round 35 review, tools/a3_round35 fixtures l1 to l3, q1 to q8): a register changed by a load whose address names it
+    // (`mov.l @r10,r10`, `mov.l @r10+,r10`), or by a value stored through a pointer and loaded back, was taken as "read from memory with the
+    // register among its origins" (SureChanged, A3-199's rule): no change for certain, and no mark. F2 pushes r10, calls G (sets r10), pops r10
+    // and does the body; F0 stores r10 after the call; the runs return r10 changed and the text said no caution. Two parts: a load marks the
+    // registers its address was made from that this function stored to no memory itself (Load, `viaAddress`: l1 to l3, q7, whose address, a
+    // call's returned r4, names every register); a value stored through a pointer carries its marks to a later load (`mLeakChanged`: q1, q2,
+    // q5, q6). Each as printed: no finding, the caution required
+    // and said; with every caution taken out, `caution-unsaid`. Controls: q4 (r10 stored through itself, loaded back: unchanged) says nothing and
+    // finds nothing; q8 (r3 through r4 into r10, no push) is said, as before.
+    {
+        const struct { const char* name; const char* funcs; const char* words; } pins[] = {
+            { "l1", "0/0/18,20/20/2a,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // mov.l @r10,r10
+            { "l2", "0/0/18,20/20/2e,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 B00D 0009 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // the same after an inner call
+            { "l3", "0/0/18,20/20/2a,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 6AA6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // mov.l @r10+,r10
+            { "q1", "0/0/16,20/20/36,40/40/46", "4F22 2FA6 6A43 7A08 B00A 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 7A04 2AA2 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // pop, add #4,r10, mov.l r10,@r10, mov.l @r10,r10
+            { "q2", "0/0/16,20/20/38,40/40/46", "4F22 2FA6 6A43 7A08 B00A 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 61A3 7A04 21A2 6A12 4F26 000B 6033 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // the same through a copy r1
+            { "q5", "0/0/16,20/20/36,40/40/46", "4F22 2FA6 6A43 7A08 B00A 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 7A04 24A2 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // add #4,r10, mov.l r10,@r4, mov.l @r4,r10
+            { "q6", "0/0/16,20/20/36,40/40/46", "4F22 2FA6 6A43 7A08 B00A 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 6AA7 24A2 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // not r10,r10 in place of the add
+            { "q7", "0/0/16,20/20/36,40/40/46", "4F22 2FA6 6A43 7A08 B00A 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 EA07 24A2 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // no mark: mov #7,r10, mov.l r10,@r4, mov.l @r4,r10
+        };
+        for (const auto& p : pins)
+        {
+            ModulePin pm = { "A3-250", p.words, p.funcs, nullptr, "0,0,0", "0,400,400", nullptr };
+            const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin 'A3-250 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", p.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
+        }
+        const struct { const char* name; const char* funcs; const char* words; bool noted; } controls[] = {
+            { "q4", "0/0/16,20/20/34,40/40/46", "4F22 2FA6 6A43 7A08 B00A 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 2AA2 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", false },   // control: r10 stored through itself, loaded back (unchanged)
+            { "q8", "0/0/16,20/20/32,40/40/46", "4F22 2FA6 6A43 7A08 B00A 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 4F22 2FA6 6A33 24A2 6A42 62F6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", true },   // control: r3 stored through r4, loaded into r10 (no push of r10 in F2)
+        };
+        for (const auto& c : controls)
+        {
+            ModulePin pm = { "A3-250", c.words, c.funcs, nullptr, "0,0,0", "0,400,400", nullptr };
+            const Report rep = EvaluateSubject(d, ModuleSubject(pm), true);
+            std::printf("pin 'A3-250 control %s': %zu finding(s), notes %d, unchanged %d, said %d\n", c.name, rep.findings.size(), count(rep, "caution.notes"),
+                        count(rep, "caution.unchanged"), count(rep, "caution.said"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(rep.findings.empty() && (c.noted ? count(rep, "caution.said") > 0 : count(rep, "caution.notes") == 0));
+        }
+    }
+    // A3-251 (grammar 2 seed 13102045, `SE_GENERATED_CAUTION=deep`, whole and shrunk): a callee F3 loads GBR (`tas.b @r5 ; ldc r5,gbr`), reached
+    // through two tail-jumping thunks; the caller reads GBR after the call (`stc gbr,r3`) and calls it again, and F3 branches on r3 (`tst r3,r3 ;
+    // bt`). The caution's "read after it" at the first call took the registers a later callee reads as it finds them from r8-r14, GBR and VBR
+    // (CalleeEntryRead) and the ones it stores through or hands on, and so never r3, a scratch register: the text named r12 at the call and not
+    // GBR, and the run's second call parted on the branch (`caution-unsaid-deep`, own-effect). Counted otherwise: `caution.unsaid.deep.own-effect`.
+    {
+        const Report seed = Evaluate(d, MakeV2(13102045), false);
+        std::printf("pin 'A3-251 grammar 2 seed 13102045': %zu finding(s), caution required %d, said %d, deep %d\n", seed.findings.size(), count(seed, "caution.required"),
+                    count(seed, "caution.said"), count(seed, "caution.unsaid.deep") + count(seed, "caution.unsaid.deep.own-effect"));
+        CHECK(seed.findings.empty() && count(seed, "caution.required") > 0 && count(seed, "caution.said") + count(seed, "caution.said.likewise") > 0 &&
+              count(seed, "caution.unsaid.deep") + count(seed, "caution.unsaid.deep.own-effect") == 0);
+        const ModulePin shrunk = { "A3-251 13102045 shrunk", "0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 8913 0009 C702 015E 412B 0009 0009 0600 9034 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 B013 0009 0009 0009 0009 0312 B00D 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 D201 422B 0009 0600 9074 D101 412B 0009 0009 0600 9080 0009 2338 8900 62C6 451B 451E 0009 0009 000B 0009",
+                                   "0/0/6a,6a/6a/70,74/74/7a,80/80/94", "1e:5:4:40:34,34,38,3c", "1,1,1,1", "21000,21000,21000,21000", "800,0,0,3008" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(shrunk), true);
+        std::printf("pin 'A3-251 shrunk': %zu finding(s), caution required %d, said %d, deep %d\n", rep.findings.size(), count(rep, "caution.required"), count(rep, "caution.said"),
+                    count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect"));
+        for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+        // (the shrunk program does not return in every input mode: the generator's own no-return lines are not the check)
+        CHECK(!Has(rep, "n:caution-unsaid") && count(rep, "caution.required") > 0 && count(rep, "caution.said") > 0 &&
+              count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect") == 0);
+    }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
     {
