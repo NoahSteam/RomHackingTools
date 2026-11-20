@@ -4817,7 +4817,7 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         // (area 8 fixer, A8-36) Enter on the entry box as the panel left it: what the tooltips tell the reader to do. It asks again what the text
         // stands for, with its origin; the rig presses it only where it knows what that is.
         if (!r.visible) return "(panel hidden: no entry box)";
-        // (area 8 fixer, A8-56) A running emulator the panel has not captured yet, followed: the panel captures on its own cadence (the retry of a
+        // (area 8 fixer, A8-57) A running emulator the panel has not captured yet, followed: the panel captures on its own cadence (the retry of a
         // PC that found no function, the auto-refresh), 30 frames after the last capture, and how many frames pass before an op is the number the
         // wait for the engine took, which is the machine's. A capture in the click's frames installs a new output under the box that has the focus
         // now, and Enter asks that output, as A8-42 says it asks the output shown; the rig, which took what Enter asks before the click, then
@@ -5107,7 +5107,7 @@ const char* const kFollowScriptPins[] = {
     "pct; follow; enter; refresh; enter",
 };
 
-// (area 8 fixer, A8-56) Enter on the entry box while a followed running emulator is captured by the panel's own retry in the click's frames.
+// (area 8 fixer, A8-57) Enter on the entry box while a followed running emulator is captured by the panel's own retry in the click's frames.
 const char* const kFollowRacePins[] = {
     "pcc; paused; pcbios; running; pct; advance; advance; enter",
     "pcc; paused; pcbios; running; pct; advance; advance; advance; enter",
@@ -5415,7 +5415,7 @@ int main(int argc, char** argv)
                     failedList.push_back("pin: follow seed " + std::to_string(seed));
                 }
             }
-            // (area 8 fixer, A8-56) The race the rig's Enter on the box lost to the panel's own capture: whether the new output is installed before
+            // (area 8 fixer, A8-57) The race the rig's Enter on the box lost to the panel's own capture: whether the new output is installed before
             // the Enter's key frame is the engine's speed against the frames, so each script runs 40 times (it failed one run in ten to one in two with the
             // skip in EnterBox off: pcc; paused; pcbios; running; pct; then 2 or 3 advances, so that the 30th frame since the capture at the
             // BIOS falls in the click's frames).

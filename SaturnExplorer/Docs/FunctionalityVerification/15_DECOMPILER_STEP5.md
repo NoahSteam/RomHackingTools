@@ -24838,7 +24838,7 @@ EOF
 
 ## Area 8 fixer (seed 2307517)
 
-Branch `review/8-fix-2307517` from `74fe81f7`. Test code only (`DecompilerTrustTests.cpp`); no product code changed. One row, A8-56 (P3, fixed).
+Branch `review/8-fix-2307517` from `74fe81f7`. Test code only (`DecompilerTrustTests.cpp`); no product code changed. One row, A8-57 (P3, fixed).
 
 ### The failure was not carried-over state
 
