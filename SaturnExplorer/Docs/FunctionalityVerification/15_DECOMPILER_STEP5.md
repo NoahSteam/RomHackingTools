@@ -24834,3 +24834,32 @@ Stays open: the drafts are in the record, nothing was filed (none can be from he
 
 EOF
 `ctest --test-dir build -j1` (RelWithDebInfo, `-j2`, `ulimit -v 3500000`) after the final build: `100% tests passed, 0 tests failed out of 117`. `check-vendored-tree.py lint`: `vendored tree: ok (lint)`. `check-literal-size.py`: `raw string sizes: ok (7 raw strings in 341 files)`. `git status` clean under `third_party/` after every mutant.
+
+
+## Area 8 fixer (seed 2307517)
+
+Branch `review/8-fix-2307517` from `74fe81f7`. Test code only (`DecompilerTrustTests.cpp`); no product code changed. One row, A8-56 (P3, fixed).
+
+### The failure was not carried-over state
+
+The done check's long run failed at `FOLLOW FAILURE, seed 2307517, after operation 21` (mix 9, from 2300000, focus, CPU, no hover) and passed alone. Starting the same job at other seeds moved the failure: from 2303500 it failed at seed 2306667, from 2305500 at 2306574, and with another step count it passed. Run alone and repeated, each of those seeds fails about one run in three (`SE_TRUST_FOLLOW_SEEDS=<seed>`, new: seeds or ranges one after another in one process): 2307517 3 of 20, 2306667 7 of 20. So the outcome is timing, not the sequences before. Chunk 5's failure (seed 2502030, no focus operation) is the same class: 9 of 20 alone with the fix off, 0 of 20 with it on.
+
+### Cause
+
+Each failing sequence ends with Enter on the untouched box while the emulator runs, Follow PC is on, and the panel's held snapshot is older than the view (a PC that found no function, or a view moved while running). The panel then captures by itself: `Update` retries a followed PC that found no function, and the opt-in auto-refresh fires, once `kAutoRefreshFrames` (30) frames have passed since the last capture. The number of frames between two operations is what the rig's `Settle` waited for the engine, so it is the machine's load. When the capture is answered in the frames of the rig's click into the box (a cache hit, or a quick worker), the new output is shown under a box that has the focus and kept its text, and Enter asks the output shown (A8-42): a pin of the function just installed. The rig had read what Enter asks (`EnterProv`) before the click and held the panel to the older pin: `I1 STALE NOT MARKED`, the model `NothingAsked`, no badge, no dimming. Printed at the failure: before the Enter key the panel already wanted and showed 06000010 (T) while the box kept 06005000; after it, Follow PC off, box 06000010, shown 06000010.
+
+### Why the panel is right
+
+Its box, target, label, Entry line and output all name the function it asked; the output on screen at the Enter's frame is the one asked, and nothing on screen is claimed that is not so. The rig's expectation was the wrong one. Severity P3 (a rig defect that reported a failure that is not one). The same class as mix 8 seed 40109 (A8-29's round), which the rig already handled for the click on Follow PC only.
+
+### Fix and pins
+
+`FollowExecute`'s `EnterBox` does not press Enter when the view is a running emulator, the target is Follow PC and the held snapshot is not the view's (source, serial, frame): a capture can still land in the frames. `kFollowRacePins`: `pcc; paused; pcbios; running; pct; advance; advance; enter` and the same with three advances (the 30th frame after the capture at the BIOS falls in the click's frames), each run 40 times in the default run. With the skip off they failed 2 and 4 of 24 runs in a process (3 of 6 as single processes); with it on, 0 of 30 and 0 of 30 single processes.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| the failing job (`SE_TRUST_MIX=9 SE_TRUST_FROM=2300000 SE_TRUST_STEPS=340000 SE_TRUST_OOM_STRIDE=0 SE_TRUST_FOLLOW_FOCUS=1 SE_TRUST_FOLLOW_CPU=1 SE_TRUST_NOHOVER=1`) | 7,625 sequences (seeds 2300000 to 2307624), 340,014 operations, 0 failing (819 s) |
+| seeds 2307517, 2306667, 2306574, 2502030, 20 runs each alone | 0 failing |
+| default trust run | all passed (58 s), the race pins ok |
