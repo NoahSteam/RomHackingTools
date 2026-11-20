@@ -3115,6 +3115,37 @@ private:
                 op.code != ghidra::CPUI_CALLOTHER)
                 for (const ghidra::VarnodeData& vn : op.in)
                     if (vn.space->getType() != ghidra::IPTR_CONSTANT) inner |= Get(s, vn).innerChanged;
+            // (area 3, round 34, A3-246) A word that may still hold a register's entry value (Value::mayEntry), put through an op that gives another
+            // value for any nonzero operand (xor, or, and, negate, not, a shift by a constant, a product, a part of the word and its extension): the step A3-243 marks for add and subtract.
+            // The result is the register's change on the paths that run it (`not r10` after the epilogue's pop). Marked as an inner call's change is.
+            uint32_t stepped = 0;
+            if (op.hasOut)
+            {
+                const bool shift = op.code == ghidra::CPUI_INT_LEFT || op.code == ghidra::CPUI_INT_RIGHT || op.code == ghidra::CPUI_INT_SRIGHT;
+                const bool unary = op.code == ghidra::CPUI_INT_2COMP || op.code == ghidra::CPUI_INT_NEGATE;
+                const bool binary = op.code == ghidra::CPUI_INT_XOR || op.code == ghidra::CPUI_INT_OR || op.code == ghidra::CPUI_INT_MULT ||
+                                    op.code == ghidra::CPUI_INT_AND;
+                // (a part of the word, `extu.b r10,r10` is a zero-extension of one: the narrowing is the step, its zero-extension carries it on)
+                const bool part = op.code == ghidra::CPUI_SUBPIECE || op.code == ghidra::CPUI_INT_ZEXT || op.code == ghidra::CPUI_INT_SEXT;
+                if ((shift || unary || binary || part) && op.in.size() >= 1)
+                {
+                    bool zeroOperand = false;
+                    uint32_t may = 0;
+                    for (size_t k = 0; k < op.in.size(); ++k)
+                    {
+                        if (op.in[k].space->getType() == ghidra::IPTR_CONSTANT)
+                        {
+                            if (!part) zeroOperand = zeroOperand || (op.in[k].offset == 0 && (k > 0 || binary)) ||
+                                                  (op.code == ghidra::CPUI_INT_AND && op.in[k].offset == (op.out.size >= 8 ? ~0ull : ((1ull << (8 * op.out.size)) - 1)));
+                            continue;
+                        }
+                        const Value v = Get(s, op.in[k]);
+                        if (v.kind == Value::Imm) { zeroOperand = zeroOperand || (v.v == 0 && (k > 0 || binary)); continue; }
+                        if (v.kind == Value::Fuzzy && (k == 0 || binary)) may |= v.mayEntry & kModelKept & ~v.stale;
+                    }
+                    if (!zeroOperand) stepped = may;
+                }
+            }
             bool falls = true;
             switch (op.code)
             {
@@ -3552,6 +3583,11 @@ private:
             {
                 auto f = s.vars.find(KeyOf(op.out));
                 if (f != s.vars.end()) f->second.innerChanged |= inner;
+            }
+            if (stepped != 0)
+            {
+                auto f = s.vars.find(KeyOf(op.out));
+                if (f != s.vars.end() && f->second.kind == Value::Fuzzy) f->second.innerChanged |= stepped;
             }
             if (falls && fallTo(i + 1, s)) work.insert(i + 1);
         }
