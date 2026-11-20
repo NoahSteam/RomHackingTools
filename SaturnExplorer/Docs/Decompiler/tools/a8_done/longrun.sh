@@ -20,6 +20,7 @@ for t in SaturnExplorerDecompilerTrustTests SaturnExplorerDecompilerModelTests; 
     [ -x "$L/bin/$t" ] || cp "$B/bin/$t" "$L/bin/$t" || exit 2
 done
 ulimit -v 3500000
+failed=0   # jobs that exited nonzero (a failure or a timeout); the chunk exits 1 if any did, every job still runs
 job() { # name, timeout in seconds, trust|model, VAR=value ...
     local name=$1 to=$2 kind=$3; shift 3
     local bin=$L/bin/SaturnExplorerDecompilerTrustTests
@@ -29,6 +30,7 @@ job() { # name, timeout in seconds, trust|model, VAR=value ...
     echo "# $name: $* $kind, started $(date -u +%FT%TZ)" > "$log"
     ( time env "$@" timeout "$to" "$bin" "$L/scratch_$name" ) >> "$log" 2>&1
     local rc=$?
+    [ "$rc" -ne 0 ] && failed=$((failed + 1))
     echo "# exit $rc, wall $(( $(date +%s) - t0 )) s" >> "$log"
     rm -rf "$L/scratch_$name"
     echo "$name exit $rc wall $(( $(date +%s) - t0 )) s: $(grep -E 'sequences, [0-9]+ failed|seed\(s\), [0-9]+ failed' "$log" | cut -c1-60)"
@@ -53,4 +55,8 @@ case $chunk in
    job g_mix2 1100 trust SE_TRUST_MIX=2 SE_TRUST_STEPS=4000 SE_TRUST_FROM=2600000 SE_TRUST_OOM_STRIDE=0 SE_TRUST_HIDDEN_RENAME=1 ;;
 *) echo "chunk 1 to 7"; exit 2 ;;
 esac
+if [ "$failed" -ne 0 ]; then
+    echo "chunk $chunk done: $failed job(s) failed"
+    exit 1
+fi
 echo "chunk $chunk done"
