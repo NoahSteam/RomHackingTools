@@ -41,6 +41,7 @@
 //   SE_TRUST_HIDDEN_RENAME=1  half the renames made and undone while the panel is hidden (A8-25), with the mixes
 //   SE_TRUST_FOLLOW_FOCUS=1   mixes 8 and 9 also click into the entry box without an edit (Enter on it across an install, A8-42)
 //   SE_TRUST_PROBE8=1    (area 8, round 8) hand-built sequences against the A8-42 and A8-43 fixes, printed; not in the default run
+//   SE_TRUST_PROBE_DONE=1  (area 8, done check) hand-built sequences against the A8-46, A8-50 and A8-51 fixes, printed; not in the default run
 //   SE_TRUST_FOLLOW_CPU=1     mixes 8 and 9 with the CPU switch, a CPU without registers, the PC in the BIOS and Stop four times as often
 #define SE_MODEL_NO_MAIN
 #include "DecompilerModelTests.cpp"
@@ -3051,6 +3052,195 @@ void RunProbe7()
 // Backspace, Ctrl+Z) before Enter; the box focused across an install, a Stop, a CPU switch, a rename, a PC with no function; the Volatile
 // popup drawn and driven with the mouse and the keyboard, with saved lists at, just under and just over its box, an edit made and undone,
 // and a multibyte character cut in two.
+// (area 8, done check) The fixes made after round 8 (A8-46, A8-50, A8-51) had no reviewer's round: hand-built sequences against them, printed
+// (SE_TRUST_PROBE_DONE=1; not in the default run). The verdicts are in the record, "Area 8, done check".
+void RunProbeDone()
+{
+    const uint32_t cEntry = Defs()[FnC].entry, aEntry = Defs()[FnA].entry;
+    auto drawnText = [] {
+        std::string all;
+        for (const drawn::Run& run : drawn::WindowRuns(DecompilerPanel::kTitle)) all += run.text + " ";
+        return Norm(all);
+    };
+    auto show = [&](MiniRig& m, const char* what) {
+        m.Frame();
+        std::string u;
+        for (const std::string& x : m.panel.Uncertainties()) u += "[" + x + "]";
+        const std::string w = drawnText();
+        const size_t at = w.find(Norm("(entry from"));
+        const DecompileResult* s = m.panel.Shown();
+        std::printf("PROBEDONE %s\n   label: %s\n   uncertainties: %s\n   box: %s, active %d, follow %d, wanted %08X, shown %s, stale %d\n"
+                    "   tooltip: %s\n   error: %s\n",
+                    what, at == std::string::npos ? "(none)" : w.substr(at, 40).c_str(), u.c_str(), m.panel.EntryText(), m.panel.EntryBoxActive() ? 1 : 0,
+                    m.panel.FollowPc() ? 1 : 0, m.panel.WantedEntry(), s ? Hex(s->requestedEntry).c_str() : "nothing", m.panel.ShownStale() ? 1 : 0,
+                    m.panel.StaleTooltip().c_str(), m.panel.EntryError().c_str());
+    };
+    auto settle = [&](MiniRig& m) {
+        m.Idle(3);
+        CHECK(m.Settle());
+    };
+    auto live = [&](MiniRig& m, uint32_t pc) {
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = pc;
+        m.haveRegs[0] = true;
+    };
+    auto typeChar = [](MiniRig& m, char ch) {
+        ImGui::GetIO().AddInputCharacter(static_cast<unsigned>(ch));
+        m.Idle(2);
+    };
+    auto ctrl = [](MiniRig& m, ImGuiKey key) {
+        ImGui::GetIO().AddKeyEvent(ShortcutMod(), true);
+        ImGui::GetIO().AddKeyEvent(key, true);
+        m.Frame();
+        ImGui::GetIO().AddKeyEvent(key, false);
+        ImGui::GetIO().AddKeyEvent(ShortcutMod(), false);
+        m.Frame();
+    };
+    auto boxTip = [](MiniRig& m) {
+        ImVec2 a, b;
+        CHECK(m.panel.ItemRect("entry", a, b));
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        bool found = false;
+        std::string tip;
+        for (int i = 0; i < 120 && (!found || Norm(tip).size() < 20); ++i)
+        {
+            m.Frame(c, false);
+            tip = drawn::TooltipText(&found);
+        }
+        return found ? Norm(tip) : std::string("(no tooltip)");
+    };
+    auto toA = [&](MiniRig& m) {
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+    };
+    {
+        // D1 (A8-46 with A8-42): an edit taken back while C is shown, then A installs with the box still focused; Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(FocusEntryBox(m));
+        typeChar(m, '1');
+        m.Key(ImGuiKey_Backspace);
+        toA(m);
+        show(m, "D1: '1' typed and deleted on C, then the PC to A (box focused)");
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "D1: Enter");
+    }
+    {
+        // D2 (A8-46's typed-out guard): the whole address typed by the user, but not left to right: all selected, the last seven digits
+        // typed, Home, the first digit.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(FocusEntryBox(m));
+        const std::string text = Hex(cEntry);
+        ctrl(m, ImGuiKey_A);
+        for (size_t i = 1; i < text.size(); ++i) typeChar(m, text[i]);
+        m.Key(ImGuiKey_Home);
+        typeChar(m, text[0]);
+        show(m, "D2: the address typed out by the user, its first digit last");
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "D2: Enter");
+    }
+    {
+        // D3 (A8-46 after A8-50): 'zz' refused; then the shown function's own address put over it in one frame (a paste); Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        TypeEntry(m, "zz");
+        settle(m);
+        show(m, "D3: 'zz' refused");
+        CHECK(FocusEntryBox(m));
+        ctrl(m, ImGuiKey_A);
+        for (char ch : Hex(cEntry)) ImGui::GetIO().AddInputCharacter(static_cast<unsigned>(ch));
+        m.Idle(2);
+        show(m, "D3: C's address put over 'zz' in one frame");
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "D3: Enter");
+    }
+    {
+        // D4 (A8-51 against A8-46's control): the box kept C while A is shown; '1' typed and deleted makes C the user's text; the box's tooltip.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(FocusEntryBox(m));
+        toA(m);
+        std::printf("PROBEDONE D4: box %s untouched, A shown: box tooltip: %s\n", m.panel.EntryText(), boxTip(m).c_str());
+        typeChar(m, '1');
+        m.Key(ImGuiKey_Backspace);
+        std::printf("PROBEDONE D4: '1' typed and deleted (box %s, the user's now): box tooltip: %s\n", m.panel.EntryText(), boxTip(m).c_str());
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "D4: Enter");
+    }
+    {
+        // D5 (A8-50): the refusal at a focused install; then the box clicked, a character typed and Escape; then Follow PC clicked twice.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(FocusEntryBox(m));
+        toA(m);
+        TypeEntry(m, "zz");
+        settle(m);
+        show(m, "D5: 'zz' refused in the box that had the focus when A installed");
+        CHECK(FocusEntryBox(m));
+        typeChar(m, 'q');
+        m.Key(ImGuiKey_Escape);
+        m.Idle(3);
+        show(m, "D5: 'q' typed and Escape");
+        std::printf("PROBEDONE D5: box tooltip: %s\n", boxTip(m).c_str());
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "D5: Follow PC clicked (off)");
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "D5: Follow PC clicked (on)");
+    }
+    {
+        // D6 (A8-42's rewrite and the undo): Enter on the focused box that kept C while A is shown rewrites it to A; the box clicked, Ctrl+Z; Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(FocusEntryBox(m));
+        toA(m);
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "D6: Enter on the focused, untouched box (A asked, box rewritten)");
+        CHECK(FocusEntryBox(m));
+        ctrl(m, ImGuiKey_Z);
+        show(m, "D6: the box clicked, Ctrl+Z");
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "D6: Enter");
+    }
+    {
+        // D7 (A8-46, the edit taken back a second time after the output came back): the box kept C while A is shown, '1' typed and deleted
+        // (the user's C); the PC back in C (C shown again, the box still focused); '1' typed and deleted again; Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(FocusEntryBox(m));
+        toA(m);
+        typeChar(m, '1');
+        m.Key(ImGuiKey_Backspace);
+        m.regs[0].pc = cEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+        show(m, "D7: the user's C in the box, the PC back in C");
+        typeChar(m, '1');
+        m.Key(ImGuiKey_Backspace);
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "D7: '1' typed and deleted again, Enter");
+    }
+}
+
 void RunProbe8()
 {
     const uint32_t cEntry = Defs()[FnC].entry, aEntry = Defs()[FnA].entry;
@@ -4869,6 +5059,11 @@ int main(int argc, char** argv)
         if (std::getenv("SE_TRUST_PROBE8"))
         {
             RunProbe8();
+            return 0;
+        }
+        if (std::getenv("SE_TRUST_PROBE_DONE"))
+        {
+            RunProbeDone();
             return 0;
         }
         if (seedEnv && *seedEnv)
