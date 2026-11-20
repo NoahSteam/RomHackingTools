@@ -23750,3 +23750,362 @@ The reviewer confirmed the round 3 extension fix and kept A7-341 open: the new d
   - The round 3 extension, cancellation and mask cases are kept. Built against round 3's code (4fcb3bec), exactly the reviewer's fixture fails (1 wrong). With "move: other not the input" switched off, 9 cases fail.
 - **Runs:** the generated-tests binary passes in full, including both seed 11004012 replays. The full matrix follows on merge.
 
+## Area 5, folded-store order (A5-160, A7-255, A5-112)
+
+Branch `review/5-fold-order` from master `7af01961`. Release build, `-j2`, `ulimit -v 3500000`, one heavy binary at a time. One oracle change, no product or engine change.
+
+**A5-160 (A7-208, grammar 1 seed 11007546).** Already fixed on master as A5-161 (`5ea47298`, merged with `review/5-round3`); the ledger row had stayed open through a merge. Reproduced: the shrunk replay prints `xRam26001030 = in_r1; iVar1 = *(int2 *)(param_4 + 6); xRam26001030 = CONCAT11(param_1,(char)in_r1);`, and the whole seed gives 0 findings; with `SE_A7_RULE_OFF=5161` the seed gives the two `n:folded-store-after-access` findings the row describes (0x06009024 and 0x06009008). The word store at 0x06009008 writes back the word read at 0x06009004 across a `tas.b`, so it is joined into the later byte store as A5-112's piece; every value is the code's. Row closed as fixed 5ea47298.
+
+**A7-255 (grammar 2 seed 12173135), filed as A5-168.** Shrunk: `mov.l @r7,r2 ; cmp/eq r4,r7 ; bf/s ; mov.l @r7,r2 ; mov.l r2,@(0x2c,r6) ; mov.l r2,@r4 ; mov.w @r5+,r2`, r7 the literal 0x26002080. The text is `xVar2 = xRam26002080; if (param_1 == 0x26002080) { *(param_3 + 0x2c) = xRam26002080; } xVar1 = *param_2; xRam26002080 = xVar2;`. The store `*r4 = r2` runs only when r4 is the global's address, in which case it writes back the word just read; the engine drops it as a copy of the global to itself and the write-back at the end is the remaining statement. No value differs: the write between stores the same register, so whatever it hits holds the same word. It is not A5-114's class (no piece, no join of a narrower store). The oracle's rule for a store no run makes (`unrun-write-back`, A5-138) treated every write between the read and the store as a change; a write of the very register the store writes back, with the register unchanged from the read (same makers), is not one unless a run shows it overlapping the bytes without being exactly them. That is a class (a conditional write-back across a write of the same value), not the seed. Change: `sameWrite` in `Sh2GeneratedTests.cpp`, counted under the existing `order.folded-store.unrun-write-back`; mutation switch `SE_A7_RULE_OFF=5168`. Pinned in `TestA5168Pins`, whole and shrunk; with the switch set the pins fail (whole 2 findings, shrunk 1), without it 0. Commit 288daa97.
+
+**A5-112 accepted.** Replayed at HEAD: both programs print the narrow store as a store of the whole word, as in the row (`xRam26002008 = CONCAT11(in_r2,(xunknown1)xRam26002008);`, `uRam26001004 = (uint4)uRam26001004._2_2_;`). The widening is heritage's range model: `Heritage::normalizeWriteSize` makes the wide access the range and the narrow write a piece of it. Fixing it means refining heritage's ranges for every global, a change to the vendored engine (a new numbered patch under `patches/` through `VENDOR.md`) whose effect reaches every folded global in every function, for a width no value, order or access shows. Patch 0090 already removed the observable part (the wide write is printed whole where the code makes it). Accepted: value-preserving, order-preserving, width-only; ordinary memory is a variable by design and a hardware register is volatile and never folded. The four seeds stay counted as `order.folded-store.piece-split`.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| 20k | failing seeds=0; findings=0 |
+| g1 (10,000 from 12,500,001, canary off) | failing seeds=5; findings=6: 12504564, 12505271, 12509692 `map-way-back` and 12509811 `map-const-join` (area 7); 12506097 `v:pointer-effect-unsaid` (1-byte SH2_SAR0 read through a derived pointer, not analysed; not from this change, which only removes findings) |
+| g2 | failing seeds=0; findings=0 |
+| ctest -j1 (Release) | 116 of 117; `SaturnExplorerDecompilerFaultTests` failed with 3 of 94 jobs `FAIL:stale-pin` on the allocation-count pins of `alloc jumptable` and `alloc mailbox` (A6-4, A6-5, A6-7). That binary does not build the changed file; the merge matrix (RelWithDebInfo) is the record for it. |
+
+## Area 11, caution grammar (A11-37)
+
+Fixer, branch `review/11-caution-grammar` from master `7af01961`; Release build, `-j2`, `ulimit -v 3500000`. Row A11-37 (fixed); one new row, A3-243 (open, area 3). Only `FrontEnd/tests/Sh2GeneratedTests.cpp`, the ledger and this section changed; no product code.
+
+### 1. What was added
+
+A11-36 left eleven shapes of `tools/a3_round28/fixtures.src` (sections 1 and 2, and a210d of section 3) that the caution grammar (grammar 2, `SE_GENERATED_CAUTION=deep`) could not draw. They are drawn now, from `kCautionMoreFirst` = 12,500,001 on, on a stream of their own (`Gen::cautionMoreRng`), so no seed below 12,500,001 changes (checked: the pin below, and the 20,000-seed matrix, which never reaches the range). `SE_GENERATED_MORE=0` draws the programs the range had before. `SE_GENERATED_LISTONLY=1 SE_GENERATED_CENSUS=1` counts the shapes of a seed range without running it.
+
+| Shape | Production | Shape name counted |
+|---|---|---|
+| tb | the change `mov #imm,Rb` (or `ldc Rm,gbr/vbr`) in one case of the function's jump table, in 60 of 100 changes of a function that has a table and does not save the register (a table needs a function that returns) | `caution.change.table` |
+| pi | the change is `mov.b/w/l @Rb+,r1` (r1 or r2 that nothing reads on entry) behind the usual `tst ; bt/bf`, 20 in 100 of the changes of r8-r14 | `caution.change.postinc` |
+| pie | the same on every path, no test, 10 in 100 | `caution.change.postinc.every` |
+| th2 | a module with a thunk becomes four functions in half the cases: functions 1 and 2 are thunks, 3 the changer (`thunkLast`) | `caution.module.th2` |
+| mr2 | a module of three functions: 1 is `tst r4,r4 ; bt L ; bsr 2 ; tst r3,r3 ; b? L ; <change> ; L:`, 2 is `shlr r4 ; bsr 1`, both made whole (nothing else may write r4, which the recursion ends on), function 0 calls 1 with `mov #n,r4`, n 3 to 8 | `caution.module.mr2` (with `caution.mr2.recurse`) |
+| mx1, mx2 | a module of three functions: function 0 calls 1 (the changer, tests r3) and then 2, which changes the same register on a parameter's test (the runs never take it: the signature is lent) and the register is read after the second call | `caution.module.mx` |
+| a210d | a module of four functions: function 0 calls 1 (the changer) and 2; 2 is `push Rb ; call 3 ; pop Rb`, then `mov Rb,Rd ; mov.l Rd,@(disp,Rp)`; 3 changes Rb on every path; Rb is r12-r14 | `caution.module.a210d` (with `caution.a210d.spill`, `.read`) |
+| o1 | the copy of the changed register stored to a work-RAM global (a literal pointer in r6 or r7, `mov.l Rc,@Rn`) in place of the store through r4/r5, 12 in 100 of the reads | `caution.call.read.ram` |
+| o2 | the copy handed to a later call in r4 (that callee does not store through r4), 12 in 100 | `caution.call.handoff` |
+| o3 | the copy is the return value (`mov Rb,r0` as the return word), in a function that returns, ends with `rts`, does not save Rb and calls a changer of it, 40 in 100 | `caution.return.read` |
+
+The module shapes (th2, mx, a210d, mr2) are drawn for a module with the caution that has no function leaving r15 moved: one draw per module, 50 in 100 of the thunk modules become th2, 16 in 100 each of the others become mx, a210d and mr2.
+
+pi and pie, soundness: the A11-37 row asked for a pointer parameter that later items do not walk off its arena. The grammar needs none. A run enters with r8-r14 at 0x80MM00RR (RR the register's number twice), which is aligned for a byte in every register, a word in r10 and r14, a longword in r8 and r12; the post-increment load takes that width and steps by it (so every value the register can hold, a multiple of 4 from a `mov #imm`, an arena pointer from a saved argument, stays aligned for it); the loads read and the stores of later items go through r4-r7, whose arenas are 4 KiB with the start 0x100 in, and a call steps a register by one width. The load through an entry value is a read of it on purpose, so the function's `reads` has the bit (the first version had not, and the kept-read check named it: seeds 12600023, 12600061, 12600086, 12600206, 12600477, 12600782 passed after that).
+
+### 2. Draws
+
+Items per shape in 10,000 seeds of grammar 2 from 12,600,001 (`SE_GENERATED_LISTONLY=1 SE_GENERATED_CENSUS=1`, 10,000 modules):
+
+| Shape | Count |
+|---|---|
+| `caution.change.table` (tb) | 436 |
+| `caution.change.postinc` (pi) | 967 |
+| `caution.change.postinc.every` (pie) | 448 |
+| `caution.module.th2` | 248 |
+| `caution.mr2.recurse` (mr2 modules) | 895 |
+| `caution.module.mx` (mx1, mx2) | 862 |
+| `caution.module.a210d` | 856 |
+| `caution.call.read.ram` (o1) | 392 |
+| `caution.call.handoff` (o2) | 212 |
+| `caution.return.read` (o3) | 349 |
+
+Pins (the A11-37 block of `Sh2GeneratedTests.cpp`): no seed from 12,000,001 to 12,000,600 or from 12,100,001 to 12,100,600 holds any of the ten shapes (0); the first program of each shape from 12,500,001 whose runs require a caution passes with it said: tb 12500079, pi 12500024, pie 12500082, mx 12500249, th2 12500735, a210d 12500014, mr2 12500062, o1 12500079, o2 12500463, o3 12500083 (each: 0 findings, required and said equal).
+
+### 3. What the shapes found (A3-243)
+
+The sweep of 10,000 seeds from 12,600,001 (grammar 2, deep) has 23 failing seeds, every one of them in an a210d module and none with `SE_GENERATED_MORE=0`: 17 `n:caution-unsaid` and 6 `n:caution-elsewhere` (A3-240's class), all for a register r10-r14 of the module that a function changes on one path and then pushes, calls around and pops. Shrunk (seed 12607388): `tst r3,r3 ; bf L ; mov #0x14,r13 ; L: mov.l r13,@-r15 ; bsr G ; ... ; mov.l @r15+,r13`, called by a function that reads r13 afterwards. Filed as A3-243 (area 3) with the shrunk words; not exempted in the oracle, not avoided in the generator (the generator's contract holds: the callee-saved check passes, the function lists r13 as changed and as read). The other nine shapes have no failing seed in this range.
+
+### 4. Runs
+
+| Run | Result |
+|---|---|
+| default generator run (300 seeds and the pins) | **failing seeds=0; findings=0** |
+| `SE_GENERATED_SEEDS=20000` | **failing seeds=0; findings=0** (10,000 seeds of each grammar; the new shapes are not reached below 12,500,001) |
+| grammar 2 deep, 12,600,001-12,610,000 (10,000 seeds) | **23 failing seeds, 24 findings**, all A3-243 (above) |
+| `ctest -j1` | **116 of 117 passed**; `SaturnExplorerDecompilerFaultTests` failed with its pins' allocation coordinates STALE (`ActionRestartGroup::clone` and others): that suite pins stack coordinates of a RelWithDebInfo build and this Release build (as asked) moves them; it does not link the generator and no product code changed. Not rerun on a RelWithDebInfo build here |
+| `check-literal-size.py SaturnExplorer/FrontEnd` | raw string sizes: ok |
+
+## Area 12, round 1
+
+Reviewer of area 12 (`REVIEW_PROGRAM.md`: oracle "the CI matrix, a release checklist on a tagged build"), first round. Branch `review/12-round1`, cut at master `b077b88a` (the worktree HEAD `7af01961` was fast-forwarded to master, which already carried A12-32 and A12-33 from PR #67). The Actions history was read through the GitHub API (read only: nothing was posted, pushed or re-run). Nothing was built with MSVC or on macOS; every workflow change below is unverified on a hosted runner. Rows **A12-34 to A12-44**.
+
+**Verdict, area 12: not clean.** Two P2 rows: **A12-34** (the ASan job is cancelled by its own 90-minute limit on a third of master pushes) and **A12-35** (the macOS bundle's "no Homebrew reference" check cannot fail). Both are fixed on this branch, so the next round starts from a fixed tree, but the round found them, so it is not one of the two consecutive clean rounds (this is round 1 of area 12). Nine P3 rows (A12-36 to A12-44), four of them open with a proposal (A12-38, A12-42, A12-43, A12-44) and A12-39 and A12-40 partly open.
+
+### 1. CI matrix coverage
+
+Registered tests: 117 on Linux (`ctest -N`, RelWithDebInfo, no SDL2, as the Linux jobs configure), 110 on macOS (the 7 Linux-only: Area 9 rounds 3 to 7 with the full-disk case, and the loader fuzz), 95 on Windows (the 8 Live tests and ExportAttach, DataSearchWalk, PosixSpawn, LaunchPath, Settings, AIInvestigationLint, DecompilerFault and PrintedC are POSIX-only, plus `SaturnExplorerExportShutdownTests`, which only Windows registers); both counts are the ones the jobs print (macOS 110, Windows 95, run 44582869748). The jobs:
+
+* **Linux plain:** no job runs `ctest` on Linux. Linux gets: `area9-stores` (Debug, `ctest -R SaturnExplorerArea9`, the six Area 9 tests), `generator-nightly` (RelWithDebInfo, the generator and printed-C binaries run directly), and `sanitizers` (below). `PLAN.md` says Linux gates nothing; the cells are `area9` and `nightly` where those jobs run the test.
+* **Linux ASan/UBSan/LSan:** `sanitizers`, 15 binaries run directly (not through `ctest`, with the arguments `CMakeLists.txt` gives ctest).
+* **macOS arm64** and **Windows Debug:** `native`, the whole `ctest` in Debug; the eleven decompiler tests with `-V` (once, after A12-36).
+* **Rosetta:** `macos-x86_64-decompiler`, 12 named tests (the list drives build, `-R` and the built-check).
+* **Windows Release:** three decompiler tests after `build-release` of those targets. **MSBuild:** builds only; `build-release.bat` builds all (tests included) and runs none.
+
+Every registered test is run by at least one gating job (the macOS arm64 and Windows Debug jobs run the whole of their registration). Y = runs, - = registered there and not run by any job, n/a = not registered on that platform; Linux plain says which Linux-only job runs it.
+
+| test | Linux plain | Linux ASan/UBSan/LSan | macOS arm64 | macOS x86_64 Rosetta | Windows Debug | Windows Release | MSBuild |
+|---|---|---|---|---|---|---|---|
+| SavestateShapeTests | - | - | Y | Y | Y | - | - |
+| YssFixtureTests | - | - | Y | - | Y | - | - |
+| ExportAttachTests | - | - | Y | - | n/a | n/a | - |
+| StateSharedTests | - | - | Y | - | Y | - | - |
+| CapturedValueInspectionTests | - | - | Y | - | Y | - | - |
+| SlaFreshnessTests | - | Y | Y | Y | Y | - | - |
+| Sh2DecompilerEngineTests | - | Y | Y | Y | Y | - | - |
+| GenerateSpecDataFailureTests | - | - | Y | - | Y | - | - |
+| Sh2DecompilerTests | - | Y | Y | Y | Y | Y | - |
+| DecompilerRunnerTests | - | Y | Y | Y | Y | Y | - |
+| Sh2SemanticsTests | - | Y | Y | Y | Y | - | - |
+| Sh2DecodeTests | - | Y | Y | Y | Y | - | - |
+| Sh2GeneratedTests | nightly | Y | Y | Y | Y | - | - |
+| HardwareWidthTableTests | - | - | Y | - | Y | - | - |
+| CapturedInspectionMetadataTests | - | - | Y | - | Y | - | - |
+| DecompilerFaultTests | - | Y | Y | - | n/a | n/a | - |
+| Sh2DecompilerFixtureTests | - | Y | Y | Y | Y | - | - |
+| MemorySnapshotTests | - | - | Y | Y | Y | - | - |
+| Sh2FunctionFinderTests | - | - | Y | Y | Y | - | - |
+| Sh2PrintedCTests | nightly | Y | Y | - | n/a | n/a | - |
+| ThemeTests | - | - | Y | - | Y | - | - |
+| Vdp2Tests | - | - | Y | - | Y | - | - |
+| Vdp1PreviewTests | - | - | Y | - | Y | - | - |
+| CramWrapTests | - | - | Y | - | Y | - | - |
+| AbiNoThrowTests | - | - | Y | - | Y | - | - |
+| Geometry3DTests | - | - | Y | - | Y | - | - |
+| VramMapTests | - | - | Y | - | Y | - | - |
+| TopBarTests | - | - | Y | - | Y | - | - |
+| ConditionEvalTests | - | - | Y | - | Y | - | - |
+| BytePatternSearchTests | - | - | Y | - | Y | - | - |
+| MemorySearchTests | - | - | Y | - | Y | - | - |
+| MemoryCompareTests | - | - | Y | - | Y | - | - |
+| MemorySearchRunnerTests | - | - | Y | - | Y | - | - |
+| DataSearchRunnerTests | - | - | Y | - | Y | - | - |
+| PrsSearchTests | - | - | Y | - | Y | - | - |
+| DataSearchWalkTests | - | - | Y | - | n/a | n/a | - |
+| ExpressionResolverTests | - | - | Y | - | Y | - | - |
+| AccessLogTests | - | - | Y | - | Y | - | - |
+| ExecutionActionsTests | - | - | Y | - | Y | - | - |
+| StepHaltMachineTests | - | - | Y | - | Y | - | - |
+| BreakpointManagerTests | - | - | Y | - | Y | - | - |
+| FunctionNamesTests | - | - | Y | - | Y | - | - |
+| FileLockTests | - | - | Y | - | Y | - | - |
+| Area9Round3Tests | area9 | - | n/a | n/a | n/a | n/a | - |
+| CallStackHeuristicTests | - | - | Y | - | Y | - | - |
+| M68kDisasmTests | - | - | Y | - | Y | - | - |
+| IsoFsTests | - | - | Y | - | Y | - | - |
+| IsoBuilderTests | - | - | Y | - | Y | - | - |
+| CdSectorTests | - | - | Y | - | Y | - | - |
+| CueSheetTests | - | - | Y | - | Y | - | - |
+| DiscBuilderTests | - | - | Y | - | Y | - | - |
+| SeStateCodecTests | - | - | Y | - | Y | - | - |
+| ControllerPanelTests | - | - | Y | - | Y | - | - |
+| PanelInteractionTests | - | - | Y | - | Y | - | - |
+| LogPanelTests | - | - | Y | - | Y | - | - |
+| HexEditorPanelTests | - | - | Y | - | Y | - | - |
+| DecompilerPanelTests | - | Y | Y | Y | Y | Y | - |
+| DecompilerModelTests | - | Y | Y | - | Y | - | - |
+| DecompilerTrustTests | - | - | Y | - | Y | - | - |
+| LoaderFuzzTests | - | Y | n/a | n/a | n/a | n/a | - |
+| Area9Round4Tests | area9 | - | n/a | n/a | n/a | n/a | - |
+| Area9Round5Tests | area9 | - | n/a | n/a | n/a | n/a | - |
+| Area9Round5FullDisk | area9 | - | n/a | n/a | n/a | n/a | - |
+| Area9Round6Tests | area9 | - | n/a | n/a | n/a | n/a | - |
+| Area9Round7Tests | area9 | - | n/a | n/a | n/a | n/a | - |
+| ScrubStateTests | - | - | Y | - | Y | - | - |
+| CompareMarkersTests | - | - | Y | - | Y | - | - |
+| MemoryComparePanelTests | - | - | Y | - | Y | - | - |
+| AssemblyPanelTests | - | - | Y | - | Y | - | - |
+| MemoryBackendTests | - | - | Y | - | Y | - | - |
+| AsmCodeWindowTests | - | - | Y | - | Y | - | - |
+| AsmScrollTargetTests | - | - | Y | - | Y | - | - |
+| Sh2OperandHoverTests | - | - | Y | - | Y | - | - |
+| DiffToolTests | - | - | Y | - | Y | - | - |
+| Utf8PathTests | - | - | Y | - | Y | - | - |
+| PosixSpawnTests | - | - | Y | - | n/a | n/a | - |
+| LaunchPathTests | - | - | Y | - | n/a | n/a | - |
+| LauncherEmulatorsTests | - | - | Y | - | Y | - | - |
+| SettingsTests | - | - | Y | - | n/a | n/a | - |
+| Sh2DumpTests | - | - | Y | - | Y | - | - |
+| SavestateSlotsTests | - | - | Y | - | Y | - | - |
+| FrameRecorderTests | - | - | Y | - | Y | - | - |
+| ScspMixTests | - | - | Y | - | Y | - | - |
+| Sh2RegInfoTests | - | - | Y | - | Y | - | - |
+| PatchLibraryTests | - | - | Y | - | Y | - | - |
+| Sha256Tests | - | - | Y | - | Y | - | - |
+| UpdateCheckerTests | - | - | Y | - | Y | - | - |
+| JsonTests | - | - | Y | - | Y | - | - |
+| AIEncodingTests | - | - | Y | - | Y | - | - |
+| CanonicalTargetTests | - | - | Y | - | Y | - | - |
+| WriteIntervalTests | - | - | Y | - | Y | - | - |
+| SourceKeyTests | - | - | Y | - | Y | - | - |
+| ResponseValidatorTests | - | - | Y | - | Y | - | - |
+| ActionRegistryTests | - | - | Y | - | Y | - | - |
+| PackageManifestTests | - | - | Y | - | Y | - | - |
+| AIInvestigationEndToEndTests | - | - | Y | - | Y | - | - |
+| AIInvestigationLintTests | - | - | Y | - | n/a | n/a | - |
+| FileWriteTests | - | - | Y | - | Y | - | - |
+| LayerExportTests | - | - | Y | - | Y | - | - |
+| LayerPanelTests | - | - | Y | - | Y | - | - |
+| DemoScriptTests | - | - | Y | - | Y | - | - |
+| ShadowCallStackTests | - | - | Y | - | Y | - | - |
+| PackageRelease | - | - | Y | - | Y | - | - |
+| BuildInfo | - | - | Y | - | Y | - | - |
+| MednafenHaltOrdering | - | - | Y | - | Y | - | - |
+| MednafenPadInjection | - | - | Y | - | Y | - | - |
+| MednafenVdp1Latch | - | - | Y | - | Y | - | - |
+| MednafenVdpPoke | - | - | Y | - | Y | - | - |
+| ByteQueueTests | - | - | Y | - | Y | - | - |
+| LiveReconnectTests | - | - | Y | - | n/a | n/a | - |
+| LiveRestoreSignalTests | - | Y | Y | - | n/a | n/a | - |
+| LiveDecompilerCaptureTests | - | Y | Y | - | n/a | n/a | - |
+| RewindPipelineTests | - | - | Y | - | n/a | n/a | - |
+| LivePokeTests | - | - | Y | - | n/a | n/a | - |
+| MemoryRoundTripTests | - | - | Y | - | n/a | n/a | - |
+| LiveExporterRobustnessTests | - | - | Y | - | n/a | n/a | - |
+| LiveHaltRaceTests | - | - | Y | - | n/a | n/a | - |
+| ExportShutdownTests (Windows registers it; Linux does not) | n/a | n/a | n/a | n/a | Y | - | - |
+
+Gaps read off the table (A12-38): on Rosetta, no run of PrintedC, DecompilerModel, DecompilerTrust, HardwareWidthTable, CapturedInspectionMetadata, CapturedValueInspection, GenerateSpecDataFailure, DecompilerFault; on Windows, no PrintedC (UNIX only) and no Fault suite (recorded in A12-14); on macOS arm64, Fault runs without glibc's backtrace pins; Linux-only tests have a recorded reason (CMakeLists comments, A12-14). Registered-test drift: the Rosetta list, `-R` and the built-check come from one variable (A12-10, sound); the sanitizer build list, runner and checker's EXPECTED list are three lists, and the checker fails on a binary the runner did not run, and the runner on a binary not built (sound); the Area 9 job greps its targets from `cmake --help`; before A12-37 a loss of registration passed silently (now a floor).
+
+Steps whose failure would not fail the job: found and fixed A12-35 (negated pipeline), A12-37 (nightly probe skip; `ctest -R` matching nothing; no test-count check). No `continue-on-error` anywhere. The `|| true` on `sysctl` and `brew uninstall` and on the intermediate-certificate import are benign by design.
+
+### 2. CI health, last 15 runs of each workflow
+
+Runs read: `saturn-explorer-verify.yml` 44322550506 (run 537) to 44597703757 (551), on master and PR #67; `saturn-explorer-decompiler.yml` 44331685949 (305) to 44597703295 (319); the 20 newest scheduled runs of the decompiler workflow.
+
+| Run (commit) | Job | Result | Cause (from the log) | Ledger |
+|---|---|---|---|---|
+| verify 537 (eeff89d9) | Windows Debug | failed, ctest 935 s | Sh2DecompilerTests and Sh2GeneratedTests aborted: MSVC `cannot dereference end map/set iterator` | none; fixed 1f8ddf3b; A12-40 |
+| verify 537 | macOS arm64 | cancelled at 15 min | "not acquired by Runner of type hosted" | infrastructure, A12-40 |
+| verify 538 (0ff611ae) | macOS arm64 | cancelled | same | A12-40 |
+| verify 539 (38b2f7f4) | Rosetta, macOS bundle | cancelled | same | A12-40 |
+| verify 540 (bf576e7a) | Rosetta | failed | DecompilerPanelTests: ImGui `font_size > 0.0f` assertion, once | A12-40 (cause open) |
+| verify 548 attempt 1 (4fcb3bec, PR) | Windows Debug | failed at 1h44 | "hosted runner lost communication"; attempt 2 passed | infrastructure |
+| verify 549 (cd5be6ae, PR) | Windows Debug | failed in the repeated decompiler step | DecompilerRunnerTests `TestBudget` (budget below a `Small()` run); its first run in "Run CTest" passed | A12-32; the double run A12-36 |
+| decompiler 307, 309, 311 (bf576e7a, c94cd6c9, d09218f8) | sanitizers | cancelled at 1h30m | `exceeded the maximum execution time of 1h30m0s` | A12-34 |
+| decompiler 318 (bb2086c0, PR) | sanitizers | failed | DecompilerRunnerTests `straight rerun after cancellations: DIFFERENT (status 3)`, baseline 34 s vs a flat 60 s wait | A12-33 |
+| all others | | green | | |
+
+The head of PR #67, `8c281a61`: decompiler run 44597703295 green (sanitizers 65 minutes: run step 19:33 to 20:27); verify run 44597703757 was in progress when read (Windows Debug "Run CTest" green after 74 minutes, the repeated step running; macOS arm64, Rosetta, the bundle, `build-release.bat` and both MSBuild jobs green). Its ledger rows A12-32 and A12-33 are on master.
+
+Nightly `Generator, long run (Linux)`: the full step list (build, generator 20,000 seeds, printed-C differential, upload) last ran green on **2026-11-19 10:43 UTC** (run 44508250655, 31 minutes, `SUMMARY: seeds=20000`, `all passed`) and has been green every night since 2026-11-07 (13 nights); the last red nights were 2026-11-01 to 2026-11-06 (A10-13, A12-24, fixed 1286d48b). It reruns seeds 1 to 20,000 every night (A12-43).
+
+Durations against limits (Debug unless named; `ctest` ceilings are 10 times the Release value in a Debug or multi-config build):
+
+| Job | Typical | Worst seen | Limit | Per test |
+|---|---|---|---|---|
+| sanitizers | 65 to 77 min | 82 min passed; three at 90 min cancelled | 90 (now 150) | the binaries run directly: no per-binary limit (a hang uses the whole job) |
+| Windows Debug (`native`) | 120 min | 157 min (two decompiler passes) | none (360 default; now 240) | Sh2Generated 1,411 s and Sh2Decompiler 1,206 s of 3,000 s; Engine 226 of 1,200; Trust 156 of 3,000 |
+| macOS arm64 (`native`) | 56 to 57 min | 57 | none (now 240) | Sh2Generated 650 s of 3,000 |
+| Rosetta | 25 to 37 min | 37 | none (now 120) | |
+| Windows `build-release.bat` | 14 to 20 min | 20 | none (now 90) | |
+| nightly | 25 to 38 min (31 latest) | 38 | 300 | the generator is run directly, no `ctest` limit |
+
+The two longest Windows Debug tests use 47 and 40 percent of their ceiling on a green run; a runner 2 times slower passes it. With A12-36 the Windows Debug job loses its second decompiler pass (about 70 minutes).
+
+### 3. Timing-sensitive tests
+
+A12-39 is the class. The remaining fixed constants a slow runner can exceed, by kind (the proposal in the row is one mechanism for all): flat live-test waits of 3 to 15 s (fixed to 60 s on this branch); small fixed budgets under which follow-up requests also run (`DecompilerPanelTests` 0.3 s and 0.05 s, `DecompilerModelTests` `kShortBudget` 1.0 s and `kShortCancelAck` 0.5 s); flat 60 s waits and the 120 s `Generous()` budget in `DecompilerRunnerTests` that do not scale with the measured baseline (A12-33's shape); upper bounds on elapsed time (`pollMs < 50`, `Area9Round4` to `7`, `FileLockTests` on all platforms, `PosixSpawnTests`); the 300 ms "stopped" window of `LiveExporterRobustnessTests`; `kWaitMs` keyed to `NDEBUG`. A12-6 (disable test), A12-32 (`TestBudget`) and A12-33 (big waits) are in place and read sound.
+
+### 4. Release checklist
+
+Status: **was missing, now written**: `Docs/Decompiler/RELEASE_CHECKLIST.md` (A12-41), 54 steps in five parts: the commit and the CI matrix before tagging (A), the tagged build and what `saturn-explorer-release.yml` does (B), the archives opened (C, with a section on the decompiler in the package), a clean-machine smoke test (D), publishing and the record (E). It has not been run on a tag: the user tags. What it found missing in the workflow is A12-42 (no CI gate on the tag, the Windows exe never started in packaging, no decompiler first-run check, the version grep reads the header) and is marked manual in the checklist. Signing: macOS Developer ID and notarization are a CI job that needs the `release` environment's secrets (it has not run on GitHub, per `DISTRIBUTION.md`); Windows is unsigned by choice.
+
+### 5. Changes on this branch
+
+* `.github/workflows/saturn-explorer-verify.yml`: one run of the decompiler tests (`SE_DECOMPILER_TESTS`, `-E` then `-V -R`), `--no-tests=error`, the test-count floor step, explicit `timeout-minutes` on all five jobs, `.github/scripts/**` in both triggers, the real Homebrew check. Every job is kept; the Windows job gets shorter, not longer.
+* `.github/workflows/saturn-explorer-decompiler.yml`: sanitizers `timeout-minutes: 150`, the nightly probe fails, `--no-tests=error` on the Area 9 job.
+* `.github/scripts/check-test-count.sh` (new).
+* `FrontEnd/tests/LiveReconnectTests.cpp`, `LiveExporterRobustnessTests.cpp`: wait budgets 60 s (A12-39 (a)).
+* `Docs/Decompiler/RELEASE_CHECKLIST.md` (new), the ledger rows, this section.
+
+### 6. What I ran
+
+| Run | Result |
+|---|---|
+| `LiveReconnectTests`, `LiveExporterRobustnessTests` rebuilt (`-j2`, `ulimit -v 3500000`) and run by `ctest` | both passed (12.1 s and 3.3 s) |
+| `check-literal-size.py` on `SaturnExplorer/FrontEnd` | `raw string sizes: ok` |
+| `check-test-count.sh` on this build (117 tests): floor 100, floor 200, a missing build directory, `-R Fault` | exit 0; exit 1 with the error line; exit 1; exit 1 (1 test) |
+| `ctest -N` | 117 tests |
+| `ctest -j1`, whole registration, in three parts because the shared disk filled during the first full build (`No space left on device`, a link error in `SaturnExplorerSh2DecompilerTests`; other agents had the volume at 100 percent) and the heavy binaries had to be built and run one at a time, deleting each one's objects after it | 104 tests (every test whose binary was built) in one `ctest -j1 -E <11 heavy>`: 103 passed, **`SaturnExplorerDecompilerRunnerTests` timed out at 300 s** in `TestBaselinesTimeoutLeavesNothingRunning` (the first case) while the box was at load 2.5 to 3 with the disk nearly full; run again by itself it passed in 58.7 s under `ctest` and in 59.0 s directly, both times `all passed`; not reproduced and not explained, noted here and not filed. The other 13, built and run one at a time: Sh2Decode, SlaFreshness, CapturedInspectionMetadata, Sh2DecompilerFixture, DecompilerPanel, DecompilerModel, DecompilerTrust, LiveDecompilerCapture, Sh2Decompiler (70.4 s), Sh2Generated (112 s) with PrintedC (33.6 s), DecompilerFault (84.5 s), GenerateSpecDataFailure: **all passed**. So 117 of 117 passed, but not in one uninterrupted `ctest -j1` invocation, and one test needed a re-run. |
+| Not run | Any workflow change on a hosted runner (nothing pushed); MSVC, macOS, Rosetta; `SE_FAULT_FULL`; the game corpus; the generator beyond the ctest default. |
+
+## Area 10, round 3
+
+Branch `review/10-round3` from master `7af01961` (patches 0001 to 0098; 88 patch files). Reviewer of area 10 (`REVIEW_PROGRAM.md`: "the reproduction job; one review per patch against pinned upstream; upstream bugs filed"), round 3, independent of rounds 1 and 2. Own RelWithDebInfo build (gcc, `-j2`; every test binary under `ulimit -v 3500000`; the container was shared with other builders and the disk filled once, see the runs). **Verdict, area 10: not clean.** **A10-20 is a P2** (patch 0085's `RuleMultiCollapse` hunk had no test that fails without it, and without it a global's write is printed after a read through a pointer). No engine or patch code changed; the round adds one test function (`TestArea10Round3`, inside `SaturnExplorerSh2DecompilerTests`, so the ctest count is unchanged), three `patches/README.md` cells, the `Unused numbers:` line and the ledger rows A10-20 to A10-24. Area 10 has no clean round yet: the two-consecutive count starts after this round's fixes.
+
+### 1. The reproduction check
+
+`check-vendored-tree.py check` against a blobless sparse clone of upstream at `918d44ebc2962a53d23eeee52b8f44c7816e7815` (the CI step's method: `clone --filter=blob:none --no-checkout`, `sparse-checkout set --no-cone` of the decompiler `cpp/` and the SuperH `languages/` directories, `LICENSE` and `NOTICE`, checkout of the pin, `HEAD` verified): `vendored tree: ok (check)`, exit 0, zero diff. Run on the unmodified tree and again after this round's README edits.
+
+### 2. The patches after 0078, one review each
+
+0079 to 0098 are 15 files (0089, 0091, 0092, 0095 and 0097 do not exist, A10-23). Each was read against the pinned file for ownership, bounds, failure modes and cancel paths, against its README row, and mutated: the patch's effect reverted in the vendored tree (the hunks `tools/a11_round2/patch_mutants.py` could revert alone with `git apply -R`, or a hand edit of the same effect, e.g. a function made to return early, where later patches overlap), the engine rebuilt, then `SaturnExplorerSh2GeneratedTests` with `SE_GENERATED_PRINTEDC=only` (`pc`, 35 s), `SaturnExplorerSh2DecompilerTests` (`unit`, 70 s) and `SaturnExplorerSh2GeneratedTests` (`gen`, 112 s) run in that order (stopping at the first kill for most), then the files restored with `git checkout`. The script checked `git status` was empty after every mutant. The unmutated tree passes all three (`pc`: functions=651 compared=619, `all passed`; `unit` and `gen`: `all passed`). "Killed" names the test functions that failed (each `CHECK failed at` line mapped to its function).
+
+| Patch | Size (upstream diff) | Verdict | Mutation result |
+|---|---|---|---|
+| 0079 heritage slot pieces marked | +19, `heritage.cc` | Sound. `markSlotPiece` takes a null `forOp` and sets one flag on the op just made; every call site has the op or `insertop` in scope (`concatPieces` and `splitPieces` may get a null `insertop`, handled). Matches its row. | All 11 hunks reverted: killed, `unit`: `TestArea7Round7` (the named test), `TestArea7Round10`, `TestArea7Round18`. |
+| 0080 narrow compare, both sides cast | +38 -2, `typeop.cc` | Sound: constants, `getSizeOfInt` and the slot-0-first cast order are handled; no allocation. Matches except one claim (A10-22): `A10-12 #5` to `#7` are controls. | `compareOtherSideCast` returns null: killed, `pc`: `A10-12 #0` to `#4` and `A10-12 oracle` become `mismatch`. |
+| 0081 sext of an implied CONCAT cast | +20 -1, `typeop.cc` | Sound (reads `getHighTypeDefFacing`, which exists in the cast pass). Matches. | Hunk reverted: killed, `pc`: `A10-16 #0` to `#7` `mismatch` (the row's count; `#8`, `#9` are `narrow-c` in the base too). |
+| 0082 store keeps earlier write | +49, `ruleaction.cc` | Sound: `accessBetween` answers yes for a `to` in another block, takes a null `to`, and for a `to` before `from` runs to the block's end without passing it; the MULTIEQUAL slot indexes the right predecessor. The row is accurate about the code, not about its pins (A10-22). | Both hunks: killed, `unit` 7 checks (`TestArea7Round12` 3, `TestArea7Round19`, `TestArea7Round23`, `TestArea7Review24` 2), `gen` 1 (`TestA3RoutedPins`). Each hunk alone is killed. The cell's named pins (`TestArea5Confirm` `a5_102*`, the `A5-102` pins of `TestA587Pins`) do not fail. |
+| 0083 MSVC unused catch names | +6 -3, 3 files | Sound: three names dropped from handlers that never read them; the CancelError handler still rethrows. | Reverted: builds, passes everything, by construction (a compiler warning); no test can fail (accepted since round 1 for 0011, 0016, 0022). |
+| 0084 CONCAT compare cast | +70 -5, `typeop.cc` | Sound: `impliedPieceRead` tests `isWritten` before `getDef`; `comparePieceCast` is bounded by `getSizeOfInt` and the signedness; all pure. Matches. | `impliedPieceRead` false and `comparePieceCast` null: killed, `pc`: `A2-127 #0` to `#4` `mismatch` (controls `#5`, `#6` agree) and the five oracle pins. |
+| 0085 global write keeps place | +52 -1, 3 files | Sound: the new loops are bounded by one block; `globalWriteMovesPastAccess` answers the cautious yes for a non-direct input; the two helpers gain external linkage via `ruleaction.hh`. Hunk 1 untested (A10-20), hunk 3 accepted (A10-21). | Whole patch: killed, `unit` 4 to 6 checks (`TestArea7Round12`, `Round13` 2, `Round19`; with `TestArea10Round3` 2 more), `gen` 1 (`TestA5150A1019Pins`). Per hunk: route 1 (`RuleMultiCollapse`) **survived** `pc`, `unit` and `gen` until `TestArea10Round3` (A10-20); route 2 (`RulePropagateCopy`) killed (Round12, 13, 19, `TestA5150A1019Pins`); route 3 (`ActionVarnodeProps`) **survives** all (A10-21). The named `a5_109_*` and `A5-109` pins do not fail even without the whole patch. |
+| 0086 xunknown signed read cast | +59 -7, `cast.cc`, `typeop.cc` | Sound (`getHigh()` of an explicit varnode: a high exists in the cast pass and the printer); the test is written twice (`cast.cc`, `typeop.cc`), a style point the comments admit. Matches. | All 9 hunks reverted: killed, `pc`: `A2-128 #0, #2, #4, #6, #7` `mismatch` (the row's list; `#7` is `narrow-c` in the base) and the oracle pins. |
+| 0087 global writes without return | +142, 3 files | Sound: block marks are cleared on exit, no allocation unless a block never returns (the fault matrix pins allocations by order), the fixed-point loops are bounded by the block count; `isFoldedFlowStore` is linear in the access fates but filtered first by `isWritten && isPersist`. Matches. | `isFoldedFlowStore` false (disables both uses): killed, `unit` 66 checks (`TestA3164Fix` 28, `TestA3173Fix`, `TestA3175Fix`, `TestA3178Fix`, `TestA3182Fix`, `TestA3184Fix`, `TestArea7Round8/12/13`, `TestHardwareVolatility`), `gen` 8 (`TestA3RoutedPins` 7, `TestArea7Round12Pins`). |
+| 0088 global piece read and join copy | +47 -2, 2 files | Sound: the old read varnode is detached by `opSetInput` before `deleteVarnode` and the caller replaces its entry of `read`; no host record keeps a `Varnode *` of the flow (`AccessRecord` holds times and addresses); a failed `newUniqueOut` leaves the op's input unchanged. Matches. | 3 hunks reverted: killed, `unit` 11 (`TestArea5Confirm` 3, the named test, `TestArea7Round8/10/18`), `gen` 4 (`TestA587Pins` 3, `TestDomainPins`). |
+| 0090 hardware access orders globals | +261, 6 files | Sound where it matters: `userops.getOp` of an out-of-range id returns null; `barrierCopyOps` is treated like upstream's `loadCopyOps` (not cleared if a function is abandoned); `heldAcrossAccess`'s graph walk is bounded (64 blocks). Cost: per global range a sink for every hardware access, LOAD and STORE (the order of upstream's `guardStores`), and a scan of every LOAD, STORE and hardware CALLOTHER per merge test; no timing was taken (the game images are gone), the corpus comparison stays the coordinator's. Matches. | Whole effect (guard, merge test, the two rule exemptions, `checkImpliedCover`): killed, `unit` 118 checks (`TestArea5Review` 11, `TestArea5ReviewAfter0090` 7, `TestArea5Confirm`, `TestA5126Fix` 4, `TestArea7Round7` to `Round17` and more), `gen` 100 (`TestA5114Pins` 13, `TestA5119Pins` 14, `TestA5126Pins` 5, `TestA5129Pins` 4, `TestA5FoldedPins`, `TestDomainPins`, `TestA3RoutedPins`...). |
+| 0093 pointer store guard kept | +13, `heritage.cc` | Sound: the INDIRECT is identified (`isIndirectStore`, same address and size, its iop is this STORE) before its output is forced. Matches. | `setAddrForce` removed: killed, `unit` 4 (`TestArea5ReviewAfter0090`, the named test), `gen` 26 (`TestA5119Pins` 8, `TestA5126Pins`, `TestA5129Pins`, `TestA5FoldedPins`...). |
+| 0094 forced write and pushed join | +51 -2, 3 files | Sound: dropping the `break` in `pushMultiequals` only keeps scanning (a later reader sets the same flag or `neednewunique`); the new chain walk follows `loneDescend` of implied outputs (finite). Matches. | Whole: killed, `unit` 6, `gen` 10. Each effect alone is killed: A5-126 (`RuleSubCommute`) `TestA5126Fix` 2; A5-125 (the `break` back) `TestA5126Fix` 2 and `TestArea5ReviewAfter0090`; A5-127 (INDIRECT as marker) `TestA5126Fix` 1; A5-132 (`checkImpliedCover` volatile chain) `gen` only, `TestA5129Pins` 2. |
+| 0096 flow-done hook | +7, 2 files | Sound: a `std::function` member that no other `Funcdata` copies (partial functions have none); the host's lambda captures locals by reference and is called only inside `followFlow` of the same pass, `fd` is not followed again after the function returns; a throw from it (an allocation failure) leaves `followFlow` as any other would. Matches. | Call made false: killed, `gen` 9 (`TestA7FlowRecordPins` 8, the named test, `TestArea7Round35Pins`); `pc` and `unit` do not see it. |
+| 0098 join inputs held across access | +25 -2, `merge.cc` | Sound: nested joins to 16 (`joins.size()` bound), `find`-deduplicated `defs`. Matches. | Join loop disabled: killed, `gen` 3 (`TestA5154Pins`, the named test); `pc` and `unit` do not see it. |
+
+The 0090 mutant also shows why 0085's other routes pass the area 5 fixtures without 0085: 0090's barrier keeps those fixtures right (the `TestA5114Pins` family reports `folded-store-after-access`). Hunk 1 of 0085 (A10-20) is the exception: the fixtures that reach it are area 7's, whose checks looked at tokens, not at the order. `tools/a10_round2/textdiff.sh` showed it: without that hunk A7-105, A7-171 and A7-175 print the write of the global after `xVar1 = *param_1;` (or `iVar1 = *param_1;`).
+
+### 3. Bookkeeping
+
+* **Numbering.** Patches 0001 to 0098; `Unused numbers:` 0035, 0036, 0039, 0041, 0042, 0043 and, since this round, 0089, 0091, 0092, 0095, 0097 (they were "reserved" and no branch or worktree holds a patch with one, A10-23). `lint` and `check` pass before and after.
+* **README and `VENDOR.md` rows.** Each of the fifteen has a row in both, in order (three cells and two); the tests they name exist (lint). Three README cells named pins that do not fail without their patch (A10-22: 0080's controls, 0082, 0085) and were rewritten from the mutation table.
+* **Notices.** Every file a patch changes carries the "Modified for SaturnExplorer" line and no other does (lint).
+
+### 4. Upstream candidates
+
+Recorded as A10-24 (the items of 0079 to 0098 plus round 2's seven drafts, which were in this record only). Nothing was filed on GitHub.
+
+### 5. A10-13
+
+Closed and holding. The sanitizers job of `saturn-explorer-decompiler.yml` passed on master `7af01961` (push run 44428006707; run 44420727321 for the master before; the schedule run 44508250655) and on PR #67's run 44551839695 (`cd5be6ae`). PR #67's run 44582869974 (`bb2086c0`) was red in the sanitizers job at the step "Check the logs for sanitizer reports" after its test step passed; its commit message and the next commit (`8c281a61`, run 44597703295, still running when read) name a wait of `DecompilerRunnerTests` that was too short under ASan on a slow runner (A12-32, A12-33, area 12), not the printed-C `cc` problem of A10-13. I did not read the failing line. The A10-10 acceptance (0011, 0016 and 0040 pinned only by that job) holds while the job passes; an intermittently red gate weakens it, which area 12 owns.
+
+### 6. The rows
+
+* **A10-20 (P2, fixed as tests).** 0085's `RuleMultiCollapse` hunk: no test failed without it, and without it a global's write is printed after a read through a pointer (A7-105, A7-171). `TestArea10Round3` pins the order; the mutant fails both of its checks.
+* **A10-21 (P3, accepted).** 0085's `ActionVarnodeProps` hunk: its only effect is a redundant write.
+* **A10-22 (P3, fixed).** Three README cells.
+* **A10-23 (P3, fixed).** Five reserved numbers that nobody held, moved to unused.
+* **A10-24 (P3, open until filed).** Upstream candidates.
+* **Re-judged:** A10-10, A10-11, A10-14 unchanged (the patches they cover did not change); A10-13 closed and holding.
+
+### 7. Runs
+
+* `check-vendored-tree.py check` (sparse clone at the pin): `vendored tree: ok (check)`, rc 0, on the unmodified tree and after the README edits. `lint`: `vendored tree: ok (lint)`.
+* `check-literal-size.py SaturnExplorer/FrontEnd`: `raw string sizes: ok`.
+* `ctest --test-dir SaturnExplorer/build -j1` (under `ulimit -v 3500000`), after the final rebuild: `100% tests passed, 0 tests failed out of 117`, 657 s.
+* Unmutated baselines before the mutation runs: `SaturnExplorerSh2DecompilerTests` `all passed` (68 s), `SaturnExplorerSh2GeneratedTests` `all passed` (112 s), with `SE_GENERATED_PRINTEDC=only` `all passed` (33 s). With `TestArea10Round3`: `Sh2DecompilerTests: 69920.4 ms total` and `all passed`.
+* Mutants: about 30 builds (the table, plus the per-hunk ones of 0082, 0085, 0094), each restored, `git status` clean of engine changes after each. `0085` and `0085a` were rerun after `TestArea10Round3` was added: both killed by it (`0085a` only by it).
+* Disk: the shared volume reached 100 % during the round (one compile failed with "No space left on device" and was rerun); 30 old (2026-11-09) copies of test binaries named `gen_v*` in the shared scratchpad, about 3.3 GB and regenerable, were deleted to go on.
+* Not done: no timing comparison of the scans of 0087, 0090 and 0094 (the game images are gone); no nightly generator run; nothing filed upstream.
+
+## Area 5, A5-169: hardware and unrun writes stay barriers (PR #68 review)
+
+The external review of PR #68 (`98cafaea`) found that A5-168's `sameWrite` exemption also waived a same-value write to a hardware register (`SCU_D0EN`, which can start a transfer that changes the global). It also waived a write no run makes, whose destination is unknown. The write-back rule's own comment requires a register's write to stay a barrier.
+
+- **Change** (`Sh2GeneratedTests.cpp`, oracle only, switch `SE_A7_RULE_OFF=5169`):
+  - A write between is waived only if some run shows it landing.
+  - Every landing must be ordinary memory: not `InHardwareRange` and not a marked (volatile) range.
+- **Negative pin** `A5-169 same-register write to SCU_D0EN`:
+  - The program is the A5-168 shape with the write between aimed at 0x25FE0010 through r3.
+  - With the fix it gives 1 finding, `n:folded-store-after-access` (judged). With the switch off it gives 0 (waived).
+- **A5-168's own seed is judged again.** Its write between, `mov.l r2,@(0x2c,r6)`, sits on the store's unrun path.
+  - Its finding (A7-255) is accepted as value-correct unless r6+0x2c is a register that acts on a same-value write.
+  - The A5-168 pins (whole and shrunk) now require exactly `folded-store-after-access`. Both give 0 findings with `SE_A7_RULE_OFF=5169`.

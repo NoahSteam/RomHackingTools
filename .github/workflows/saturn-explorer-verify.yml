@@ -7,12 +7,14 @@ on:
       - 'SaturnExplorer/**'
       - 'RomHackingTools.sln'
       - '.github/workflows/saturn-explorer-verify.yml'
+      - '.github/scripts/**'
   pull_request:
     branches: [master]
     paths:
       - 'SaturnExplorer/**'
       - 'RomHackingTools.sln'
       - '.github/workflows/saturn-explorer-verify.yml'
+      - '.github/scripts/**'
   workflow_dispatch:
 
 permissions:
@@ -29,6 +31,12 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # Explicit (A12-37): the default is 360 minutes. Windows Debug took 157 minutes with the decompiler tests run twice (A12-36).
+    timeout-minutes: 240
+    env:
+      # The tests whose own output the verification record copies (A7). The full run excludes them (-E) and the step after it
+      # runs them with -V (-R), so each test runs once; a test outside this list, a new one included, is in the full run (A12-36).
+      SE_DECOMPILER_TESTS: SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|MemorySnapshot|Sh2FunctionFinder|Sh2Decompiler|Sh2Semantics|Sh2Decode|Sh2Generated|Sh2DecompilerFixture|DecompilerRunner|DecompilerPanel)Tests
     defaults:
       run:
         working-directory: SaturnExplorer
@@ -50,13 +58,25 @@ jobs:
       - name: Build
         run: cmake --build build --config Debug --parallel 4
 
-      - name: Run CTest
-        run: ctest --test-dir build -C Debug --output-on-failure
+      # A silent drop of registered tests (a CMake condition that stops holding, a missing Python) must not leave the job green
+      # on fewer tests (A12-37). The floors are below the counts of 2026-11-19 (Windows 95, macOS 110).
+      - name: Check the registered test count
+        shell: bash
+        run: bash ../.github/scripts/check-test-count.sh build ${{ runner.os == 'Windows' && '90' || '105' }} -- -C Debug
+
+      # The runner's default shell, not bash (A12-45): under Git Bash on Windows, SaturnExplorerSh2DecompilerEngineTests'
+      # icacls deny-write ACE was not enforced (TestUnwritableConfigDir, PR #68 run 44640816333), where it is under the default
+      # shell. The regex comes in as an expression so the line reads the same in pwsh and bash.
+      - name: Run CTest (all but the decompiler suites, which run once in the next step)
+        run: ctest --test-dir build -C Debug --output-on-failure -E "${{ env.SE_DECOMPILER_TESTS }}"
 
       # Passing tests print nothing above; the decompiler tests' own output (timings, the
-      # decompiled fixture) is what the verification record copies (A7), so show it.
-      - name: Decompiler test output
-        run: ctest --test-dir build -C Debug -V -R "SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|MemorySnapshot|Sh2FunctionFinder|Sh2Decompiler|Sh2Semantics|Sh2Decode|Sh2Generated|Sh2DecompilerFixture|DecompilerRunner|DecompilerPanel)Tests"
+      # decompiled fixture) is what the verification record copies (A7), so show it. They ran in the
+      # step above as well before A12-36: seventy minutes twice on Windows Debug. This step also runs
+      # after a failure of the one above, so a run reports both.
+      - name: Decompiler tests, with their output
+        if: ${{ !cancelled() }}
+        run: ctest --test-dir build -C Debug -V --no-tests=error -R "${{ env.SE_DECOMPILER_TESTS }}"
 
       # The Debug runner test above uses a tenth of each cancellation fixture on Windows (the Debug
       # CRT's checked iterators make the engine ~20x slower there), and the allocation-failure cases
@@ -66,7 +86,7 @@ jobs:
         shell: bash
         run: |
           cmake --build build --config Release --parallel 4 --target SaturnExplorerDecompilerRunnerTests SaturnExplorerSh2DecompilerTests SaturnExplorerDecompilerPanelTests
-          ctest --test-dir build -C Release -V -R "SaturnExplorer(DecompilerRunner|Sh2Decompiler|DecompilerPanel)Tests"
+          ctest --test-dir build -C Release -V --no-tests=error -R "SaturnExplorer(DecompilerRunner|Sh2Decompiler|DecompilerPanel)Tests"
 
       - name: Verify macOS headless renderer and frontend exist
         if: runner.os == 'macOS'
@@ -81,6 +101,7 @@ jobs:
   windows-release-batch:
     name: build-release.bat (Windows, CMake Release)
     runs-on: windows-latest
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: SaturnExplorer
@@ -105,6 +126,7 @@ jobs:
   windows-msbuild-batch:
     name: build-release-msbuild.bat (Windows, checked-in solution, ${{ matrix.toolset || 'auto' }})
     runs-on: windows-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -135,6 +157,7 @@ jobs:
   macos-x86_64-decompiler:
     name: Decompiler engine + tests (macOS x86_64 under Rosetta)
     runs-on: macos-latest
+    timeout-minutes: 120
     # One list drives the build, the -R regex and the check that each selected test was built, so the
     # three cannot drift apart (A12-10: Sh2DecodeTests and Sh2GeneratedTests were selected and not built,
     # and ctest ended "Not Run"). Each name is the middle of SaturnExplorer<name>Tests.
@@ -181,6 +204,7 @@ jobs:
   macos-bundle-dmg:
     name: macOS bundle + DMG (ad-hoc signed)
     runs-on: macos-latest
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: SaturnExplorer
@@ -206,8 +230,12 @@ jobs:
             test -f "stage/SaturnExplorer.app/Contents/Resources/licenses/$f"
           done
           # Self-contained: nothing may still point into Homebrew, from the exe or a bundled dylib.
+          # `! cmd | grep` never fails a step under `bash -e` (a negated pipeline is exempt from errexit), so this check
+          # passed whatever it found (A12-35). The first line of `otool -L` is the file's own path and is skipped.
           for f in stage/SaturnExplorer.app/Contents/MacOS/SaturnExplorer stage/SaturnExplorer.app/Contents/Frameworks/*.dylib; do
-            ! otool -L "$f" | grep -E '/opt/homebrew|/usr/local/'
+            if otool -L "$f" | tail -n +2 | grep -E '/opt/homebrew|/usr/local/'; then
+              echo "::error::$f still points into Homebrew"; exit 1
+            fi
           done
           # sdl2-compat loads SDL3 at run time; the bundle must carry it.
           if strings stage/SaturnExplorer.app/Contents/Frameworks/libSDL2*.dylib | grep -q libSDL3; then
