@@ -24683,3 +24683,121 @@ No area 3 class (`caution-unsaid`, `callee-saved`, `state-saved`) in either swee
 * Not run: the local game corpus (not in the repository); the sanitizer jobs (CI).
 
 **Verdict, area 3 round 39 (A3-269 and A3-270 fixed): not clean.** P2: A3-269 (round 38's "provably disjoint" ignored that memory repeats on the bus: mirrors and a 1 MiB gap; found by hand fixtures, fixed with pins), A3-270 (an exact address of a saved word handed to a callee; found by hand, fixed with pins); A3-271 as a P3 accepted by class (frame words a callee writes that the walk cannot place look the same as an index store into the callee's own frame, so flagging them would warn at nearly every such call, and compiled code does not write its caller's saved registers this way; a "no change" can be wrong in this one shape, and a bit telling an own-frame index store from one above the entry r15 is the way to revisit it). No P1. P3: A3-272 (accepted), A3-273 (routed). The sweeps are clean for area 3. The count of consecutive clean rounds restarts.
+
+## Area 8, done check
+
+Branch `review/8-done` from master `5bcf9284`. **WORK IN PROGRESS: paused at the coordinator's request with the overnight run about one tenth done. No verdict yet; area 8 is not declared done.** Changed: test code only (`RunProbeDone` in `DecompilerTrustTests.cpp`, behind `SE_TRUST_PROBE_DONE=1`), `Docs/Decompiler/tools/a8_done/longrun.sh`, the ledger (A8-52 filed, A8-45's status cell given its word) and this section. No product code.
+
+### The criteria, against the record
+
+| Criterion | Finding |
+|---|---|
+| Two consecutive review rounds with no P1 or P2 | **Met by rounds 7 and 8.** Round 6 filed A8-36 and A8-37 (P2). Round 7 (master `21c0ed1d`): clean, four P3 rows (A8-42 to A8-45). Round 8 (master `b26f913b`): clean, six P3 rows (A8-46 to A8-51). Product code changed between them (the fixer for A8-42 to A8-45), and round 8 attacked those fixes, so the two rounds are consecutive in the program's sense |
+| A fix after the last round that no reviewer saw | **Yes: the fixer for A8-46, A8-50 and A8-51 changed `DecompilerPanel.cpp` and `.h` after round 8** (the entry box: `mBoxCleanText`, `mBoxPrevText`, the restore in `IsItemEdited`, the refusal clearing the pending sync, the box's second tooltip; about 45 lines, mutation-checked by the fixer, in the component that gave A8-42, A8-46 and A8-50 in consecutive rounds). The cycle says the next round's reviewer verifies the previous fix, and no round followed. Everything else that touched the panel since (`git diff b26f913b 5bcf9284`): area 9's one-full-stop line for A8-48, area 7's wording of the folded fallback and its `noOrigin` tooltip; none of them a trust indicator's logic. **This check made that look itself** (below): no P1 or P2, one P3 (A8-52, accepted). It is a short look by the done check's owner, not a full round; whether it stands in for round 9 is the coordinator's call |
+| Every P3 fixed or accepted with a reason | **Met.** All 52 rows have 8 cells. A8-1 to A8-51: fixed, or accepted with a reason (A8-16, A8-26, A8-32, A8-40, parts of A8-15 and A8-23). Two cells were not in the ledger's words: A8-34 reads "closed (area 8 fixer; the rest is A8-40)", which is a reason and was left; A8-45 (the instrument record) had no status word and now reads "accepted", with what it leaves to A8-40. A8-52 (new, below): accepted |
+| No open P1 or P2 rows | **Met.** The four P2 rows (A8-17, A8-30, A8-36, A8-37) are fixed; area 8 never had a P1 |
+| Rows routed out of area 8 | A8-43 (area 9's popup): fixed by the area 8 fixer. A8-44 (area 1's oracle): fixed by the area 8 fixer. A8-47 (area 1's oracle): fixed on `review/open-p3`, the three scripts in `kPinned`. A8-48 (area 9's popup texts): fixed on `review/9-round3-fix`. None unresolved |
+| Rows routed into area 8 | A11-15 (area 11, to the Follow rig): fixed `9522bb1b` (five `kFollowScriptPins`). No open row of another area names area 8, the trust test or the trust model (A7-17, open, is area 7's Assembly-follow toggle in the same panel) |
+| The generator run overnight once with no violation | **Not met yet.** No earlier record has a run of that length (the longest: round 8's, about 1.1 million operations over several ranges). The run below was started and paused |
+
+### The fixes after round 8, attacked (`RunProbeDone`, `SE_TRUST_PROBE_DONE=1`)
+
+Read first: the restore in `DrawHeader`'s `IsItemEdited` branch, `EnterTarget`, `Install`'s `sameFunction`, `SetTarget`'s refusal reset. From the reading: `mEntry` is the address as typed (a mirror stays a mirror), so A8-51's comparison of the box's number with `EnterTarget`'s address cannot call a mirror "an older address"; the only place that ends a refusal is `SetTarget`, which sets the sync again, so A8-50's cleared sync cannot leave the refused text behind. Then seven hand-built sequences on the small rig, each printing the label, the Entry line, the box, the tooltips and the error:
+
+| # | Sequence | Result |
+|---|---|---|
+| D1 | Follow PC on C; the box clicked, '1' typed and deleted (untouched again, A8-46); the PC to A with the box focused; Enter | A asked as a pin, "rts scan, 60%" with the line, the box rewritten to A. Right (A8-42 holds after a restore) |
+| D2 | the box clicked, all selected, the last seven digits of C typed, Home, the first digit; Enter | **A8-52**: "rts scan, 60%" and the Entry line, a pin, where the user typed the whole address |
+| D3 | `zz` refused; the box clicked, all selected, C's address put in in one frame (a paste); Enter | **A8-52**, the same. (Before the Enter the refusal and its tooltip stay though the box now holds an address: A8-4's rule, the refusal is the question until Enter, unchanged by the fix) |
+| D4 | the box kept C while A is shown: its tooltip; '1' typed and deleted: its tooltip; Enter | "The box still holds an older address ..." while untouched; "Decompile the function starting at this address ..." once the text is the user's; Enter asks C, "user-set entry". Both tooltips true |
+| D5 | `zz` refused in the box that had the focus when A installed; the box clicked, 'q' typed, Escape; Follow PC off, on | `zz` stays through all of it with the refusal; the box's tooltip is the plain one; the Follow PC click ends the refusal and the box reads A. Right |
+| D6 | Enter on the focused box that kept C (A asked, the box rewritten to A); the box clicked, Ctrl+Z; Enter | the undo brings nothing back; a pin of A with its doubt. Right |
+| D7 | the box kept C while A is shown, '1' typed and deleted (the user's C); the PC back in C with the box focused; '1' typed and deleted; Enter | a pin of C, "rts scan, 60%" with the line: the text is the shown output's again. Right |
+
+**A8-52 (P3, accepted).** An address entered in full by the user, but not left to right (a paste, or the first digit last), that equals the text the panel last wrote for the function shown counts as an edit taken back: Enter asks the function shown as the finder's guess, not as "user-set entry". The panel claims less than the user gave, never more; the direction opposite to A8-30, A8-36 and A8-46. Accepted with the reason in the row.
+
+No P1 and no P2 from the look.
+
+### The overnight run (paused)
+
+RelWithDebInfo, gcc, the worktree's build at `5bcf9284`, the binaries copied aside before the first job, one job at a time under `ulimit -v 3500000`, each with its own log (`Docs/Decompiler/tools/a8_done/longrun.sh <build dir> <log dir> <chunk>`; the logs are not in the repository). Seeds from 2,000,000: no earlier record uses a Follow rig seed above 1,451,000.
+
+| Job | Seeds | Sequences | Operations | Failures | Wall / CPU (user + sys) |
+|---|---|---|---|---|---|
+| mix 8, `SE_TRUST_FOLLOW_FOCUS=1`, hover on | 2,000,000 to 2,004,475 | 4,476 | 200,007 | 0 | 709 s / 656 s |
+| mix 9, the same | 2,000,000 to 2,004,475 | 4,476 | 200,007 | 0 | 775 s / 661 s |
+| mix 8, focus, `SE_TRUST_NOHOVER=1` | 2,100,000 to 2,104,471 | 4,472 | 200,024 | 0 | 1,066 s / 524 s |
+| mix 9, the same | 2,100,000 to 2,104,471 | 4,472 | 200,024 | 0 | 1,070 s / 530 s |
+| **Done so far** | | **17,896** | **800,062** | **0** | 3,620 s wall, about 40 minutes of CPU |
+| mix 8, focus, `SE_TRUST_FOLLOW_CPU=1`, hover on, from 2,200,000 (chunk 2) | | | | | stopped by the pause after 12 minutes, before it printed anything: **not counted, to be run again** |
+
+Still to run for an overnight length (about 6 hours of CPU): chunk 2 (focus, CPU, hover on, from 2,200,000), chunk 3 (focus, CPU, no hover, from 2,300,000), chunk 4 (no focus operation, hover on, from 2,400,000), chunk 5 (no focus operation, CPU, no hover, from 2,500,000), each 400,000 operations for mix 8 and for mix 9; chunk 6, the model run `SE_MODEL_SEEDS=10000` (not started; the model has no start seed, seeds 1 to 1,200 were run by the fixer); chunk 7, mixes 0 to 7 with `SE_TRUST_HIDDEN_RENAME=1` from 2,600,000.
+
+To resume (one chunk at a time, each fits two hours):
+
+```
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+( ulimit -v 3500000; cmake --build build -j2 --target SaturnExplorerDecompilerTrustTests SaturnExplorerDecompilerModelTests )
+for c in 2 3 4 5 6 7; do Docs/Decompiler/tools/a8_done/longrun.sh build <log dir> $c; done
+```
+
+A failing job prints `FOLLOW FAILURE, seed N` (replay with `SE_TRUST_FOLLOW_SEED=N`, `SE_TRUST_FOLLOW_AUTO=1` for mix 9, and the job's knobs), `MODEL FAILURE` (mixes 0 to 7) or `seed N: FAILED` (the model, `SE_MODEL_SEED=N`); the output is to be kept before any rerun.
+
+### What was run besides
+
+| Run | Result |
+|---|---|
+| calibration: mix 8 with focus from 1,999,000 (3,049 operations); `SE_MODEL_SEEDS=100` | 0 failing (15 s); 100 seeds, 0 failed (44 s) |
+| `SE_TRUST_PROBE_DONE=1` | the table above |
+| `ctest` | not run: no product code changed, and the default trust run is unchanged (the probe is behind its variable) |
+
+### Verdict
+
+**Not given yet (paused).** As the record stands: the review-round, P3 and open-row criteria are met; the fix after round 8 had no reviewer's round, and the look made here found one P3 (A8-52, accepted); the overnight run has 800,062 operations of the Follow rig with no failure and is to be finished (chunks 2 to 7) before area 8 can be called done.
+
+## Area 8, round 9
+
+Branch `review/8-round9` from `73377fef` (the done check's WIP branch). An adversarial round on the area 8 fixer's change to the entry box (A8-46, A8-50, A8-51: `mBoxCleanText`, `mBoxPrevText`, the restore of `mBoxTargetValid` and `mBoxShowsShown` on `IsItemEdited`, the refusal clearing `mSyncEntryBox`, the second tooltip), read and attacked independently of the fixer's and the done check's conclusions. **No product code changed. No P1 and no P2: the round is clean.** Three P3 rows (A8-53 to A8-55), all accepted.
+
+### What was read, and the argument for no over-claim
+
+The box text can reach "untouched, the panel's" (`mBoxTargetValid`) by exactly three doors: the sync (box inactive, text written from the shown answer), an accepted Enter (text and `mBoxTarget` are what was asked), and the restore. The restore fires only when the text equals the text the panel last left (`mBoxCleanText`) and, for the shown answer's text, only while that text still equals `%08X` of `mShown.requestedEntry` (`mShownValid` guarded); for an Enter's text, only through `mBoxTarget`, whose address `EnterTarget` compares with the text. So whenever the box counts as untouched, its text is what the panel would write for what Enter then asks, and the label, the Entry line and the pin are those of the output asked for. The only way to be wrong is toward the doubtful side (a user's whole entry taken as the panel's text, A8-52). Checked in the code:
+
+* `mBoxPrevText` is written at the end of every Draw and read only on the frame of an edit; a hidden panel draws nothing and changes no text, so it cannot go stale. A programmatic write (the sync, the rewrite after an Enter on the panel's text) is followed in the same Draw by the copy, so the next edit compares against the right text.
+* A multi-character commit (IME, paste) over a shorter text that is a prefix of the panel's text is "typed out" (user's); over the same or an unrelated text it is a restore (panel's) or the user's. Both directions err to the cautious side.
+* The refusal branch clears the sync; the only places that end a refusal are `SetTarget` (which sets the sync again) and an accepted Enter (which clears it); a result cannot install under a refusal (`mEntryOk` false, `Accept` discards it), so no path writes the box over refused text.
+* The tooltip compares the box's number with the address `EnterTarget` gives. A mirror entered stays a mirror in `mEntry`, `mShownTarget.address` and `requestedEntry`, so a mirror is never called "an older address" (G2).
+* `SetCpu` touches neither the box nor a refusal; a refused entry followed by a CPU switch stays refused (G3).
+* ImGui 1.92 semantics seen on the harness: Escape reverts to the text at activation and raises `IsItemEdited` (restore reached, G6 shows it for an entered entry); Enter deactivates the single-line box, so the post-Enter rewrite of the text is not fought by the widget; Ctrl+Z reaches the restore (done check D6); focus loss keeps the text.
+
+### Probe (`RunProbe9`, `SE_TRUST_PROBE9=1`, test-only, prints)
+
+| # | Sequence | Result |
+|---|---|---|
+| G1 | Follow PC on C; End, 'g', Enter (refused); End, Backspace; Enter | the restore makes the box untouched; the refusal's tooltip and red line stay until Enter (A8-53, P3, accepted); Enter asks C as the finder's guess, refusal ended, right |
+| G2 | the mirror of C entered; '1' typed and deleted; Enter | label "user-set entry", the plain tooltip, never "older address"; right |
+| G3 | `zz` refused; CPU switched to one whose PC is in A; Enter on `zz`; Follow PC clicked | `zz` and the refusal stay through the switch and Enter; the click ends the refusal and the box reads C; right |
+| G4 | a draft `060041000` left with a click elsewhere; A installs | the draft is overwritten by A's entry (A8-54, P3, accepted) |
+| G5 | Enter twice on the untouched box | one pin of C, the finder's origin kept |
+| G6 | A typed and entered; '1' typed and Escape; Enter | "user-set entry" (the restore returns to the Enter's target, Typed); right |
+| G7 | A entered, Follow PC on, the PC walks to A, '1' typed and deleted, Enter | a pin of A with the doubt; the text is the shown output's; right |
+| G8 | the panel's own text put over itself in one frame; Enter | the finder's guess (A8-52's class, under-claim) |
+| G9 | `zz` refused, box focused, the PC to A | no install under the refusal; `zz` stays; right |
+
+### A8-52 re-judged
+
+Accepted stands, P3. The restore needs the text to equal what the panel wrote for the output shown, so a user's whole entry that is taken as the panel's names the function that is on screen; the panel then keeps its finder doubt (60%, "no symbol, call or user entry confirms it") where the user gave certainty. That is the doubtful side: nothing is shown as confirmed that was not. It never over-claims (G8, done check D2 and D3).
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SE_TRUST_PROBE9=1` | the table above |
+| `ctest --test-dir build -j1` | 117 of 117 passed (671 s) |
+| `check-literal-size.py` | ok |
+
+Product code is unchanged; the default trust run is unchanged (the probe is behind its variable). The long Follow-rig and model runs were left to the other job.
+
+### Verdict
+
+**Clean: no P1, no P2.** With rounds 7 and 8 and this round attacking the fixer's change, the done check's concern (a fix no reviewer saw) is met for the entry box. The overnight run's remaining chunks are the other job's.
