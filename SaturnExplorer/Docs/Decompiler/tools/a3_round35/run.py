@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Area 3 round 34 review (A3-210's run.py, unchanged but for this line and the scratch prefix): assemble a fixture of fixtures.src (functions separated by `fn` lines, each padded to 0x20) and run it through the
+"""Area 3 round 35 review (A3-210's run.py, unchanged but for this line and the scratch prefix): assemble a fixture of fixtures.src (functions separated by `fn` lines, each padded to 0x20) and run it through the
 generator's SE_GENERATED_WORDS mode. usage: W=<SaturnExplorer dir> S=<scratch> run25.py <name> [KEY=VAL ...]
 `name N` starts a fixture; `ret a,b,c` sets SE_GENERATED_RETURNS (default 0 per function); `fn` starts the next function; `env K=V ...` sets the fixture's environment (SE_GENERATED_CLOBBERS); lines as asm22.py's."""
 import os, re, subprocess, sys, tempfile
@@ -36,7 +36,7 @@ env['SE_GENERATED_RETURNS'] = ret or ','.join('0' for _ in fns)
 env.update(fenv)
 env.update(extra)
 print(name, 'FUNCS=' + env['SE_GENERATED_FUNCS'], 'RETURNS=' + env['SE_GENERATED_RETURNS'], 'WORDS="' + env['SE_GENERATED_WORDS'] + '"')
-d = tempfile.mkdtemp(prefix='a3r34.', dir=S)
+d = tempfile.mkdtemp(prefix='a3r35.', dir=S)
 r = subprocess.run('ulimit -v 3500000; timeout 300 %s/build/bin/SaturnExplorerSh2GeneratedTests %s/x 2>&1' % (W, d), shell=True, env=env, capture_output=True, text=True, executable='/bin/bash').stdout
 subprocess.run(['rm', '-rf', d])
 out = r[r.find('default request'):] if 'default request' in r else r
