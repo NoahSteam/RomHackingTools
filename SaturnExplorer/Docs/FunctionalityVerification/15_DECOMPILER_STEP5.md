@@ -24144,3 +24144,18 @@ Ranges 12,700,001 and 12,800,001 had not been used by any round. No area 3 findi
 * Not run: the local game corpus (two save states, not in the repository), so corpus caution counts before and after the change were not compared; the sanitizer jobs (CI); the printed-C suite beyond what `ctest` runs. The change adds cautions only where a register's change is now seen, so corpus text could gain a caution; that is untested here.
 
 **Verdict, area 3 round 33: clean** (no P1 or P2 found by the round's sweeps on the fresh ranges; A3-243, a P2, was found by A11-37's sweep before the round and is fixed here with pins, its own deep sweep clean). The coordinator decides whether the product change in this branch restarts the two-clean-rounds count: round 32 was clean on code without it.
+
+## Area 3, A3-245: A3-243's marks survive the next operation (PR #69 review)
+
+The external review of PR #69 (`4d5b57ba`) found that A3-243's two new producers of `Value::innerChanged` did not set `mInnerSeen`. Those producers are `Clobber`, which keeps a pushed join's change, and the constant step of a `mayEntry` word. The walk carries an operand's mark to an op's output only when that flag is set, and only `Call` set it, when an inner callee's walk reports a changed kept register. An inner callee that keeps r8-r14 left the flag false, so the next op that is not a COPY lost the mark.
+
+**Fix** (`Sh2Decompiler.cpp`): the propagation is no longer gated, and `mInnerSeen` is removed. `Call` always set the flag when it made a mark, so for the marks that existed before, the behaviour is unchanged.
+
+**Pins** (A3-243 block of `TestA3RoutedPins`), with propagation switched off for the old-code evidence, then restored:
+
+| Pin | Propagation off | With the fix |
+|---|---|---|
+| `A3-245 12607388 shrunk, extu.b after the pop` | `n:caution-unsaid` | caution required 1, said 1, 0 findings |
+| `A3-245 12600844 shrunk, extu.w after the step` (in the rts slot) | `n:caution-unsaid` | caution required 1, said 1, 0 findings |
+
+With the fix, taking the cautions out makes the oracle flag `caution-unsaid` on both pins.

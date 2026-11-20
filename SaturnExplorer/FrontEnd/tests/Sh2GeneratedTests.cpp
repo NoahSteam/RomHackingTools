@@ -22188,6 +22188,19 @@ void TestA3RoutedPins(Sh2Decompiler& d)
               "6B73 E104 3412 8913 4408 C701 014E 412B 0009 0600 90A0 0600 90A0 0600 90A4 0600 90AA A005 0009 EC1C A002 0009 A000 0009 2FC6 B010 0009 6483 6593 66A3 67B3 "
               "6CF6 62C3 1421 6050 4F26 6DF6 6BF6 6AF6 69F6 68F6 000B 0009 6071 000B 0009",
               "0/0/3e,3e/3e/6c,6c/6c/d4,d4/d4/da", "8c:4:4:ae:a0,a0,a4,aa", "1,0,1,1", "41000,41000,41000,41000", "8,8,1000,20008" },
+            // A3-245 (external review of PR #69): A3-243's marks, then an op that is not a COPY. The walk carried an operand's
+            // Value::innerChanged to an op's output only once an inner call had marked a register, which G (it keeps r8-r14) never does:
+            // 12607388 shrunk with `extu.b r13,r13` after the pop (the Clobber mark), and 12600844 shrunk with `extu.w r10,r10` in the rts slot
+            // after the step `mov.w @r10+,r2` (the step mark). Both `caution-unsaid` with that propagation off.
+            { "A3-245 12607388 shrunk, extu.b after the pop",
+              "2F86 2F96 4F22 7FF8 6843 6953 B00A 0009 6483 6593 62D3 6023 7F08 4F26 69F6 68F6 000B 0009 2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 2338 8B00 ED14 2FD6 B00D "
+              "6463 6483 6593 66A3 63D3 6DF6 6DDC 4F26 6BF6 6AF6 69F6 68F6 000B 0009 7FF4 E009 CDE7 604C 7F0C 000B 0009",
+              "0/0/24,24/24/5c,5c/5c/6a", nullptr, "1,0,1", "103000,3000,3000", "8,3008,120000" },
+            { "A3-245 12600844 shrunk, extu.w after the step",
+              "2F86 2F96 2FA6 4F22 7FF0 6843 6953 6A63 B021 6583 6483 6593 66A3 E104 3612 8911 4608 C702 016E 412B 0009 0009 0600 903C 0600 903C 0600 9044 0600 9040 A003 0009 "
+              "A001 0009 C607 605C 7F10 4F26 6AF6 69F6 68F6 000B 0009 2F86 2F96 2FA6 4F22 7FE8 6843 6953 6A63 B00D 0009 6483 6593 66A3 7F18 4F26 6AF6 69F6 68F6 2338 8B00 "
+              "62A5 000B 6AAD 6073 000B 0009",
+              "0/0/56,56/56/84,84/84/8a", "26:6:4:44:3c,3c,44,40", "1,0,1", "104400,4400,4400", "20000,4408,20000" },
         };
         for (const ModulePin& m : cases)
         {
