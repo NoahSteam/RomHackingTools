@@ -21713,6 +21713,61 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                     count(rep, "caution.required"), count(rep, "caution.said"), count(rep, "caution.said.likewise"));
         CHECK(rep.findings.empty() && count(rep, "caution.required") > 0 && count(rep, "caution.said") + count(rep, "caution.said.likewise") > 0);
     }
+    // A3-243 (grammar 2 seeds 12607388 `caution-unsaid`, 12606129 `caution-elsewhere`, from A11-37's a210d modules, whole and shrunk): the walk of an
+    // unlent callee that changes a register on one path (`tst r3,r3 ; bf L ; mov #0x14,r13 ; L:`), pushes it, calls G and pops it. The register at
+    // the push is a join of a change and its entry value; G's model writes over the pushed word (Clobber), and the word then kept only the join's
+    // origins, which name r13: no longer a change for certain (SureChanged), so the pop gave r13 back unchanged in the walk's account and no caution
+    // was said. The word written over keeps the mark that what it held changed the register (Value::innerChanged, as A3-207's marks do). Each as
+    // printed: no finding, the caution required and said; with every caution taken out, `caution-unsaid`.
+    {
+        // ...and the sweep's other shapes of the same class (seeds 12600844 and 12600761, 12608271: the word popped after the epilogue is the
+        // entry value or what a call's model wrote, and a path steps it by `add #2,r10` or `mov.w @r10+,r2`, which SureChanged could not see;
+        // 12602940, 12606641, 12606709, 12607151, 12607354, 12609178: the pushed register is the join of a table case's change and the entry value,
+        // and the later callee reads the popped word as the entry value, Value::entryJoin lost with the word written over)
+        for (const uint64_t seed : { 12607388ull, 12606129ull, 12600844ull, 12600761ull, 12608271ull, 12602940ull, 12606641ull, 12606709ull, 12607151ull, 12607354ull, 12609178ull })
+        {
+            const Report rep = Evaluate(d, MakeV2(seed), false);
+            std::printf("pin 'A3-243 grammar 2 seed %llu': %zu finding(s), caution required %d, said %d, likewise %d\n", static_cast<unsigned long long>(seed), rep.findings.size(),
+                        count(rep, "caution.required"), count(rep, "caution.said"), count(rep, "caution.said.likewise"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(rep.findings.empty() && count(rep, "caution.required") > 0 && count(rep, "caution.said") + count(rep, "caution.said.likewise") > 0);
+        }
+        const ModulePin cases[] = {
+            { "A3-243 12607388 shrunk",
+              "2F86 2F96 4F22 7FF8 6843 6953 B00A 0009 6483 6593 62D3 6023 7F08 4F26 69F6 68F6 000B 0009 2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 2338 8B00 ED14 2FD6 B00D "
+              "6463 6483 6593 66A3 67B3 63D3 6DF6 4F26 6BF6 6AF6 69F6 68F6 000B 0009 7FF4 E009 CDE7 604C 7F0C 000B 0009",
+              "0/0/24,24/24/5c,5c/5c/6a", nullptr, "1,0,1", "103000,3000,3000", "8,3008,120000" },
+            { "A3-243 12606129 shrunk",
+              "2F86 2F96 2FD6 4F22 7FF0 6843 6953 B01C 0009 6483 6593 62C3 B027 0009 6483 6593 63C3 4515 8B02 2431 A002 0009 A000 0009 7F10 4F26 6DF6 69F6 68F6 2338 8B03 E202 "
+              "E85C 4210 8BFC 000B 0009 2F86 2F96 2FD6 4F22 6843 6953 B022 0009 6483 6593 4F26 6DF6 69F6 68F6 000B 0009 2F86 2F96 2FA6 4F22 7FF0 6843 6953 6A63 2338 8B00 EC0C "
+              "2FC6 B00C 0009 6483 6593 66A3 61E3 6CF6 7F10 4F26 6AF6 69F6 68F6 000B 0009 7FC0 EC3C 2668 8900 6043 7F40 000B 0009",
+              "0/0/4a,4a/4a/6a,6a/6a/9e,9e/9e/ae", nullptr, "0,0,0,2", "45100,45000,5000,5000", "8,a,3008,8" },
+            { "A3-243 12600844 shrunk",
+              "2F86 2F96 2FA6 4F22 7FF0 6843 6953 6A63 B021 6583 6483 6593 66A3 E104 3612 8911 4608 C702 016E 412B 0009 0009 0600 903C 0600 903C 0600 9044 0600 9040 A003 0009 "
+              "A001 0009 C607 605C 7F10 4F26 6AF6 69F6 68F6 000B 0009 2F86 2F96 2FA6 4F22 7FE8 6843 6953 6A63 B00D 0009 6483 6593 66A3 7F18 4F26 6AF6 69F6 68F6 2338 8B00 "
+              "62A5 000B 0009 6073 000B 0009",
+              "0/0/56,56/56/84,84/84/8a", "26:6:4:44:3c,3c,44,40", "1,0,1", "104400,4400,4400", "20000,4408,20000" },
+            { "A3-243 12602940 shrunk",
+              "2F86 2F96 2FA6 2FE6 4F22 7FFC 6EF3 6843 6953 6A63 B013 0009 6483 6593 66A3 63C3 B024 0009 6483 6593 66A3 6060 7E04 6FE3 4F26 6EF6 6AF6 69F6 68F6 000B 0009 2F86 "
+              "2F96 2FA6 4F22 7FD0 6843 6953 6A63 EC48 2128 8B01 A003 0009 6151 A000 0009 7F30 4F26 6AF6 69F6 68F6 000B 0009 2F86 2F96 2FA6 2FB6 2FD6 4F22 6843 6953 6A63 "
+              "6B73 E104 3412 8913 4408 C701 014E 412B 0009 0600 90A0 0600 90A0 0600 90A4 0600 90AA A005 0009 EC1C A002 0009 A000 0009 2FC6 B010 0009 6483 6593 66A3 67B3 "
+              "6CF6 62C3 1421 6050 4F26 6DF6 6BF6 6AF6 69F6 68F6 000B 0009 6071 000B 0009",
+              "0/0/3e,3e/3e/6c,6c/6c/d4,d4/d4/da", "8c:4:4:ae:a0,a0,a4,aa", "1,0,1,1", "41000,41000,41000,41000", "8,8,1000,20008" },
+        };
+        for (const ModulePin& m : cases)
+        {
+            const Report clean = EvaluateSubject(d, ModuleSubject(m), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(m), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin '%s': as printed %zu finding(s), required %d, said %d, likewise %d; cautions taken out: caution-unsaid %d\n", m.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), count(clean, "caution.said.likewise"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") + count(clean, "caution.said.likewise") > 0 && flagged);
+        }
+    }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
     {

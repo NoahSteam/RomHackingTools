@@ -1177,6 +1177,12 @@ private:
                 // inner call that may have changed it keeps the mark
                 if (SavedRegister(was) && was.v == kPr) slot.second.mayEntry |= 1u << kPr;
                 slot.second.innerChanged = was.innerChanged;
+                // (area 3, round 33, A3-243) ...and what it held is still what it may hold, with what that showed: a register's change on one path,
+                // pushed (the join of the change and the entry value, Merge), and written over by an inner call's model, kept only the join's
+                // origins, which name the register, so the pop gave it back as no change for certain (SureChanged) and as no entry value (EntryOf).
+                // The word keeps the join's marks: the registers it changes for certain (innerChanged) and the entry values it may be (mayEntry)
+                slot.second.innerChanged |= SureChanged(was) & kModelKept;
+                if (was.kind == Value::Fuzzy && was.def == Value::kJoin) slot.second.mayEntry |= was.entryJoin & kModelKept;
             }
     }
 
@@ -3197,6 +3203,15 @@ private:
                         r.baseReg = static_cast<int8_t>(yr);
                         r.regOff = x.kind == Value::Imm ? Value::MoveRegConst(yo, x.v) : Value::MoveRegVar(yo, true);
                     }
+                }
+                // (area 3, round 33, A3-243) A word that may still hold a register's entry value (Value::mayEntry: a saved word an inner call's model
+                // wrote over, popped back) stepped by a constant: the walk cannot say it is the entry value, but the runs do, and then the step changes
+                // the register for certain (`mov.w @r10+,r2` or `add #2,r10` after the epilogue, on one path). SureChanged cannot see it (a value
+                // computed from a word of memory with the register among its origins), so it is marked as an inner call's change is.
+                if (r.kind == Value::Fuzzy)
+                {
+                    if (y.kind == Value::Imm && y.v != 0 && x.kind == Value::Fuzzy) r.innerChanged |= x.mayEntry & kModelKept & ~x.stale;
+                    else if (!sub && x.kind == Value::Imm && x.v != 0 && y.kind == Value::Fuzzy) r.innerChanged |= y.mayEntry & kModelKept & ~y.stale;
                 }
                 Set(s, op.out, r);
                 break;

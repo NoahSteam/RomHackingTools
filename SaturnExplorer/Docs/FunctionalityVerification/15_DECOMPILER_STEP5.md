@@ -23738,3 +23738,39 @@ The sweep of 10,000 seeds from 12,600,001 (grammar 2, deep) has 23 failing seeds
 | grammar 2 deep, 12,600,001-12,610,000 (10,000 seeds) | **23 failing seeds, 24 findings**, all A3-243 (above) |
 | `ctest -j1` | **116 of 117 passed**; `SaturnExplorerDecompilerFaultTests` failed with its pins' allocation coordinates STALE (`ActionRestartGroup::clone` and others): that suite pins stack coordinates of a RelWithDebInfo build and this Release build (as asked) moves them; it does not link the generator and no product code changed. Not rerun on a RelWithDebInfo build here |
 | `check-literal-size.py SaturnExplorer/FrontEnd` | raw string sizes: ok |
+
+## Area 3, round 33
+
+Branch `review/3-round33` from `review/11-caution-grammar` (A11-37's shapes, the A3-243 row); RelWithDebInfo, `-j2`, `ulimit -v 3500000`. One product change in `Sh2Decompiler.cpp` (the walk of a callee's code), no engine patch; ledger rows A3-243 (re-rated P2, fixed) and A3-244 (routed seeds). Pins: the A3-243 block of `TestA3RoutedPins`.
+
+### 1. A3-243 (grammar 2 deep, 12,600,001-12,610,000: 23 failing seeds, all in a210d modules)
+
+**Product fault, not the oracle's.** The emulator runs of the shrunk replays (12607388, 12606129) do return the register changed (`80100D0D` at the callee's entry, `00000014` after) and the later code does read it; the text names no caution. Re-rated P2 (A3-219, A3-237, A3-238 were P2: a caution the runs need is missing).
+
+The filer's reading was right for the first shape and incomplete: switching one change in the host on and off showed three shapes of one class, "a word of the walked function's frame written over by the model of an inner call loses what it showed".
+
+1. `Clobber` (the model of an inner call writing over the words from its r15 up) rebuilt a word as `Value::From(origins | stored)` and kept only A3-197's `mayEntry` of a *saved register*. The register at `L:` after `tst r3,r3 ; bf L ; mov #imm,r13` is a join of the change and the entry value (`sureChanged`, `entryJoin` set by `Merge`); pushed and written over, the word kept the join's origins, which name r13 and memory. The pop then gave r13 back as no change for certain (`SureChanged` skips a value from memory with the register among its origins) and as no entry value. Fix: the word keeps `innerChanged |= SureChanged(was)`. The first change alone took the sweep from 23 to 9 failing seeds.
+2. Seeds 12600844, 12600761, 12608271 (the other nine): a word that may still be the entry value (`mayEntry`) popped after the epilogue and stepped by a constant on one path (`add #2,r10` or `mov.w @r10+,r2`) is memory-derived with the register among its origins, so not a change for certain. Fix: an add or subtract of a nonzero constant to a `mayEntry` value marks the result `innerChanged` for those registers. Shrunk: 12600844 (replay in the ledger row's pins).
+3. Seeds 12602940, 12606641, 12606709, 12607151, 12607354, 12609178: a210d with a jump-table case that sets the register, so the pushed register is a join; F2 reads the popped word as the entry value (`unaff_r12`), which the walk's record of what a callee reads (`EntryOf`) takes from `mayEntry` or `entryJoin`; `Clobber` dropped `entryJoin`. Fix: `mayEntry |= entryJoin` for a joined word.
+
+A pop after a plain `mov #imm,r13 ; push` has no join and was already seen (the word's origins do not name the register), which is why the generator's older shapes never reached this.
+
+**Evidence the pins fail without the fix** (the three changes each behind a temporary environment test, not committed): all off, the A3-243 block fails 15 CHECKs (11 whole seeds, 4 shrunk replays; the findings are the oracle's `n:caution-unsaid` and `n:caution-elsewhere`); change 1 off alone: 4 (12607388, 12606129 whole and shrunk); change 2 off alone: 4 (12600844, 12600761, 12608271, 12600844 shrunk); change 3 off alone: 7 (the six seeds and 12602940 shrunk). All on: 0.
+
+### 2. Sweeps
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep`, `SE_GENERATED_CANARY=0` (A3-243's sweep, after the fix) | 12,600,001, 10,000 seeds | **failing seeds=0; findings=0** (12 m 35 s); before the fix 23 seeds (first change only: 9) |
+| Grammar 2, deep, fresh range | 12,700,001, 10,000 seeds | **failing seeds=0; findings=0** (12 m 47 s) |
+| Grammar 1, fresh range | 12,800,001, 10,000 seeds | **failing seeds=1; findings=2**: 12800378 `n:map-const-join` and `v:map-const-join` (line 22 `xVar2 = 0;`, 23 `xVar3 = 0;` drawn at 06009022, the first instruction of a join): area 7, routed (A3-244) |
+| Default `SE_GENERATED_SEEDS=20000` | 1 on, 10,000 of each grammar | **failing seeds=0; findings=0** (13 m 38 s) |
+
+Ranges 12,700,001 and 12,800,001 had not been used by any round. No area 3 finding in the round's sweeps.
+
+### 3. Runs
+
+* `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`): **117 of 117 passed** (the fault matrix's allocation pins included). `check-literal-size.py SaturnExplorer/FrontEnd`: raw string sizes ok. No C++ feature beyond what the files already use.
+* Not run: the local game corpus (two save states, not in the repository), so corpus caution counts before and after the change were not compared; the sanitizer jobs (CI); the printed-C suite beyond what `ctest` runs. The change adds cautions only where a register's change is now seen, so corpus text could gain a caution; that is untested here.
+
+**Verdict, area 3 round 33: clean** (no P1 or P2 found by the round's sweeps on the fresh ranges; A3-243, a P2, was found by A11-37's sweep before the round and is fixed here with pins, its own deep sweep clean). The coordinator decides whether the product change in this branch restarts the two-clean-rounds count: round 32 was clean on code without it.
