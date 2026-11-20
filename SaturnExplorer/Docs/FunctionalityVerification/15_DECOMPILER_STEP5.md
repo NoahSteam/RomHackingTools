@@ -24541,3 +24541,50 @@ A failing job prints `FOLLOW FAILURE, seed N` (replay with `SE_TRUST_FOLLOW_SEED
 ### Verdict
 
 **Not given yet (paused).** As the record stands: the review-round, P3 and open-row criteria are met; the fix after round 8 had no reviewer's round, and the look made here found one P3 (A8-52, accepted); the overnight run has 800,062 operations of the Follow rig with no failure and is to be finished (chunks 2 to 7) before area 8 can be called done.
+
+## Area 8, round 9
+
+Branch `review/8-round9` from `73377fef` (the done check's WIP branch). An adversarial round on the area 8 fixer's change to the entry box (A8-46, A8-50, A8-51: `mBoxCleanText`, `mBoxPrevText`, the restore of `mBoxTargetValid` and `mBoxShowsShown` on `IsItemEdited`, the refusal clearing `mSyncEntryBox`, the second tooltip), read and attacked independently of the fixer's and the done check's conclusions. **No product code changed. No P1 and no P2: the round is clean.** Three P3 rows (A8-53 to A8-55), all accepted.
+
+### What was read, and the argument for no over-claim
+
+The box text can reach "untouched, the panel's" (`mBoxTargetValid`) by exactly three doors: the sync (box inactive, text written from the shown answer), an accepted Enter (text and `mBoxTarget` are what was asked), and the restore. The restore fires only when the text equals the text the panel last left (`mBoxCleanText`) and, for the shown answer's text, only while that text still equals `%08X` of `mShown.requestedEntry` (`mShownValid` guarded); for an Enter's text, only through `mBoxTarget`, whose address `EnterTarget` compares with the text. So whenever the box counts as untouched, its text is what the panel would write for what Enter then asks, and the label, the Entry line and the pin are those of the output asked for. The only way to be wrong is toward the doubtful side (a user's whole entry taken as the panel's text, A8-52). Checked in the code:
+
+* `mBoxPrevText` is written at the end of every Draw and read only on the frame of an edit; a hidden panel draws nothing and changes no text, so it cannot go stale. A programmatic write (the sync, the rewrite after an Enter on the panel's text) is followed in the same Draw by the copy, so the next edit compares against the right text.
+* A multi-character commit (IME, paste) over a shorter text that is a prefix of the panel's text is "typed out" (user's); over the same or an unrelated text it is a restore (panel's) or the user's. Both directions err to the cautious side.
+* The refusal branch clears the sync; the only places that end a refusal are `SetTarget` (which sets the sync again) and an accepted Enter (which clears it); a result cannot install under a refusal (`mEntryOk` false, `Accept` discards it), so no path writes the box over refused text.
+* The tooltip compares the box's number with the address `EnterTarget` gives. A mirror entered stays a mirror in `mEntry`, `mShownTarget.address` and `requestedEntry`, so a mirror is never called "an older address" (G2).
+* `SetCpu` touches neither the box nor a refusal; a refused entry followed by a CPU switch stays refused (G3).
+* ImGui 1.92 semantics seen on the harness: Escape reverts to the text at activation and raises `IsItemEdited` (restore reached, G6 shows it for an entered entry); Enter deactivates the single-line box, so the post-Enter rewrite of the text is not fought by the widget; Ctrl+Z reaches the restore (done check D6); focus loss keeps the text.
+
+### Probe (`RunProbe9`, `SE_TRUST_PROBE9=1`, test-only, prints)
+
+| # | Sequence | Result |
+|---|---|---|
+| G1 | Follow PC on C; End, 'g', Enter (refused); End, Backspace; Enter | the restore makes the box untouched; the refusal's tooltip and red line stay until Enter (A8-53, P3, accepted); Enter asks C as the finder's guess, refusal ended, right |
+| G2 | the mirror of C entered; '1' typed and deleted; Enter | label "user-set entry", the plain tooltip, never "older address"; right |
+| G3 | `zz` refused; CPU switched to one whose PC is in A; Enter on `zz`; Follow PC clicked | `zz` and the refusal stay through the switch and Enter; the click ends the refusal and the box reads C; right |
+| G4 | a draft `060041000` left with a click elsewhere; A installs | the draft is overwritten by A's entry (A8-54, P3, accepted) |
+| G5 | Enter twice on the untouched box | one pin of C, the finder's origin kept |
+| G6 | A typed and entered; '1' typed and Escape; Enter | "user-set entry" (the restore returns to the Enter's target, Typed); right |
+| G7 | A entered, Follow PC on, the PC walks to A, '1' typed and deleted, Enter | a pin of A with the doubt; the text is the shown output's; right |
+| G8 | the panel's own text put over itself in one frame; Enter | the finder's guess (A8-52's class, under-claim) |
+| G9 | `zz` refused, box focused, the PC to A | no install under the refusal; `zz` stays; right |
+
+### A8-52 re-judged
+
+Accepted stands, P3. The restore needs the text to equal what the panel wrote for the output shown, so a user's whole entry that is taken as the panel's names the function that is on screen; the panel then keeps its finder doubt (60%, "no symbol, call or user entry confirms it") where the user gave certainty. That is the doubtful side: nothing is shown as confirmed that was not. It never over-claims (G8, done check D2 and D3).
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SE_TRUST_PROBE9=1` | the table above |
+| `ctest --test-dir build -j1` | 117 of 117 passed (671 s) |
+| `check-literal-size.py` | ok |
+
+Product code is unchanged; the default trust run is unchanged (the probe is behind its variable). The long Follow-rig and model runs were left to the other job.
+
+### Verdict
+
+**Clean: no P1, no P2.** With rounds 7 and 8 and this round attacking the fixer's change, the done check's concern (a fix no reviewer saw) is met for the entry box. The overnight run's remaining chunks are the other job's.

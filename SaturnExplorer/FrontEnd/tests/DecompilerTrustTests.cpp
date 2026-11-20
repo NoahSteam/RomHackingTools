@@ -3241,6 +3241,224 @@ void RunProbeDone()
     }
 }
 
+// Area 8, round 9: the entry box after the A8-46/A8-50/A8-51 fixer, attacked from outside. Behind SE_TRUST_PROBE9=1; prints, asserts nothing.
+void RunProbe9()
+{
+    const uint32_t cEntry = Defs()[FnC].entry, aEntry = Defs()[FnA].entry;
+    auto drawnText = [] {
+        std::string all;
+        for (const drawn::Run& run : drawn::WindowRuns(DecompilerPanel::kTitle)) all += run.text + " ";
+        return Norm(all);
+    };
+    auto show = [&](MiniRig& m, const char* what) {
+        m.Frame();
+        std::string u;
+        for (const std::string& x : m.panel.Uncertainties()) u += "[" + x + "]";
+        const std::string w = drawnText();
+        const size_t at = w.find(Norm("(entry from"));
+        const DecompileResult* s = m.panel.Shown();
+        std::printf("PROBE9 %s\n   label: %s\n   uncertainties: %s\n   box: %s, active %d, follow %d, wanted %08X, shown %s, stale %d\n"
+                    "   tooltip: %s\n   error: %s\n",
+                    what, at == std::string::npos ? "(none)" : w.substr(at, 40).c_str(), u.c_str(), m.panel.EntryText(), m.panel.EntryBoxActive() ? 1 : 0,
+                    m.panel.FollowPc() ? 1 : 0, m.panel.WantedEntry(), s ? Hex(s->requestedEntry).c_str() : "nothing", m.panel.ShownStale() ? 1 : 0,
+                    m.panel.StaleTooltip().c_str(), m.panel.EntryError().c_str());
+    };
+    auto settle = [&](MiniRig& m) {
+        m.Idle(3);
+        CHECK(m.Settle());
+    };
+    auto live = [&](MiniRig& m, uint32_t pc) {
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = pc;
+        m.haveRegs[0] = true;
+    };
+    auto typeChar = [](MiniRig& m, char ch) {
+        ImGui::GetIO().AddInputCharacter(static_cast<unsigned>(ch));
+        m.Idle(2);
+    };
+    auto ctrl = [](MiniRig& m, ImGuiKey key) {
+        ImGui::GetIO().AddKeyEvent(ShortcutMod(), true);
+        ImGui::GetIO().AddKeyEvent(key, true);
+        m.Frame();
+        ImGui::GetIO().AddKeyEvent(key, false);
+        ImGui::GetIO().AddKeyEvent(ShortcutMod(), false);
+        m.Frame();
+    };
+    auto boxTip = [](MiniRig& m) {
+        ImVec2 a, b;
+        CHECK(m.panel.ItemRect("entry", a, b));
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        bool found = false;
+        std::string tip;
+        for (int i = 0; i < 120 && (!found || Norm(tip).size() < 20); ++i)
+        {
+            m.Frame(c, false);
+            tip = drawn::TooltipText(&found);
+        }
+        return found ? Norm(tip) : std::string("(no tooltip)");
+    };
+    auto toA = [&](MiniRig& m) {
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+    };
+    auto clickAway = [](MiniRig& m) {
+        m.Frame(ImVec2(1270, 710), true);
+        m.Frame(ImVec2(1270, 710), false);
+        m.Idle(2);
+    };
+    {
+        // G1: an entry refused for a stray character, the character taken back (the panel's text again, the refusal still the question); Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(FocusEntryBox(m));
+        m.Key(ImGuiKey_End);
+        typeChar(m, 'g');
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "G1: C's text + 'g' refused");
+        CHECK(FocusEntryBox(m));
+        m.Key(ImGuiKey_End);
+        m.Key(ImGuiKey_Backspace);
+        show(m, "G1: Backspace (text is C's again)");
+        std::printf("PROBE9 G1: box tooltip: %s\n", boxTip(m).c_str());
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "G1: Enter");
+    }
+    {
+        // G2: a mirror entered, then an edit taken back.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        TypeEntry(m, Hex(cEntry | 0x20000000u));
+        settle(m);
+        show(m, "G2: the mirror typed and entered");
+        std::printf("PROBE9 G2: box tooltip: %s\n", boxTip(m).c_str());
+        CHECK(FocusEntryBox(m));
+        typeChar(m, '1');
+        m.Key(ImGuiKey_Backspace);
+        std::printf("PROBE9 G2: '1' typed and deleted: box tooltip: %s\n", boxTip(m).c_str());
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "G2: Enter");
+    }
+    {
+        // G3: the refusal, then a CPU switch (A in CPU 1's PC), then the box clicked, Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        m.regs[1].pc = aEntry + 4;
+        m.haveRegs[1] = true;
+        settle(m);
+        TypeEntry(m, "zz");
+        settle(m);
+        show(m, "G3: 'zz' refused (CPU 0)");
+        m.panel.SetCpu(1);
+        settle(m);
+        show(m, "G3: CPU 1");
+        std::printf("PROBE9 G3: box tooltip: %s\n", boxTip(m).c_str());
+        CHECK(FocusEntryBox(m));
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "G3: Enter on 'zz'");
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "G3: Follow PC clicked");
+    }
+    {
+        // G4: a draft ('1' typed) left with a click elsewhere; then A installs.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(FocusEntryBox(m));
+        typeChar(m, '1');
+        clickAway(m);
+        show(m, "G4: draft C+'1', focus gone");
+        toA(m);
+        show(m, "G4: A installed");
+    }
+    {
+        // G5: two Enters in two frames on the untouched box.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(FocusEntryBox(m));
+        PressEnterInBox(m);
+        CHECK(FocusEntryBox(m));
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "G5: Enter twice on the untouched box");
+    }
+    {
+        // G6: a typed entry (A) entered while C is shown, one stray character typed and Escape, Enter: the user's A.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        TypeEntry(m, Hex(aEntry));
+        settle(m);
+        show(m, "G6: A typed and entered");
+        CHECK(FocusEntryBox(m));
+        typeChar(m, '1');
+        m.Key(ImGuiKey_Escape);
+        m.Idle(3);
+        show(m, "G6: '1' typed, Escape");
+        CHECK(FocusEntryBox(m));
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "G6: Enter");
+    }
+    {
+        // G7: A typed and entered, Follow PC clicked on (PC in C), the PC walks to A; the box clicked, '1' typed and deleted; Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        TypeEntry(m, Hex(aEntry));
+        settle(m);
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "G7: A typed and entered, Follow PC clicked on (PC in C)");
+        toA(m);
+        show(m, "G7: PC in A");
+        CHECK(FocusEntryBox(m));
+        typeChar(m, '1');
+        m.Key(ImGuiKey_Backspace);
+        show(m, "G7: '1' typed and deleted");
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "G7: Enter");
+    }
+    {
+        // G8: Ctrl+A then the same text in one frame (an IME commit) over the panel's text, and Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(FocusEntryBox(m));
+        ctrl(m, ImGuiKey_A);
+        for (char ch : Hex(cEntry)) ImGui::GetIO().AddInputCharacter(static_cast<unsigned>(ch));
+        m.Idle(2);
+        show(m, "G8: C's text put over C's text in one frame");
+        PressEnterInBox(m);
+        settle(m);
+        show(m, "G8: Enter");
+    }
+    {
+        // G9: 'zz' refused; the box focused; A installs while the refusal stands.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        TypeEntry(m, "zz");
+        settle(m);
+        CHECK(FocusEntryBox(m));
+        toA(m);
+        show(m, "G9: refused 'zz', box active, PC to A");
+        clickAway(m);
+        m.Idle(3);
+        show(m, "G9: focus gone");
+    }
+}
+
 void RunProbe8()
 {
     const uint32_t cEntry = Defs()[FnC].entry, aEntry = Defs()[FnA].entry;
@@ -5059,6 +5277,11 @@ int main(int argc, char** argv)
         if (std::getenv("SE_TRUST_PROBE8"))
         {
             RunProbe8();
+            return 0;
+        }
+        if (std::getenv("SE_TRUST_PROBE9"))
+        {
+            RunProbe9();
             return 0;
         }
         if (std::getenv("SE_TRUST_PROBE_DONE"))
