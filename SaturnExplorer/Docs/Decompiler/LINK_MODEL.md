@@ -313,10 +313,21 @@ Rules that become unnecessary: `firstAddrWrong`, the address-set round trip (`ro
    join, and pins protect examples, not fresh shapes. The generator already runs each function on the emulator and
    compiles and runs the printed C on the same inputs (the printed-C oracle). The witness instruments each printed
    statement on a memory variable to log (line, address, value) and records the emulator's store events (instruction,
-   address, value). For every statement with a **proven** `Effect` link, on every run where the statement executes,
-   the linked instruction must have executed in that run and written the logged bytes. It is bounded (the runs the
-   generator makes anyway), independent of the engine's records and of the product's walk, and it rejects the
-   two-arm mutation below. Candidate links are not checked by it.
+   address, value). It is **path-aware**: a statement after a join may have one proven `Effect` per input path, and
+   only one of those stores runs on a given execution. So the check is made per execution of the statement, over that
+   execution's **window**: the emulator events from the statement's previous execution (or the function's entry) to
+   its next execution (or the function's exit), which covers a store made on the path before the statement (a join's
+   inputs) and one made after it (a store whose value the statement shows ahead of it, A7-19). For each execution of
+   a statement with proven `Effect` links:
+   - **coverage**: every displayed byte is written, inside the window, by a store event of one of the statement's
+     proven `Effect` instructions, with the logged value's byte (`kLinkPartial` links jointly cover the bytes; no
+     single link need cover them all);
+   - **no wrong effect**: every proven `Effect` instruction that executed inside the window wrote the logged value's
+     bytes for the bytes it covers.
+   Effects of paths not taken in that run are not required to execute. It is bounded (the runs the generator makes
+   anyway) and independent of the engine's records and of the product's walk. It rejects the two-arm mutation below:
+   on a run that takes the statement's arm, the store the mutation links is on the other arm, does not execute in the
+   window, and the displayed bytes are not covered. Candidate links are not checked by it.
 
 The oracle keeps a size ceiling (2,800 lines after step 5) so that it does not grow back into a second
 reconstruction; a new rule that would cross it needs a design note.
@@ -436,6 +447,10 @@ product code changes until these decisions are approved.
   store passed every check. Section 3 now defines the edges a proven link may cross (a store after a join, walking
   forwards, is only a candidate), and section 5 adds the execution witness (check 9) with the two-arm mutation that
   it must reject before the old walks are deleted.
+- **Third review (PR #73, Codex).** The witness as first written required every proven `Effect` to run on every
+  execution, which a statement with one effect per join input can never meet. Check 9 is now path-aware: per
+  execution, the displayed bytes must be covered by the statement's proven effects that ran in that execution's
+  window (partial links jointly), and no proven effect that ran may have written other bytes.
 
 It also asked that the 85 to 95% survival band be defined (step 1's census now does) and noted that the plan can
 reduce the heuristic tail but does not yet show that it ends it; the census and check 9's results on fresh seeds are
