@@ -1251,6 +1251,136 @@ G:
 mov #4,r10
 rts
 mov r3,r0
+# q5: under: pop; step r10 by 4; store r10 through r4 (a pointer argument); load it back into r10 (address names r4 only)
+name q5
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+add #4,r10
+mov.l r10,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q6: under: the same with `not r10` (no pointer use of the marked value)
+name q6
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+not r10,r10
+mov.l r10,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q7: control, no mark: the callee overwrites r10 with 7 after the pop, stores it through r4, loads it back
+name q7
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+bsr G
+nop
+mov.l @r15+,r10
+mov #7,r10
+mov.l r10,@r4
+mov.l @r4,r10
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
+# q8: control, no pop: r10 = r3 stored through r4 and loaded back
+name q8
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov r4,r10
+add #8,r10
+bsr F2
+nop
+mov.l r10,@r4
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+mov r3,r10
+mov.l r10,@r4
+mov.l @r4,r10
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+G:
+mov #4,r10
+rts
+mov r3,r0
 # q4: control: pop; store r10 through r10; load it back (unchanged)
 name q4
 ret 0,0,0
@@ -1369,6 +1499,361 @@ G:
 mov #4,r10
 rts
 mov r3,r0
+# h1: r10 (changed by F2 on every path, never restored) copied to r3, H stores r3
+name h1
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+mov r10,r3
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+mov #4,r10
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+
+# h2: control: r10 copied to r0 (a plain read) and stored through r4 by the caller
+name h2
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+mov r10,r0
+mov.l r0,@r4
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+mov #4,r10
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+
+# h3: r10 copied to r4 (a convention argument) and H stores r3 (the value the caller never set)
+name h3
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+mov r10,r4
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+mov #4,r10
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+
+# h4: gbr (loaded by F2 on every path, never restored) read into r3 by `stc gbr,r3`, H stores r3
+name h4
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+stc gbr,r3
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+mov #4,r1
+ldc r1,gbr
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+
+# h5: as h4 with r0 as the copy and the caller storing it (a plain read after the call)
+name h5
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+stc gbr,r0
+mov.l r0,@r4
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+mov #4,r1
+ldc r1,gbr
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+
+# h6: h4 with `tas.b @r4` in F2 before the ldc
+name h6
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+stc gbr,r3
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+tas.b @r4
+mov #4,r1
+ldc r1,gbr
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+
+# h7: h4 with `or #1,r0`-free control: a nop in place of the tas
+name h7
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+stc gbr,r3
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+nop
+mov #4,r1
+ldc r1,gbr
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+
+# h8: F2: `tas.b @r4 ; mov r5,r10` (no pop, r10 overwritten with a parameter), the caller stores r10
+name h8
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+mov r10,r0
+mov.l r0,@r4
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+tas.b @r4
+mov r5,r10
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+
+# h9: control: the same without the tas.b
+name h9
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+mov r10,r0
+mov.l r0,@r4
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+mov r5,r10
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+
+# h10: tas.b @r4 then `ldc r5,gbr`, the caller reads gbr (stc gbr,r0 ; store)
+name h10
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+stc gbr,r0
+mov.l r0,@r4
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+tas.b @r4
+ldc r5,gbr
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+
+# h11: control: `ldc r5,gbr` without the tas.b
+name h11
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,400,400
+.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+stc gbr,r0
+mov.l r0,@r4
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+ldc r5,gbr
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+
 # o1: over: or with an unknown operand r3 (0 in some runs)
 name o1
 ret 0,0,0

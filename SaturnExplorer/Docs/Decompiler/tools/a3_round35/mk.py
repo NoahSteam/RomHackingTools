@@ -110,6 +110,10 @@ for n, why, body in [
   ("q1", "under: pop; step r10 by 4; store r10 at @r10; load it back into r10 (address names r10)", callg + "mov.l @r15+,r10\nadd #4,r10\nmov.l r10,@r10\nmov.l @r10,r10\n"),
   ("q2", "under: pop; copy r10 to r1; step r10; store through r1; load through r1 into r10", callg + "mov.l @r15+,r10\nmov r10,r1\nadd #4,r10\nmov.l r10,@r1\nmov.l @r1,r10\n"),
   ("q3", "under: pop; not r10 (r10 is a pointer so ~r10 is not valid memory); control with a clean copy: copy r10 to r1, step r1, store r1 through r10, load r10 from it", callg + "mov.l @r15+,r10\nmov r10,r1\nadd #4,r1\nmov.l r1,@r10\nmov.l @r10,r10\n"),
+  ("q5", "under: pop; step r10 by 4; store r10 through r4 (a pointer argument); load it back into r10 (address names r4 only)", callg + "mov.l @r15+,r10\nadd #4,r10\nmov.l r10,@r4\nmov.l @r4,r10\n"),
+  ("q6", "under: the same with `not r10` (no pointer use of the marked value)", callg + "mov.l @r15+,r10\nnot r10,r10\nmov.l r10,@r4\nmov.l @r4,r10\n"),
+  ("q7", "control, no mark: the callee overwrites r10 with 7 after the pop, stores it through r4, loads it back", callg + "mov.l @r15+,r10\nmov #7,r10\nmov.l r10,@r4\nmov.l @r4,r10\n"),
+  ("q8", "control, no pop: r10 = r3 stored through r4 and loaded back", "mov r3,r10\nmov.l r10,@r4\nmov.l @r4,r10\nmov.l @r15+,r2\n"),
   ("q4", "control: pop; store r10 through r10; load it back (unchanged)", callg + "mov.l @r15+,r10\nmov.l r10,@r10\nmov.l @r10,r10\n"),
   ]:
     out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, ptr + body + tail.rstrip("\n")))
@@ -121,6 +125,57 @@ for n, why, body in [
   ("l3", "r10 stepped by 4 and loaded through (`mov.l @(4,r10)` style: post-increment)", "mov.l @r10+,r10\n"),
   ]:
     out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, ptr3.replace("F2:\n.word 0x4F22\nmov.l r10,@-r15\n", "F2:\n.word 0x4F22\n") + body + tail.rstrip("\n")))
+# h*: the 13102045 shape by hand: the caller reads the changed register into r3 (not a convention argument) and calls a later callee H that stores r3
+hh = """.word 0x4F22
+mov.l r10,@-r15
+mov #5,r10
+bsr F2
+nop
+%s
+bsr H
+nop
+mov.l @r15+,r10
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov.l r10,@-r15
+mov #4,r10
+mov.l @r15+,r2
+.word 0x4F26
+rts
+mov r3,r0
+fn
+H:
+mov.l r3,@r4
+rts
+mov r3,r0
+"""
+for n, why, pre in [
+  ("h1", "r10 (changed by F2 on every path, never restored) copied to r3, H stores r3", "mov r10,r3"),
+  ("h2", "control: r10 copied to r0 (a plain read) and stored through r4 by the caller", "mov r10,r0\nmov.l r0,@r4"),
+  ("h3", "r10 copied to r4 (a convention argument) and H stores r3 (the value the caller never set)", "mov r10,r4"),
+  ]:
+    out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, hh % pre))
+for n, why, pre in [
+  ("h4", "gbr (loaded by F2 on every path, never restored) read into r3 by `stc gbr,r3`, H stores r3", "stc gbr,r3"),
+  ("h5", "as h4 with r0 as the copy and the caller storing it (a plain read after the call)", "stc gbr,r0\nmov.l r0,@r4"),
+  ]:
+    out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, (hh % pre).replace("mov #4,r10\n", "mov #4,r1\nldc r1,gbr\n")))
+for n, why, pre, pre2 in [
+  ("h6", "h4 with `tas.b @r4` in F2 before the ldc", "stc gbr,r3", "tas.b @r4\n"),
+  ("h7", "h4 with `or #1,r0`-free control: a nop in place of the tas", "stc gbr,r3", "nop\n"),
+  ]:
+    out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, (hh % pre).replace("mov #4,r10\n", pre2 + "mov #4,r1\nldc r1,gbr\n")))
+for n, why, pre, pre2 in [
+  ("h8", "F2: `tas.b @r4 ; mov r5,r10` (no pop, r10 overwritten with a parameter), the caller stores r10", "mov r10,r0\nmov.l r0,@r4", "tas.b @r4\nmov r5,r10\n"),
+  ("h9", "control: the same without the tas.b", "mov r10,r0\nmov.l r0,@r4", "mov r5,r10\n"),
+  ("h10", "tas.b @r4 then `ldc r5,gbr`, the caller reads gbr (stc gbr,r0 ; store)", "stc gbr,r0\nmov.l r0,@r4", "tas.b @r4\nldc r5,gbr\n"),
+  ("h11", "control: `ldc r5,gbr` without the tas.b", "stc gbr,r0\nmov.l r0,@r4", "ldc r5,gbr\n"),
+  ]:
+    out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, (hh % pre).replace("mov #4,r10\n", pre2)))
 for n, why, body in r35:
     use = big if n.startswith("e") else head
     out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, use + body + tail.rstrip("\n")))

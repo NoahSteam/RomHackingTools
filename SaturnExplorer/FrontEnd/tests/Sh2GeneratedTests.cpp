@@ -22216,7 +22216,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") + count(clean, "caution.said.likewise") > 0 && flagged);
         }
     }
-    // A3-246 (area 3 round 34; hand fixtures, tools/a3_round34): A3-243 marked the add or subtract of a constant to a word that may still hold
+    // A3-246 (area 3 round 34; hand fixtures, tools/a3_round35): A3-243 marked the add or subtract of a constant to a word that may still hold
     // a register's entry value (a saved word an inner call's model wrote over, popped back) as the register's change; the other ops that give
     // another value for any nonzero operand did not. F2 pushes r10, calls G, pops r10 and then `not`s, negates, shifts (`shll2`), xors, ors or ands
     // a constant register into it, or extends a part of it (`extu.b`, `extu.w`, `exts.b`): the runs return r10 changed, and the text said no caution. Each as printed: no finding, the caution required
