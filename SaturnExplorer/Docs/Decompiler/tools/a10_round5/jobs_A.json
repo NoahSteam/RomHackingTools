@@ -1,0 +1,16 @@
+[
+{"id": "0052-h3", "patch": "0052", "hunks": [3], "named": [], "runs": ["unit"]},
+{"id": "0090-h13", "patch": "0090", "hunks": [13], "named": [], "runs": ["unit"]},
+{"id": "0086-h8", "patch": "0086", "hunks": [8], "named": [], "runs": ["unit"]},
+{"id": "0086-h9", "patch": "0086", "hunks": [9], "named": [], "runs": ["unit"]},
+{"id": "0099-g1", "patch": "0099", "hunks": [1], "named": [], "runs": ["gen", "pc", "engine", "unit"]},
+{"id": "0099-g2", "patch": "0099", "hunks": [2], "named": [], "runs": ["gen", "pc", "engine", "unit"]},
+{"id": "0028-edit", "patch": "0028", "hunks": "edits", "named": [], "runs": ["unit", "gen", "pc"],
+ "edits": [["cpp/fspec.cc", "  effectlist = overrides;\n  decodeEffect();\n", "  (void)overrides;\n"]]},
+{"id": "0057-key", "patch": "0057", "hunks": "edits", "named": [], "runs": ["unit", "gen", "pc", "engine"],
+ "edits": [["cpp/varmap.cc", "if (seen[i].first == out && seen[i].second == next) { known = true; break; }", "if (seen[i].first == out) { known = true; break; }"]]},
+{"id": "0057-mask", "patch": "0057", "hunks": "edits", "named": [], "runs": ["unit", "gen", "pc", "engine"],
+ "edits": [["cpp/varmap.cc", "      next &= calc_mask(out->getSize());\n      bool known = false;", "      bool known = false;"]]},
+{"id": "0044-in", "patch": "0044", "hunks": "edits", "named": [], "runs": ["unit", "gen", "pc"],
+ "edits": [["cpp/database.cc", "      s << \"in_\" << regname;\n      s << registerPieceSuffix(glb,regname,addr,sz);", "      s << \"in_\" << regname;"]]}
+]

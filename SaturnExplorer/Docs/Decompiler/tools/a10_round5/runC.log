@@ -1,0 +1,7 @@
+0028-edit: applied ['edit:cpp/fspec.cc'] named_hit=False unit:FAIL(rc1,TestArea7Round4=1,TestArea7Round7=1,TestArea7Round17=3,TestCallsAndTraps=55,TestAreas234Leftovers=1,TestArea3Round9=2)
+0057-key: applied ['edit:cpp/varmap.cc'] named_hit=False unit:FAIL(rc1,TestArea3Round10Fix=2)
+0057-mask: applied ['edit:cpp/varmap.cc'] named_hit=False unit:ok(rc0,) gen:ok(rc0,) pc:ok(rc0,) engine:ok(rc0,)
+0044-in: applied ['edit:cpp/database.cc'] named_hit=False unit:FAIL(rc1,TestArea2Round4=2,TestArea2Round5=1)
+0064-h23: applied [23] named_hit=False unit:ok(rc0,)
+0064-h24: applied [24] named_hit=False unit:ok(rc0,)
+finished

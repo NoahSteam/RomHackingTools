@@ -24801,3 +24801,36 @@ Product code is unchanged; the default trust run is unchanged (the probe is behi
 ### Verdict
 
 **Clean: no P1, no P2.** With rounds 7 and 8 and this round attacking the fixer's change, the done check's concern (a fix no reviewer saw) is met for the entry box. The overnight run's remaining chunks are the other job's.
+
+## Area 10, round 5
+
+Branch `review/10-round5` from `8f418cd6` (round 4's head), merged with area 3 round 38 (`4373fb37`) and area 5 round 36 (`55abe4e5`, which brings patch 0099); patches 0001 to 0099 (89 files). Reviewer of area 10, round 5, independent of rounds 1 to 4. Method as round 4: `tools/a10_round4/mut.py` with `jobs_gen.py` groups, hand-made edits for the hand reverts; jobs, logs and results in `tools/a10_round5/`. RelWithDebInfo, `-j2`, `ulimit -v 3500000`; `git status --porcelain -- SaturnExplorer/FrontEnd/third_party` empty after every mutant. **Verdict, area 10: clean. No P1 or P2 found.** Three P3 rows (A10-30 to A10-32): two corrections to round 4's acceptances (A10-27, A10-28) and the round's survivors. The round is partial: see "Not done".
+
+### 1. Round 4's work checked
+
+* `TestArea10Round4` a and b: 0052 hunk 3 reverted alone fails exactly `TestArea10Round4` (2 checks), 0090 hunk 13 likewise (2 checks); nothing else fails in `Sh2DecompilerTests`. Both are robust: a asserts the bad-data halt at the odd entry, the absence of any "overlaps instruction" warning and `halt_baddata();`; b counts the two writes and refuses the joined boolean. Neither depends on a name the engine numbers.
+* A10-27: the "cap of 256" is 64 hops (A10-30); no hidden P2 found, the layered hunks are fail-closed. A10-28: the reason given was false (restarts happen inside a request, A10-31); re-judged on the real reason, still P3. A10-29: 0086 hunk 8 is pinned now (below); the rest stands (0064 hunks 23 and 24 are unreachable on SH-2, A10-32).
+
+### 2. Patch 0099 (A5-173), one review against the pinned upstream
+
+`opCollapseIndirectsForCopy` keeps the guard INDIRECT of an address-forced global when the COPY's output is volatile (`iter = previter; continue;` steps past the kept op, as the loop's other branches advance by moving it); `replaceVolatile` moves the kept guards (the INDIRECTs right before the COPY whose iop names it) before the user op that takes the COPY's place, because the COPY is then dead code and its iop would dangle. Read for ownership (no allocation but one iop varnode), bounds (the scan stops at the block's start or the first op that is not such a guard), failure paths (none added; the `Volatile memory was propagated` check is before it) and cancel (no loop that can run long). The guards move in reverse order, which does not matter: each sits on a different global. Mutants: hunk 1 reverted fails `TestA5173Pins` (2 checks); hunk 2 reverted crashes the generated tests (rc -11, the dangling iop). No finding.
+
+### 3. New and hand-made mutants
+
+* 0086 hunk 8 (`TypeOpIntSdiv`): survived in round 4, killed now by the new `TestArea10Round5` a (`xStack_4` built from two pieces, then the signed division by 7 of A2-21's control: `(int4)xStack_4 / 7`; without the hunk the text has no cast and is an unsigned division as C). Hunk 9 (`TypeOpIntSrem`) has no fixture: the engine does not recover `%` from the shapes tried (A10-32). `TestArea10Round5` c is a control only.
+* Hand-made reverts: 0028 (`setEffects` made a no-op; the host's calls stay): killed by 6 unit tests; 0057 (the forward walk keyed on the varnode alone, as 0056 left it): killed by `TestArea3Round10Fix`; 0057's offset mask: survives (A10-32); 0044 (the `in_` register-piece suffix removed): killed by `TestArea2Round4` and `TestArea2Round5`.
+* Per-group mutation of the multi-hunk patches before 0059 that round 4 had not done: 25 groups of 0012, 0014, 0015, 0017, 0018, 0021, 0033, 0054 and 0055 (`jobs_D.json`, each run with the oracle that killed the whole patch; 0021 group 1 does not build); 7 survived that oracle and then passed all five (`runE.log`): A10-32.
+* 0064 hunks 23 and 24 alone: survive `unit`; unreachable (A10-32).
+
+### 4. Not done
+
+Hand-made reverts of 0056, 0065, 0066, 0072 and 0076 (they overlap one another, and with no upstream checkout to replay the stack their later dependants cannot be separated; round 4's per-group runs and the family's pins stand); the groups of 0006, 0023, 0032 and 0050 (spec regeneration and the fault matrix, about 30 mutants) and the re-runs of 0001, 0040, 0052 and 0060; 0066's cap fixture (unreachable, A10-30); 0086 hunk 9's fixture. The two consecutive clean rounds the program asks for are not yet met by this round alone (round 4 was not clean).
+
+### 5. A10-24
+
+Stays open: the drafts are in the record, nothing was filed (none can be from here). Patch 0099 adds no upstream defect of its own; its collapse of a STORE's guard into a register write is the family of item (6) (a global's guard against an access to a register).
+
+### 6. Runs
+
+EOF
+`ctest --test-dir build -j1` (RelWithDebInfo, `-j2`, `ulimit -v 3500000`) after the final build: `100% tests passed, 0 tests failed out of 117`. `check-vendored-tree.py lint`: `vendored tree: ok (lint)`. `check-literal-size.py`: `raw string sizes: ok (7 raw strings in 341 files)`. `git status` clean under `third_party/` after every mutant.
