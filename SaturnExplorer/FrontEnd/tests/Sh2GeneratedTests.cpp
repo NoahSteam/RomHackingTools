@@ -22399,6 +22399,140 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(rep.findings.empty() && (c.noted ? count(rep, "caution.said") > 0 : count(rep, "caution.notes") == 0));
         }
     }
+    // A3-255 (area 3 round 36 review, tools/a3_round36 fixtures a1 to a24, f1 to f6): a register changed by a load through an address made from it, or
+    // through another address after this function stored a value made from it to memory it does not track, was no change for certain when
+    // the store (A3-250's `mOwnLeaks`, then a member set for the whole walk) had been made anywhere, on another path included: the stated
+    // residual (a1, a2, a7, a15, a17) and its order dependence (a3, a21: the walk reached the store's path first; with the load's path
+    // first the caution was said). F2 stores r10, or not on this path, and chases or loads into it; F0 stores r10 after the call; the runs
+    // return r10 changed. Now a store keeps the address it was made through in the state (State::own, kept across a join only when every side
+    // has it), a load through that same address is a restore (the controls: a9, a10, a11, a20, a23, a24), any other load marks the registers
+    // the address was made from and every register this function stored (a15, a17, a21: `mOwnStored`); a load through a pointer that may be the frame reads some word of it and marks every register but the ones this function stored through that address (A3-256: f1, f2, f4; the controls f5, f6). As printed: no finding, the caution
+    // required and said; with every caution taken out, `caution-unsaid`.
+    {
+        const struct { const char* name; const char* funcs; const char* words; } pins[] = {
+            { "a1", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // F2 stores r10 through r4, then `mov.l @r10,r10`
+            { "a2", "0/0/18,20/20/2e,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 61A3 2412 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // the same through a copy r1 of r10
+            { "a3", "0/0/18,20/20/34,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2338 8B02 24A2 A001 0009 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // a store of r10 on the r3 = 0 path, the chase on the other (the walk reached the store first)
+            { "a7", "0/0/18,20/20/30,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 24A2 6AA2 7F04 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // F2 pushes r10, stores it through r4, chases, drops the frame word
+            { "a12", "0/0/18,20/20/30,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2338 8900 2AA2 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through itself on one path only, the chase after the join
+            { "a14", "0/0/18,20/20/2e,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2AA2 7A04 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through itself, stepped by 4, chased through the new address
+            { "a15", "0/0/18,20/20/2e,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 7404 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through r4, r4 stepped, `mov.l @r4,r10`
+            { "a17", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 25A2 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through r5, `mov.l @r4,r10`
+            { "a21", "0/0/18,20/20/34,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2338 8B02 25A2 A001 0009 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through r5 on one path, `mov.l @r4,r10` on the other (the walk reached the store first)
+            { "f1", "0/0/18,20/20/32,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 61F3 316C 6A12 7F04 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // F2 pushes r10, r1 = r15 + r6, `mov.l @r1,r10` (a frame word at an index the walk cannot place)
+            { "f2", "0/0/18,20/20/30,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 6063 0AFE 7F04 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // push r10, `mov.l @(r0,r15),r10` with r0 = r6
+            { "f4", "0/0/18,20/20/32,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 6AF3 3A6C 6AA2 7F04 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // push r10, `mov r15,r10 ; add r6,r10 ; mov.l @r10,r10`
+        };
+        for (const auto& p : pins)
+        {
+            ModulePin pm = { "A3-255", p.words, p.funcs, nullptr, "0,0,0", "0,400,400", nullptr };
+            const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin 'A3-255 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", p.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
+        }
+        const struct { const char* name; const char* funcs; const char* words; } controls[] = {
+            { "a9", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through r4, loaded back through r4
+            { "a10", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2AA2 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through itself, loaded back
+            { "a11", "0/0/18,20/20/36,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2338 8902 2AA2 A001 0009 2AA2 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // the same store on both paths, the chase through the same address
+            { "a20", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 14A1 5A41 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored at @(4,r4), loaded from @(4,r4) (the address made twice)
+            { "a23", "0/0/18,20/20/2e,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 25A2 6653 6A62 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through r5, loaded back through a copy of r5
+            { "a24", "0/0/18,20/20/30,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 15A1 6653 7604 6A62 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored at @(4,r5), loaded through a copy of r5 stepped by 4
+            { "f5", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // push r10, pop r10 (the exact restore)
+            { "f6", "0/0/18,20/20/30,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 E000 0AFE 7F04 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // push r10, `mov #0,r0 ; mov.l @(r0,r15),r10` (the register's own slot, an exact index)
+        };
+        for (const auto& c : controls)
+        {
+            ModulePin pm = { "A3-255", c.words, c.funcs, nullptr, "0,0,0", "0,400,400", nullptr };
+            const Report rep = EvaluateSubject(d, ModuleSubject(pm), true);
+            std::printf("pin 'A3-255 control %s': %zu finding(s), notes %d\n", c.name, rep.findings.size(), count(rep, "caution.notes"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(rep.findings.empty() && count(rep, "caution.notes") == 0);
+        }
+    }
+    // A3-259 (area 3 round 37 review, tools/a3_round37 fixtures b1 to b25, k8, b42, b45): round 36's rule "a load through the same address as a store on
+    // the way here is a restore" took the store for one that left the register's entry value in the word, whatever else was written there
+    // after it, and whatever the load reads: a second store of another register or a constant at the same address (b1, b2, b3, b14, k8), a
+    // narrower store over it (b4), a store through the same register at an overlapping offset (b11, b13) or an index (b21) or a pointer joined
+    // of two (b22), a store of a value made from the register (b7, b8, b9: the value stored was r10 + 1), an inner call that writes the
+    // word (b10: said before, not pinned), a store on one path only before the join (b16, b18), a narrower load of it (b5, b6), an absolute address (b23, b25), and a store through another address of the same register made with an index or loaded (b42, b45: a pointer r4 + r6 with r6 = 0 in the runs). In each the runs return r10 changed and the text, which stores r10 after the call, said
+    // no caution (`n:caution-unsaid`). Now State::own holds, per address, the one register whose entry value is the whole word there (a full
+    // word store of exactly that value), a later store that may write any of its bytes (NoteOwnStore) or a call takes the entry out, and a
+    // load of another width is no restore. As printed: no finding, the caution required and said; with every caution taken out, `caution-unsaid`.
+    // The controls (the restores that stay silent): b1c, b24, b26, b28, k1, k4, k9, the context save of r8-r14 (k12), of nine words (k13: the
+    // 16-entry cap), by `@-r4` and `@r4+` (k14), and the variable-size frames (m10 to m14).
+    {
+        const struct { const char* name; const char* funcs; const char* returns; const char* clobbers; const char* words; } pins[] = {
+            { "b1", "0/0/18,20/20/2e,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 24B2 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10, then r11, stored through r4; `mov.l @r4,r10`
+            { "b2", "0/0/18,20/20/30,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 E207 2422 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10, then a constant (r2 = 7), stored through r4; load
+            { "b3", "0/0/18,20/20/30,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 E100 2412 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10, then 0, through r4; load
+            { "b4", "0/0/18,20/20/2e,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 24A0 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored, then `mov.b r10,@r4`; word load
+            { "b5", "0/0/18,20/20/2c,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 6A40 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // `mov.b @r4,r10` of the saved word
+            { "b6", "0/0/18,20/20/2c,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 6A41 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // `mov.w @r4,r10`
+            { "b7", "0/0/18,20/20/2e,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 7A01 24A2 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 + 1 stored, loaded back
+            { "b8", "0/0/18,20/20/30,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 62A3 7201 2422 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r2 = r10 + 1 stored, loaded into r10
+            { "b9", "0/0/18,20/20/30,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 62A3 32BC 2422 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r2 = r10 + r11 stored, loaded into r10
+            { "b11", "0/0/18,20/20/30,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 E001 8141 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // `mov.w r0,@(2,r4)` overlaps the saved word
+            { "b13", "0/0/18,20/20/30,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 E001 8043 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // `mov.b r0,@(3,r4)` overlaps the saved word
+            { "b14", "0/0/18,20/20/30,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 14A1 E207 1421 5A41 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // @(4,r4) overwritten with 7
+            { "b16", "0/0/18,20/20/36,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 E502 E207 2422 4510 8BFB 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // a constant stored through r4 in a loop
+            { "b18", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 2338 8901 E207 2422 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored, 7 stored on one path only
+            { "b21", "0/0/18,20/20/32,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 E000 E207 0426 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // a store through `@(r0,r4)`
+            { "b22", "0/0/18,20/20/38,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 6143 2338 8900 6153 E207 2122 6A42 4F26 000B 6033 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // a store through a pointer joined of r4 and r5
+            { "b23", "0/0/18,20/20/32,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 E207 2122 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0603 0000" },   // an absolute address, a constant stored over it
+            { "b25", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 D20F E007 2200 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0603 0000 0603 0001" },   // an absolute address, a byte stored over its low end
+            { "k8", "0/0/18,20/20/2e,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 25A2 25B2 6A52 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10, then r11, stored through r5
+            { "b42", "0/0/18,20/20/36,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 5643 6143 316C 21A2 E207 2422 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r1 = r4 + r6 (r6 loaded, 0), 7 stored through r4 over it
+            { "b45", "0/0/18,20/20/3a,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 5643 6143 316C 21A2 6243 326C E307 2232 6A12 4F26 000B 6033 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r1 and r2 = r4 + r6 made twice, 7 stored through r2
+        };
+        for (const auto& p : pins)
+        {
+            ModulePin pm = { "A3-259", p.words, p.funcs, nullptr, p.returns, p.clobbers, nullptr };
+            const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin 'A3-259 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", p.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
+        }
+        const struct { const char* name; const char* funcs; const char* returns; const char* clobbers; const char* words; } controls[] = {
+            { "b43", "0/0/18,20/20/32,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 5643 6143 316C 21A2 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r6 loaded from memory (0), r10 stored and loaded through r4 + r6 (a restore through an indexed address)
+            { "b31", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 24A2 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // push, inner call, pop, store through r4, load back (q4 shape through another address)
+            { "b1c", "0/0/18,20/20/2e,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 24B2 6B42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10, then r11, stored through r4; r11 loaded back
+            { "b24", "0/0/18,20/20/2e,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0603 0000" },   // absolute address, restore
+            { "b26", "0/0/18,20/20/30,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 14B1 5B41 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // two words, each loaded back
+            { "b28", "0/0/18,20/20/2c,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A6 6A46 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // `@-r4` store, `@r4+` load
+            { "k1", "0/0/18,20/20/30,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 7404 74FC 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r4 stepped by 4 and back
+            { "k4", "0/0/18,20/20/30,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 6643 6452 6A62 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // a copy of r4 kept across a reload
+            { "k9", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 6153 7104 21A2 6253 7204 6A22 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r5 + 4 made twice
+            { "k12", "0/0/18,20/20/44,60/60/66", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 1480 1491 14A2 14B3 14C4 14D5 14E6 5840 5941 5A42 5B43 5C44 5D45 5E46 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r8-r14 saved at @(0..24,r4) and restored
+            { "k13", "0/0/18,20/20/54,60/60/66", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 1480 1491 14A2 14B3 14C4 14D5 14E6 0112 1417 0122 1418 5840 5941 5A42 5B43 5C44 5D45 5E46 5147 411E 5148 412E 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r8-r14, GBR and VBR saved (nine words) and restored
+            { "k14", "0/0/18,20/20/44,60/60/66", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2486 2496 24A6 24B6 24C6 24D6 24E6 6E46 6D46 6C46 6B46 6A46 6946 6846 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r8-r14 by `@-r4`, restored by `@r4+` in reverse
+            { "m10", "0/0/18,20/20/30,40/40/46", "0,0,0", "0,4000,4000", "4F22 2FE6 6E43 7E08 2E42 B009 0009 24E2 6EF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FE6 3F68 3F6C 6EF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EE04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // alloca given back by an add, r14 popped
+            { "m11", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 2FE6 3F68 3F6C 6EF6 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // the same with r10
+            { "m12", "0/0/18,20/20/32,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 61F3 3F68 6F13 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r15 saved in r1 around an alloca
+            { "m13", "0/0/18,20/20/32,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 E2F0 3F2C 7F10 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // a constant alloca by add
+            { "m14", "0/0/18,20/20/38,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FE6 2FA6 6EF3 3F68 5AE0 6FE3 7F04 6EF6 4F26 000B 6033 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // a frame pointer slot restore
+        };
+        for (const auto& c : controls)
+        {
+            ModulePin pm = { "A3-259", c.words, c.funcs, nullptr, c.returns, c.clobbers, nullptr };
+            const Report rep = EvaluateSubject(d, ModuleSubject(pm), true);
+            std::printf("pin 'A3-259 control %s': %zu finding(s), notes %d\n", c.name, rep.findings.size(), count(rep, "caution.notes"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(rep.findings.empty() && count(rep, "caution.notes") == 0);
+        }
+    }
     // A3-251 (grammar 2 seed 13102045, `SE_GENERATED_CAUTION=deep`, whole and shrunk): a callee F3 loads GBR (`tas.b @r5 ; ldc r5,gbr`), reached
     // through two tail-jumping thunks; the caller reads GBR after the call (`stc gbr,r3`) and calls it again, and F3 branches on r3 (`tst r3,r3 ;
     // bt`). The caution's "read after it" at the first call took the registers a later callee reads as it finds them from r8-r14, GBR and VBR
@@ -22419,6 +22553,31 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         // (the shrunk program does not return in every input mode: the generator's own no-return lines are not the check)
         CHECK(!Has(rep, "n:caution-unsaid") && count(rep, "caution.required") > 0 && count(rep, "caution.said") > 0 &&
               count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect") == 0);
+    }
+    // A3-263 (grammar 2 seed 13602154, `SE_GENERATED_CAUTION=deep`; hand fixtures t7, t10 of tools/a3_round37): a walked callee F2 copies r13 to r3 (or r1) and
+    // calls F3, which reads r3 as it finds it (`tst r3,r3`) and sets r13 on every path; F0 calls F2 (directly or through F1) and then F2 again. The
+    // second call's callee reads r13 through its own copy, so the text must name r13 at the first call. Call took the registers an inner call is handed,
+    // for the walked callee's record of what it reads of its entry values (CalleeEntryRead), after Apply had replaced r0-r3 with the call's outputs: a copy
+    // of a kept register in r1 or r3 was not read, F2's record lacked r13, and the earlier call's caution named r14 only (`caution-unsaid-deep`,
+    // a later callee). Now the values at the call are read. The controls read r13 as an operand (t8) and through r4 (t9), which said it before.
+    {
+        const struct { const char* name; const char* words; const char* funcs; const char* returns; const char* clobbers; const char* reads; bool pin; } pins[] = {
+            { "seed 13602154 shrunk (F0 calls F1 and F2, F1 calls F2, F2 copies r13 to r3 and calls F3, which tests r3 and sets r13)", "2F86 2F96 4F22 6843 6953 B011 6473 6483 6593 B027 0009 6483 6593 0322 2640 E007 4F26 69F6 68F6 2668 8B00 E834 000B 0009 2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 6423 6543 B00D 0009 6483 6593 66A3 67B3 030A E0ED 4F26 6BF6 6AF6 69F6 68F6 000B 0009 2F86 2F96 2FA6 2FB6 2FC6 0C2A 7FF4 6843 6953 6A63 6B73 63D3 B00F 0009 6483 6593 66A3 67B3 62E3 605D 7F0C 4C2A 6CF6 6BF6 6AF6 69F6 68F6 000B 0009 7FC0 2338 8B00 61E5 6D53 606D 7F40 000B 0009", "0/0/30,30/30/64,64/64/9e,9e/9e/b0", "1,1,1,1", "1c6100,1c6000,1c6000,186000", "2000,8,6000,24008", true },
+            { "t7: F0 calls F2 twice; F2 `mov r13,r3`, F3 tests r3 and sets r13", "4F22 B00D 0009 B00B 0009 4F26 000B E000 0009 0009 0009 0009 0009 0009 0009 0009 4F22 63D3 B00C 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2338 8B00 61E5 2432 6D53 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/10,20/20/2e,40/40/4e", "0,0,0", "0,2000,2000", nullptr, true },
+            { "t10: the copy in r1, F3 tests r1", "4F22 B00D 0009 B00B 0009 4F26 000B E000 0009 0009 0009 0009 0009 0009 0009 0009 4F22 61D3 B00C 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2118 8B00 61E5 2412 6D53 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/10,20/20/2e,40/40/4e", "0,0,0", "0,2000,2000", nullptr, true },
+            { "control t8: F2 tests the copy itself (an operand of an op: said before)", "4F22 B00D 0009 B00B 0009 4F26 000B E000 0009 0009 0009 0009 0009 0009 0009 0009 4F22 63D3 2338 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 2338 8B00 61E5 2432 6D53 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/10,20/20/30,40/40/4e", "0,0,0", "0,2000,2000", nullptr, false },
+            { "control t9: the copy in r4, a convention register (said before)", "4F22 B00D 0009 B00B 0009 4F26 000B E000 0009 0009 0009 0009 0009 0009 0009 0009 4F22 64D3 B00C 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2542 6D53 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/10,20/20/2e,40/40/48", "0,0,0", "0,2000,2000", nullptr, false },
+        };
+        for (const auto& p : pins)
+        {
+            const ModulePin pm = { "A3-263", p.words, p.funcs, nullptr, p.returns, p.clobbers, p.reads };
+            const Report rep = EvaluateSubject(d, ModuleSubject(pm), true);
+            const int deep = count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect");
+            std::printf("pin 'A3-263 %s': %zu finding(s), caution required %d, said %d, deep %d\n", p.name, rep.findings.size(), count(rep, "caution.required"), count(rep, "caution.said"), deep);
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            // (the generator's own findings, a callee-saved register left changed on purpose, are not the check)
+            CHECK(!Has(rep, "n:caution-unsaid") && !Has(rep, "n:caution-unsaid-deep") && count(rep, "caution.required") > 0 && count(rep, "caution.said") > 0 && deep == 0);
+        }
     }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
