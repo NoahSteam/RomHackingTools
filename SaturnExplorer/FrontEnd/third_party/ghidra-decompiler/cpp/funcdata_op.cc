@@ -23,6 +23,7 @@
  * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a STORE guard is kept against the alias analysis while the STORE is aimed at its local or pending; the frame records walk to 4,096 ops and follow a guard read through a piece (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: the host is called when a flow has been followed (patches/0096-engine-flow-done-hook.patch).
+ * Modified for SaturnExplorer: the guard a STORE put on a global stays when the STORE folds into a write of a hardware register (patches/0099-engine-register-store-guard-kept.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -1882,6 +1883,15 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
       opInsertAfter(op, copyOp);
     }
     else {
+      // SaturnExplorer (0099): the COPY is a write of a hardware register (a STORE whose pointer was a join of constants when heritage guarded
+      // it, and a register's address once they folded), and the guard it put on a global (kept, address forced: Heritage::guardHardwareAccesses,
+      // 0090 and 0093) stays, as the guard of a CALLOTHER that writes a register does: the write may start a transfer that changes the global.
+      // Collapsed with the STORE, a global read before it was printed at its use after it, `SCU_D0EN = g; *p = (char)g;` for `r2 = g ; (r7 =
+      // SCU_D0EN) ; *r7 = r2 ; *p = r2`.
+      if (op->isIndirectStore() && vn1->isVolatile() && vn2->isAddrForce() && vn2->isAddrTied() && vn2->getSpace()->getType() == IPTR_PROCESSOR) {
+	iter = previter;
+	continue;
+      }
       totalReplace(op->getOut(),op->getIn(0));
       opDestroy(op);		// Get rid of the INDIRECT
     }

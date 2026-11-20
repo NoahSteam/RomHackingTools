@@ -7955,6 +7955,16 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (fb >= fr.reach.size() || mb >= fr.reach.size()) return false;
                 return fb == mb ? mo > fo : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto && (alwaysReaches(fb, mb) || dominates(fb, mb));
             };
+            // (A5-174: the instructions of the blocks the engine says it removed as unreachable. A store in one is not in the text by the
+            // text's own warning, whether or not a run makes it: the runs reach it through a jump table the engine could not recover ("Could
+            // not recover jumptable", "Treating indirect jump as call"), the code of whose cases it has dropped, grammar 2 seed 13409856. A3-231
+            // leaves a call there out of the caution check for the same reason; the `unrun` rule below takes only a store no run makes.)
+            const auto removedWord = [&](uint32_t pc, uint16_t& w) {
+                if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                w = subject.WordAt(pc);
+                return true;
+            };
+            const std::set<uint32_t> removedInsns = dts::A7RuleOff(5174) ? std::set<uint32_t>() : dts::RemovedBlockInsns(r, removedWord);
             for (const AccessFate& f : r.accessFates)
             {
                 if (!f.write || f.fate != AccessFate::FoldedOrdinary || !f.constantAddress || f.frame || f.origBlock < 0) continue;
@@ -8069,6 +8079,12 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         count("order.folded-store.write-back");
                         continue;
                     }
+                }
+                // (A5-174: a store some run makes, in a block the engine says it removed as unreachable: the `unrun` rule below takes one no run makes)
+                if (storeRan && removedInsns.count(f.insn))
+                {
+                    count("order.folded-store.removed-block");
+                    continue;
                 }
                 // (a register the engine merged under the global's name is written where the register is made: the store's statement is the
                 // line that assigns the global at the instruction that made the register the store stores, which names the stored register's
@@ -20542,6 +20558,49 @@ void TestA5170Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 5, routed seeds 13401724 and 13409856 (A5-173, A5-174), each whole and shrunk. A5-173, grammar 2 deep seed 13401724 (`n:folded-read-after-access`,
+// product, patch 0099): `r2 = g ; (r7 = SCU_D0EN or another register's address, a join of two constants) ; *r7 = r2 ; *p = r2`: the STORE's guard on g
+// collapsed when the STORE folded into the register write, so `SCU_D0EN = g; *p = (char)g;` read g again after the write (fails with the patch's
+// condition off, and the run of the whole seed gives 1 finding). A5-174, grammar 2 deep seed 13409856 (`n:folded-store-after-access`, oracle): a store in a
+// block the engine says it removed as unreachable (the jump table that reaches it is not recovered, warned), which the runs make through the table
+// (SE_A7_RULE_OFF=5174 gives the finding back: 1 whole, 1 shrunk).
+void TestA5173Pins(Sh2Decompiler& d)
+{
+    {
+        const Report rep = Evaluate(d, MakeV2(13401724), true);
+        std::printf("pin 'A5-173 grammar 2 seed 13401724': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const ModulePin pin = { "A5-173 grammar 2 seed 13401724 shrunk",
+                                "D60A 2FE6 7FE0 6EF3 D709 2778 8900 D709 62F3 7220 E103 2216 4110 8BFC E200 D306 7E20 6FE3 6EF6 432B 0009 0009 2600 2280 0600 2100 3DFE 00E4 0600 903C "
+                                "2FE6 7FFC 6EF3 5260 4615 8F00 2722 3670 8B00 2420 2420 7E04 6FE3 6EF6 000B 0009",
+                                "0/0/2,2/2/2a,3c/3c/5c", nullptr, "0,0,0", "c00,c00,800", "0,8,0" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+        std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const Report rep = Evaluate(d, MakeV2(13409856), true);
+        std::printf("pin 'A5-174 grammar 2 seed 13409856': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const ModulePin pin = { "A5-174 grammar 2 seed 13409856 shrunk",
+                                "2F86 2F96 2FA6 2FE6 4F22 7FD0 6EF3 6843 6953 6A63 D71A 2722 E301 A000 0009 4310 8BFD E105 3417 891C 4408 C703 014E 412B 0009 0009 0600 9054 0600 9062 0600 9050 "
+                                "0600 9054 0600 905A 0600 9062 0600 905E A007 0009 6372 A004 0009 A002 0009 A000 0009 2138 8900 807E 1506 6043 7E30 6FE3 4F26 6EF6 6AF6 69F6 68F6 000B 0009 0009 "
+                                "0600 230C",
+                                "0/0/7e", "2e:4:6:62:62,50,54,5a,62,5e:54", "1", "21000", "20000" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+        std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 // Area 5, round 4 (A5-165, A5-166): two order-class oracle findings whose text is value-correct, each whole and shrunk. A5-165, grammar 2 seed 12247189
 // (`n:read-after-folded-store`): `mov.l r0,@r6 ; mov.w @r7,r1 ; mov.l r0,@r6`, the second store the same value at the same address as the first, which
 // the engine joins into it. A5-166, grammar 1 seed 12260346 (`v:folded-read-after-pointer-write`): a read in the slot of `bf/s` whose register is
@@ -22938,6 +22997,7 @@ void TestGenerated()
         RUN(TestA5165Pins(d));
         RUN(TestA5168Pins(d));
         RUN(TestA5170Pins(d));
+        RUN(TestA5173Pins(d));
         RUN(TestA7FlowRecordPins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
