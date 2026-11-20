@@ -24095,3 +24095,17 @@ Closed and holding. The sanitizers job of `saturn-explorer-decompiler.yml` passe
 * Mutants: about 30 builds (the table, plus the per-hunk ones of 0082, 0085, 0094), each restored, `git status` clean of engine changes after each. `0085` and `0085a` were rerun after `TestArea10Round3` was added: both killed by it (`0085a` only by it).
 * Disk: the shared volume reached 100 % during the round (one compile failed with "No space left on device" and was rerun); 30 old (2026-11-09) copies of test binaries named `gen_v*` in the shared scratchpad, about 3.3 GB and regenerable, were deleted to go on.
 * Not done: no timing comparison of the scans of 0087, 0090 and 0094 (the game images are gone); no nightly generator run; nothing filed upstream.
+
+## Area 5, A5-169: hardware and unrun writes stay barriers (PR #68 review)
+
+The external review of PR #68 (`98cafaea`) found that A5-168's `sameWrite` exemption also waived a same-value write to a hardware register (`SCU_D0EN`, which can start a transfer that changes the global). It also waived a write no run makes, whose destination is unknown. The write-back rule's own comment requires a register's write to stay a barrier.
+
+- **Change** (`Sh2GeneratedTests.cpp`, oracle only, switch `SE_A7_RULE_OFF=5169`):
+  - A write between is waived only if some run shows it landing.
+  - Every landing must be ordinary memory: not `InHardwareRange` and not a marked (volatile) range.
+- **Negative pin** `A5-169 same-register write to SCU_D0EN`:
+  - The program is the A5-168 shape with the write between aimed at 0x25FE0010 through r3.
+  - With the fix it gives 1 finding, `n:folded-store-after-access` (judged). With the switch off it gives 0 (waived).
+- **A5-168's own seed is judged again.** Its write between, `mov.l r2,@(0x2c,r6)`, sits on the store's unrun path.
+  - Its finding (A7-255) is accepted as value-correct unless r6+0x2c is a register that acts on a same-value write.
+  - The A5-168 pins (whole and shrunk) now require exactly `folded-store-after-access`. Both give 0 findings with `SE_A7_RULE_OFF=5169`.

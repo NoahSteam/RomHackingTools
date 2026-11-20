@@ -8483,7 +8483,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         // (A5-168: ...a write between that stores the very register the store writes back, the register unchanged from the read to
                         // it, stores the value the bytes hold wherever it lands, unless it overlaps them without being the same bytes: `mov.l @r7,r2
                         // ; mov.l r2,@(0x2c,r6) ; ... ; mov.l r2,@r4` with r4 the global's address when the store runs, grammar 2 seed 12173135, whose
-                        // text writes the word back after the pointer read. A run that shows a partial overlap keeps the write a change.)
+                        // text writes the word back after the pointer read. A run that shows a partial overlap keeps the write a change. A5-169: the
+                        // write must be seen landing, and only in ordinary memory: a write of the same value to a hardware register or a marked
+                        // (volatile) range may act whatever it stores (`SCU_D0EN` starts a transfer that can change the global), and a write no run
+                        // makes has no known destination, so both stay barriers. This takes A5-168's own seed back: its write between is unrun.)
                         const auto sameWrite = [&](uint32_t wi) {
                             if (dts::A7RuleOff(5168)) return false;
                             int wsize = 0;
@@ -8493,12 +8496,16 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             if (!word(wi, ww) || dts::StoredRegister(ww, wsize) != reg || wsize != ssize ||
                                 !dts::RegisterMakers(r, word, dts::BranchSources(r, word), wi, reg, there, false, &thereEntry) || !thereEntry.empty() || there != makers)
                                 return false;
+                            bool seen = false;
                             for (const RunOut& run : runs)
                                 for (const TraceRec& t : run.trace)
-                                    if (t.depth == 0 && t.write && t.insn == wi && t.addr < f.address + f.size && f.address < t.addr + static_cast<uint32_t>(t.size) &&
-                                        t.addr != f.address)
-                                        return false;
-                            return true;
+                                    if (t.depth == 0 && t.write && t.insn == wi)
+                                    {
+                                        if (!dts::A7RuleOff(5169) && (InHardwareRange(t.addr) || inMarked(t.addr))) return false;
+                                        if (t.addr < f.address + f.size && f.address < t.addr + static_cast<uint32_t>(t.size) && t.addr != f.address) return false;
+                                        seen = true;
+                                    }
+                            return seen || dts::A7RuleOff(5169);
                         };
                         bool back = true;
                         for (uint32_t mk : makers)
@@ -20422,23 +20429,43 @@ void TestA5162Pins(Sh2Decompiler& d)
     CHECK(rep.findings.empty());
 }
 
-// Area 5, A7-255 (A5-168): grammar 2 seed 12173135 (`n:folded-store-after-access`), whole and shrunk. `x = g ; if (p == &g) *p3 = x ; *p = x` -- the
-// store through r4 is made only when r4 is the global's address, writes back the word read, and a write between stores the same register; the text
-// writes the word back after the read through r5, which no value shows. Fails with SE_A7_RULE_OFF=5168.
+// Area 5, A7-255 (A5-168, A5-169): grammar 2 seed 12173135 (`folded-store-after-access`), whole and shrunk. `x = g ; if (p == &g) *p3 = x ; *p = x`
+// -- the store through r4 is made only when r4 is the global's address, writes back the word read, and a write between stores the same register; the
+// text writes the word back after the read through r5. A5-168 waived the write between; A5-169 keeps it a barrier, because no run makes it (it sits on
+// the store's own unrun path), so its destination through r6 is unknown and may be a register that acts on a same-value write. The finding is
+// accepted (A7-255): value-correct unless r6+0x2c is such a register. These pins hold it to exactly that finding; with SE_A7_RULE_OFF=5169 both give 0.
+bool OnlyFoldedStoreAfterAccess(const Report& rep)
+{
+    for (const Finding& f : rep.findings)
+        if (f.sig != "n:folded-store-after-access" && f.sig != "v:folded-store-after-access") return false;
+    return !rep.findings.empty();
+}
+
 void TestA5168Pins(Sh2Decompiler& d)
 {
     {
         const Report rep = Evaluate(d, MakeV2(12173135), true);
-        std::printf("pin 'A5-168 grammar 2 seed 12173135': %zu finding(s)\n", rep.findings.size());
+        std::printf("pin 'A5-168 grammar 2 seed 12173135': %zu finding(s), folded-store-after-access only expected\n", rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
-        CHECK(rep.findings.empty());
+        CHECK(OnlyFoldedStoreAfterAccess(rep));
     }
     {
         const ModulePin pin = { "A5-168 grammar 2 seed 12173135 shrunk", "D704 3740 8F02 6272 162B 2422 6255 000B 0009 0009 2600 2080", "0/0/e,e/e/12", nullptr, "0,0", nullptr, nullptr };
         const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
-        std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+        std::printf("pin '%s': %zu finding(s), folded-store-after-access only expected\n", pin.name, rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
-        CHECK(rep.findings.empty());
+        CHECK(OnlyFoldedStoreAfterAccess(rep));
+    }
+    {
+        // A5-169, the negative: the same shape with the write between aimed at SCU_D0EN (0x25FE0010) through r3. A write of the same value
+        // to a hardware register is not idempotent (it may start a transfer that changes the global), so A5-168's exemption must not waive
+        // it: the oracle judges the folded write-back, and the text prints it after the read through r5. Gives 0 findings with
+        // SE_A7_RULE_OFF=5169 (the exemption waiving the hardware write).
+        const ModulePin pin = { "A5-169 same-register write to SCU_D0EN", "D704 D305 3740 8F02 6272 2322 2422 6255 000B 0009 2600 2080 25FE 0010", "0/0/10,10/10/14", nullptr, "0,0", nullptr, nullptr };
+        const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+        std::printf("pin '%s': %zu finding(s), 1 expected\n", pin.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.size() == 1 && rep.findings[0].sig == "n:folded-store-after-access");
     }
 }
 
