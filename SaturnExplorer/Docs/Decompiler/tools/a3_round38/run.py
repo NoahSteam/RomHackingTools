@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Area 3 round 37 review (A3-210's run.py, unchanged but for this line and the scratch prefix): assemble a fixture of fixtures.src (functions separated by `fn` lines, each padded to 0x20) and run it through the
+"""Area 3 round 38 review (A3-210's run.py, unchanged but for this line and the scratch prefix): assemble a fixture of fixtures.src (functions separated by `fn` lines, each padded to 0x20) and run it through the
 generator's SE_GENERATED_WORDS mode. usage: W=<SaturnExplorer dir> S=<scratch> run25.py <name> [KEY=VAL ...]
 `name N` starts a fixture; `ret a,b,c` sets SE_GENERATED_RETURNS (default 0 per function); `fn` starts the next function; `env K=V ...` sets the fixture's environment (SE_GENERATED_CLOBBERS); lines as asm22.py's."""
 import os, re, subprocess, sys, tempfile
