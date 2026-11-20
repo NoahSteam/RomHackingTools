@@ -29,7 +29,7 @@ text = [re.sub(r'=@(\w+)-@(\w+)', lambda m: '=0x%08X' % ((lab[m.group(1)] - lab[
 text = [re.sub(r'=@(\w+)', lambda m: '=0x%08X' % lab[m.group(1)], l) for l in text]
 env = dict(os.environ)
 words = subprocess.run([sys.executable, '-I', os.path.join(here, '..', 'a3_round22', 'asm22.py')], input='\n'.join(text), capture_output=True, text=True)
-if words.returncode: sys.exit(words.stderr)
+if words.returncode: print(words.stderr.strip()); print('RUN FAILED: %s did not assemble' % name); sys.exit(1)
 env['SE_GENERATED_WORDS'] = words.stdout.strip()
 env['SE_GENERATED_FUNCS'] = ','.join('%x/%x/%x' % (a, a, b) for a, b in spans)
 env['SE_GENERATED_RETURNS'] = ret or ','.join('0' for _ in fns)
@@ -37,8 +37,21 @@ env.update(fenv)
 env.update(extra)
 print(name, 'FUNCS=' + env['SE_GENERATED_FUNCS'], 'RETURNS=' + env['SE_GENERATED_RETURNS'], 'WORDS="' + env['SE_GENERATED_WORDS'] + '"')
 d = tempfile.mkdtemp(prefix='a3r35.', dir=S)
-r = subprocess.run('ulimit -v 3500000; timeout 300 %s/build/bin/SaturnExplorerSh2GeneratedTests %s/x 2>&1' % (W, d), shell=True, env=env, capture_output=True, text=True, executable='/bin/bash').stdout
+p = subprocess.run('ulimit -v 3500000; timeout 300 %s/build/bin/SaturnExplorerSh2GeneratedTests %s/x 2>&1' % (W, d), shell=True, env=env, capture_output=True, text=True, executable='/bin/bash')
 subprocess.run(['rm', '-rf', d])
+r = p.stdout
+# A crash, a timeout (124), a failed CHECK or a run that never printed its summary is not a fixture with no findings: say so, keep the
+# child's own lines, and exit non-zero so run.sh does not summarise it as clean. A run that finished with findings exits 1 through
+# exactly one CHECK, `rep.findings.empty()`; that is a result, not a failure.
+fm = re.search(r'^(\d+) finding\(s\)$', r, re.M)
+checks = re.findall(r'^CHECK failed at .*$', r, re.M)
+if not fm: done = False
+elif p.returncode == 0: done = re.search(r'^all passed$', r, re.M) is not None and not checks
+else: done = p.returncode == 1 and int(fm.group(1)) > 0 and len(checks) == 1 and checks[0].endswith(': rep.findings.empty()')
+if not done:
+    print(r)
+    print('RUN FAILED: %s rc=%d' % (name, p.returncode))
+    sys.exit(p.returncode or 1)
 out = r[r.find('default request'):] if 'default request' in r else r
 keep = os.environ.get('FULL')
 for l in out.splitlines():

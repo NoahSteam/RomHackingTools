@@ -3,13 +3,17 @@
 # Prints per fixture: function 0's return lines; each caution with the call printed after it ("+likewise" / "+likewise-other"); the frame,
 # slot and stack-argument notes (first words); the oracle's caution counts; and every finding line.
 # usage: W=<SaturnExplorer dir> S=<scratch dir> run.sh [fixture[:KEY=VAL,...] ...]   (default: every fixture of fixtures.src)
+set -o pipefail
 here=$(cd "$(dirname "$0")" && pwd)
+status=0
 names=${*:-$(grep -oE '^name [A-Za-z0-9_]+' "$here/fixtures.src" | cut -d' ' -f2)}
 for spec in $names; do
     f=${spec%%:*}; extra=""; [ "$spec" != "$f" ] && extra=$(echo "${spec#*:}" | tr ',' ' ')
     python3 -I "$here/run.py" "$f" $extra 2>&1 | python3 -I -c '
 import re, sys
 out = sys.stdin.read()
+if "RUN FAILED" in out or not re.search(r"^\d+ finding\(s\)$", out, re.M):
+    sys.stdout.write(out); print("%s: FAILED (see above)" % sys.argv[1]); sys.exit(1)
 body = out[out.find("function 0 at"):]
 body = body[:body.find("finding(s)")] if "finding(s)" in body else body
 flat = re.sub(r"\s+", " ", body)
@@ -28,5 +32,6 @@ finds = sorted(set(re.findall(r"^  \[([nv]:[^\]]+)\]", out, re.M)))
 print("%s: %s | %s | %s | findings %s" % (sys.argv[1], " ".join(rets), "; ".join(notes) or "no note", cc, ",".join(finds) or "none"))
 for l in out.splitlines():
     if l.startswith("  [") and "caution" in l: print("    " + l.strip()[:400])
-' "$spec"
+' "$spec" || status=1
 done
+exit $status

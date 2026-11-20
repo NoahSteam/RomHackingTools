@@ -1122,7 +1122,7 @@ G:
 mov #4,r10
 rts
 mov r3,r0
-# x7: push r10, byte store of r10's own low byte over it, pop (the byte is the same only in the low position)
+# x7: push r10, byte store of r10's own low byte over it, pop (the byte is the same only in the low position) (through a copy of r15: `mov.b Rm,@(disp,Rn)` stores only r0, so the first version never assembled)
 name x7
 ret 0,0,0
 env SE_GENERATED_CLOBBERS=0,400,400
@@ -1140,7 +1140,9 @@ fn
 F2:
 .word 0x4F22
 mov.l r10,@-r15
-mov.b r10,@(3,r15)
+mov r15,r1
+add #3,r1
+mov.b r10,@r1
 mov.l @r15+,r10
 .word 0x4F26
 rts
@@ -2483,7 +2485,7 @@ G:
 mov #4,r10
 rts
 mov r3,r0
-# p6: under: marked word pushed, part store to the neighbour word at r15+4 (untouched), popped
+# p6: under: marked word pushed, part store to the neighbour word at r15+4 (untouched), popped (through a copy of r15, as x7)
 name p6
 ret 0,0,0
 env SE_GENERATED_CLOBBERS=0,400,400
@@ -2507,7 +2509,9 @@ mov.l @r15+,r10
 not r10,r10
 mov.l r10,@-r15
 mov #1,r1
-mov.b r1,@(4,r15)
+mov r15,r2
+add #4,r2
+mov.b r1,@r2
 mov.l @r15+,r10
 .word 0x4F26
 rts
