@@ -147,6 +147,8 @@ class H:
             if r["rc"] not in (0, 77) and any(n in blob for n in named):
                 hit = True
                 break
+            if r["rc"] not in (0, 77) and not named:   # a per-hunk group (jobs_gen.py): one failing oracle kills it
+                break
         rec = {"id": job["id"], "applied": job.get("applied"), "named": named, "named_hit": hit, "runs": res}
         open(os.path.join(self.out, "results.jsonl"), "a").write(json.dumps(rec) + "\n")
         print("%s: applied %s named_hit=%s %s" % (job["id"], job.get("applied"), hit,

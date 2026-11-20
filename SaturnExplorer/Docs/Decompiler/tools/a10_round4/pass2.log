@@ -1,0 +1,109 @@
+0001-g1f: applied [2] named_hit=False runner:ok(rc0,) fault:ok(rc0,)
+0001-g2f: applied [7] named_hit=False runner:ok(rc0,) fault:ok(rc0,)
+0001-g3f: applied [8] named_hit=False runner:ok(rc0,) fault:ok(rc0,)
+0040-g1f: applied [1] named_hit=False fault:ok(rc0,)
+0040-g3f: build failed
+0040-g2f: applied [2] named_hit=False fault:ok(rc0,)
+0040-g5f: applied [5] named_hit=False fault:ok(rc0,)
+0040-g6f: applied [6] named_hit=False fault:ok(rc0,)
+0040-g7f: applied [7] named_hit=False fault:ok(rc0,)
+0040-g8f: applied [8] named_hit=False fault:ok(rc0,)
+0040-g9f: applied [9] named_hit=False fault:ok(rc0,)
+0040-g10f: applied [10] named_hit=False fault:ok(rc0,)
+0040-g11f: applied [11] named_hit=False fault:ok(rc0,)
+0040-g12: applied [12] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0040-g13: applied [13] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0040-g14: applied [14, 15] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0040-g15: applied [16] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0052-g1: applied [3] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0060-g1: applied [1] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0060-g2: applied [2] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:FAIL(rc1,)
+0060-g3: applied [4] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0078-g1: applied [1] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestA3155Fix=9)
+0078-g2: applied [2] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestA3155Fix=9)
+0078-g3: applied [3] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0010-g1: build failed
+0010-g2: build failed
+0010-g3: build failed
+0028-g1: build failed
+0079-g1: applied [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea7Round7=1,TestArea7Round10=1,TestArea7Round18=4)
+0044-g1: applied [2, 3] named_hit=False pc:FAIL(rc1,TestPrintedC=1)
+0044-g3: build failed
+0057-g1: build failed
+0044-g2: applied [5, 6] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea7Round4=1,TestArea7Round10=2,TestTailJumpToUnreachedCode=1,TestCallsAndTraps=9,TestArea2Round5=7,TestAreas234Leftovers=1)
+0065-g2: build failed
+0065-g1: applied [2] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0065-g3: applied [8] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0065-g5: build failed
+0065-g6: build failed
+0065-g4: applied [9, 10] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0065-g7: applied [13] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0066-g2: build failed
+0066-g1: applied [1] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0066-g3: applied [3] named_hit=False pc:FAIL(rc1,TestPrintedC=1)
+0066-g4: applied [4] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0066-g6: build failed
+0066-g7: build failed
+0066-g5: applied [5] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0066-g8: applied [11] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:FAIL(rc1,)
+0066-g10: build failed
+0066-g9: applied [14, 15] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0066-g11: applied [17] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0072-g1: applied [1] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestA3130Fix=3)
+0072-g2: applied [3] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestA3130Fix=4)
+0072-g4: build failed
+0072-g3: applied [5] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0072-g5: applied [7] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:FAIL(rc1,TestLeftoverSeedPins=1)
+0072-g7: build failed
+0072-g6: applied [11] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:FAIL(rc1,TestLeftoverSeedPins=1)
+0072-g9: build failed
+0072-g8: applied [15, 16] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestA3130Fix=2)
+0072-g11: build failed
+0072-g12: build failed
+0072-g13: build failed
+0072-g10: applied [18] named_hit=False pc:FAIL(rc1,TestPrintedC=1)
+0072-g14: applied [23] named_hit=False pc:FAIL(rc1,TestPrintedC=5)
+0072-g15: applied [24] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0072-g16: applied [30] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestA3130Fix=3)
+0072-g17: applied [31] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestA3130Fix=3)
+0072-g18: applied [32] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestA3130Fix=9)
+0076-g1: build failed
+0072-g19: applied [33] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0076-g2: applied [2] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestA3124Fix=1)
+0076-g3: applied [5] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0056-g1: build failed
+0076-g4: applied [6] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea7Round4=2)
+0056-g2: applied [4] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0056-g3: applied [7, 8] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestCallsAndTraps=2,TestArea3Round10=2,TestArea3Round10Fix=2,TestA365WalkDown=11)
+0056-g4: applied [10] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0056-g5: applied [11] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0056-g6: applied [12] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0081-g1: applied [1] named_hit=False pc:FAIL(rc1,TestPrintedC=12)
+0083-g1: applied [1] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0083-g2: applied [2] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0083-g3: applied [3] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0084-g1: applied [2] named_hit=False pc:FAIL(rc1,TestPrintedC=4)
+0086-g1: build failed
+0084-g2: applied [3] named_hit=False pc:FAIL(rc1,TestPrintedC=4)
+0086-g3: build failed
+0086-g2: applied [2] named_hit=False pc:FAIL(rc1,TestPrintedC=2)
+0086-g4: applied [4] named_hit=False pc:FAIL(rc1,TestPrintedC=2)
+0086-g5: applied [5] named_hit=False pc:FAIL(rc1,TestPrintedC=8)
+0086-g6: applied [6] named_hit=False pc:FAIL(rc1,TestPrintedC=8)
+0086-g7: applied [7] named_hit=False pc:FAIL(rc1,TestPrintedC=2)
+0086-g8: applied [8] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0087-g1: build failed
+0086-g9: applied [9] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0087-g2: applied [2] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea7Round8=1,TestArea7Round13=2,TestHardwareVolatility=1,TestA3164Fix=28,TestA3173Fix=3,TestA3175Fix=6)
+0088-g1: build failed
+0087-g3: applied [4] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea7Round12=2,TestArea7Round13=2,TestA3164Fix=4)
+0088-g2: applied [2] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea10Round3=1)
+0088-g3: applied [3] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea7Round8=4,TestArea7Round10=1,TestArea7Round18=3,TestArea5Confirm=3)
+0090-g1: applied [2] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea7Round7=2,TestArea7Round8=1,TestArea7Round9=2,TestArea7Round10=3,TestArea7Round12=3,TestArea7Round13=4)
+0090-g2: applied [4] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestMappingOracleAtMirrors=24,TestArea7Round4=6,TestArea7Round7=4,TestArea7Round9=2,TestArea7Round11=2,TestArea7Round12=1)
+0090-g3: applied [10] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea7Round8=3,TestArea7Round10=1,TestArea7Round11=1,TestArea7Round13=2,TestArea7Round25=2)
+0090-g4: applied [12] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea7Round22=1)
+0090-g5: applied [13] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0093-g1: applied [1] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea5ReviewAfter0090=4)
+0096-g1: applied [4] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:FAIL(rc1,TestA7FlowRecordPins=8,TestArea7Round35Pins=1)
+0098-g1: applied [1] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:ok(rc0,) gen:FAIL(rc1,TestA5154Pins=3)
