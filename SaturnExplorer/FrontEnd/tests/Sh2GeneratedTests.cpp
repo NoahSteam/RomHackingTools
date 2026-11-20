@@ -22289,7 +22289,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") + count(clean, "caution.said.likewise") > 0 && flagged);
         }
     }
-    // A3-246 (area 3 round 34; hand fixtures, tools/a3_round34): A3-243 marked the add or subtract of a constant to a word that may still hold
+    // A3-246 (area 3 round 34; hand fixtures, tools/a3_round35): A3-243 marked the add or subtract of a constant to a word that may still hold
     // a register's entry value (a saved word an inner call's model wrote over, popped back) as the register's change; the other ops that give
     // another value for any nonzero operand did not. F2 pushes r10, calls G, pops r10 and then `not`s, negates, shifts (`shll2`), xors, ors or ands
     // a constant register into it, or extends a part of it (`extu.b`, `extu.w`, `exts.b`): the runs return r10 changed, and the text said no caution. Each as printed: no finding, the caution required
@@ -22318,6 +22318,34 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             gMutateKind = kept;
             const bool flagged = Has(cut, "n:caution-unsaid");
             std::printf("pin 'A3-246 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", o.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
+        }
+    }
+    // A3-249 (area 3 round 35; hand fixtures, tools/a3_round35): a partial store at the exact address of a word that held a register's saved entry
+    // value (or a word that may still hold it) did reach the word and wrote other bytes into it, but Clobber left it as a word that may still be the
+    // entry value, which the caution does not say. F2 pushes r10 and writes one byte or half of it (a constant, or r10's own low byte, which lands in
+    // the top byte: SH-2 is big-endian), then pops r10, with or without an inner call between: the runs return r10 changed (01000005 for 5 in), and
+    // the text said no caution. Each as printed: no finding, the caution required and said; with every caution taken out, `caution-unsaid`.
+    {
+        const struct { const char* name; const char* funcs; const char* words; } pins[] = {
+            { "byte of 1", "0/0/14,20/20/30,40/40/46", "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 E101 2F10 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+            { "half of 1", "0/0/14,20/20/30,40/40/46", "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 E101 2F11 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+            { "own low byte", "0/0/14,20/20/2e,40/40/46", "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 2FA0 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+            { "byte after an inner call", "0/0/14,20/20/34,40/40/46", "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 E101 2F10 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+            { "own byte over the popped word", "0/0/14,20/20/36,40/40/46", "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 2FA6 2FA0 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+        };
+        for (const auto& p : pins)
+        {
+            ModulePin pm = { "A3-249", p.words, p.funcs, nullptr, "0,0,0", "0,400,400", nullptr };
+            const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin 'A3-249 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", p.name, clean.findings.size(),
                         count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
             for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
             CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);

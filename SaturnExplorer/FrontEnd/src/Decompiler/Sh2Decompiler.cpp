@@ -2686,6 +2686,24 @@ private:
             // joined with the bytes stored, a value computed from r0 (the engine reads `in_r0` to build it), not r0 left alone. Clobber's
             // rule for a word that may still hold what it held (a store through an address not known) takes r0 there for r0 untouched.
             std::set<int64_t> partR0;
+            // (area 3, round 35, A3-249) The registers whose entry value a word may hold (a saved register's push, a word an inner call's model wrote
+            // over, a join with the entry value on one side), before a partial store at its exact address: the store did reach the word and wrote
+            // other bytes into it, so the word popped back is not that entry value on any path that runs it. Clobber leaves the word as one that
+            // may still be the entry value (a store through an unknown address may have missed it), which the caution does not say.
+            std::map<int64_t, uint32_t> enteredBefore;
+            if (n != 4)
+            {
+                for (int64_t w = addr.v & ~int64_t(3); w < addr.v + n; w += 4)
+                {
+                    auto f = s.slots.find(w);
+                    if (f == s.slots.end()) continue;
+                    const Value& was = f->second;
+                    uint32_t may = was.mayEntry & ~was.stale;
+                    if (SavedRegister(was)) may |= 1u << was.v;
+                    if (was.kind == Value::Fuzzy && was.def == Value::kJoin) may |= was.entryJoin & ~was.stale;
+                    if ((may & kModelKept) != 0) enteredBefore[w] = may & kModelKept;
+                }
+            }
             if (n != 4)
             {
                 // Part of a word: it holds what it held and part of this.
@@ -2712,6 +2730,8 @@ private:
                         slot.second.carried = slot.second.carried || value.carried;
                         slot.second.joined = slot.second.Joined() || value.Joined();
                         slot.second.keepsR0 = slot.second.KeepsR0() || value.KeepsR0();
+                        const auto e = enteredBefore.find(slot.first);
+                        if (e != enteredBefore.end()) slot.second.innerChanged |= e->second;   // (A3-249)
                     }
             return;
         }

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Area 3 round 34 review: each fixture of fixtures.src through run.py (the generator's SE_GENERATED_WORDS mode, so A11-33's oracle runs on it).
+# Area 3 round 35 review: each fixture of fixtures.src through run.py (the generator's SE_GENERATED_WORDS mode, so A11-33's oracle runs on it).
 # Prints per fixture: function 0's return lines; each caution with the call printed after it ("+likewise" / "+likewise-other"); the frame,
 # slot and stack-argument notes (first words); the oracle's caution counts; and every finding line.
 # usage: W=<SaturnExplorer dir> S=<scratch dir> run.sh [fixture[:KEY=VAL,...] ...]   (default: every fixture of fixtures.src)
