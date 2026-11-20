@@ -6,6 +6,10 @@ clang accept any length, so a long raw string builds on Linux and breaks the Win
 Adjacent literals are joined by the compiler, so a long text must be split into pieces.
 This checks every raw string (R"delim( ... )delim") in the given directories.
 
+A directory that does not exist is an error (A12-46: the vendored-tree job checked out only part of the tree, the
+directories it was told to scan were not there, and the step printed "ok" having read nothing), and so is a run that
+reads no C++ file at all.
+
 Usage: check-literal-size.py DIR [DIR ...]
 """
 import os
@@ -48,7 +52,12 @@ def main(argv):
         print(__doc__)
         return 2
     bad = 0
+    files = 0
+    strings = 0
     for root in argv[1:]:
+        if not os.path.isdir(root):
+            print(f'error: {root} is not a directory (is it missing from the checkout?)')
+            return 2
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d != 'third_party']
             for name in filenames:
@@ -60,12 +69,17 @@ def main(argv):
                         text = f.read()
                 except (UnicodeDecodeError, OSError):
                     continue
+                files += 1
                 for line, size in raw_strings(text):
+                    strings += 1
                     if size > LIMIT:
                         print(f'{path}:{line}: raw string of {size} bytes (with CRLF) exceeds {LIMIT}; '
                               'split it into adjacent raw strings (MSVC C2026 limit is 16,380)')
                         bad += 1
-    print(f'raw string sizes: {"ok" if not bad else f"{bad} too long"}')
+    if files == 0:
+        print('error: no C++ file was read')
+        return 2
+    print(f'raw string sizes: {"ok" if not bad else f"{bad} too long"} ({strings} raw strings in {files} files)')
     return 1 if bad else 0
 
 
