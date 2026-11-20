@@ -24686,7 +24686,7 @@ No area 3 class (`caution-unsaid`, `callee-saved`, `state-saved`) in either swee
 
 ## Area 8, done check
 
-Branch `review/8-done` from master `5bcf9284`. **WORK IN PROGRESS: paused at the coordinator's request with the overnight run about one tenth done. No verdict yet; area 8 is not declared done.** Changed: test code only (`RunProbeDone` in `DecompilerTrustTests.cpp`, behind `SE_TRUST_PROBE_DONE=1`), `Docs/Decompiler/tools/a8_done/longrun.sh`, the ledger (A8-52 filed, A8-45's status cell given its word) and this section. No product code.
+Branch `review/8-done` from master `5bcf9284`. **Finished by the coordinator: area 8 is DONE** (verdict at the end of this section). Changed: test code only (`RunProbeDone` in `DecompilerTrustTests.cpp`, behind `SE_TRUST_PROBE_DONE=1`), `Docs/Decompiler/tools/a8_done/longrun.sh`, the ledger (A8-52 filed, A8-45's status cell given its word) and this section. No product code.
 
 ### The criteria, against the record
 
@@ -24754,6 +24754,38 @@ A failing job prints `FOLLOW FAILURE, seed N` (replay with `SE_TRUST_FOLLOW_SEED
 ### Verdict
 
 **Not given yet (paused).** As the record stands: the review-round, P3 and open-row criteria are met; the fix after round 8 had no reviewer's round, and the look made here found one P3 (A8-52, accepted); the overnight run has 800,062 operations of the Follow rig with no failure and is to be finished (chunks 2 to 7) before area 8 can be called done.
+
+### Verdict (coordinator, after the pause)
+
+The overnight run was finished by the coordinator with the same driver (`tools/a8_done/longrun.sh`, chunks 2 to 7, one job
+at a time, the binaries built from `review/8-done`), after the pause:
+
+| Chunk | Jobs | Operations | Failing |
+|---|---|---|---|
+| 1 (before the pause) | Follow, focus, hover and no hover, mixes 8 and 9 | 800,062 | 0 |
+| 2 | focus, CPU, hover, from 2,200,000 | 800,020 | 0 |
+| 3 | focus, CPU, no hover, from 2,300,000 | 800,073 | 1 (seed 2307517, mix 9) |
+| 4 | no focus, hover, from 2,400,000 | 800,016 | 0 |
+| 5 | no focus, CPU, no hover, from 2,500,000 | 800,011 | 1 (seed 2502030, mix 9) |
+| 6 | the area 1 model, `SE_MODEL_SEEDS=10000` | 10,000 seeds | 0 |
+| 7 | mixes 0 to 7, `SE_TRUST_HIDDEN_RENAME=1`, from 2,600,000 | 46,264 | 0 |
+
+About 4.05 million Follow-rig and mix operations and 10,000 model seeds. The two failures were one cause, found by the area 8
+fixer (`## Area 8 fixer (seed 2307517)`, A8-57): a timing race in the rig's "Enter on the untouched entry box" when the panel's
+own capture (Follow PC's retry, or auto-refresh, after 30 frames) is answered during the rig's click; the panel showed and
+asked the output it then held, consistently (A8-42's rule), and never over-claimed. The rig is fixed and pinned
+(`kFollowRacePins`); both seeds and their neighbours pass 20 runs alone. No product defect was found by the run.
+
+The fix after round 8 that no round had seen (A8-46, A8-50, A8-51) was reviewed by round 9 (`## Area 8, round 9`): clean.
+
+| Criterion | Final |
+|---|---|
+| Two consecutive review rounds with no P1 or P2 | Met: rounds 8 and 9 (round 9 reviewed the fixer's change after round 8) |
+| Every P3 fixed or accepted with a reason | Met: A8-52 to A8-57 accepted or fixed |
+| The generator run overnight on the area's grammar with no violation | Met: no product violation; the two rig failures are fixed (A8-57) |
+| No open P1 or P2 rows | Met |
+
+**Area 8 is done.** The driver's exit status bug found in PR #75's review is A8-56 (fixed).
 
 ## Area 8, round 9
 
