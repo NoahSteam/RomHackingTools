@@ -19,7 +19,11 @@ LIMIT = 16000   # a margin under MSVC's 16,380 (CRLF checkouts lengthen a piece 
 
 
 def raw_strings(text):
-    """Yield (line, byte length) for each raw string literal, scanning linearly."""
+    """Yield (line, byte length) for each raw string literal, scanning linearly.
+
+    An opener with no closing delimiter yields (line, None): the rest of the file cannot be scanned, and stopping
+    silently let any long raw string after it pass (A12-56).
+    """
     i = 0
     n = len(text)
     while True:
@@ -41,6 +45,7 @@ def raw_strings(text):
             continue
         close = text.find(')' + delim + '"', open_paren + 1)
         if close < 0:
+            yield text.count('\n', 0, i) + 1, None
             return
         body = text[open_paren + 1:close]
         yield text.count('\n', 0, i) + 1, len(body.encode('utf-8')) + body.count('\n')
@@ -58,24 +63,36 @@ def main(argv):
         if not os.path.isdir(root):
             print(f'error: {root} is not a directory (is it missing from the checkout?)')
             return 2
+        root_files = 0
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d != 'third_party']
             for name in filenames:
                 if not name.endswith(('.cpp', '.cc', '.h', '.hpp')):
                     continue
                 path = os.path.join(dirpath, name)
+                # A file that is not valid UTF-8 (a Latin-1 or Shift-JIS comment) is still read, with the bad bytes replaced:
+                # skipping it would let a long raw string in it pass (A12-54). A file that cannot be opened is an error.
                 try:
-                    with open(path, encoding='utf-8') as f:
+                    with open(path, encoding='utf-8', errors='replace') as f:
                         text = f.read()
-                except (UnicodeDecodeError, OSError):
-                    continue
+                except OSError as e:
+                    print(f'error: cannot read {path}: {e}')
+                    return 2
                 files += 1
+                root_files += 1
                 for line, size in raw_strings(text):
+                    if size is None:
+                        print(f'{path}:{line}: raw string opener with no closing delimiter; the rest of the file was not checked')
+                        return 2
                     strings += 1
                     if size > LIMIT:
                         print(f'{path}:{line}: raw string of {size} bytes (with CRLF) exceeds {LIMIT}; '
                               'split it into adjacent raw strings (MSVC C2026 limit is 16,380)')
                         bad += 1
+        # Each directory must hold a C++ file: one that exists but is empty (a partial checkout) read nothing (A12-54).
+        if root_files == 0:
+            print(f'error: no C++ file was read under {root}')
+            return 2
     if files == 0:
         print('error: no C++ file was read')
         return 2

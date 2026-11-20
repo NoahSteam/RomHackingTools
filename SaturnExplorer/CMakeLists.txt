@@ -65,6 +65,16 @@ if(EMSCRIPTEN AND SE_ENABLE_DECOMPILER)
     set(SE_ENABLE_DECOMPILER OFF CACHE BOOL "Build the SH-2 decompiler engine (desktop)" FORCE)
 endif()
 
+# ctest reports a test that exits 77 as "skipped" and still exits 0, so a CI job cannot tell a suite that did not run (the
+# game save states moved, no C compiler) from one that passed (A12-52). With SE_FAIL_ON_SKIP=ON (the verify workflow's
+# configure steps) the tests that skip themselves carry no SKIP_RETURN_CODE, and their exit 77 is a failure.
+option(SE_FAIL_ON_SKIP "Treat a skipping test's exit code 77 as a failure (for CI)" OFF)
+function(se_skip_code_77 test)
+    if(NOT SE_FAIL_ON_SKIP)
+        set_property(TEST ${test} PROPERTY SKIP_RETURN_CODE 77)
+    endif()
+endfunction()
+
 # The Demo menu (scripted feature-tour playback, F7/F8) is for recording demos of the tool, not for users:
 # release builds turn it off (Integration/install.py --no-demo-menu, the release workflow, make-release.bat).
 # It is a compile definition for every target, so the app and the tests that build App.cpp agree.
@@ -175,7 +185,7 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerYssFixtureTests
              COMMAND SaturnExplorerYssFixtureTests)
     # Without the states it exits 77: ctest reports it skipped, not passed (A11-10).
-    set_tests_properties(SaturnExplorerYssFixtureTests PROPERTIES SKIP_RETURN_CODE 77)
+    se_skip_code_77(SaturnExplorerYssFixtureTests)
 endif()
 
 # Does the Windows live tap's shutdown actually end its server thread (HOOK-01)? The threads it
@@ -371,8 +381,9 @@ if(SE_ENABLE_DECOMPILER)
             # The leak check of a child that leaves through _Exit is made by the test itself, which
             # needs LeakSanitizer on in a sanitizer build (it is harmless in any other).
             # SKIP_RETURN_CODE: where the matrix cannot run (it prints SKIPPED) ctest reports it skipped, not passed.
-            set_tests_properties(SaturnExplorerDecompilerFaultTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_600} SKIP_RETURN_CODE 77
+            set_tests_properties(SaturnExplorerDecompilerFaultTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_600}
                                  ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1")
+            se_skip_code_77(SaturnExplorerDecompilerFaultTests)
             # The default subset pins cells for each finding of the sweep (kPins in
             # DecompilerFaultTests.cpp; REVIEW_LEDGER.md, rows A6-1 .. A6-15), each with the name of the
             # function whose allocation it fails, so it fails again if one comes back or if a pin no
@@ -393,7 +404,7 @@ if(SE_ENABLE_DECOMPILER)
         add_test(NAME SaturnExplorerSh2DecompilerFixtureTests
                  COMMAND SaturnExplorerSh2DecompilerFixtureTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_fixture_test)
         # Without the game state it exits 77: ctest reports it skipped, not passed (A11-10).
-        set_tests_properties(SaturnExplorerSh2DecompilerFixtureTests PROPERTIES SKIP_RETURN_CODE 77)
+        se_skip_code_77(SaturnExplorerSh2DecompilerFixtureTests)
 
         # The snapshot's A2 rules and the function finder are pure: no engine linked.
         foreach(name MemorySnapshot Sh2FunctionFinder)
@@ -440,11 +451,16 @@ if(SE_ENABLE_DECOMPILER)
         # functions, decompiled, their text compiled with the system C compiler and its return value compared with
         # the emulator's. The same executable, told by the environment to run only that. SE_GENERATED_SEEDS=<n>
         # makes it longer. Without a C compiler it exits 77 and ctest reports it skipped (never passed).
+        # UNIX only (A12-38): the test compiles the printed text with the system C compiler (`cc`/`gcc`/`clang` on PATH),
+        # which a plain MSVC machine does not have on PATH (no row asks for it there). It runs
+        # on macOS (arm64 in the native job; Rosetta does not list it, see SE_ROSETTA_TESTS in saturn-explorer-verify.yml)
+        # and in the Linux sanitizers job and the nightly.
         if(UNIX)
             add_test(NAME SaturnExplorerSh2PrintedCTests
                      COMMAND SaturnExplorerSh2GeneratedTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_PrintedC_test)
-            set_tests_properties(SaturnExplorerSh2PrintedCTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_300} SKIP_RETURN_CODE 77
+            set_tests_properties(SaturnExplorerSh2PrintedCTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_300}
                                  ENVIRONMENT "SE_GENERATED_PRINTEDC=only")
+            se_skip_code_77(SaturnExplorerSh2PrintedCTests)
         endif()
         # Area 2's oracle: all 65,536 words decoded three ways, and every instruction form run against
         # a reference model transcribed from Mednafen (REVIEW_LEDGER.md rows A2-1 .. A2-8). The default
