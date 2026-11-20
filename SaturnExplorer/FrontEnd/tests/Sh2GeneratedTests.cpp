@@ -8308,6 +8308,39 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         count("order.folded-store.dropped-unobserved");
                         continue;
                     }
+                    // (A5-170: ...but a store that a later store of all its bytes overwrites in every run that makes it, with only writes between
+                    // them, each seen landing in ordinary memory, is a value nothing observes: a write reads nothing, and the later store leaves
+                    // the bytes as the code leaves them whether the write overlapped them or not. `mov.l r2,@g ; mov.l r0,@(0x10,r4) ; mov.l
+                    // r2,@g` printed `*(param_1 + 0x10) = v; g = param_1;` (the engine joins the two stores into the later), grammar 2 seed
+                    // 12908713. Held as A5-169 holds a write: a write to a hardware register or a marked range may act on the bytes (SCU_D0EN
+                    // starts a transfer that reads them); a write no run makes has no known destination; a callee's accesses and a read of the
+                    // bytes between are not known to leave them unseen; a run that does not overwrite them leaves the dropped value in memory
+                    // at its return.)
+                    if (!dts::A7RuleOff(5170) && isWrite && viaPointer)
+                    {
+                        bool any = false, unobserved = true;
+                        for (const RunOut& run : runs)
+                            for (size_t k = 0; k < run.trace.size() && unobserved; ++k)
+                            {
+                                const TraceRec& t = run.trace[k];
+                                if (t.depth != 0 || !t.write || t.insn != f.insn) continue;
+                                any = true;
+                                bool covered = false;
+                                for (size_t i = k + 1; i < run.trace.size() && unobserved && !covered; ++i)
+                                {
+                                    const TraceRec& w = run.trace[i];
+                                    const bool overlaps = w.addr < f.address + f.size && f.address < w.addr + static_cast<uint32_t>(w.size);
+                                    if (w.depth != 0 || (!w.write && overlaps) || InHardwareRange(w.addr) || inMarked(w.addr)) unobserved = false;
+                                    else if (w.write && w.addr <= f.address && f.address + f.size <= w.addr + static_cast<uint32_t>(w.size)) covered = true;
+                                }
+                                unobserved = unobserved && covered;
+                            }
+                        if (any && unobserved)
+                        {
+                            count("order.folded-store.dropped-overwritten-unobserved");
+                            continue;
+                        }
+                    }
                     // (...and the text assigns the global nowhere before that access: a line that does, named after another store of it, may be
                     // this one's, which the engine joined there (the mapping names one instruction of two: grammar 1 seed 4007292). A5-118's text
                     // assigns it after the DMA enable only.)
@@ -20469,6 +20502,46 @@ void TestA5168Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 5, routed seeds (A5-170, A5-171), each whole and shrunk. A5-170, grammar 2 seed 12908713 (`n:` and `v:folded-store-after-access`, oracle): `mov.l r2,@g ;
+// mov.l r0,@(0x10,r4) ; mov.l r2,@g` -- the engine joins the two stores into the later, printed after the pointer write, which nothing reads
+// (SE_A7_RULE_OFF=5170 gives the finding back: 2 whole, 1 shrunk). A5-171, grammar 1 seed 12506097 (`v:pointer-effect-unsaid`, product,
+// Sh2Decompiler.cpp): a do-while stepping a pointer from SH2_BDRBH (`p = (p + 4) ^ 0x20000000`), joined with an SCSP address, whose later turns reach
+// SH2_SAR0; the stepped note was not said. The product's old line (the partition test without partition 7) gives 1 finding on both.
+void TestA5170Pins(Sh2Decompiler& d)
+{
+    {
+        const Report rep = Evaluate(d, MakeV2(12908713), true);
+        std::printf("pin 'A5-170 grammar 2 seed 12908713': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const ModulePin pin = { "A5-170 grammar 2 seed 12908713 shrunk",
+                                "2F86 2F96 2FA6 2FE6 4F22 7FE0 6EF3 6843 6953 6A63 B014 0009 6483 6593 66A3 6283 D606 2622 1404 2622 7E20 6FE3 4F26 6EF6 6AF6 69F6 68F6 000B 0009 0009 0600 238C "
+                                "2F86 2F96 2FA6 2FB6 2FD6 2FE6 4F22 7FF4 6EF3 6843 6953 6A63 6B73 2FC6 B013 6483 6483 6593 66A3 67B3 6CF6 62C3 1523 6041 7E0C 6FE3 4F26 6EF6 6DF6 6BF6 6AF6 69F6 68F6 "
+                                "000B 0009 7FF0 6286 7F10 000B 0009",
+                                "0/0/3a,40/40/86,86/86/90", nullptr, "0,1,0", "1100,1100,1100", "0,1000,100" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+        std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const Report rep = Evaluate(d, Generate(12506097u), true);
+        std::printf("pin 'A5-171 grammar 1 seed 12506097': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const Subject subject = RawSubjectWithEnv("D60A E304 7604 D10A 261A 4310 8BFA D709 6072 C801 89FC 3030 8B00 D607 6260 2660 D606 E154 2612 000B 0009 0009 FFFF FF70 2000 0000 2600 1014 25B0 00A0 2600 3018",
+                                                  "26001010-2600101f", "26001014:until-set", "5:06003C14");
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin 'A5-171 shrunk': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 // Area 5, round 4 (A5-165, A5-166): two order-class oracle findings whose text is value-correct, each whole and shrunk. A5-165, grammar 2 seed 12247189
 // (`n:read-after-folded-store`): `mov.l r0,@r6 ; mov.w @r7,r1 ; mov.l r0,@r6`, the second store the same value at the same address as the first, which
 // the engine joins into it. A5-166, grammar 1 seed 12260346 (`v:folded-read-after-pointer-write`): a read in the slot of `bf/s` whose register is
@@ -22188,6 +22261,19 @@ void TestA3RoutedPins(Sh2Decompiler& d)
               "6B73 E104 3412 8913 4408 C701 014E 412B 0009 0600 90A0 0600 90A0 0600 90A4 0600 90AA A005 0009 EC1C A002 0009 A000 0009 2FC6 B010 0009 6483 6593 66A3 67B3 "
               "6CF6 62C3 1421 6050 4F26 6DF6 6BF6 6AF6 69F6 68F6 000B 0009 6071 000B 0009",
               "0/0/3e,3e/3e/6c,6c/6c/d4,d4/d4/da", "8c:4:4:ae:a0,a0,a4,aa", "1,0,1,1", "41000,41000,41000,41000", "8,8,1000,20008" },
+            // A3-245 (external review of PR #69): A3-243's marks, then an op that is not a COPY. The walk carried an operand's
+            // Value::innerChanged to an op's output only once an inner call had marked a register, which G (it keeps r8-r14) never does:
+            // 12607388 shrunk with `extu.b r13,r13` after the pop (the Clobber mark), and 12600844 shrunk with `extu.w r10,r10` in the rts slot
+            // after the step `mov.w @r10+,r2` (the step mark). Both `caution-unsaid` with that propagation off.
+            { "A3-245 12607388 shrunk, extu.b after the pop",
+              "2F86 2F96 4F22 7FF8 6843 6953 B00A 0009 6483 6593 62D3 6023 7F08 4F26 69F6 68F6 000B 0009 2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 2338 8B00 ED14 2FD6 B00D "
+              "6463 6483 6593 66A3 63D3 6DF6 6DDC 4F26 6BF6 6AF6 69F6 68F6 000B 0009 7FF4 E009 CDE7 604C 7F0C 000B 0009",
+              "0/0/24,24/24/5c,5c/5c/6a", nullptr, "1,0,1", "103000,3000,3000", "8,3008,120000" },
+            { "A3-245 12600844 shrunk, extu.w after the step",
+              "2F86 2F96 2FA6 4F22 7FF0 6843 6953 6A63 B021 6583 6483 6593 66A3 E104 3612 8911 4608 C702 016E 412B 0009 0009 0600 903C 0600 903C 0600 9044 0600 9040 A003 0009 "
+              "A001 0009 C607 605C 7F10 4F26 6AF6 69F6 68F6 000B 0009 2F86 2F96 2FA6 4F22 7FE8 6843 6953 6A63 B00D 0009 6483 6593 66A3 7F18 4F26 6AF6 69F6 68F6 2338 8B00 "
+              "62A5 000B 6AAD 6073 000B 0009",
+              "0/0/56,56/56/84,84/84/8a", "26:6:4:44:3c,3c,44,40", "1,0,1", "104400,4400,4400", "20000,4408,20000" },
         };
         for (const ModulePin& m : cases)
         {
@@ -22201,6 +22287,68 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                         count(clean, "caution.required"), count(clean, "caution.said"), count(clean, "caution.said.likewise"), int(flagged));
             for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
             CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") + count(clean, "caution.said.likewise") > 0 && flagged);
+        }
+    }
+    // A3-246 (area 3 round 34; hand fixtures, tools/a3_round35): A3-243 marked the add or subtract of a constant to a word that may still hold
+    // a register's entry value (a saved word an inner call's model wrote over, popped back) as the register's change; the other ops that give
+    // another value for any nonzero operand did not. F2 pushes r10, calls G, pops r10 and then `not`s, negates, shifts (`shll2`), xors, ors or ands
+    // a constant register into it, or extends a part of it (`extu.b`, `extu.w`, `exts.b`): the runs return r10 changed, and the text said no caution. Each as printed: no finding, the caution required
+    // and said; with every caution taken out, `caution-unsaid`.
+    {
+        const char* funcs = "0/0/14,20/20/34,40/40/46";
+        const std::string head = "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 ";
+        const std::string tailw = " 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009";
+        // (the last four start r10 at 0x12345678, from a literal at the end: a mask or an extension changes a value with high bits)
+        const struct { const char* name; const char* op; bool big; } ops[] = { { "not", "6AA7", false }, { "neg", "6AAB", false }, { "shll2", "4A08", false },
+                                                                              { "xor", "E103 2A1A", false }, { "or", "E108 2A1B", false }, { "extu.b", "6AAC", true },
+                                                                              { "extu.w", "6AAD", true }, { "exts.b", "6AAE", true }, { "and", "E10F 2A19", true } };
+        for (const auto& o : ops)
+        {
+            // (F2 is padded to sixteen words: a two-word op leaves one nop less)
+            std::string pad = tailw;
+            if (std::strlen(o.op) > 4) pad.erase(pad.find(" 0009", pad.find("6033")), 5);
+            std::string words = head + o.op + pad;
+            if (o.big) words = words.replace(words.find("EA05"), 4, "DA16") + " 1234 5678";
+            ModulePin pm = { "A3-246", nullptr, funcs, nullptr, "0,0,0", "0,400,400", nullptr };
+            pm.words = words.c_str();
+            const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin 'A3-246 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", o.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
+        }
+    }
+    // A3-249 (area 3 round 35; hand fixtures, tools/a3_round35): a partial store at the exact address of a word that held a register's saved entry
+    // value (or a word that may still hold it) did reach the word and wrote other bytes into it, but Clobber left it as a word that may still be the
+    // entry value, which the caution does not say. F2 pushes r10 and writes one byte or half of it (a constant, or r10's own low byte, which lands in
+    // the top byte: SH-2 is big-endian), then pops r10, with or without an inner call between: the runs return r10 changed (01000005 for 5 in), and
+    // the text said no caution. Each as printed: no finding, the caution required and said; with every caution taken out, `caution-unsaid`.
+    {
+        const struct { const char* name; const char* funcs; const char* words; } pins[] = {
+            { "byte of 1", "0/0/14,20/20/30,40/40/46", "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 E101 2F10 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+            { "half of 1", "0/0/14,20/20/30,40/40/46", "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 E101 2F11 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+            { "own low byte", "0/0/14,20/20/2e,40/40/46", "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 2FA0 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+            { "byte after an inner call", "0/0/14,20/20/34,40/40/46", "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 E101 2F10 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+            { "own byte over the popped word", "0/0/14,20/20/36,40/40/46", "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 2FA6 2FA0 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+        };
+        for (const auto& p : pins)
+        {
+            ModulePin pm = { "A3-249", p.words, p.funcs, nullptr, "0,0,0", "0,400,400", nullptr };
+            const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin 'A3-249 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", p.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
         }
     }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
@@ -22663,6 +22811,7 @@ void TestGenerated()
         RUN(TestA5162Pins(d));
         RUN(TestA5165Pins(d));
         RUN(TestA5168Pins(d));
+        RUN(TestA5170Pins(d));
         RUN(TestA7FlowRecordPins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));

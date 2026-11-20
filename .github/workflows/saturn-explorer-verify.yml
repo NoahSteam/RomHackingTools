@@ -161,8 +161,12 @@ jobs:
     # One list drives the build, the -R regex and the check that each selected test was built, so the
     # three cannot drift apart (A12-10: Sh2DecodeTests and Sh2GeneratedTests were selected and not built,
     # and ctest ended "Not Run"). Each name is the middle of SaturnExplorer<name>Tests.
+    # Not in the list, and not yet tried under Rosetta (A12-38): Sh2PrintedC (a mode of Sh2Generated that compiles with
+    # the system C compiler; A12-21's macOS fault was an arm64 address-space fact, so the x86_64 result is not implied and
+    # wants its own trial run), DecompilerFault (its default subset takes minutes; the Linux sanitizers job and the arm64
+    # job run it), CapturedValueInspection and GenerateSpecDataFailure. Every one of them runs on the arm64 job.
     env:
-      SE_ROSETTA_TESTS: SlaFreshness Sh2DecompilerEngine SavestateShape MemorySnapshot Sh2FunctionFinder Sh2Decompiler Sh2Semantics Sh2Decode Sh2Generated Sh2DecompilerFixture DecompilerRunner DecompilerPanel
+      SE_ROSETTA_TESTS: SlaFreshness Sh2DecompilerEngine SavestateShape MemorySnapshot Sh2FunctionFinder Sh2Decompiler Sh2Semantics Sh2Decode Sh2Generated Sh2DecompilerFixture DecompilerRunner DecompilerPanel DecompilerModel DecompilerTrust HardwareWidthTable CapturedInspectionMetadata
     defaults:
       run:
         working-directory: SaturnExplorer
@@ -232,11 +236,18 @@ jobs:
           # Self-contained: nothing may still point into Homebrew, from the exe or a bundled dylib.
           # `! cmd | grep` never fails a step under `bash -e` (a negated pipeline is exempt from errexit), so this check
           # passed whatever it found (A12-35). The first line of `otool -L` is the file's own path and is skipped.
+          # The listing is taken on its own line so that an otool that fails (a path the glob did not expand, a file it cannot
+          # read) stops the step under `bash -e`; inside a pipeline its status was dropped and the file passed unchecked (A12-46).
+          checked=0
           for f in stage/SaturnExplorer.app/Contents/MacOS/SaturnExplorer stage/SaturnExplorer.app/Contents/Frameworks/*.dylib; do
-            if otool -L "$f" | tail -n +2 | grep -E '/opt/homebrew|/usr/local/'; then
+            deps="$(otool -L "$f")"
+            if printf '%s\n' "$deps" | tail -n +2 | grep -E '/opt/homebrew|/usr/local/'; then
               echo "::error::$f still points into Homebrew"; exit 1
             fi
+            checked=$((checked + 1))
           done
+          echo "$checked binaries checked for Homebrew references"
+          test "$checked" -ge 2   # the executable and at least the bundled SDL
           # sdl2-compat loads SDL3 at run time; the bundle must carry it.
           if strings stage/SaturnExplorer.app/Contents/Frameworks/libSDL2*.dylib | grep -q libSDL3; then
             test -f stage/SaturnExplorer.app/Contents/Frameworks/libSDL3.dylib

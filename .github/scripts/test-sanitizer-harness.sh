@@ -97,6 +97,9 @@ one other-no-pass-line   0  "$FM"                                               
 one model-omitted        0  "$FM"                                                                        0 fail "all passed" SaturnExplorerDecompilerModelTests
 one live-restore-omitted 0  "$FM"                                                                        0 fail "all passed" SaturnExplorerLiveRestoreSignalTests
 one live-capture-omitted 0  "$FM"                                                                        0 fail "all passed" SaturnExplorerLiveDecompilerCaptureTests
+# The loader fuzz and the printed-C mode (a log of the generator binary under its own name) are on the list too (A12-46).
+one loader-omitted       0  "$FM"                                                                        0 fail "all passed" SaturnExplorerLoaderFuzzTests
+one printedc-omitted     0  "$FM"                                                                        0 fail "all passed" SaturnExplorerSh2PrintedCTests
 # The freshness test is gating (A10-3): never run, a compiler error the sanitizer saw while it ran se-sleighc, a leak, or a
 # missing pass line each fail the check.
 one sla-omitted          0  "$FM"                                                                        0 fail "all passed" SaturnExplorerSlaFreshnessTests

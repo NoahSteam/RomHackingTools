@@ -24144,3 +24144,193 @@ Ranges 12,700,001 and 12,800,001 had not been used by any round. No area 3 findi
 * Not run: the local game corpus (two save states, not in the repository), so corpus caution counts before and after the change were not compared; the sanitizer jobs (CI); the printed-C suite beyond what `ctest` runs. The change adds cautions only where a register's change is now seen, so corpus text could gain a caution; that is untested here.
 
 **Verdict, area 3 round 33: clean** (no P1 or P2 found by the round's sweeps on the fresh ranges; A3-243, a P2, was found by A11-37's sweep before the round and is fixed here with pins, its own deep sweep clean). The coordinator decides whether the product change in this branch restarts the two-clean-rounds count: round 32 was clean on code without it.
+
+## Area 3, A3-245: A3-243's marks survive the next operation (PR #69 review)
+
+The external review of PR #69 (`4d5b57ba`) found that A3-243's two new producers of `Value::innerChanged` did not set `mInnerSeen`. Those producers are `Clobber`, which keeps a pushed join's change, and the constant step of a `mayEntry` word. The walk carries an operand's mark to an op's output only when that flag is set, and only `Call` set it, when an inner callee's walk reports a changed kept register. An inner callee that keeps r8-r14 left the flag false, so the next op that is not a COPY lost the mark.
+
+**Fix** (`Sh2Decompiler.cpp`): the propagation is no longer gated, and `mInnerSeen` is removed. `Call` always set the flag when it made a mark, so for the marks that existed before, the behaviour is unchanged.
+
+**Pins** (A3-243 block of `TestA3RoutedPins`), with propagation switched off for the old-code evidence, then restored:
+
+| Pin | Propagation off | With the fix |
+|---|---|---|
+| `A3-245 12607388 shrunk, extu.b after the pop` | `n:caution-unsaid` | caution required 1, said 1, 0 findings |
+| `A3-245 12600844 shrunk, extu.w after the step` (in the rts slot) | `n:caution-unsaid` | caution required 1, said 1, 0 findings |
+
+With the fix, taking the cautions out makes the oracle flag `caution-unsaid` on both pins.
+
+## Area 3, round 34
+
+Branch `review/3-round34` from master, with master merged in again before the final runs (it carries A3-243 from round 33 and A3-245, the PR #69 review fix: `innerChanged` carried through every op except LOAD, the calls, branches and RETURN, `mInnerSeen` removed). RelWithDebInfo, `-j2`, `ulimit -v 3500000`. One product change in `Sh2Decompiler.cpp` (the walk of a callee's code, A3-246; the id A3-245 was taken by master while this round ran, so this round's rows are A3-246 to A3-248), no engine patch. Fixtures: `Docs/Decompiler/tools/a3_round35/` (`mk.py` writes `fixtures.src`; `run.sh` runs a fixture through the generator's `SE_GENERATED_WORDS` replay, so A11-33's oracle judges it). Pins: the A3-246 block of `TestA3RoutedPins`.
+
+### 1. Review of A3-243's change (and of A3-245's ungated propagation)
+
+Three pieces now: `Clobber` keeps the marks of a joined word (`innerChanged |= SureChanged(was)`, `mayEntry |= entryJoin`); the add or subtract of a nonzero constant to a `mayEntry` word marks the result `innerChanged`; and (A3-245) a mark is carried through every op that computes from it. Each suspicion was built as a fixture (F0 pushes r10 and sets it to 5, or to 0x12345678 for the masks, calls F2 not lent, stores r10 through r4; F2 pushes r10, calls G which sets r10, pops r10, then the op under test) and run before filing.
+
+Over-warning (a note naming a register the callee does not change), with the ungated propagation on:
+
+| Fixture | F2 | Result |
+|---|---|---|
+| j1 | save A, change on a path, save B (the join), call, pop B, pop A | no note; right (the second pop restores the entry value) |
+| j2, j3 | the joined word popped into r2 or r11, r10 restored from A | no note; right |
+| s3, s4 | the step is on a copy (`r1 = r10 + 4`), or on r11 (saved and restored) | no note; right (a mark carries its register's bit; a copy in another register is not read as r10's) |
+| e7 | pop only (control) | no note; right |
+| s5 | `add #2` on one path, `add #-2` after the join | note said and required: the paths do not restore |
+| s1, s2p | pop r10, `add #2,r10 ; add #-2,r10`, or `mov.l @r10+,r2 ; add #-4,r10` | **note said, no run changes r10**: the step is marked for certain, not tracked as an offset. P3 noise (A3-247), accepted by class |
+
+Why the ungated propagation adds no over-warning by itself: the marks exist only where A3-243 and A3-246 make them (a pushed join's change, a step of a may-entry word), each is a bit for one register, and a value only counts for the register of its bit when it sits in that register at the return (`ChangedAtReturn`); LOAD is excluded, so a reload from the stack (the epilogue's pop of the saved word) gives the register clean. Checked on the 12,700,001 deep range below (counts identical with the new rule on and off).
+
+How the oracle counts an over-warning: `caution.unchanged` in `CheckCautions` is incremented for each register of a said note that no run changes at that call (and `caution.call-unrun` for a note whose call no run made). Both are counters, not findings: a "may change" note on a path the finite runs did not take is not a violation.
+
+Under-warning (ops other than add or subtract that step a `mayEntry` word): the add or subtract of a register that holds a constant (u3, u7, u10), `dt` (u4), a step on a copy moved back (u11), `swap.w` (e4) and `shlr16` (e6) were said. **`not` (u1), `shll2` (u2), `neg` (u5), `xor` with a constant register (u6), `or` with one (u8), and, with 0x12345678 going in, `extu.b` (e1), `extu.w` (e2), `exts.b` (e3) and `and` with a constant register (e5) were not**: the runs return r10 changed, the text said no caution, `n:caution-unsaid`. **A3-246, P2**, fixed: a `mayEntry` word (not stale, r8-r14, GBR, VBR) put through xor, or, and, multiply, negate, two's complement, a shift by a constant, or a part of the word and its extension (SUBPIECE, ZEXT, SEXT), with no zero operand (and no all-ones mask), marks the result `innerChanged`; A3-245's propagation then carries it. With the change switched off (a temporary test, not committed) the nine pins fail (5 of 5 first checked; the extension and mask ones show `caution-unsaid` in the fixtures without it).
+
+Marks that may still be lost (read in the code, **not built as fixtures**): a part store into a pushed word (`mov.b r13,@r15` over a marked word), and a marked value that passes through memory by a store through a pointer and a load of the same address. Not tested; the deep sweeps below are clean.
+
+### 2. Sweeps (merged code; fresh ranges; `SE_GENERATED_CANARY=0`; `SE_GENERATED_PINS=0` for the first two)
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep` | 12,900,001, 10,000 seeds | **failing seeds=1; findings=2**: 12908713 `n:` and `v:folded-store-after-access` (area 5; the same with A3-243 and A3-246 switched off), routed (A3-248) |
+| Grammar 1 | 13,000,001, 10,000 seeds | **failing seeds=2; findings=2**: 13004986 `v:map-way-back` and 13005195 `n:map-const-join`: area 7, routed (A3-248) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on (the A3-246 pins in it) | 1 on | **failing seeds=0; findings=0** (620,409 ms) |
+| Grammar 2 deep, A3-243's range | 12,700,001, 10,000 seeds | **failing seeds=0; findings=0**, with A3-246 on and with it off |
+
+The same three seeds failed on the first (pre-merge) sweeps of these ranges. No area 3 finding in the sweeps; A3-246 came from the hand review.
+
+### 3. Caution counts, 12,700,001 deep, 10,000 seeds
+
+The round 33 section recorded no caution counts, so the baseline was run here with temporary environment switches in the host (not committed).
+
+| Code | notes | required | said | said by "likewise" | unchanged | call-unrun | findings |
+|---|---|---|---|---|---|---|---|
+| A3-243 off (pre-round 33) | 4516 | 1883 | 1691 | 170 | 1441 | 751 | 22 (20 seeds, the A3-243 class) |
+| round 33 code (A3-243 on) | 4579 | 1883 | 1710 | 173 | 1460 | 763 | 0 |
+| merged master, A3-246 off (A3-245's propagation on) | 4579 | 1883 | 1710 | 173 | 1460 | 763 | 0 |
+| this branch (A3-246 on) | 4579 | 1883 | 1710 | 173 | 1460 | 763 | 0 |
+
+A3-245's propagation and A3-246 add no note to this range (counts identical). A3-243 adds 63 notes and 19 `caution.unchanged` (1441 to 1460); required stays 1883 and all are said. The 19 seeds were found by printing the seed and call of each `caution.unchanged` with and without A3-243 (a temporary print in the test, not committed): 12700011, 12701161, 12701430, 12701491, 12701563, 12701604, 12701848, 12702064, 12702520, 12702725, 12702945, 12704720, 12705011, 12705204, 12706322, 12706932, 12707851, 12708430, 12708948. Read in full: 12700011 (r12 set by the callee on the r3 = 0 path), 12701430 (r9 stepped by `mov.b @r9+,r1` after the epilogue on a path that always runs; the callee ends in a poll, so no run returns), 12702520 (r14 set on a path and never saved), 12704720 (r10 stepped by `mov.w @r10+,r2` after the epilogue on the r3 = 0 path). Each names a register the callee's code changes on a path that exists, none restored later; the runs took no changing return. The other 15 were not read. No newly said caution was found that the code does not support, other than the step-and-back shape of section 1 (A3-247).
+
+### 4. Runs
+
+* `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`, after merging master): **117 of 117 passed**.
+* `check-literal-size.py SaturnExplorer/FrontEnd`: raw string sizes ok. No C++ feature beyond what the files already use.
+* Not run: the local game corpus (not in the repository), so corpus text before and after A3-243, A3-245 and A3-246 was not compared; sanitizer jobs (CI); the printed-C suite beyond what `ctest` runs. The 15 of 19 seeds of section 3 not read in full are listed in A3-247.
+
+**Verdict, area 3 round 34: not clean.** One P2, A3-246 (a caution the runs need is missing for a may-entry word put through not, neg, shifts, and, or, xor, extu or exts; the op that makes the mark, where A3-245 fixed the ops after it), found by the review of A3-243's step rule and fixed here with pins; no P1. The sweeps on the fresh ranges found no area 3 finding. By REVIEW_PROGRAM.md's rule (two consecutive rounds without P1 or P2) the count restarts after this fix, on the coordinator's decision.
+
+## Area 5, routed seeds 12908713 and 12506097
+
+Branch `review/5-routed-r35` from master `c945d815`. RelWithDebInfo, `-j2`, `ulimit -v 3500000`, one heavy binary at a time. Rows A5-170 (oracle) and A5-171 (product); one oracle rule behind `SE_A7_RULE_OFF=5170`, one product line in `Sh2Decompiler.cpp`. Pins: `TestA5170Pins` (each seed whole and shrunk).
+
+### 1. Grammar 2 seed 12908713 (A3-248): oracle fault, A5-170
+
+Reproduced with `SE_GENERATED_CAUTION=deep`: `n:` and `v:folded-store-after-access`, "the store at 0600903E the engine folded into 0600238C is printed nowhere, and the write through a pointer at 06009042 the code makes after it is made without it"; shrunk (51 evaluations) to function 0 of `mov r8,r2 ; mov.l @(lit),r6 [g = 0x0600238C] ; mov.l r2,@r6 ; mov.l r0,@(0x10,r4) ; mov.l r2,@r6` with r4 = r8 = the first parameter. The text is `xVar1 = func_0x06009040(); *(xunknown4 *)(param_1 + 0x10) = xVar1; iRam0600238c = param_1;`.
+
+Evidence from the runs, not the shape: 4 of 4 runs finish; the write through r4 lands at 0x06020110 (ordinary memory) in each; no run reads the global between the first store and the second; the second store writes the same four bytes with the same value. So the code's final memory is `g = param_1` whether or not the pointer is g's address (a write that lands on g is overwritten by the later store), and the text leaves the same. No value and no effect differs. The oracle (A5-119's pointer form: a store dropped before an access the ledger holds) counted the write through a pointer as an access made without the store, though a write reads nothing; it would matter only if the write acted on the bytes (a register: A5-118's `SCU_D0EN`).
+
+**Fix** (oracle only; A5-169's lesson kept): in the dropped-store branch, the finding is set aside (`order.folded-store.dropped-overwritten-unobserved`) when, in every run that makes the store, a later store of all its bytes follows, and between them every access is a write seen landing in ordinary memory (not `InHardwareRange`, not a marked range, not at depth above 0, no read overlapping the bytes). A hardware or marked landing, a callee's access, a read of the bytes, a run that does not overwrite them (the dropped value would stay in memory at the return), and a write no run makes (unknown destination) all keep the finding. Residual, accepted: another value of the pointer might name a register that acts on a write; the runs do not show it, as in A7-255. No hardware-landing negative pin could be built: the generator's pointer arenas never reach a register, and a literal register address is a direct access, which the rule does not touch.
+
+**Old-code evidence:** `SE_A7_RULE_OFF=5170`: the whole seed gives the two findings back and the shrunk replay one; `TestA5170Pins` fails 2 checks. With the rule: 0 findings on both.
+
+### 2. Grammar 1 seed 12506097 (fold-order sweep): product fault, A5-171
+
+Reproduced: `v:pointer-effect-unsaid`, "the read of 1 byte(s) at 0600901C reached FFFFFF80 through a pointer the output derives from register addresses, and no note says: a 1-byte read of SH2_SAR0, a 32-bit register, is an address error on the SH-2 ... Mednafen then returns bits 15-8". Shrunk (52 evaluations) to `p = &SH2_BDRBH (0xFFFFFF70) ; r3 = 4 ; do { p = (p + 4) ^ 0x20000000 } while (--r3) ; (poll the mailbox until set) ; if (r0 == 0) p = 0x25B000A0 ; r2 = *(char *)p ; *(char *)p = p`. The four turns end at 0xFFFFFF80 = SH2_SAR0 in the run where the poll is answered (the default request's runs do not finish; the request with the mailbox marked does).
+
+Why no note: a temporary print of the pointer walk at the access gave constants {0x25B000A0, 0xDFFFFF74}, `steps` set, and later values 0xFFFFFF78, 0xDFFFFF7C, 0xFFFFFF80 ... The do-while's exit value is the pointer after one turn, so the first values hold no register near the start; 0x25B000A0 is an unnamed SCSP address (no stepped note, A5-54); and A5-136's test of the later values, which exists for this case, took partitions 2, 3 and 5 (purge, address array) only, so a later value in the on-chip page was never asked. The text shows `puVar3 = &SH2_BDRBH` and a loop, and says nothing of what the access may reach. The oracle is right: the run reaches a register whose width rule changes the value read (the value is unused in this program, but the caution is the product's contract for a pointer stepped from register addresses).
+
+**Fix** (`Sh2Decompiler.cpp`, one condition): the later-values test also accepts a value in partition 7 that is a hardware register. The access then says the existing stepped note ("the pointer is stepped in a loop from 0x25B000A0: the iterations after the first reach other addresses, which are not said, among them 0xFFFFFF78 (an on-chip register address): a 1-byte read there has the effects and is subject to the width rules of that hardware"). The note's "from" address is the first register candidate (the SCSP address), not 0xFFFFFF70, which the loop's exit value does not hold; cosmetic, left. Only a pointer already stepped (`steps`) whose first values name no stepped note is touched; the corpus text was not compared (no save states here), so extra notes in game code are possible and untested.
+
+**Old-code evidence:** with the condition reverted (partitions 2, 3, 5 only) the whole seed gives 1 finding and the shrunk replay 1 (`v:pointer-effect-unsaid`, the SAR0 read); with it, 0 and 0.
+
+### 3. Runs
+
+| Run | Result |
+|---|---|
+| Pins (`SE_GENERATED_SEEDS=1`), fix on | all passed; the four pins 0 findings |
+| Pins, `SE_A7_RULE_OFF=5170` | 2 failures: 12908713 whole 2 findings, shrunk 1 |
+| Pins, product line reverted | 2 failures: 12506097 whole 1 finding, shrunk 1 |
+| Grammar 1, 10,000 from 13,300,001, canary off | **failing seeds=0; findings=0** |
+| Grammar 2 deep, 10,000 from 13,300,001, canary off | failing seeds=1; findings=2: 13307611 `n:` and `v:map-way-back` (0600904E answered with a line that does not begin with it): area 7, not analysed here (the changes of this branch only remove findings and add stepped notes) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | **failing seeds=0; findings=0** (773,376 ms), all passed |
+| `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`) | **117 of 117 passed** (686 s); `check-literal-size.py SaturnExplorer/FrontEnd`: raw string sizes ok; no C++ feature beyond what the files use |
+
+Not done: the game corpus; the sanitizer jobs; a hardware-landing negative pin for A5-170; the area 7 seed 13307611.
+## Area 3, round 35
+
+Branch `review/3-round35` from master (c945d815), RelWithDebInfo, `-j2`, `ulimit -v 3500000`. A review of A3-246's change independent of round 34's conclusions, then sweeps on fresh seed ranges. One product change in `Sh2Decompiler.cpp` (`Store`, A3-249); ledger rows A3-249 to A3-253. Fixtures: `Docs/Decompiler/tools/a3_round35/` (round 34's tooling moved, `mk.py` extended; `mk.py` writes `fixtures.src`, `run.sh <name>...` runs fixtures through the generator's `SE_GENERATED_WORDS` replay, so A11-33's oracle judges each; `SE_GENERATED_CAUTION=deep` for the later-callee tier). Pins: the A3-249 block of `TestA3RoutedPins`. In every fixture F0 pushes r10, sets it to 5 (0x12345678 for the e series, r4 + 8 for the pointer series), calls F2 (not lent) and stores r10 through r4; F2 pushes r10, calls G (which sets r10), pops r10 and runs the body under test.
+
+### 1. Review of A3-246 (the mark of a may-entry word through xor, or, and, multiply, negate, shifts, SUBPIECE, ZEXT, SEXT)
+
+Reading of the change: `stepped` is built per op from the operands that are Fuzzy with `mayEntry` bits (not stale, `kModelKept`), skipped when an operand is an Imm zero (or an all-ones mask for `and`), and set on the output as `innerChanged`; the only reader of the mark is `ChangedAtReturn` (the caution), the join's equality and A3-245's propagation. So an over-warning can only be a "may change" note; it cannot make a wrong statement or a finding (an extra note does not remove a required one).
+
+Over-warning fixtures (run with the current code):
+
+| Fixture | Op after the pop (r10 = 5 in) | Result |
+|---|---|---|
+| o1, o2, o3 | `or`, `xor`, `and` with r3 (an input: 0, or all ones, in some runs) | note said and required: a run changes r10 |
+| o4, o5, o6, o7 | `extu.b`, `extu.w`, `exts.b`, `exts.w` of 5 | note said, no run changes r10: `caution.unchanged` 1 (A3-252) |
+| o11, o12, o13, o14 | `shll ; shlr`, `not` twice, `neg` twice, `xor` of a constant register twice | note said, `caution.unchanged` 1 (A3-252) |
+| o10 | `mov.b r10,@r4` only (a SUBPIECE into a store) | no note, right |
+| o15 | the op on a copy in r2, r10 untouched | no note, right |
+| o8, o9 | push the popped word, `mov.b` or `mov.w` of r10 over it, pop | **not over-warning: a miss** (below, A3-249) |
+
+Under-warning, the two spots round 34 read only from code:
+
+* **A part store into a pushed word.** Marked words (p1 to p5, p7, p8: `not` or `neg` after the pop, pushed, a byte or half stored over it by a constant, r10's own byte, or r3, through r15 or a copy of r15, an inner call over it, a store through a displacement): all said, because `Clobber` keeps `innerChanged` and A3-246's mark rides the word. **But the unmarked word was a miss, and not only after an inner call:** x1 (push r10, `mov.b r1,@r15`, pop; r10 returns 01000005), x2 (half), x3 (r10's own low byte), x5 (through a copy of r15), x6 (after an inner call), o8, o9. `Clobber` keeps a saved register's word as one that may still be the entry value because a store through an unknown address may have missed it; a partial store at the exact address did not miss. **A3-249, P2, fixed.** `Store` now marks `innerChanged` on a touched word, for the registers whose entry value it may hold (a saved register's push, `mayEntry`, `entryJoin`), after a partial store at an exact stack address. A full-word store (x4) was already said. Old-code evidence: with the change switched off (a temporary test, not committed) all five pins fail (`as printed 1 finding(s), required 1, said 0`; cautions taken out `caution-unsaid`); on, 0.
+* **A marked value passed through memory by a pointer store and a load** (LOAD is excluded from the mark's propagation). q5 and q6 (`add #4,r10` or `not r10,r10`, `mov.l r10,@r4`, `mov.l @r4,r10`) and q1, q2 (through r10's own address, or a copy) return r10 changed and the text said no caution. The mark is not the cause: q7 (`mov #7,r10` stored and loaded back, no mark) is the same, and so are l1 to l3 (`mov.l @r10,r10`, `mov.l @r10+,r10`: a pointer chase in a callee-saved register, no store at all). The walk takes a value read from memory with the register among its origins as no change for certain (A3-199's rule); a load through a pointer that may be the frame takes every slot's origins, and the popped push of r10 is among them. Controls said: q4 (stored through itself, loaded back, unchanged) and q8 (r3 through r4 into r10, no push of r10). **A3-250, P2, open, proposed patch not applied** (the rule's change decides which callers of the corpus get a caution, and the corpus is not in the repository). The generator's grammars do not draw these shapes (no finding in the sweeps below).
+
+### 2. Sweeps (this branch's code; fresh ranges; `SE_GENERATED_CANARY=0`; `SE_GENERATED_PINS=0` for the ranges)
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep` | 13,100,001, 10,000 seeds | **failing seeds=2; findings=3** (450 s): 13102045 `n:caution-unsaid-deep` (GBR, a later callee: **A3-251, P2, open**, cause not found); 13103591 `n:` and `v:map-copy-store` (area 7, routed: A3-253) |
+| Grammar 1 | 13,200,001, 10,000 seeds | **failing seeds=0; findings=0** (689 s) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on (the A3-246 and A3-249 pins in it) | 1 on, 10,000 of each grammar | **failing seeds=0; findings=0** (767 s, canary 240 programs, 0 failing) |
+
+13102045 was swept with A3-249 on and not rerun with it off (the callee's GBR load is a whole-register write, not a partial store, so the change is unlikely to matter). Its replay and the discriminators found by editing the shrunk words are in the A3-251 row.
+
+### 3. Caution counts, 12,700,001 deep, 10,000 seeds (round 34's table, this code)
+
+| Code | notes | required | said | said by "likewise" | unchanged | call-unrun | findings |
+|---|---|---|---|---|---|---|---|
+| round 34 merged (A3-246 on) | 4579 | 1883 | 1710 | 173 | 1460 | 763 | 0 |
+| this branch (A3-249 on) | 4579 | 1883 | 1710 | 173 | 1460 | 763 | 0 |
+
+A3-249 adds no note to this range; the sweep had 0 failing seeds.
+
+### 4. Runs
+
+* `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`): **117 of 117 passed**. `check-literal-size.py SaturnExplorer/FrontEnd`: raw string sizes ok. No C++ feature beyond what the files already use (a `std::map` and `std::set` already in the file).
+* Not run: the local game corpus (not in the repository), so no corpus text before and after A3-249 was compared (the change adds a caution only where a partial store lands in a saved register's word, which compiled code does not do); sanitizer jobs (CI); the printed-C suite beyond what `ctest` runs. A3-251's cause was not found.
+
+**Verdict, area 3 round 35: not clean.** P2: A3-249 (a partial store over a saved register's word, popped back: caution missing; found by the review of A3-246's code-read spot, fixed here with pins), A3-250 (a changed value read back through a pointer into the register it changed, open with a proposed patch), A3-251 (deep sweep seed 13102045, GBR, a later callee reading the value through r3, open, cause not found). No P1. By REVIEW_PROGRAM.md's rule the two-clean-rounds count restarts.
+
+## Area 12, round 2
+
+Reviewer of area 12, second round. Branch `review/12-round2`, cut at master `d2239915`. Read only: the Actions history through `gh api` (runs, jobs, job logs of master `c0189bbc`, runs 44664080644 and 44664080654); nothing was re-run, dispatched or pushed. Nothing here was run on a hosted runner, so every workflow change is unverified there; the scripts were run locally. Rows **A12-46 to A12-53**.
+
+**Verdict, area 12 round 2: not clean.** Two P2 rows, **A12-46** (the ASan job is red on master `c0189bbc`: the runner test's cold-baseline wait is a flat 60 s) and **A12-47** (the raw-string size gate scanned a partial checkout and said ok), both fixed on this branch; six P3 rows (A12-48 to A12-53), four fixed and two (A12-52, A12-53) open with proposals. Round 1 was also not clean, so the count of consecutive clean rounds is zero.
+
+### 1. A12-45 verified
+
+Both ctest steps of the `native` job in `saturn-explorer-verify.yml` have no `shell:` key again, and the regex comes in as `${{ env.SE_DECOMPILER_TESTS }}`; only the test-count step and the Release step run in bash, and neither runs the engine test with the ACL case. Evidence: PR run 44649208879 (6cdfb3fb) and master run 44664080654 (c0189bbc) are green on Windows Debug (job 136049026551: 76 minutes; "100% tests passed out of 84", then the eleven decompiler suites in 53 minutes, then Release in 12) and on macOS (99 tests, then the eleven). The count check passes against floors of 90 and 105. Fixed.
+
+### 2. What was checked
+
+* **Test lists against CMake.** With a configure of the tree (SDL off as the Linux jobs do: 117 tests) every name in `SE_DECOMPILER_TESTS`, in `SE_ROSETTA_TESTS` and in the sanitizer build list is a registered test or a target; `check-selected-tests-built.sh` finds all sixteen Rosetta names (it reports each executable missing, as nothing was built). The sanitizer runner, `EXPECTED` in the checker and the harness's stubs agree (fifteen binaries; the printed-C mode is the generator binary's second log). A name in `-E` is the same string as in `-R`, so a rename can only add a test to the full run, not drop it.
+* **Path filters.** Every project file the MSBuild solution and CMake build read lies under `SaturnExplorer/` (the solution file itself is in the filter). The release and guides workflows have their own triggers.
+* **Timeouts.** Last 27 runs of the sanitizers job: 55 to 111 minutes (the latest, c0189bbc, 111), nine cancelled at the old 90; 150 leaves 35 percent over the longest, kept. Windows Debug `native` 76 minutes of 240 (the decompiler suites 53); macOS 38 of 240; Rosetta 32 of 120; Windows Release batch 20 of 90; MSBuild 5 of 60; bundle 4 of 60; Area 9 job 2 of 30; vendored 3 of 20; nightly 31 of 300; the release jobs 19 to 28 minutes with no limit (A12-50). `windows-latest` now runs VS 18 (Enterprise, MSVC 14.51); the builds pass.
+* **Failure propagation.** Unspecified `run` steps are `bash -e` without `pipefail`: the nightly's two generator steps set `pipefail` themselves; the `grep -q` probes read `cmake ... help` through a pipe (harmless). The bundle check's pipeline had a second hole (A12-48). ctest treats a 77 exit as skipped (A12-52).
+* **Steps that check nothing.** A12-47 (the literal-size gate), A12-48, A12-52. The count floors and the built-check hold up (a floor of 200 fails, 105 passes, on the 117 tests).
+* **CI history.** The only failure in the last 30 runs that no row records is A12-46. Runs 44551839693 (A12-32), 44645997395 (A12-45) and 44582869974 (A12-33) are recorded. The nightly has been green every night since 2026-11-07 (13 runs, about 31 minutes); the two red ones of 2026-11-05 and 06 are A12-24.
+* **Release workflow and checklist.** Read against `package_release.py` (the smoke test, the Integration check, the VC runtime requirement, `--allow-mismatch`), `UpdateChecker.cpp` (tags accept `-rc1` style suffixes, so the checklist's tag form is the common case, not a rule the code enforces), and the runs of v1.0 to v1.3. The checklist's step numbers, job names, counts (95, 110, fifteen binaries), label pattern and artifact names match the workflows. Steps 1, 2, 12, 13, 20 and 29 are enforced by nothing (A12-42 stays open); step 12 is not met today, since master's sanitizers job is red (A12-46). A12-42 (6) is fixed (A12-50).
+* **Docs.** `REVIEW_PROGRAM.md`'s CI table had drifted (A12-49).
+
+### 3. Changes
+
+`DecompilerRunnerTests.cpp` (baseline wait 240 s, A12-46); `check-literal-size.py` and the vendored-tree job's sparse checkout (A12-47); the bundle check in `saturn-explorer-verify.yml` (A12-48); `REVIEW_PROGRAM.md` (A12-49); `timeout-minutes` in the release workflow (A12-50); two cases in `test-sanitizer-harness.sh` (A12-51); four tests added to `SE_ROSETTA_TESTS` (A12-38, partly). The open P3s A12-40, A12-43 and A12-44 were left: A12-40 (1) needs a sanitizers trial run, A12-43 would turn the nightly red on the open area 7 rows, A12-44 adds a Release build to the bundle job and wants a macOS trial.
+
+### 4. Validation
+
+`bash -n` on the scripts; the harness self-test passes, 21 cases (`shellcheck` is not installed here); the three workflow files parse as YAML; `check-literal-size.py` on the full tree prints `ok (7 raw strings in 315 files)` and exits 2 for a missing directory; the bundle loop was tested with a fake `otool` (clean 0, leak 1, no glob 1); the count and built-check scripts ran against the configured tree. The runner test was not built (a one-literal change that only lengthens a wait). Not verified: any workflow change on a hosted runner, and the four Rosetta additions (about 3 to 6 minutes; the targets build in the sanitizers and arm64 jobs).

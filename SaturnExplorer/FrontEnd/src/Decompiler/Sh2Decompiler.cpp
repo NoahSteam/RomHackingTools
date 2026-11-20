@@ -478,7 +478,6 @@ public:
         mKeptSeen = false;
         mUnkeptSeen = false;
         mUnkeptSites.clear();
-        mInnerSeen = false;
         mHanded = 0;
         mEntryRead = 0;
         std::map<uint32_t, State> in;
@@ -1693,7 +1692,6 @@ private:
                 auto f = s.vars.find(KeyOf(mReg[r]));
                 if (f == s.vars.end()) continue;
                 f->second.innerChanged |= 1u << r;
-                mInnerSeen = true;
             }
         }
         // (area 3, A3-210) ...and, for the caution's "read after it", what this inner call reads of the walked function's entry values (the
@@ -2688,6 +2686,24 @@ private:
             // joined with the bytes stored, a value computed from r0 (the engine reads `in_r0` to build it), not r0 left alone. Clobber's
             // rule for a word that may still hold what it held (a store through an address not known) takes r0 there for r0 untouched.
             std::set<int64_t> partR0;
+            // (area 3, round 35, A3-249) The registers whose entry value a word may hold (a saved register's push, a word an inner call's model wrote
+            // over, a join with the entry value on one side), before a partial store at its exact address: the store did reach the word and wrote
+            // other bytes into it, so the word popped back is not that entry value on any path that runs it. Clobber leaves the word as one that
+            // may still be the entry value (a store through an unknown address may have missed it), which the caution does not say.
+            std::map<int64_t, uint32_t> enteredBefore;
+            if (n != 4)
+            {
+                for (int64_t w = addr.v & ~int64_t(3); w < addr.v + n; w += 4)
+                {
+                    auto f = s.slots.find(w);
+                    if (f == s.slots.end()) continue;
+                    const Value& was = f->second;
+                    uint32_t may = was.mayEntry & ~was.stale;
+                    if (SavedRegister(was)) may |= 1u << was.v;
+                    if (was.kind == Value::Fuzzy && was.def == Value::kJoin) may |= was.entryJoin & ~was.stale;
+                    if ((may & kModelKept) != 0) enteredBefore[w] = may & kModelKept;
+                }
+            }
             if (n != 4)
             {
                 // Part of a word: it holds what it held and part of this.
@@ -2714,6 +2730,8 @@ private:
                         slot.second.carried = slot.second.carried || value.carried;
                         slot.second.joined = slot.second.Joined() || value.Joined();
                         slot.second.keepsR0 = slot.second.KeepsR0() || value.KeepsR0();
+                        const auto e = enteredBefore.find(slot.first);
+                        if (e != enteredBefore.end()) slot.second.innerChanged |= e->second;   // (A3-249)
                     }
             return;
         }
@@ -3111,10 +3129,43 @@ private:
                     mEntryRead |= EntryOf(Get(s, vn));
                 }
             uint32_t inner = 0;
-            if (mInnerSeen && op.hasOut && op.code != ghidra::CPUI_LOAD && op.code != ghidra::CPUI_CALL && op.code != ghidra::CPUI_CALLIND &&
+            // (A3-245) Not gated on an inner call having marked a register: A3-243's marks (Clobber keeping a pushed join's change, a constant
+            // step of a mayEntry word) are made without one, and an op after them (`extu.b r13,r13` after the pop) dropped the mark.
+            if (op.hasOut && op.code != ghidra::CPUI_LOAD && op.code != ghidra::CPUI_CALL && op.code != ghidra::CPUI_CALLIND &&
                 op.code != ghidra::CPUI_CALLOTHER)
                 for (const ghidra::VarnodeData& vn : op.in)
                     if (vn.space->getType() != ghidra::IPTR_CONSTANT) inner |= Get(s, vn).innerChanged;
+            // (area 3, round 34, A3-246) A word that may still hold a register's entry value (Value::mayEntry), put through an op that gives another
+            // value for any nonzero operand (xor, or, and, negate, not, a shift by a constant, a product, a part of the word and its extension): the step A3-243 marks for add and subtract.
+            // The result is the register's change on the paths that run it (`not r10` after the epilogue's pop). Marked as an inner call's change is.
+            uint32_t stepped = 0;
+            if (op.hasOut)
+            {
+                const bool shift = op.code == ghidra::CPUI_INT_LEFT || op.code == ghidra::CPUI_INT_RIGHT || op.code == ghidra::CPUI_INT_SRIGHT;
+                const bool unary = op.code == ghidra::CPUI_INT_2COMP || op.code == ghidra::CPUI_INT_NEGATE;
+                const bool binary = op.code == ghidra::CPUI_INT_XOR || op.code == ghidra::CPUI_INT_OR || op.code == ghidra::CPUI_INT_MULT ||
+                                    op.code == ghidra::CPUI_INT_AND;
+                // (a part of the word, `extu.b r10,r10` is a zero-extension of one: the narrowing is the step, its zero-extension carries it on)
+                const bool part = op.code == ghidra::CPUI_SUBPIECE || op.code == ghidra::CPUI_INT_ZEXT || op.code == ghidra::CPUI_INT_SEXT;
+                if ((shift || unary || binary || part) && op.in.size() >= 1)
+                {
+                    bool zeroOperand = false;
+                    uint32_t may = 0;
+                    for (size_t k = 0; k < op.in.size(); ++k)
+                    {
+                        if (op.in[k].space->getType() == ghidra::IPTR_CONSTANT)
+                        {
+                            if (!part) zeroOperand = zeroOperand || (op.in[k].offset == 0 && (k > 0 || binary)) ||
+                                                  (op.code == ghidra::CPUI_INT_AND && op.in[k].offset == (op.out.size >= 8 ? ~0ull : ((1ull << (8 * op.out.size)) - 1)));
+                            continue;
+                        }
+                        const Value v = Get(s, op.in[k]);
+                        if (v.kind == Value::Imm) { zeroOperand = zeroOperand || (v.v == 0 && (k > 0 || binary)); continue; }
+                        if (v.kind == Value::Fuzzy && (k == 0 || binary)) may |= v.mayEntry & kModelKept & ~v.stale;
+                    }
+                    if (!zeroOperand) stepped = may;
+                }
+            }
             bool falls = true;
             switch (op.code)
             {
@@ -3553,6 +3604,11 @@ private:
                 auto f = s.vars.find(KeyOf(op.out));
                 if (f != s.vars.end()) f->second.innerChanged |= inner;
             }
+            if (stepped != 0)
+            {
+                auto f = s.vars.find(KeyOf(op.out));
+                if (f != s.vars.end() && f->second.kind == Value::Fuzzy) f->second.innerChanged |= stepped;
+            }
             if (falls && fallTo(i + 1, s)) work.insert(i + 1);
         }
         if (at[n].reached) succ.emplace_back(next, Leaving(std::move(at[n])));
@@ -3650,7 +3706,6 @@ private:
     bool mFrameOut = false;     // (area 3 round 12 fix) a possible frame address went out to code that may keep it (HandOut)
     bool mKeptSeen = false;     // (area 3, A3-192) a call marked a register Value::kept in this run
     bool mUnkeptSeen = false;   // (area 3, A3-197) ...and one of r8-r14 Value::unkept
-    bool mInnerSeen = false;    // (area 3, A3-207) a walked callee's inner call marked a register Value::innerChanged
     std::map<uint32_t, uint32_t> mUnkeptSites;   // (A3-197) UnkeptSites
     std::map<uint32_t, uint32_t> mLostSites;     // (A3-214) LostSites
     uint32_t mHanded = 0;       // ...and, of a walked callee, the registers it lets out or writes through (CalleeHanded)
@@ -5839,7 +5894,10 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                 for (uint32_t l : pv.later)
                 {
                     const uint32_t partition = l >> 29;
-                    if (partition == 2 || partition == 3 || partition == 5)
+                    // (A5-171: ...and the on-chip registers' page: a pointer whose first values are the join of a register's address and the
+                    // values after one turn (`p = (p + 4) ^ 0x20000000` from 0xFFFFFF70 holds 0xDFFFFF74 first, a do-while's exit) names no register
+                    // near, and the later turns reach SH2_SAR0, a long register a byte read returns bits 15-8 of: grammar 1 seed 12506097)
+                    if (partition == 2 || partition == 3 || partition == 5 || (partition == 7 && IsHardwareRegion(l)))
                     {
                         say = true;
                         sayAt = l;
