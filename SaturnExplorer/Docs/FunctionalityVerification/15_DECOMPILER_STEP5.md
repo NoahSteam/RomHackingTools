@@ -24623,3 +24623,4 @@ Stays open: the drafts are in the record, nothing was filed (none can be from he
 ### 6. Runs
 
 EOF
+`ctest --test-dir build -j1` (RelWithDebInfo, `-j2`, `ulimit -v 3500000`) after the final build: `100% tests passed, 0 tests failed out of 117`. `check-vendored-tree.py lint`: `vendored tree: ok (lint)`. `check-literal-size.py`: `raw string sizes: ok (7 raw strings in 341 files)`. `git status` clean under `third_party/` after every mutant.
