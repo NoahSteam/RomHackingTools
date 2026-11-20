@@ -24342,3 +24342,45 @@ External review of PR #70 found that `tools/a3_round35/run.sh` printed `findings
 **Fix.** `run.py` now accepts a run only when it printed `N finding(s)` and either exited 0 with `all passed` and no CHECK, or exited 1 with N > 0 and exactly the one CHECK `rep.findings.empty()` (how the generator reports findings). Any other outcome prints the child's lines and `RUN FAILED`, and exits non-zero. Such outcomes include a crash, a `timeout` (124), another CHECK, a missing summary, or a fixture that does not assemble. `run.sh` runs with `pipefail`, prints `<fixture>: FAILED`, and exits 1 if any fixture failed. `selftest.sh` substitutes four failing generators: a CHECK with exit 42, exit 124, exit 0 with no summary, and exit 1 with a CHECK other than the findings one. It passes with the new runner and fails all four with the old one.
 
 **Did it hide a recorded result?** All 82 fixtures were rerun through both runners. 80 summaries are byte-identical. Two fixtures, x7 and p6, never ran: they used `mov.b Rm,@(disp,r15)` with Rm not r0, which SH-2 does not encode. The old runner showed them as `findings none`. Neither is cited in the round 35 section. They now store through a copy of r15. Each gives a "may change" note and no finding, which is A3-249's stated residual (a partial store of the same bytes) and A3-252's class.
+
+## Area 3, A3-250 and A3-251
+
+Branch `review/3-fix250b` from master (90d3f88a, round 35 merged), merged with 39fc934e (A3-254, the runner fix) before the last commit. RelWithDebInfo, `-j2`, `ulimit -v 3500000`. Two open P2 rows of round 35, both fixed in `Sh2Decompiler.cpp` (`Load`, `StoreThrough`, `Call`); pins in the A3-250 and A3-251 blocks of `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`). The product's code comments call this change "round 36".
+
+### 1. A3-250: a register changed by a load, read as no change
+
+**Cause.** `SureChanged` (A3-199's rule) takes a value read from memory with the register among its origins as no change for certain, since the memory may hold the register's entry value. The origins of a value loaded from untracked memory carry every register the address was made from (`taint`, kept for the pointer-provenance rules of A3-83) and every register a callee's model may have let out (`mLeaks`), and a load through a pointer that may be the frame takes every register (`FreeStack`: kAnything). So `mov.l @r10,r10`, `mov.l @r10+,r10` (the address names r10), a changed value stored through a pointer and loaded back (q1, q2, q5, q6), and a constant stored and loaded back after a pop of r10 (q7: the pointer is a call's returned r4, which names every register) all read as "may be the entry value", and no mark was made (a LOAD is excluded from the mark's propagation).
+
+**Evaluation of the proposed patch.** The idea (a pointer base is not a read of the register's old value as data) is right, but a separate data-origin set on the value is lost at the first op after the load (`mov.l @r10,r10 ; add #4,r10` would still read as maybe-entry). The change instead says the fact in the mark A3-243 and A3-245 already carry through every op and join: `Value::innerChanged`.
+
+**Fix.** Two marks on the value a load gives (`Load`), both `innerChanged` for registers of r8-r14, GBR, VBR:
+
+* `viaAddress`: the registers the address was made from that this function itself stored no value made from to memory (`mOwnLeaks`, set in `StoreThrough` for the function's own stores, not for a callee's model of what it may let out: that set names every word above the callee's r15 and so the push of r10, which left q7 unmarked). l1, l2, l3, q7.
+* `mLeakChanged`: the marks of a value the function stores through a pointer into untracked memory, given to a later load. q1, q2, q5, q6.
+
+A frame slot read at an exact address is unchanged (the slot's value keeps its marks). A narrowing of `FreeStack`'s origins to the words at or above r15 was tried (a temporary switch) and no fixture needed it, so it is not in the change.
+
+**Evidence** (`tools/a3_round35` fixtures l1 to l3, q1, q2, q4 to q8; the pins hold the words). Old code, run by `run.sh` (the first line of each): l1, l2, l3, q1, q2, q5, q6, q7 `n:caution-unsaid`, no note; q4 no note; q8 `caution r10`. New code: all eight said (`caution r10@06009020`), no finding; q4 no note, no finding (`caution.notes=0`); q8 said. Mutation (temporary switches, not committed): `viaAddress` off fails l1, l2, l3, q7 (as printed 1 finding, said 0); `mLeakChanged` off fails q1, q2, q5, q6; both off fails all eight; the two controls pass in every setting. A shape the pins do not move: the function stores a value made from r10 to untracked memory and then loads through r10 into r10 (q4's own store): not marked, since the store may have put r10's entry value there.
+
+**Expected changes in game code text** (the local corpus is not in the repository; the coordinator's comparison should show only these): a caution "this call may change rN" (N in 8 to 14, GBR, VBR), where the text reads rN after the call, at a call of an unlent callee that (a) leaves rN holding a word it loaded through an address made from rN's entry value (a pointer chase in a callee-saved register that is not restored: `mov.l @r10,r10`, `mov.l @r10+,r10`, `mov.l @(4,r8),r8`) or (b) round-trips a changed value through a pointer (stores it, then loads it into the register) after the register's entry value was popped, or loads a word through a returned or maybe-frame pointer into a callee-saved register that the callee does not restore (q7). A callee that restores the register from its push (the usual epilogue, an exact slot) is unchanged. No change to any statement, prototype, or ledger; only `/* this call may change ... */` notes (and the same words in the `likewise` forms).
+
+### 2. A3-251: GBR changed, the text names r12 only
+
+**Cause (product).** Seed 13102045, grammar 2 deep: the first call's callee chain (two tail-jumping thunks, then F3) changes r12 and GBR (`CalleeChanged` 0x21000 at both calls, confirmed with a temporary print; the marks were put on both). The caller then copies GBR to r3 (`stc gbr,r3`) and calls again; F3 branches on r3 (`tst r3,r3 ; bt`), which is where the runs part (06009084). `Call` puts the caution at an earlier call whose callee changed a register for the registers a later callee reads as it finds them: r2 and r4-r7, those it stores below or hands on, and (A3-222) the registers of r8-r14, GBR and VBR that it reads on entry (`CalleeEntryRead & kModelKept`). r3 (and r0, r1) is none of these: no convention hands it, and a branch on it stores and hands nothing, so GBR's mark sat unused in r3, while r12's was used by the callee's `mov.l @r12+,r2`. The row's discriminators (`tas.b @r5`, `ldc r5,gbr`, `ldc r1,gbr`) decide only which reads the walk of F3 records; h4 to h11 were said because their later callee stores r3 (a hand-on). The oracle was right.
+
+**Fix.** `CalleeEntryRead(target) & (kModelKept | 0xB)`: r0, r1 and r3 as well. The mark is read only at a call whose callee does read the register on entry, so a scratch register the callee overwrites first is not read (`CalleeEntryRead` is the entry value as read, A3-210).
+
+**Evidence.** Old code: whole seed `required 2, said 0, deep 1` (`n:caution-unsaid-deep`, `caution.unsaid.deep.own-effect`); shrunk replay (a word-by-word shrinker, not committed: each word set to a nop kept while the old code shows the finding and the new code none; 23 words remain) `said 0, deep 1`. New code: the note reads "may change r12 and gbr", no finding. With the change off by a temporary switch both pins fail, and on they pass. The shrunk program does not return in some input modes, so its pin tests that no `caution-unsaid` finding is raised and the counts (required 1, said 1, deep 0), not that the finding list is empty.
+
+**Expected changes in game code text:** a caution naming a register of r8-r14, GBR or VBR at a call, where its copy is in r0, r1 or r3 and a later call's callee reads that scratch register on entry (a condition, an index, a store's value). Notes only.
+
+### 3. Sweeps and runs (`SE_GENERATED_CANARY=0`, `SE_GENERATED_PINS=0` for the ranges)
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep` | 13,100,001, 10,000 seeds | failing seeds=1, findings=2 (603 s): 13103591 `n:` and `v:map-copy-store` (area 7, A3-253, already routed). 13102045 is gone (round 35: 2 failing seeds). The same range with only A3-250 in the code: the same two seeds, so A3-250 adds nothing |
+| Grammar 1 | 13,200,001, 10,000 seeds | failing seeds=0, findings=0 (532 s) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | | 1 on, 10,000 of each grammar: failing seeds=0, findings=0 (652 s, canary 240 programs, 0 failing; the A3-250 and A3-251 pins in it) |
+| `ctest --test-dir build -j1` | | RelWithDebInfo: 117 of 117 passed (612 s) |
+
+`check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include`: raw string sizes ok (7 raw strings in 315 files). No C++ feature beyond what the file already uses. Not run: the local game corpus (not in the repository), the sanitizer jobs (CI).
