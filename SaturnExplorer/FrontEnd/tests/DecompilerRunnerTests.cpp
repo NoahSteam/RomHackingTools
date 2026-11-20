@@ -313,7 +313,10 @@ bool MeasureBaselines(DecompilerRunner& runner, double waitSeconds, bool timeout
 void TestBaselines()
 {
     DecompilerRunner runner(gConfig, Generous());
-    MeasureBaselines(runner, 60.0);
+    // Not the flat 60 s: the baselines are the first, cold runs of the three big fixtures, and under ASan on a shared runner
+    // the straight one outlasted 60 s (master c0189bbc, the sanitizers job): the wait ended, no baseline was taken and
+    // five later checks failed against the empty one (A12-46, the class of A12-33). Four minutes is still only a hang catch.
+    MeasureBaselines(runner, 240.0);
 }
 
 // A6-46: a baseline wait that times out returns with the worker stopped and the observer cleared, not running on beside

@@ -195,11 +195,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # The raw-string check below scans FrontEnd, Drivers and include, so those are checked out whole (A12-46: with only
+      # FrontEnd/tests and the vendored directory the others were not there and the step passed having read none of them).
       - uses: actions/checkout@v4
         with:
           sparse-checkout: |
-            SaturnExplorer/FrontEnd/third_party/ghidra-decompiler
-            SaturnExplorer/FrontEnd/tests
+            SaturnExplorer/FrontEnd
+            SaturnExplorer/Drivers
+            SaturnExplorer/include
             .github/scripts
 
       - name: Read the pinned commit
