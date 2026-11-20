@@ -19,37 +19,88 @@ LIMIT = 16000   # a margin under MSVC's 16,380 (CRLF checkouts lengthen a piece 
 
 
 def raw_strings(text):
-    """Yield (line, byte length) for each raw string literal, scanning linearly.
+    """Yield (line, byte length) for each raw string literal, scanning linearly as a C++ lexer would.
 
-    An opener with no closing delimiter yields (line, None): the rest of the file cannot be scanned, and stopping
-    silently let any long raw string after it pass (A12-56).
+    Comments, ordinary string and character literals, identifiers and numbers are skipped first, so `R"x(` in a
+    comment or in an ordinary string is not taken for an opener (a documentation comment that shows one is valid C++).
+    A real opener with no closing delimiter yields (line, None): the rest of the file cannot be scanned, and stopping
+    silently let any long raw string after it pass (A12-57).
     """
     i = 0
     n = len(text)
-    while True:
-        i = text.find('R"', i)
-        if i < 0:
-            return
-        # an identifier character before R makes it something else (e.g. uR" is still raw; FOOR" is not)
-        prev = text[i - 1] if i > 0 else ' '
-        if prev.isalnum() and prev not in 'uUL8' or prev == '_':
-            i += 2
-            continue
-        open_paren = text.find('(', i + 2, i + 2 + 17)
-        if open_paren < 0:
-            i += 2
-            continue
-        delim = text[i + 2:open_paren]
-        if any(c in delim for c in ' \\)\t\n"'):
-            i += 2
-            continue
-        close = text.find(')' + delim + '"', open_paren + 1)
-        if close < 0:
-            yield text.count('\n', 0, i) + 1, None
-            return
-        body = text[open_paren + 1:close]
-        yield text.count('\n', 0, i) + 1, len(body.encode('utf-8')) + body.count('\n')
-        i = close + len(delim) + 2
+    raw_prefixes = ('R', 'uR', 'UR', 'LR', 'u8R')
+    plain_prefixes = ('u', 'U', 'L', 'u8')
+
+    def line_of(pos):
+        return text.count('\n', 0, pos) + 1
+
+    def skip_quoted(j, quote):
+        # j is just past the opening quote; returns the index past the closing one (or the end of the line)
+        while j < n:
+            c = text[j]
+            if c == '\\':
+                j += 2
+                continue
+            if c == quote:
+                return j + 1
+            if c == '\n':
+                return j   # an unterminated ordinary literal does not compile; leave it to the compiler
+            j += 1
+        return n
+
+    while i < n:
+        c = text[i]
+        if c == '/' and i + 1 < n and text[i + 1] == '/':
+            # a line comment, continued past a newline by a trailing backslash
+            j = i + 2
+            while j < n:
+                if text[j] == '\n' and text[j - 1] != '\\':
+                    break
+                j += 1
+            i = j
+        elif c == '/' and i + 1 < n and text[i + 1] == '*':
+            j = text.find('*/', i + 2)
+            i = n if j < 0 else j + 2
+        elif c == '"' or c == "'":
+            i = skip_quoted(i + 1, c)
+        elif c.isdigit() or (c == '.' and i + 1 < n and text[i + 1].isdigit()):
+            # a pp-number, digit separators (1'000) and exponent signs included
+            j = i + 1
+            while j < n:
+                d = text[j]
+                if d.isalnum() or d in '._':
+                    j += 1
+                elif d == "'" and j + 1 < n and text[j + 1].isalnum():
+                    j += 2
+                elif d in '+-' and text[j - 1] in 'eEpP':
+                    j += 1
+                else:
+                    break
+            i = j
+        elif c.isalpha() or c == '_':
+            j = i + 1
+            while j < n and (text[j].isalnum() or text[j] == '_'):
+                j += 1
+            word = text[i:j]
+            if j < n and text[j] == '"' and word in raw_prefixes:
+                open_paren = text.find('(', j + 1, j + 1 + 17)
+                delim = text[j + 1:open_paren] if open_paren >= 0 else None
+                if delim is None or any(ch in delim for ch in ' \\)\t\n"'):
+                    i = skip_quoted(j + 1, '"')   # not a valid raw string: the compiler will say so
+                    continue
+                close = text.find(')' + delim + '"', open_paren + 1)
+                if close < 0:
+                    yield line_of(i), None
+                    return
+                body = text[open_paren + 1:close]
+                yield line_of(i), len(body.encode('utf-8')) + body.count('\n')
+                i = close + len(delim) + 2
+            elif j < n and text[j] in '"\'' and word in plain_prefixes:
+                i = skip_quoted(j + 1, text[j])
+            else:
+                i = j
+        else:
+            i += 1
 
 
 def main(argv):
