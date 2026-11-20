@@ -79,10 +79,10 @@ struct InsnLink                 // 8 bytes; plain data, C++14
 {
     uint32_t addr = 0;          // canonical
     LinkRole role = LinkRole::Value;
-    uint8_t flags = 0;          // kLinkCandidate, kLinkBadData, kLinkPartial (writes some of the displayed bytes)
+    uint8_t flags = 0;          // kLinkCandidate, kLinkBadData, kLinkPartial (writes some of the displayed bytes), kLinkHalt (where flow stopped; not an effect)
     uint16_t span = 0xFFFF;     // token index in its line; 0xFFFF = the statement as a whole
 };
-enum class StatementKind : uint8_t { None, Store, Assign, Branch, Call, Return, Label };
+enum class StatementKind : uint8_t { None, Store, Assign, Branch, Call, Return, Halt, Label };
 struct Statement
 {
     uint32_t firstLine = 0, lineCount = 0;   // a statement can wrap
@@ -143,12 +143,29 @@ made it. The definition is the engine's own `Funcdata::flowOps` (`funcdata.hh:15
 the host's separate `opsEnd` (`Sh2Decompiler.cpp` around 6253 at `c58849ae`); step 1 asserts once that the two agree,
 including ops made between `generateOps` and the hook such as the artificial halt RETURN (`flow.cc:621`).
 
+**Artificial halts first.** A RETURN is not always a return. `FlowInfo::artificialHalt` (`flow.cc:613`) makes a
+`CPUI_RETURN` marked with a halt type (`PcodeOp::getHaltType`, `op.hh:183`): `halt`, `badinstruction`,
+`unimplemented`, `noreturn` or `missing`. `checkForFlowModification` (`flow.cc:689`) puts a `noreturn` one at a
+non-returning **call's** address, and `PrintC::opReturn` prints the printed kinds as `halt()`, `halt_baddata()`,
+`halt_unimplemented()` or `halt_missing()`, not as a return (the A7-6 fixture prints `halt_baddata()` at an odd
+location). So a RETURN is classified by its halt type **before** the op-code rule below:
+
+| Halt type | Statement | Link |
+|---|---|---|
+| none | `Return` | `Effect` at the `rts`/`rte` (by op-code, or through the Clone record for a cloned return) |
+| `badinstruction` | `Halt` | `kLinkBadData` at the word, as today's A7-12 text; never `Effect` |
+| `halt`, `unimplemented`, `missing` | `Halt` | `kLinkHalt` at the address where flow stopped; never `Effect`, and never counted as a return |
+| `noreturn` | not printed (`notPrinted`); the call's own statement keeps its `Effect` at the `jsr`/`bsr` | none for the halt op |
+
+Step 1's fixtures include a non-returning call, a bad-data halt (A7-6), a missing and an unimplemented halt, with
+ordinary and cloned returns as controls; the census reports halt statements by type.
+
 **Time alone is wrong for cloned ops, and op-code beats time for effects.** `CloneBlockOps::buildOpClone`
 (`funcdata_block.cc:1008`) gives a clone a new time at the same address, and `ActionReturnSplit` runs it on shared
 epilogues, which SH-2 code has everywhere; `CloneBlockOps::cloneExpression` (from `RuleConditionalMove`,
 `ruleaction.cc` around 9716) and `nodeSplit` are other clone sources. A cloned STORE, CALL, RETURN or folded-store
 COPY read by time as engine-made would be walked back to a different flow store: a wrong primary, P2. So a STORE,
-CALL, BRANCH or RETURN op is an `Effect` at `InstructionOf(op)` **whatever its time**, and a cloned COPY that was a
+CALL, BRANCH or non-halt RETURN op is an `Effect` at `InstructionOf(op)` **whatever its time**, and a cloned COPY that was a
 folded store needs the Clone record of the engine patch below (which is why that record is in the first version).
 
 | Printed op | Link | Recoverable today? |
@@ -165,13 +182,27 @@ folded store needs the Clone record of the engine patch below (which is why that
 | Two flow stores merged into one (`RuleDoubleStore`, `double.cc` around 3533) | both instructions, `Effect` with `kLinkPartial` (the new STORE has the later one's address) | Needs the merged pair recorded; until then the later is proven and the earlier is a candidate |
 | One store split in two (`prefersplit.cc:411`, `subflow.cc:2944`) | each keeps its instruction | Yes |
 
-**Stores.** For an engine-made statement on a memory variable, walk the SSA from its output: backwards through
-engine-made ops in the same storage (COPY, MULTIEQUAL, INDIRECT; PIECE and SUBPIECE with the byte range narrowed) to
-flow stores (the statement shows again a value a store wrote: A7-11, A7-15, A7-25), and forwards through
-non-printing ops to a flow store (the statement is the store's value put on a path ahead of it: A7-19, A7-35, where
-the shared store's COPY survives as a copy inside one variable). Bounded: at most 64 ops and 8 links, more is
-`Unknown`. A link found this way is proven; it names the store by identity, so "the store of another value" (A7-23,
-A7-35, A7-41, A7-44, A7-84) cannot be chosen. Where a PIECE joins two stores (`CONCAT11(in_r2,in_r1)`, A7-77), both
+**Stores.** For an engine-made statement on a memory variable, walk the SSA from its output: backwards to flow
+stores (the statement shows again a value a store wrote: A7-11, A7-15, A7-25), and forwards to a flow store (the
+statement is the store's value put on a path ahead of it: A7-19, A7-35, where the shared store's COPY survives as a
+copy inside one variable). Bounded: at most 64 ops and 8 links, more is `Unknown`.
+
+**What makes a link proven.** Def-use reachability alone is not proof that a store writes the displayed value. A
+walk link is **proven** only if every edge on its path preserves the displayed bytes, from these:
+
+| Edge | Allowed for a proven link |
+|---|---|
+| COPY in the same storage, same size | yes |
+| INDIRECT whose effect op is a call or guard that does not write these bytes (input 0 passes through) | yes |
+| PIECE / SUBPIECE | yes, with the byte range narrowed to the displayed bytes; a store that writes only some of them is `kLinkPartial` |
+| MULTIEQUAL, walking **backwards** | yes, and the result is one `Effect` per input path (several effects, section 2); a path whose input is not a flow store makes the whole answer candidates |
+| MULTIEQUAL, walking **forwards** (a store after a join) | no: the store may write another arm's value. The link is `kLinkCandidate` |
+| INDIRECT whose effect op may write these bytes, any arithmetic, CAST, INT_ZEXT/SEXT, a load | no: the walk stops; what it found so far is `kLinkCandidate` |
+
+So a statement on one arm of an `if` is never given the other arm's store as a proven effect: the only path between
+them crosses a join forwards. Where the proof is incomplete the panel says "candidates", which the policy accepts;
+it never names a proven primary it cannot prove. A link proven this way names the store by identity, so "the store of
+another value" (A7-23, A7-35, A7-41, A7-44, A7-84) cannot be chosen. Where a PIECE joins two stores (`CONCAT11(in_r2,in_r1)`, A7-77), both
 are `Effect` links with `kLinkPartial`.
 
 **What is lost, and the optional engine patch.** When a folded store's COPY is destroyed (its readers were given its
@@ -217,7 +248,7 @@ instruction, over the four corpus dumps and the generator's pins.
 | 2b | (if the count passes the threshold) the Twin, Merged and Forwarded records | | +80 engine, patch record | the count falls below the threshold; vendored lint and reproduction job pass |
 | 3 | `ForwardLookup`, `ReverseLookup`, `LinkCursor`; the panel, hover text and menu use them; the fallback label. **The old fields stay authoritative**: the old oracle still judges them, and the new functions are added beside them, not derived into them | `LineInstructions`, `LineOriginText`, `InstructionLineIndex` | +350, -200 | panel tests; new contract checks (section 5) run beside the old oracle |
 | 4a | Delete (i) `MarkMaterialisedReads` and the A7-145 block; (ii) `RetargetTwinExtensions`, `RetargetHoistedConversions`, `RetargetInputOperandToStore`, `MoveDrawnTokens`; (iii) `AddJoinConstantTokens`, `MovtNumber`; one commit each, diffing dumps before and after | the passes | -345, -620, -330 | the pins of each pass's rows hold under the contract; pins are rewritten only under section 7's rule (question 7) and listed |
-| 5 | Oracle: remove the value reconstruction and the rules tuned to it; keep structure, coverage, the contract and the one value check of section 5; rebase the mutations. **Before step 4b**, so a deleted walker is never the only check of its class | 87 rules | 5,945 to about 2,400, with a ceiling of 2,800 | every mutation kind is reported; SE_A7_RULE_OFF list empty |
+| 5 | Oracle: remove the value reconstruction and the rules tuned to it; keep structure, coverage, the contract, the narrowed value check (8) and the execution witness (9); rebase the mutations, including the two-arm join mutation, which must be rejected. **Before step 4b**, so a deleted walker is never the only check of its class | 87 rules | 5,945 to about 2,400, with a ceiling of 2,800 | every mutation kind is reported; SE_A7_RULE_OFF list empty |
 | 4b | Delete (iv) `AddFrameStoreTokens` and (v) the value walkers, **split by statement kind** (stores at a call, at a return, at a block's end, frame stores; then each walker once unused), one commit each with dumps diffed | the rest | -1,750, -1,890, in about six commits | as 4a |
 | 6 | Remove the old fields; acceptance per the policy (two clean rounds, the overnight run) | `Token::addr` and friends | -150 | policy's done criterion |
 
@@ -226,13 +257,14 @@ in step 4a or 4b, after its shadow has run beside it on the corpus and the pins.
 -3,100 oracle lines. Effort: the first draft said 12 to 16 working days on one track; given the pin tables, plan for
 more, and re-estimate after step 1's census.
 
-**Step 1's census**, per corpus image (alone and lent) and per grammar over 20,000 seeds. The thresholds are a
-proposal to be adjusted once the first census exists, not derived from data:
+**Step 1's census**, per corpus image (alone and lent) and per grammar over 20,000 seeds. The thresholds are
+provisional degradation budgets, to be adjusted once the first census exists, not derived from data. Zero
+unexplained changes on a P2-pinned row takes precedence over every percentage:
 
 | Measure | Threshold |
 |---|---|
 | Printed ops by flow, engine-made and cloned, crossed with op-code | report only |
-| Store statements with a surviving flow op or folded COPY | go at 95% or more; below 85%, rework section 3 before step 2 |
+| Store statements with a surviving flow op or folded COPY | go at 95% or more. 85 to 95%: go only with a written per-class account of the missing stores and step 2b scheduled, not optional. Below 85%: rework section 3 before step 2 |
 | Engine-made statements where the bounded walk finds a store, candidates, or nothing | go if candidates or nothing is 2% or less of the lines that name a store today; 2 to 10% requires step 2b; above 10%, stop and rework |
 | Lines on a P2-pinned row where the new `Effect` differs from today's click target | zero unexplained |
 | Clone-made effect ops | any non-zero count confirms the Clone record (already in step 1) |
@@ -252,7 +284,8 @@ Checks, all on the pure functions the panel calls:
    GBR-relative with a known GBR, or absolute through a literal; the engine's access record (`accessFates`,
    `accesses`) is used only for a register-indirect target, so the oracle does not grade the product with the
    product's own evidence; a `Branch`'s is a branch, a
-   `Call`'s a call or jump, a `Return`'s an `rts` or `rte`. A delay slot's statement links the slot, not the branch.
+   `Call`'s a call or jump, a `Return`'s an `rts` or `rte`; a `Halt`'s link is `kLinkBadData` or `kLinkHalt` and
+   never `Effect`. A delay slot's statement links the slot, not the branch.
 3. **Effect first.** `ForwardLookup` of a statement with a proven effect returns it first; `ReverseLookup` of an
    instruction returns the lines it is the effect of before any other.
 4. **Reverse is complete.** Every line with a link to an instruction is in its reverse answer, and `LinkCursor`
@@ -272,21 +305,30 @@ Rules that become unnecessary: `firstAddrWrong`, the address-set round trip (`ro
 `numberAtSlotBranch`, with `WrittenValue`, `RegisterBefore`, `MemoryBefore`, `SlotBefore`, `RegisterMakers`,
 `PossibleBits`, `EdgeImpossible`, `TBefore` (lines 430 to 2090).
 
-8. **One value check, narrowed: another store of the same variable.** The one gap of checks 1 to 7 is the P2 class
-   of A7-23 and A7-35. `storeValueOther` stays, limited to straight-line code within one block, where the value is
+8. **One value check, narrowed: another store of the same variable.** The gap of checks 1 to 7 is the P2 class of
+   A7-23 and A7-35. `storeValueOther` stays, limited to straight-line code within one block, where the value is
    decidable from the words alone and the check has had no false alarms; its join walks (the source of most of the 62
-   `map-const-join` false alarms) are removed. A witness from executing the generated program is the better long-term
-   answer and is filed as a follow-up, not part of this plan.
+   `map-const-join` false alarms) are removed.
+9. **Execution witness, across joins** (generated functions). Check 8 does not reach a store on another arm of a
+   join, and pins protect examples, not fresh shapes. The generator already runs each function on the emulator and
+   compiles and runs the printed C on the same inputs (the printed-C oracle). The witness instruments each printed
+   statement on a memory variable to log (line, address, value) and records the emulator's store events (instruction,
+   address, value). For every statement with a **proven** `Effect` link, on every run where the statement executes,
+   the linked instruction must have executed in that run and written the logged bytes. It is bounded (the runs the
+   generator makes anyway), independent of the engine's records and of the product's walk, and it rejects the
+   two-arm mutation below. Candidate links are not checked by it.
 
 The oracle keeps a size ceiling (2,800 lines after step 5) so that it does not grow back into a second
 reconstruction; a new rule that would cross it needs a design note.
 
 Mutations stay meaningful because each check has one that only it reports: a link moved into the middle of an
 instruction or out of the body (1); a store's effect moved to the next non-store, to a store of another variable, or
-a slot's to its branch (2); the effect swapped with a value link, or a `Placement` promoted (3); one line dropped
+a slot's to its branch, or a halt's link promoted to `Effect` (2); the effect swapped with a value link, or a `Placement` promoted (3); one line dropped
 from a reverse answer (4); a fallback relabelled `Exact` (5); today's `tokdrop`, `tokcall`, `toksilent` (6); a
-store's effect moved to **another store of the same variable** in straight-line code (8). Across a join that last
-case passes; the pins of A7-23, A7-35, A7-41, A7-44 and A7-84 hold it by example.
+store's effect moved to **another store of the same variable** in straight-line code (8); and a statement's proven
+effect moved to the store on **another arm of a join** writing a different value to the same bytes, with coverage
+and reverse links kept (9), which checks 1 to 8 all pass. Step 5's acceptance requires that last mutation to be
+rejected on the generated grammars.
 
 Classification of the 261 area 7 rows (264 now; A7-340 to A7-342 are value-walk refinements and a wording fix, in the first class) (`tools/a7_linkmodel/classify_a7.py`, a key-word count, not a new triage):
 
@@ -368,7 +410,8 @@ questions, recorded here as **proposed decisions pending approval**:
    the host, not flagged at a list of sites. Twin, Merged and Forwarded records are built only if more than 2% of
    today's store-named lines become candidates or unknown in step 2.
 3. **A value check.** Keep `storeValueOther` for straight-line code in one block (section 5, check 8); drop the join
-   walks; file an execution witness as a follow-up.
+   walks. The first review filed an execution witness as a follow-up; the second review (below) showed it is
+   required: it is check 9, and it is in place before step 4b deletes the old oracle's walks.
 4. **`Placement`.** Use it to order the way back; show it only as a hover line on a line that also has a proven
    `Effect`; never a click target.
 5. **Roles in the first version.** `Effect`, `Condition`, `Value`, `Placement`. `Condition` is needed so a click on
@@ -381,3 +424,19 @@ questions, recorded here as **proposed decisions pending approval**:
 
 The 12 to 16 day estimate is likely optimistic given the pin tables; re-estimate after step 1. Nothing in area 7's
 product code changes until these decisions are approved.
+
+**Second review (PR #73).** Two changes were required and are made above:
+
+- **Artificial halts.** A halt is a `CPUI_RETURN` (`FlowInfo::artificialHalt`), including one at a non-returning
+  call's address, so the op-code rule alone would claim a return effect that does not exist. Section 3 now classifies
+  a RETURN by its halt type first (`Halt` statements, `kLinkBadData` or `kLinkHalt`, never `Effect`), check 2 says so,
+  and step 1 has non-returning-call, bad-data, missing and unimplemented fixtures with ordinary and cloned returns as
+  controls.
+- **A wrong store across a join.** With check 8 limited to straight-line code, a primary moved to the other arm's
+  store passed every check. Section 3 now defines the edges a proven link may cross (a store after a join, walking
+  forwards, is only a candidate), and section 5 adds the execution witness (check 9) with the two-arm mutation that
+  it must reject before the old walks are deleted.
+
+It also asked that the 85 to 95% survival band be defined (step 1's census now does) and noted that the plan can
+reduce the heuristic tail but does not yet show that it ends it; the census and check 9's results on fresh seeds are
+the evidence that will settle that.
