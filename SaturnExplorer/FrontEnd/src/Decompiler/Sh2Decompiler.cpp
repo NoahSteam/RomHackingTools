@@ -860,10 +860,13 @@ private:
         std::map<Key, Value> vars;         // registers and temporaries; absent = anything
         std::map<int64_t, Value> slots;    // 4-byte stack words by offset; absent = loaded from memory
         // (area 3, round 36, A3-255) The stores this function made on the way here through an address into memory it does not track: the
-        // registers of kModelKept the stored value was made from, and the address (what made it, not its marks). A load through that same
-        // address may read back the entry value stored there (`mov.l r10,@r10 ; mov.l @r10,r10`), so it is no change of those registers
+        // address (what made it, not its marks) and the register of kModelKept whose entry value is the whole word there. A load through that
+        // same address may read back the entry value stored there (`mov.l r10,@r10 ; mov.l @r10,r10`), so it is no change of that register
         // (Load). On the path only: a join keeps what every side has (a store on one path says nothing of a load on another, however the
         // walk happened to order them), and a load through another address (a1: `mov.l r10,@r4 ; mov.l @r10,r10`) reads what it reads.
+        // (round 37, A3-259) An entry stands only while the word is what it was stored as: a later store that may write any of its bytes
+        // (another value at the same address, a narrower one, one through the same register at an offset that overlaps, or through an address
+        // nothing tells from another) or a call (its callee may write any memory) takes it out, and a load of another width is no restore.
         struct OwnStore
         {
             int kind;
@@ -1404,6 +1407,9 @@ private:
     void Call(State& s, uint32_t at, bool targetIsR0 = false, bool haveTarget = false, uint32_t target = 0)
     {
         CallEffects e;   // unknown: anything
+        // (area 3, round 37, A3-259) The callee may write any memory (CallEffects names the registers it stores through, not an absolute address or
+        // a constant stored), so no word a store here put a register's entry value in is known to be that word after it.
+        s.own.clear();
         bool signatureLent = false;
         auto t = mCallAt.find(at);
         if (t != mCallAt.end())
@@ -2815,7 +2821,7 @@ private:
             mHanded |= value.Direct() & kHandedRegs;
         }
         mHanded |= addr.Direct() & kHandedRegs;
-        StoreThrough(s, addr, v, value.Direct(), false, nullptr, INT64_MAX, FrameWriteOf(value), value.innerChanged & kModelKept);
+        StoreThrough(s, addr, v, value.Direct(), false, nullptr, INT64_MAX, FrameWriteOf(value), value.innerChanged & kModelKept, &value, n);
     }
 
     // Whether a callee's stores into this function's words may write a frame address (area 3 round 12 fix): a register it is handed (the
@@ -2833,11 +2839,56 @@ private:
         return w;
     }
 
+    // (area 3, round 37, A3-259) State::own after a store of 'width' bytes of 'value' through 'addr' into memory not tracked: the entries the
+    // store may write into are gone, and the store is itself an entry when it puts one register's entry value, whole, at an address the key tells.
+    // An address of the same register at an offset (an entry register plus a constant) clears the entries that overlap it, one with an index
+    // or a lowered offset every entry of that register; one nothing tells from another (a join, an op the walk gave no maker) clears all.
+    // Another register's address is taken as another word (the runs hand a function disjoint pointers; two arguments that alias are the
+    // accepted residual, A3-261).
+    void NoteOwnStore(State& s, const Value& addr, const Value* value, int64_t width)
+    {
+        State::OwnStore k;
+        const bool keyed = OwnKey(addr, k);
+        int br = -1;
+        int64_t bo = 0;
+        const bool based = addr.RegBase(br, bo);
+        const bool exactBase = based && bo != Value::kLowBase && bo != Value::kHighBase;
+        for (auto it = s.own.begin(); it != s.own.end();)
+        {
+            bool hit;
+            if (!keyed && !based) hit = true;
+            else if (based && it->kind == 100 && it->v == br)
+                hit = !exactBase || (bo < static_cast<int64_t>(it->def) + 4 && static_cast<int64_t>(it->def) < bo + width);
+            else if (keyed && !based && addr.kind == Value::Imm && it->kind == k.kind)
+                hit = k.v < it->v + 4 && it->v < k.v + width;
+            else
+                hit = keyed && it->kind == k.kind && it->v == k.v && it->def == k.def && it->from == k.from;
+            if (hit) it = s.own.erase(it);
+            else ++it;
+        }
+        if (!keyed || value == nullptr || width != 4) return;
+        // The one register whose entry value the word is: a register's entry value itself, or a word that may still be it for no other reason
+        // than that an inner call's model may have written over it (a saved word popped back, Value::mayEntry), or a join one side of which is it
+        // and no side changes it (a loop that saves and restores: the second pass stores what the first one loaded back). Not a value made by an op
+        // (it carries no such bit), nor one SureChanged or an inner call's mark shows changed (a join of the entry value and a constant: loaded
+        // back it is changed on one path, and the load's value does not carry that).
+        uint32_t regs = 0;
+        if (value->kind == Value::Reg && value->v >= 0 && value->v < 32) regs = 1u << value->v;
+        else if (value->kind == Value::Fuzzy && value->part < 0)
+            regs = value->mayEntry | (value->def == Value::kJoin ? value->entryJoin : 0u);
+        regs &= kModelKept & ~value->stale & ~SureChanged(*value) & ~value->innerChanged;
+        if (regs == 0 || (regs & (regs - 1)) != 0) return;
+        if (s.own.size() >= 16) s.own.erase(s.own.begin());   // fewer entries only mark more
+        k.regs = regs;
+        s.own.push_back(k);
+    }
+
     // A store through an address not known exactly, made here or by a callee, of a value from
     // 'stored': recorded in this function's summary, and over every slot it may hit. An absolute
     // address is taken never to be in the stack, as the engine's own stack analysis takes it.
     void StoreThrough(State& s, const Value& addr, uint32_t stored, uint32_t storedDep, bool spare = false, const std::vector<int64_t>* exact = nullptr,
-                      int64_t reachFrom = INT64_MAX, const FrameWrite& storedFrame = FrameWrite(), uint32_t storedChanged = 0)
+                      int64_t reachFrom = INT64_MAX, const FrameWrite& storedFrame = FrameWrite(), uint32_t storedChanged = 0,
+                      const Value* storedValue = nullptr, int64_t width = 4)
     {
         const uint32_t o = addr.Origins();
         // Whether the address may be in the stack is asked before the store lets a stack address out: the store that publishes a frame address
@@ -2847,26 +2898,7 @@ private:
         {
             Leak(s, stored);   // memory this function does not track
             if (!spare) mOwnStored |= stored;   // (A3-255) flow-insensitive: what any store of this function put in memory it does not track
-            if (!spare && (stored & kModelKept) != 0)
-            {
-                State::OwnStore k;
-                if (OwnKey(addr, k))
-                {
-                    bool seen = false;
-                    for (auto& o : s.own)
-                        if (o.kind == k.kind && o.v == k.v && o.def == k.def && o.from == k.from)
-                        {
-                            o.regs |= stored & kModelKept;
-                            seen = true;
-                        }
-                    if (!seen)
-                    {
-                        if (s.own.size() >= 8) s.own.erase(s.own.begin());   // fewer entries only mark more
-                        k.regs = stored & kModelKept;
-                        s.own.push_back(k);
-                    }
-                }
-            }
+            if (!spare) NoteOwnStore(s, addr, storedValue, width);
             mLeakChanged |= storedChanged;
         }
         if (o == 0) return;
@@ -2937,8 +2969,9 @@ private:
         // inner call's change is, and so are the registers a value let out carried a change of (a changed value stored through a pointer and
         // loaded back, q1 to q7).
         uint32_t ownStored = 0;
-        for (const auto& o : s.own)
-            if (SameAddress(o, addr)) ownStored |= o.regs;
+        if (n == 4)
+            for (const auto& o : s.own)
+                if (SameAddress(o, addr)) ownStored |= o.regs;
         const uint32_t viaAddress = ((addr.Origins() | mOwnStored) & kModelKept) & ~ownStored;
         const uint32_t changed = viaAddress | (mLeakChanged & kModelKept);
         if (!MayBeStack(s, addr))
