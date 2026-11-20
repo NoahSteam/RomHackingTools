@@ -195,7 +195,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      # The raw-string check below scans FrontEnd, Drivers and include, so those are checked out whole (A12-46: with only
+      # The raw-string check below scans FrontEnd, Drivers, include and Core (all built by MSVC), so those are checked out whole (A12-46: with only
       # FrontEnd/tests and the vendored directory the others were not there and the step passed having read none of them).
       - uses: actions/checkout@v4
         with:
@@ -203,6 +203,7 @@ jobs:
             SaturnExplorer/FrontEnd
             SaturnExplorer/Drivers
             SaturnExplorer/include
+            SaturnExplorer/Core
             .github/scripts
 
       - name: Read the pinned commit
@@ -222,7 +223,7 @@ jobs:
       # MSVC rejects a string literal over 16,380 bytes (C2026); gcc and clang do not, so only the
       # Windows build would notice. Checked here so it fails on Linux first (A12-28).
       - name: Raw string literals fit MSVC's limit
-        run: python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include
+        run: python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include SaturnExplorer/Core
 
       # The two upstream directories vendor.py reads (UPSTREAM_CPP, UPSTREAM_SPEC) and the two
       # licence files it copies. A blobless sparse clone fetches only those few MB.

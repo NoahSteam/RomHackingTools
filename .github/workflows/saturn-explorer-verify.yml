@@ -47,8 +47,10 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install sdl2
 
+      # SE_FAIL_ON_SKIP: a test that exits 77 (the game save states missing, no C compiler) is a failure here, not a "Skipped"
+      # that ctest still counts as passed (A12-52).
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DSE_FAIL_ON_SKIP=ON
 
       # Built on its own first only so its build time is visible in the log (A7 "Timing").
       - name: Build decompiler engine (timed)
@@ -176,6 +178,7 @@ jobs:
         run: >
           cmake -S . -B build-x86_64 -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
           -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_DISABLE_FIND_PACKAGE_SDL2=ON
+          -DSE_FAIL_ON_SKIP=ON
       - name: Build decompiler engine (timed)
         run: time cmake --build build-x86_64 --parallel 4 --target SaturnExplorerGhidraDecomp
       - name: Build decompiler tests
