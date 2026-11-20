@@ -19651,9 +19651,9 @@ void TestArea10Round5()
                                         0x4200, 0xE200, 0x302E, 0x6003, 0x000B, 0x0009, 0x9249, 0x2493 });
         CHECK(Has(r.Text(), "(int4)xStack_4 / 7"));
     }
-    // c: 0064 hunks 23 and 24 (`SubvariableFlow::traceForwardSext` and `traceBackwardSext` refuse a constant right shift of a sign-extended
-    // value that does not fit the flow's size). The value a logical right shift of a sign extension returns has the extension's bits in it, so
-    // a flow narrowed to the byte or the half would lose them: exts.b ; shlr8 and exts.b/exts.w ; shlr16.
+    // c: a control, not a pin of 0064 hunks 23 and 24 (`SubvariableFlow::traceForwardSext` and `traceBackwardSext` refuse an arithmetic right
+    // shift by a constant above the flow's mask, 255 for a byte: no SH-2 code makes one, A10-32, and the hunks reverted pass this too). The value a
+    // logical right shift of a sign extension returns has the extension's bits in it: exts.b ; shlr8 and exts.b/exts.w ; shlr16.
     {
         std::string why;
         struct C { const char* label; std::vector<uint16_t> w; uint32_t in, out; };
