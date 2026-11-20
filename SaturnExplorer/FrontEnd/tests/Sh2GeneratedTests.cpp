@@ -22554,6 +22554,31 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         CHECK(!Has(rep, "n:caution-unsaid") && count(rep, "caution.required") > 0 && count(rep, "caution.said") > 0 &&
               count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect") == 0);
     }
+    // A3-263 (grammar 2 seed 13602154, `SE_GENERATED_CAUTION=deep`; hand fixtures t7, t10 of tools/a3_round37): a walked callee F2 copies r13 to r3 (or r1) and
+    // calls F3, which reads r3 as it finds it (`tst r3,r3`) and sets r13 on every path; F0 calls F2 (directly or through F1) and then F2 again. The
+    // second call's callee reads r13 through its own copy, so the text must name r13 at the first call. Call took the registers an inner call is handed,
+    // for the walked callee's record of what it reads of its entry values (CalleeEntryRead), after Apply had replaced r0-r3 with the call's outputs: a copy
+    // of a kept register in r1 or r3 was not read, F2's record lacked r13, and the earlier call's caution named r14 only (`caution-unsaid-deep`,
+    // a later callee). Now the values at the call are read. The controls read r13 as an operand (t8) and through r4 (t9), which said it before.
+    {
+        const struct { const char* name; const char* words; const char* funcs; const char* returns; const char* clobbers; const char* reads; bool pin; } pins[] = {
+            { "seed 13602154 shrunk (F0 calls F1 and F2, F1 calls F2, F2 copies r13 to r3 and calls F3, which tests r3 and sets r13)", "2F86 2F96 4F22 6843 6953 B011 6473 6483 6593 B027 0009 6483 6593 0322 2640 E007 4F26 69F6 68F6 2668 8B00 E834 000B 0009 2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 6423 6543 B00D 0009 6483 6593 66A3 67B3 030A E0ED 4F26 6BF6 6AF6 69F6 68F6 000B 0009 2F86 2F96 2FA6 2FB6 2FC6 0C2A 7FF4 6843 6953 6A63 6B73 63D3 B00F 0009 6483 6593 66A3 67B3 62E3 605D 7F0C 4C2A 6CF6 6BF6 6AF6 69F6 68F6 000B 0009 7FC0 2338 8B00 61E5 6D53 606D 7F40 000B 0009", "0/0/30,30/30/64,64/64/9e,9e/9e/b0", "1,1,1,1", "1c6100,1c6000,1c6000,186000", "2000,8,6000,24008", true },
+            { "t7: F0 calls F2 twice; F2 `mov r13,r3`, F3 tests r3 and sets r13", "4F22 B00D 0009 B00B 0009 4F26 000B E000 0009 0009 0009 0009 0009 0009 0009 0009 4F22 63D3 B00C 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2338 8B00 61E5 2432 6D53 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/10,20/20/2e,40/40/4e", "0,0,0", "0,2000,2000", nullptr, true },
+            { "t10: the copy in r1, F3 tests r1", "4F22 B00D 0009 B00B 0009 4F26 000B E000 0009 0009 0009 0009 0009 0009 0009 0009 4F22 61D3 B00C 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2118 8B00 61E5 2412 6D53 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/10,20/20/2e,40/40/4e", "0,0,0", "0,2000,2000", nullptr, true },
+            { "control t8: F2 tests the copy itself (an operand of an op: said before)", "4F22 B00D 0009 B00B 0009 4F26 000B E000 0009 0009 0009 0009 0009 0009 0009 0009 4F22 63D3 2338 B00B 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 2338 8B00 61E5 2432 6D53 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/10,20/20/30,40/40/4e", "0,0,0", "0,2000,2000", nullptr, false },
+            { "control t9: the copy in r4, a convention register (said before)", "4F22 B00D 0009 B00B 0009 4F26 000B E000 0009 0009 0009 0009 0009 0009 0009 0009 4F22 64D3 B00C 0009 4F26 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 2542 6D53 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009", "0/0/10,20/20/2e,40/40/48", "0,0,0", "0,2000,2000", nullptr, false },
+        };
+        for (const auto& p : pins)
+        {
+            const ModulePin pm = { "A3-263", p.words, p.funcs, nullptr, p.returns, p.clobbers, p.reads };
+            const Report rep = EvaluateSubject(d, ModuleSubject(pm), true);
+            const int deep = count(rep, "caution.unsaid.deep") + count(rep, "caution.unsaid.deep.own-effect");
+            std::printf("pin 'A3-263 %s': %zu finding(s), caution required %d, said %d, deep %d\n", p.name, rep.findings.size(), count(rep, "caution.required"), count(rep, "caution.said"), deep);
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            // (the generator's own findings, a callee-saved register left changed on purpose, are not the check)
+            CHECK(!Has(rep, "n:caution-unsaid") && !Has(rep, "n:caution-unsaid-deep") && count(rep, "caution.required") > 0 && count(rep, "caution.said") > 0 && deep == 0);
+        }
+    }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
     {

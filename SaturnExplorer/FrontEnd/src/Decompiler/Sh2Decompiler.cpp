@@ -1731,6 +1731,11 @@ private:
             for (int r = 0; r < kTracked; ++r)
                 if (((through >> r) & 1u) && ((EntryOf(Get(s, mReg[r])) >> r) & 1u)) entryBack.push_back(r);
         }
+        // (area 3, round 37, A3-263) ...as the registers held at the call, not after Apply: the call's model replaces r0-r3 and the registers the
+        // callee does not keep with its outputs, so a copy of a kept register made in r1 or r3 (`mov r13,r3 ; bsr F3`, F3 reading r3) was read from
+        // the output and the walked function was not taken to read r13 (grammar 2 seed 13602154: a later call of it, whose callee read r13 through
+        // that copy, parted from the runs with no caution at the earlier call that changed r13).
+        const uint32_t entryReadAtCall = mNested ? EntryOfRegs(s, kConvention | (haveTarget && !signatureLent ? CalleeEntryRead(target) : 0u)) : 0u;
         Apply(s, e, targetIsR0);
         for (const int r : entryBack)
         {
@@ -1770,7 +1775,7 @@ private:
         // (Value::stale). 06024A72/007 calls 06024B18, which loads r10-r13 on every path, and then reads r10-r13: not its caller's.
         if (mNested)
         {
-            mEntryRead |= EntryOfRegs(s, kConvention | (haveTarget && !signatureLent ? CalleeEntryRead(target) : 0u));
+            mEntryRead |= entryReadAtCall;
             const uint32_t written = haveTarget ? CalleeWritten(target) & kModelKept & (signatureLent ? ~e.preserved : ~0u) : 0u;
             for (int r = 0; r < kTracked; ++r)
             {

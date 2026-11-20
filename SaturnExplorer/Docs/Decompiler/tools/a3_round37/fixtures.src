@@ -8421,3 +8421,325 @@ G:
 mov #4,r10
 rts
 mov r3,r0
+# t1: grammar 2 seed 13602154 by hand: F0 calls F1 (-> F2 -> F3) and then F2; F3 sets r13 and tests r3, F2 copies r13 to r3 first
+name t1
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000,2000
+.word 0x4F22
+bsr F1
+nop
+bsr F2
+nop
+mov.l r13,@r4
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F1:
+.word 0x4F22
+bsr F2
+nop
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+mov r13,r3
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov r5,r13
+rts
+nop
+# t2: t1 with F1 gone: F0 calls F2 twice
+name t2
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+mov.l r13,@r4
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov r13,r3
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov r5,r13
+rts
+nop
+# t3: t1 with F3 reading r13 directly (`mov r13,r1 ; tst r1,r1`) instead of r3, so no scratch copy
+name t3
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+mov.l r13,@r4
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+mov r13,r1
+tst r1,r1
+bf K1
+mov.w @r14+,r1
+K1:
+mov r5,r13
+rts
+nop
+# t4: t2 with the copy in F0 (`mov r13,r3` after the first call, F2 lacks it): the A3-251 shape
+name t4
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000
+.word 0x4F22
+bsr F2
+nop
+mov r13,r3
+bsr F2
+nop
+mov.l r13,@r4
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov r5,r13
+rts
+nop
+# t5: t1 without F0's own read of r13: only the later call of F2 reads it (F2 copies it to r3, F3 branches on r3)
+name t5
+ret 0,0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000,2000
+.word 0x4F22
+bsr F1
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F1:
+.word 0x4F22
+bsr F2
+nop
+.word 0x4F26
+rts
+nop
+fn
+F2:
+.word 0x4F22
+mov r13,r3
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov r5,r13
+rts
+nop
+# t6: t2 without F0's own read of r13
+name t6
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov r13,r3
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov r5,r13
+rts
+nop
+# t7: t6 with F3 branching on r3 and storing r3 through r4 (a visible use)
+name t7
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov r13,r3
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov.l r3,@r4
+mov r5,r13
+rts
+nop
+# t8: t7 with F2 testing the copy itself (`mov r13,r3 ; tst r3,r3`) before the call: an op operand
+name t8
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov r13,r3
+tst r3,r3
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov.l r3,@r4
+mov r5,r13
+rts
+nop
+# t9: t7 with the copy in r4 (`mov r13,r4`), F3 storing r4 through r5 (a convention register handed to the callee)
+name t9
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov r13,r4
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+K1:
+mov.l r4,@r5
+mov r5,r13
+rts
+nop
+# t10: t7 with the copy in r1 (`mov r13,r1`), F3 branching on r1
+name t10
+ret 0,0,0
+env SE_GENERATED_CLOBBERS=0,2000,2000
+.word 0x4F22
+bsr F2
+nop
+bsr F2
+nop
+.word 0x4F26
+rts
+mov #0,r0
+fn
+F2:
+.word 0x4F22
+mov r13,r1
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+tst r1,r1
+bf K1
+mov.w @r14+,r1
+K1:
+mov.l r1,@r4
+mov r5,r13
+rts
+nop

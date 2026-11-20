@@ -472,6 +472,61 @@ r37("b42", "r6 = the word at r4 + 12 (0 in the runs: unknown to the walk); r1 = 
 r37("b43", "control for b42: r6 loaded as in b42, r10 stored through r1 and loaded back through r1 (no other store)", "mov.l @(12,r4),r6\nmov r4,r1\nadd r6,r1\nmov.l r10,@r1\nmov.l @r1,r10\n")
 r37("b44", "r6 loaded as in b42; r10 stored through r4; 7 stored through r1 = r4 + r6 (the same word); load through r4", "mov.l @(12,r4),r6\nmov.l r10,@r4\nmov r4,r1\nadd r6,r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
 r37("b45", "r6 loaded; r10 stored through r1 = r4 + r6; 7 stored through r2 = r4 + r6 made again; load through r1", "mov.l @(12,r4),r6\nmov r4,r1\nadd r6,r1\nmov.l r10,@r1\nmov r4,r2\nadd r6,r2\nmov #7,r3\nmov.l r3,@r2\nmov.l @r1,r10\n")
+# t*: the shape of grammar 2 seed 13602154 (`SE_GENERATED_CAUTION=deep`, A3-263): F0 calls F1 and then F2; F1 calls F2; F2 copies r13 to r3 and calls F3,
+# which reads r3 (`tst r3,r3`) and sets r13 on every path; nothing restores r13. The caller then calls F2 again (a later callee that reads r13 through
+# its copy). F0 stores r13 through r4 after the calls so that the register's change shows.
+def raw(n, why, text, ret, clob):
+    out_extra.append("# %s: %s\nname %s\nret %s\nenv SE_GENERATED_CLOBBERS=%s\n%s" % (n, why, n, ret, clob, text.rstrip("\n")))
+t_f0 = """.word 0x4F22
+%s
+bsr F2
+nop
+mov.l r13,@r4
+.word 0x4F26
+rts
+mov #0,r0
+fn
+"""
+t_f1 = """F1:
+.word 0x4F22
+bsr F2
+nop
+.word 0x4F26
+rts
+nop
+fn
+"""
+t_f2 = """F2:
+.word 0x4F22
+mov r13,r3
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+"""
+t_f3 = """F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov r5,r13
+rts
+nop
+"""
+raw("t1", "grammar 2 seed 13602154 by hand: F0 calls F1 (-> F2 -> F3) and then F2; F3 sets r13 and tests r3, F2 copies r13 to r3 first", t_f0 % "bsr F1\nnop" + t_f1 + t_f2 + t_f3, "0,0,0,0", "0,2000,2000,2000")
+raw("t2", "t1 with F1 gone: F0 calls F2 twice", t_f0 % "bsr F2\nnop" + t_f2 + t_f3, "0,0,0", "0,2000,2000")
+raw("t3", "t1 with F3 reading r13 directly (`mov r13,r1 ; tst r1,r1`) instead of r3, so no scratch copy", t_f0 % "bsr F2\nnop" + t_f2.replace("mov r13,r3\n", "") + t_f3.replace("tst r3,r3", "mov r13,r1\ntst r1,r1"), "0,0,0", "0,2000,2000")
+raw("t4", "t2 with the copy in F0 (`mov r13,r3` after the first call, F2 lacks it): the A3-251 shape", t_f0 % "bsr F2\nnop\nmov r13,r3" + t_f2.replace("mov r13,r3\n", "") + t_f3, "0,0,0", "0,2000,2000")
+t_f0n = t_f0.replace("mov.l r13,@r4\n", "")
+raw("t5", "t1 without F0's own read of r13: only the later call of F2 reads it (F2 copies it to r3, F3 branches on r3)", t_f0n % "bsr F1\nnop" + t_f1 + t_f2 + t_f3, "0,0,0,0", "0,2000,2000,2000")
+raw("t6", "t2 without F0's own read of r13", t_f0n % "bsr F2\nnop" + t_f2 + t_f3, "0,0,0", "0,2000,2000")
+raw("t7", "t6 with F3 branching on r3 and storing r3 through r4 (a visible use)", t_f0n % "bsr F2\nnop" + t_f2 + t_f3.replace("K1:\n", "K1:\nmov.l r3,@r4\n"), "0,0,0", "0,2000,2000")
+t_f3s = t_f3.replace("K1:\n", "K1:\nmov.l r3,@r4\n")
+raw("t8", "t7 with F2 testing the copy itself (`mov r13,r3 ; tst r3,r3`) before the call: an op operand", t_f0n % "bsr F2\nnop" + t_f2.replace("mov r13,r3\n", "mov r13,r3\ntst r3,r3\n") + t_f3s, "0,0,0", "0,2000,2000")
+raw("t9", "t7 with the copy in r4 (`mov r13,r4`), F3 storing r4 through r5 (a convention register handed to the callee)", t_f0n % "bsr F2\nnop" + t_f2.replace("mov r13,r3\n", "mov r13,r4\n") + t_f3s.replace("tst r3,r3\nbf K1\nmov.w @r14+,r1\n", "").replace("mov.l r3,@r4", "mov.l r4,@r5"), "0,0,0", "0,2000,2000")
+raw("t10", "t7 with the copy in r1 (`mov r13,r1`), F3 branching on r1", t_f0n % "bsr F2\nnop" + t_f2.replace("mov r13,r3\n", "mov r13,r1\n") + t_f3s.replace("tst r3,r3", "tst r1,r1").replace("mov.l r3,@r4", "mov.l r1,@r4"), "0,0,0", "0,2000,2000")
 out = ["# Area 3 round 37 review (mk.py): A3-255 and A3-256's change. Run: W=<SaturnExplorer> S=<scratch> run.sh [name]"]
 for n, why, body in fx:
     out.append("# %s: %s" % (n, why))
