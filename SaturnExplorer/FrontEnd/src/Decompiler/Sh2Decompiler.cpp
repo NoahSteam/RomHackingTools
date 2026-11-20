@@ -473,7 +473,7 @@ public:
         mPathLost = false;
         mLeaks = 0;
         mLeakChanged = 0;
-        mOwnLeaks = 0;
+        mOwnStored = 0;
         mFrameValues = 0;
         mLowestSp = 0;
         mFrameOut = false;
@@ -859,7 +859,46 @@ private:
         uint32_t ctl = 0;
         std::map<Key, Value> vars;         // registers and temporaries; absent = anything
         std::map<int64_t, Value> slots;    // 4-byte stack words by offset; absent = loaded from memory
+        // (area 3, round 36, A3-255) The stores this function made on the way here through an address into memory it does not track: the
+        // registers of kModelKept the stored value was made from, and the address (what made it, not its marks). A load through that same
+        // address may read back the entry value stored there (`mov.l r10,@r10 ; mov.l @r10,r10`), so it is no change of those registers
+        // (Load). On the path only: a join keeps what every side has (a store on one path says nothing of a load on another, however the
+        // walk happened to order them), and a load through another address (a1: `mov.l r10,@r4 ; mov.l @r10,r10`) reads what it reads.
+        struct OwnStore
+        {
+            int kind;
+            int64_t v;
+            uint64_t def;
+            uint32_t from;
+            uint32_t regs;
+        };
+        std::vector<OwnStore> own;
     };
+    // The key of an address for State::own, or false when nothing tells it from another address of the same origins. An entry value plus a
+    // constant is told by that (`@(4,r4)` made twice is one address); another computed value by the op that made it.
+    static bool OwnKey(const Value& a, State::OwnStore& k)
+    {
+        int br = -1;
+        int64_t bo = 0;
+        if (a.RegBase(br, bo) && bo != Value::kLowBase && bo != Value::kHighBase)
+        {
+            k = {100, br, static_cast<uint64_t>(bo), 0, 0};
+            return true;
+        }
+        if (a.kind == Value::Fuzzy)
+        {
+            if (a.def == 0 || a.def == Value::kJoin) return false;
+            k = {static_cast<int>(a.kind), a.v, a.def, a.from, 0};
+            return true;
+        }
+        k = {static_cast<int>(a.kind), a.v, 0, 0, 0};
+        return true;
+    }
+    static bool SameAddress(const State::OwnStore& o, const Value& a)
+    {
+        State::OwnStore k;
+        return OwnKey(a, k) && o.kind == k.kind && o.v == k.v && o.def == k.def && o.from == k.from;
+    }
     struct Op
     {
         ghidra::OpCode code;
@@ -1308,6 +1347,24 @@ private:
         {
             into.ctl |= from.ctl;
             changed = true;
+        }
+        for (auto it = into.own.begin(); it != into.own.end();)
+        {
+            uint32_t there = 0;
+            for (const auto& o : from.own)
+                if (o.kind == it->kind && o.v == it->v && o.def == it->def && o.from == it->from) there |= o.regs;
+            const uint32_t keep = it->regs & there;
+            if (keep != it->regs)
+            {
+                changed = true;
+                if (keep == 0)
+                {
+                    it = into.own.erase(it);
+                    continue;
+                }
+                it->regs = keep;
+            }
+            ++it;
         }
         const uint8_t out = into.out | from.out;
         auto merge = [&changed, out](Value& a, const Value& b) {
@@ -2789,7 +2846,27 @@ private:
         if (o == 0 || (o & ~origin::kStack))
         {
             Leak(s, stored);   // memory this function does not track
-            if (!spare) mOwnLeaks |= stored;
+            if (!spare) mOwnStored |= stored;   // (A3-255) flow-insensitive: what any store of this function put in memory it does not track
+            if (!spare && (stored & kModelKept) != 0)
+            {
+                State::OwnStore k;
+                if (OwnKey(addr, k))
+                {
+                    bool seen = false;
+                    for (auto& o : s.own)
+                        if (o.kind == k.kind && o.v == k.v && o.def == k.def && o.from == k.from)
+                        {
+                            o.regs |= stored & kModelKept;
+                            seen = true;
+                        }
+                    if (!seen)
+                    {
+                        if (s.own.size() >= 8) s.own.erase(s.own.begin());   // fewer entries only mark more
+                        k.regs = stored & kModelKept;
+                        s.own.push_back(k);
+                    }
+                }
+            }
             mLeakChanged |= storedChanged;
         }
         if (o == 0) return;
@@ -2853,11 +2930,16 @@ private:
         // value from memory with the register among them as no change for certain, since the memory may hold the register's entry value; a
         // register that only the address names (`mov.l @r10,r10`, `mov.l @r10+,r10`) is no data origin: the word read is not r10's value. A
         // load through a pointer that may be the frame takes every register as an origin (FreeStack), the popped push of r10 among them (q7).
-        // So the registers the address was made from, that no value this function itself stored to memory (mOwnLeaks, not a callee's model of
-        // what it may let out, which names every word above its r15 and so every register pushed) was made from, are marked as an inner
-        // call's change is, and so are the registers a value let out carried a change of (a changed value stored through a pointer and
+        // So the registers the address was made from, and those a store of this function put in memory it does not track on any path (a load
+        // through another address reads another word, not the entry value stored: a1, a15, a17; State::own, not a callee's model of what it
+        // may let out, which names every word above its r15 and so every register pushed), minus those a store made on the way here through
+        // that same address put its value in (A3-255: `mov.l r10,@r10 ; mov.l @r10,r10`, an `@(4,r4)` saved and restored), are marked as an
+        // inner call's change is, and so are the registers a value let out carried a change of (a changed value stored through a pointer and
         // loaded back, q1 to q7).
-        const uint32_t viaAddress = addr.Origins() & ~mOwnLeaks & kModelKept;
+        uint32_t ownStored = 0;
+        for (const auto& o : s.own)
+            if (SameAddress(o, addr)) ownStored |= o.regs;
+        const uint32_t viaAddress = ((addr.Origins() | mOwnStored) & kModelKept) & ~ownStored;
         const uint32_t changed = viaAddress | (mLeakChanged & kModelKept);
         if (!MayBeStack(s, addr))
         {
@@ -2866,8 +2948,12 @@ private:
             l.innerChanged |= changed;
             return l;
         }
+        // (area 3, round 36, A3-256) ...and a load through a pointer that may be the frame reads some word of it, which the origins take for
+        // any register's saved entry value: a word at an index the walk cannot place (`mov r15,r1 ; add r6,r1 ; mov.l @r1,r10`, f1, f2, f4)
+        // is not that value but for the one index that is the register's own slot, so every register is marked as changed by it, except one
+        // a store through this same address put its value in.
         Value f = FreeStack();
-        f.innerChanged |= changed;
+        f.innerChanged |= changed | (kModelKept & ~ownStored);
         f.dep = Deps::All(origin::kMemory | origin::kStack | kDepArgs);
         f.from |= taint;
         // (area 3 round 13 fix, A3-106) ...and it may be a word of the frame the interpreter tracks: what one of those holds. A frame address
@@ -3659,7 +3745,7 @@ private:
     std::set<uint32_t> mNoReturn;            // call instructions the engine knows do not return
     const std::set<uint32_t>* mLiterals = nullptr;   // the probe's literal-pool words, and where to read them (SetLiterals)
     const MemorySnapshot* mLiteralMemory = nullptr;
-    uint32_t mPreserved = 0, mStoresThrough = 0, mStoresBelow = 0, mOut = 0, mLeaks = 0, mOwnLeaks = 0, mLeakChanged = 0, mFrameValues = 0;
+    uint32_t mPreserved = 0, mStoresThrough = 0, mStoresBelow = 0, mOut = 0, mLeaks = 0, mOwnStored = 0, mLeakChanged = 0, mFrameValues = 0;
     uint32_t mKeptAt = 0;   // (A3-190) the registers some return leaves as they began
     uint32_t mChangedAt = 0;   // (A3-197) ...and the ones some return holds another value in, for certain (Value::mayEntry)
     uint32_t mLostAt = 0;      // (A3-214) ...and the ones named there because a switch was not bounded (DispatchTargets), here or in a callee
