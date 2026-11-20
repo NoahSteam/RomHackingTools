@@ -478,7 +478,6 @@ public:
         mKeptSeen = false;
         mUnkeptSeen = false;
         mUnkeptSites.clear();
-        mInnerSeen = false;
         mHanded = 0;
         mEntryRead = 0;
         std::map<uint32_t, State> in;
@@ -1178,6 +1177,12 @@ private:
                 // inner call that may have changed it keeps the mark
                 if (SavedRegister(was) && was.v == kPr) slot.second.mayEntry |= 1u << kPr;
                 slot.second.innerChanged = was.innerChanged;
+                // (area 3, round 33, A3-243) ...and what it held is still what it may hold, with what that showed: a register's change on one path,
+                // pushed (the join of the change and the entry value, Merge), and written over by an inner call's model, kept only the join's
+                // origins, which name the register, so the pop gave it back as no change for certain (SureChanged) and as no entry value (EntryOf).
+                // The word keeps the join's marks: the registers it changes for certain (innerChanged) and the entry values it may be (mayEntry)
+                slot.second.innerChanged |= SureChanged(was) & kModelKept;
+                if (was.kind == Value::Fuzzy && was.def == Value::kJoin) slot.second.mayEntry |= was.entryJoin & kModelKept;
             }
     }
 
@@ -1687,7 +1692,6 @@ private:
                 auto f = s.vars.find(KeyOf(mReg[r]));
                 if (f == s.vars.end()) continue;
                 f->second.innerChanged |= 1u << r;
-                mInnerSeen = true;
             }
         }
         // (area 3, A3-210) ...and, for the caution's "read after it", what this inner call reads of the walked function's entry values (the
@@ -3105,7 +3109,9 @@ private:
                     mEntryRead |= EntryOf(Get(s, vn));
                 }
             uint32_t inner = 0;
-            if (mInnerSeen && op.hasOut && op.code != ghidra::CPUI_LOAD && op.code != ghidra::CPUI_CALL && op.code != ghidra::CPUI_CALLIND &&
+            // (A3-245) Not gated on an inner call having marked a register: A3-243's marks (Clobber keeping a pushed join's change, a constant
+            // step of a mayEntry word) are made without one, and an op after them (`extu.b r13,r13` after the pop) dropped the mark.
+            if (op.hasOut && op.code != ghidra::CPUI_LOAD && op.code != ghidra::CPUI_CALL && op.code != ghidra::CPUI_CALLIND &&
                 op.code != ghidra::CPUI_CALLOTHER)
                 for (const ghidra::VarnodeData& vn : op.in)
                     if (vn.space->getType() != ghidra::IPTR_CONSTANT) inner |= Get(s, vn).innerChanged;
@@ -3198,6 +3204,15 @@ private:
                         r.baseReg = static_cast<int8_t>(yr);
                         r.regOff = x.kind == Value::Imm ? Value::MoveRegConst(yo, x.v) : Value::MoveRegVar(yo, true);
                     }
+                }
+                // (area 3, round 33, A3-243) A word that may still hold a register's entry value (Value::mayEntry: a saved word an inner call's model
+                // wrote over, popped back) stepped by a constant: the walk cannot say it is the entry value, but the runs do, and then the step changes
+                // the register for certain (`mov.w @r10+,r2` or `add #2,r10` after the epilogue, on one path). SureChanged cannot see it (a value
+                // computed from a word of memory with the register among its origins), so it is marked as an inner call's change is.
+                if (r.kind == Value::Fuzzy)
+                {
+                    if (y.kind == Value::Imm && y.v != 0 && x.kind == Value::Fuzzy) r.innerChanged |= x.mayEntry & kModelKept & ~x.stale;
+                    else if (!sub && x.kind == Value::Imm && x.v != 0 && y.kind == Value::Fuzzy) r.innerChanged |= y.mayEntry & kModelKept & ~y.stale;
                 }
                 Set(s, op.out, r);
                 break;
@@ -3635,7 +3650,6 @@ private:
     bool mFrameOut = false;     // (area 3 round 12 fix) a possible frame address went out to code that may keep it (HandOut)
     bool mKeptSeen = false;     // (area 3, A3-192) a call marked a register Value::kept in this run
     bool mUnkeptSeen = false;   // (area 3, A3-197) ...and one of r8-r14 Value::unkept
-    bool mInnerSeen = false;    // (area 3, A3-207) a walked callee's inner call marked a register Value::innerChanged
     std::map<uint32_t, uint32_t> mUnkeptSites;   // (A3-197) UnkeptSites
     std::map<uint32_t, uint32_t> mLostSites;     // (A3-214) LostSites
     uint32_t mHanded = 0;       // ...and, of a walked callee, the registers it lets out or writes through (CalleeHanded)
