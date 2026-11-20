@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Area 3 round 36 (round 35's fixtures plus the r36 block): writes fixtures.src (A3-243's change under review). Each fixture: F0 pushes r10, sets it to 5, calls F2 (the callee
+"""Area 3 round 37 (round 36's fixtures plus the r37 block): writes fixtures.src (A3-243's change under review). Each fixture: F0 pushes r10, sets it to 5, calls F2 (the callee
 under test, not lent), stores r10 through r4, pops, returns; G (the last function) sets r10 to 4. The body of F2 is given per fixture."""
 import os
 head = """.word 0x4F22
@@ -374,7 +374,160 @@ r36("w10", "push r10; chase, store marked value through r4, pop, load into r10 f
 r36("w11", "r10 saved to r12 (kept by F2's own push); chase; r10 = r12; r12 popped", "mov.l r12,@-r15\nmov r10,r12\nmov.l @r10,r10\nmov r12,r10\nmov.l @r15+,r12\n")
 r36("w12", "r10 saved in the F2 frame; chase into r10; restore r10 from the frame slot (frame pointer r14, pushed)", "mov.l r14,@-r15\nmov r15,r14\nadd #-4,r15\nmov.l r10,@(0,r15)\nmov.l @r10,r10\nmov.l @(0,r15),r10\nadd #4,r15\nmov.l @r15+,r14\n")
 r36("w13", "push r10; chase through r10 into r1 and test it, then pop", "mov.l @r10,r1\ntst r1,r1\nmov.l @r15+,r10\n", pre="push")
-out = ["# Area 3 round 36 review (mk.py): A3-243's change. Run: W=<SaturnExplorer> S=<scratch> run.sh [name]"]
+# --- round 37: A3-255 / A3-256 (State::own, OwnKey, SameAddress, Join, the 8-entry cap, mOwnStored, the load rule) under review ---
+# r37(): as r36, with extra functions (before G) for an inner callee that writes memory: `extra` is the text of functions separated by `fn`, and
+# `clobs` the per-function clobber list (F0, F2, extras..., G).
+def r37(n, why, body, reg="r10", pre="none", extra=None, clobs=None, setup=None):
+    h = ptr3
+    if pre == "none": h = h.replace("F2:\n.word 0x4F22\nmov.l r10,@-r15\n", "F2:\n.word 0x4F22\n")
+    t = sub(h + body + tail.rstrip("\n"), reg)
+    nex = 0
+    if extra:
+        t = t.replace("fn\nG:", "fn\n" + extra.rstrip("\n") + "\nfn\nG:")
+        nex = extra.count("fn\n") + 1
+    m = CLOB[reg]
+    ret = ",".join("0" for _ in range(3 + nex))
+    cl = clobs or ",".join(["0", "%x" % m] + ["0"] * nex + ["%x" % m])
+    out_extra.append("# %s: %s\nname %s\nret %s\nenv SE_GENERATED_CLOBBERS=%s\n%s" % (n, why, n, ret, cl, t))
+# b*: a store through an address that is overwritten (by another register, a constant, a narrower store) before the load through the same address
+r37("b1", "r10 then r11 stored through r4, `mov.l @r4,r10` (r10 gets r11's entry value)", "mov.l r10,@r4\nmov.l r11,@r4\nmov.l @r4,r10\n")
+r37("b1c", "control: r10 then r11 stored through r4, `mov.l @r4,r11` (r11 restored; r10 unchanged)", "mov.l r10,@r4\nmov.l r11,@r4\nmov.l @r4,r11\n")
+r37("b2", "r10 stored through r4, then r2 (not callee-saved, = 7) stored through r4, `mov.l @r4,r10`", "mov.l r10,@r4\nmov #7,r2\nmov.l r2,@r4\nmov.l @r4,r10\n")
+r37("b3", "r10 stored through r4, then a constant register r1 = 0 through r4, load", "mov.l r10,@r4\nmov #0,r1\nmov.l r1,@r4\nmov.l @r4,r10\n")
+r37("b4", "r10 stored through r4, then `mov.b r10,@r4` (top byte overwritten), load word", "mov.l r10,@r4\nmov.b r10,@r4\nmov.l @r4,r10\n")
+r37("b5", "r10 stored through r4, `mov.b @r4,r10` (narrow load of the saved word)", "mov.l r10,@r4\nmov.b @r4,r10\n")
+r37("b6", "r10 stored through r4, `mov.w @r4,r10`", "mov.l r10,@r4\nmov.w @r4,r10\n")
+r37("b7", "r10 stepped by 1, stored through r4, loaded back into r10 (a changed value stored)", "add #1,r10\nmov.l r10,@r4\nmov.l @r4,r10\n")
+r37("b8", "r2 = r10 + 1 stored through r4, loaded into r10", "mov r10,r2\nadd #1,r2\nmov.l r2,@r4\nmov.l @r4,r10\n")
+r37("b9", "r2 = r10 + r11 stored through r4, loaded into r10", "mov r10,r2\nadd r11,r2\nmov.l r2,@r4\nmov.l @r4,r10\n")
+r37("b10", "r10 stored through r4; an inner call G3 (unlent: stores r3 through r4); load into r10", "mov.l r10,@r4\nbsr G3\nnop\nmov.l @r4,r10\n", extra="G3:\nmov.l r3,@r4\nrts\nnop\n")
+r37("b10c", "control: the same with G3 not writing memory (stores through r5, r5 = 0x06030000)", "mov.l r10,@r4\nbsr G3\nnop\nmov.l @r4,r10\n", extra="G3:\nmov.l r3,@-r15\nmov.l @r15+,r3\nrts\nnop\n")
+r37("b11", "r10 stored through r4, `mov #1,r0 ; mov.w r0,@(2,r4)` (an overlapping store through another key), load word", "mov.l r10,@r4\nmov #1,r0\nmov.w r0,@(2,r4)\nmov.l @r4,r10\n")
+r37("b12", "r10 stored through r4, r2 stored through r5 (r5 may alias r4), load through r4", "mov.l r10,@r4\nmov #7,r2\nmov.l r2,@r5\nmov.l @r4,r10\n")
+r37("b13", "r10 stored through r4, `mov #1,r0 ; mov.b r0,@(3,r4)` (overlapping byte), load word", "mov.l r10,@r4\nmov #1,r0\nmov.b r0,@(3,r4)\nmov.l @r4,r10\n")
+r37("b14", "r10 stored at @(4,r4) twice around a store of 7 at the same address (the update between)", "mov.l r10,@(4,r4)\nmov #7,r2\nmov.l r2,@(4,r4)\nmov.l @(4,r4),r10\n")
+r37("b15", "b1 in a loop of two", "mov #2,r5\nK1:\nmov.l r10,@r4\nmov.l r11,@r4\nmov.l @r4,r10\ndt r5\nbf K1\n")
+r37("b16", "r10 stored through r4 before the loop; in the loop a constant is stored through r4; load after", "mov.l r10,@r4\nmov #2,r5\nK1:\nmov #7,r2\nmov.l r2,@r4\ndt r5\nbf K1\nmov.l @r4,r10\n")
+r37("b17", "store on one path (r3 = 0) of r10 through r4; on the other a constant stored; load after the join", "tst r3,r3\nbf K1\nmov.l r10,@r4\nbra K2\nnop\nK1:\nmov #7,r2\nmov.l r2,@r4\nK2:\nmov.l @r4,r10\n")
+r37("b18", "r10 stored through r4 on both paths, one path then stores a constant through r4; load after the join", "mov.l r10,@r4\ntst r3,r3\nbt K1\nmov #7,r2\nmov.l r2,@r4\nK1:\nmov.l @r4,r10\n")
+r37("b19", "r10 stored through r4, an unlent inner call writing through r4 on one path only, load after the join", "mov.l r10,@r4\ntst r3,r3\nbt K1\nbsr G3\nnop\nK1:\nmov.l @r4,r10\n", extra="G3:\nmov.l r3,@r4\nrts\nnop\n")
+# k*: the base register rewritten between the store and the load; the 8-entry cap
+r37("k1", "r10 stored through r4, r4 stepped by 4 and back, load through r4 (restore)", "mov.l r10,@r4\nadd #4,r4\nadd #-4,r4\nmov.l @r4,r10\n")
+r37("k2", "r10 stored through r4, r4 reloaded from @r5 (another pointer), load through r4", "mov.l r10,@r4\nmov.l @r5,r4\nmov.l @r4,r10\n")
+r37("k3", "r10 stored through r4, r4 = r5, load through r4 (r5 may be another address)", "mov.l r10,@r4\nmov r5,r4\nmov.l @r4,r10\n")
+r37("k4", "r10 stored through r4, r6 = r4 (copy), r4 reloaded, load through r6 (restore)", "mov.l r10,@r4\nmov r4,r6\nmov.l @r5,r4\nmov.l @r6,r10\n")
+r37("k5", "r10 stored at @(0,r4); eight other stores of r11 at @(4..32,r4) (the cap); load of r10 through r4", "mov.l r10,@r4\n" + "".join("mov.l r11,@(%d,r4)\n" % d for d in range(4, 36, 4)) + "mov.l @r4,r10\n")
+r37("k6", "r10 stored at @(0,r4); eight stores of r11 at @(4..32,r4); load r10 through r4 with r11 first stored through r4 too", "mov.l r10,@r4\nmov.l r11,@r4\n" + "".join("mov.l r11,@(%d,r4)\n" % d for d in range(4, 36, 4)) + "mov.l @r4,r10\n")
+r37("k7", "r10 stored at 9 distinct addresses; load from the first (evicted)", "".join("mov.l r10,@(%d,r4)\n" % d for d in range(0, 36, 4)) + "mov.l @(0,r4),r10\n")
+r37("k8", "r10 stored through r4 and r5; load through r5, after a store of r11 through r5", "mov.l r10,@r5\nmov.l r11,@r5\nmov.l @r5,r10\n")
+r37("k9", "r10 stored through r4 with r4 = r5 + 4 made by an add and later loaded through r5 + 4 made again", "mov r5,r1\nadd #4,r1\nmov.l r10,@r1\nmov r5,r2\nadd #4,r2\nmov.l @r2,r10\n")
+r37("k10", "loop: r1 loaded from @r5+ each pass; r10 stored through r1 in pass 1, loaded through r1 in pass 2 (same op, another address)", "mov #2,r6\nmov.l r10,@r4\nK1:\nmov.l @r5+,r1\nmov.l @r1,r10\nmov.l r10,@r1\ndt r6\nbf K1\n")
+r37("k11", "r1 = loaded pointer; r10 stored through r1; then r1 reloaded by the same op in a loop; load through r1", "mov #2,r6\nK1:\nmov.l @r5+,r1\nmov.l @r1,r10\ntst r3,r3\nbt K2\nmov.l r10,@r1\nK2:\ndt r6\nbf K1\n")
+# m*: the frame forms of the load rule (maybe-frame pointers), variable-size frames: over-warning shapes of real code
+r37("m1", "variable frame: push r14, r14 = r15, r15 -= r6 (a stack array), restore with `mov r14,r15 ; pop r14`", "mov.l r14,@-r15\nmov r15,r14\nsub r6,r15\nmov r14,r15\nmov.l @r15+,r14\n", reg="r14")
+r37("m2", "variable frame: push r14, r14 = r15, `add r6,r15` (a negative size), epilogue `mov r14,r15 ; pop r14`", "mov.l r14,@-r15\nmov r15,r14\nadd r6,r15\nmov r14,r15\nmov.l @r15+,r14\n", reg="r14")
+r37("m3", "m1 with a store into the array between", "mov.l r14,@-r15\nmov r15,r14\nsub r6,r15\nmov.l r2,@r15\nmov r14,r15\nmov.l @r15+,r14\n", reg="r14")
+r37("m4", "m1 with r10 also pushed and popped around it", "mov.l r10,@-r15\nmov.l r14,@-r15\nmov r15,r14\nsub r6,r15\nmov.l r2,@r15\nmov r14,r15\nmov.l @r15+,r14\nmov.l @r15+,r10\n")
+r37("m5", "variable frame, pop through r14 after a load from the array: `mov.l @r15,r1`, restore, pop", "mov.l r14,@-r15\nmov r15,r14\nsub r6,r15\nmov.l @r15,r1\nmov r14,r15\nmov.l @r15+,r14\n", reg="r14")
+r37("m6", "r10 and r14 pushed, r15 -= r6, array read at r15 + r0, then `mov r14,r15 ; pops`", "mov.l r10,@-r15\nmov.l r14,@-r15\nmov r15,r14\nsub r6,r15\nmov r6,r0\nmov.l @(r0,r15),r1\nmov r14,r15\nmov.l @r15+,r14\nmov.l @r15+,r10\n")
+r37("m7", "r10 pushed; array load through r15 + r6 into r1 (not r10); pop r10", "mov.l r10,@-r15\nmov r15,r1\nadd r6,r1\nmov.l @r1,r2\nmov.l @r15+,r10\n")
+r37("m8", "r10 stored through r4, a load through a maybe-frame pointer of r2 (not r10), load r10 back through r4", "mov.l r10,@r4\nmov r15,r1\nadd r6,r1\nmov.l @r1,r2\nmov.l @r4,r10\n")
+r37("m9", "r10 and r11 stored through r4; `mov.l @r4,r11` (restore r11); load through a maybe-frame pointer into r1 (r1 only)", "mov.l r10,@r4\nmov.l r11,@r4\nmov r15,r1\nadd r6,r1\nmov.l @r1,r1\n")
+r37("b20", "r11 stored through r4, `mov.l @r4,r10` (r10 takes r11's entry value)", "mov.l r11,@r4\nmov.l @r4,r10\n")
+r37("b21", "r10 stored through r4, `mov #0,r0 ; mov.l r2,@(r0,r4)` (an index from the same register), load through r4", "mov.l r10,@r4\nmov #0,r0\nmov #7,r2\nmov.l r2,@(r0,r4)\nmov.l @r4,r10\n")
+r37("b22", "r10 stored through r4, then through a pointer joined of r4 and r5 (r3 picks), load through r4", "mov.l r10,@r4\nmov r4,r1\ntst r3,r3\nbt K1\nmov r5,r1\nK1:\nmov #7,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
+r37("b23", "r10 stored at an absolute address (literal), a constant stored there, loaded back", "mov.l =0x06030000,r1\nmov.l r10,@r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r1,r10\n")
+r37("b24", "control: r10 stored at an absolute address (literal), loaded back (a restore)", "mov.l =0x06030000,r1\nmov.l r10,@r1\nmov.l @r1,r10\n")
+r37("b25", "r10 stored at an absolute address, a byte stored one byte in (overlap, another register holds the same literal), load back", "mov.l =0x06030000,r1\nmov.l r10,@r1\nmov.l =0x06030001,r2\nmov #7,r0\nmov.b r0,@r2\nmov.l @r1,r10\n")
+r37("b26", "control: r10 stored through r4 and r11 through r4+4, both loaded back (distinct words)", "mov.l r10,@r4\nmov.l r11,@(4,r4)\nmov.l @(4,r4),r11\nmov.l @r4,r10\n")
+r37("b27", "r10 stored through r4, r11 stored through r4+4, load r10 through r4 (restore) then `mov.l @(4,r4),r10` (r10 gets r11's)", "mov.l r10,@r4\nmov.l r11,@(4,r4)\nmov.l @r4,r10\nmov.l @(4,r4),r10\n")
+r37("b28", "control: r10 stored via post-decrement `mov.l r10,@-r4`, loaded back via `mov.l @r4+,r10`", "mov.l r10,@-r4\nmov.l @r4+,r10\n")
+r37("b29", "control: save r10 at @r4, inner call G that touches no memory (register-only), load back (a19's shape: stays noted by design)", "mov.l r10,@r4\nbsr G\nnop\nmov.l @r4,r10\n")
+ctx = ["r8", "r9", "r10", "r11", "r12", "r13", "r14"]
+r37("k12", "control: context save of r8-r14 through r4, then restore of all of them through r4 (hand-written context code)", "".join("mov.l %s,@(%d,r4)\n" % (r, 4 * i) for i, r in enumerate(ctx)) + "".join("mov.l @(%d,r4),%s\n" % (4 * i, r) for i, r in enumerate(ctx)))
+r37("k13", "control: save of r8-r14, gbr and vbr (nine words), restore of all, through r4", "".join("mov.l %s,@(%d,r4)\n" % (r, 4 * i) for i, r in enumerate(ctx)) + "stc gbr,r1\nmov.l r1,@(28,r4)\nstc vbr,r1\nmov.l r1,@(32,r4)\n" + "".join("mov.l @(%d,r4),%s\n" % (4 * i, r) for i, r in enumerate(ctx)) + "mov.l @(28,r4),r1\nldc r1,gbr\nmov.l @(32,r4),r1\nldc r1,vbr\n")
+r37("k14", "control: save r8-r14 by `mov.l rN,@-r4`, restore by `mov.l @r4+,rN` in reverse", "".join("mov.l %s,@-r4\n" % r for r in ctx) + "".join("mov.l @r4+,%s\n" % r for r in reversed(ctx)))
+r37("m10", "variable frame given back by an add: push r14, `sub r6,r15 ; add r6,r15`, pop r14 (r15 is a lost copy of the frame pointer)", "mov.l r14,@-r15\nsub r6,r15\nadd r6,r15\nmov.l @r15+,r14\n", reg="r14")
+r37("m11", "m10 with r10 pushed too (both popped through the lost r15)", "mov.l r10,@-r15\nmov.l r14,@-r15\nsub r6,r15\nadd r6,r15\nmov.l @r15+,r14\nmov.l @r15+,r10\n")
+r37("m12", "r15 saved in r1 around an alloca, restored from r1, pops", "mov.l r10,@-r15\nmov r15,r1\nsub r6,r15\nmov r1,r15\nmov.l @r15+,r10\n")
+r37("m13", "alloca by `add r6,r15` with r6 a negative size built in the function (r6 = -16), `add #16,r15`, pop", "mov.l r10,@-r15\nmov #-16,r2\nadd r2,r15\nadd #16,r15\nmov.l @r15+,r10\n")
+r37("m14", "`mov.l @(4,r14),r10` restore through the frame pointer after a lowered r15 (r14 = r15 after the push)", "mov.l r14,@-r15\nmov.l r10,@-r15\nmov r15,r14\nsub r6,r15\nmov.l @(0,r14),r10\nmov r14,r15\nadd #4,r15\nmov.l @r15+,r14\n")
+r37("b30", "r10 changed on one path (r3 picks), the join stored through r4 and loaded back (a join is the entry value on one path only)", "tst r3,r3\nbt K1\nmov #9,r10\nK1:\nmov.l r10,@r4\nmov.l @r4,r10\n")
+r37("b31", "control: push r10, inner call G, pop (a word an inner call's model may have written), store through r4, load back", "bsr G\nnop\nmov.l @r15+,r10\nmov.l r10,@r4\nmov.l @r4,r10\n", pre="push")
+r37("b32", "push r10, inner call G, pop, `add #1,r10` stored through r4 and loaded back (a stepped may-entry word)", "bsr G\nnop\nmov.l @r15+,r10\nadd #1,r10\nmov.l r10,@r4\nmov.l @r4,r10\n", pre="push")
+r37("b33", "r10 stored through r4 before a loop; in the loop it is loaded back and a constant is stored over it (the second pass loads 7)", "mov.l r10,@r4\nmov #2,r5\nK1:\nmov.l @r4,r10\nmov #7,r2\nmov.l r2,@r4\ndt r5\nbf K1\n")
+r37("b34", "a loop: r10 stepped by 1, stored through r4, loaded back, twice (a changed value on every pass)", "mov #2,r5\nK1:\nadd #1,r10\nmov.l r10,@r4\nmov.l @r4,r10\ndt r5\nbf K1\n")
+r37("b35", "a loop of the save and restore (d_loop3 again) with an inner stepping of r4 by 4 and back", "mov #2,r5\nK1:\nmov.l r10,@r4\nadd #4,r4\nadd #-4,r4\nmov.l @r4,r10\ndt r5\nbf K1\n")
+r37("f7", "push r10; r1 = r15 + r6; r10 stored through r1, loaded back through r1 (maybe-frame address, a restore); frame word dropped", "mov r15,r1\nadd r6,r1\nmov.l r10,@r1\nmov.l @r1,r10\nadd #4,r15\n", pre="push")
+r37("f8", "push r10; r1 = r15 + r6; r2 = 7 stored through r1, `mov.l @r1,r10`; frame word dropped", "mov r15,r1\nadd r6,r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r1,r10\nadd #4,r15\n", pre="push")
+r37("f9", "push r10; r1 = r15 + r6; 7 stored through r1 (may be the saved word); pop r10", "mov r15,r1\nadd r6,r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r15+,r10\n", pre="push")
+r37("f10", "push r10; r10 stored through r1 = r15 + r6, `mov.l @r1,r11` is not r10 (r11 observed): r10 popped", "mov r15,r1\nadd r6,r1\nmov.l r10,@r1\nmov.l @r15+,r10\n", pre="push")
+r37("b36", "r1 = r4 + r6; r10 stored through r1; 7 stored through r4 (r6 = 0 in some run: the same word); load through r1", "mov r4,r1\nadd r6,r1\nmov.l r10,@r1\nmov #7,r2\nmov.l r2,@r4\nmov.l @r1,r10\n")
+r37("b37", "r1 = r4 + r6 (the same value) stored through, then `mov #0,r0 ; mov.l r2,@(r0,r4)` over it, load through r1", "mov r4,r1\nadd r6,r1\nmov.l r10,@r1\nmov #0,r0\nmov #7,r2\nmov.l r2,@(r0,r4)\nmov.l @r1,r10\n")
+r37("b38", "r10 stored through r4, r1 = r4 + r6 (an index) written with 7, load through r4", "mov.l r10,@r4\nmov r4,r1\nadd r6,r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
+r37("b39", "r10 stored through r1 = r4 + r6 and through nothing else; a second pointer r2 = r4 + r6 (made again, another op) written with 7; load through r1", "mov r4,r1\nadd r6,r1\nmov.l r10,@r1\nmov r4,r2\nadd r6,r2\nmov #7,r3\nmov.l r3,@r2\nmov.l @r1,r10\n")
+r37("b40", "control for b36: r1 = r4 + r6; r10 stored through r1 and loaded back through r1 (no other store)", "mov r4,r1\nadd r6,r1\nmov.l r10,@r1\nmov.l @r1,r10\n")
+r37("b41", "control for b36 with r6 replaced by a constant register that points into the arena: r1 = r4 + r5 (r5 = a pointer argument)", "mov r4,r1\nadd r5,r1\nmov.l r10,@r1\nmov.l @r1,r10\n")
+r37("b42", "r6 = the word at r4 + 12 (0 in the runs: unknown to the walk); r1 = r4 + r6; r10 stored through r1; 7 stored through r4 (the same word); load through r1", "mov.l @(12,r4),r6\nmov r4,r1\nadd r6,r1\nmov.l r10,@r1\nmov #7,r2\nmov.l r2,@r4\nmov.l @r1,r10\n")
+r37("b43", "control for b42: r6 loaded as in b42, r10 stored through r1 and loaded back through r1 (no other store)", "mov.l @(12,r4),r6\nmov r4,r1\nadd r6,r1\nmov.l r10,@r1\nmov.l @r1,r10\n")
+r37("b44", "r6 loaded as in b42; r10 stored through r4; 7 stored through r1 = r4 + r6 (the same word); load through r4", "mov.l @(12,r4),r6\nmov.l r10,@r4\nmov r4,r1\nadd r6,r1\nmov #7,r2\nmov.l r2,@r1\nmov.l @r4,r10\n")
+r37("b45", "r6 loaded; r10 stored through r1 = r4 + r6; 7 stored through r2 = r4 + r6 made again; load through r1", "mov.l @(12,r4),r6\nmov r4,r1\nadd r6,r1\nmov.l r10,@r1\nmov r4,r2\nadd r6,r2\nmov #7,r3\nmov.l r3,@r2\nmov.l @r1,r10\n")
+# t*: the shape of grammar 2 seed 13602154 (`SE_GENERATED_CAUTION=deep`, A3-263): F0 calls F1 and then F2; F1 calls F2; F2 copies r13 to r3 and calls F3,
+# which reads r3 (`tst r3,r3`) and sets r13 on every path; nothing restores r13. The caller then calls F2 again (a later callee that reads r13 through
+# its copy). F0 stores r13 through r4 after the calls so that the register's change shows.
+def raw(n, why, text, ret, clob):
+    out_extra.append("# %s: %s\nname %s\nret %s\nenv SE_GENERATED_CLOBBERS=%s\n%s" % (n, why, n, ret, clob, text.rstrip("\n")))
+t_f0 = """.word 0x4F22
+%s
+bsr F2
+nop
+mov.l r13,@r4
+.word 0x4F26
+rts
+mov #0,r0
+fn
+"""
+t_f1 = """F1:
+.word 0x4F22
+bsr F2
+nop
+.word 0x4F26
+rts
+nop
+fn
+"""
+t_f2 = """F2:
+.word 0x4F22
+mov r13,r3
+bsr F3
+nop
+.word 0x4F26
+rts
+nop
+fn
+"""
+t_f3 = """F3:
+tst r3,r3
+bf K1
+mov.w @r14+,r1
+K1:
+mov r5,r13
+rts
+nop
+"""
+raw("t1", "grammar 2 seed 13602154 by hand: F0 calls F1 (-> F2 -> F3) and then F2; F3 sets r13 and tests r3, F2 copies r13 to r3 first", t_f0 % "bsr F1\nnop" + t_f1 + t_f2 + t_f3, "0,0,0,0", "0,2000,2000,2000")
+raw("t2", "t1 with F1 gone: F0 calls F2 twice", t_f0 % "bsr F2\nnop" + t_f2 + t_f3, "0,0,0", "0,2000,2000")
+raw("t3", "t1 with F3 reading r13 directly (`mov r13,r1 ; tst r1,r1`) instead of r3, so no scratch copy", t_f0 % "bsr F2\nnop" + t_f2.replace("mov r13,r3\n", "") + t_f3.replace("tst r3,r3", "mov r13,r1\ntst r1,r1"), "0,0,0", "0,2000,2000")
+raw("t4", "t2 with the copy in F0 (`mov r13,r3` after the first call, F2 lacks it): the A3-251 shape", t_f0 % "bsr F2\nnop\nmov r13,r3" + t_f2.replace("mov r13,r3\n", "") + t_f3, "0,0,0", "0,2000,2000")
+t_f0n = t_f0.replace("mov.l r13,@r4\n", "")
+raw("t5", "t1 without F0's own read of r13: only the later call of F2 reads it (F2 copies it to r3, F3 branches on r3)", t_f0n % "bsr F1\nnop" + t_f1 + t_f2 + t_f3, "0,0,0,0", "0,2000,2000,2000")
+raw("t6", "t2 without F0's own read of r13", t_f0n % "bsr F2\nnop" + t_f2 + t_f3, "0,0,0", "0,2000,2000")
+raw("t7", "t6 with F3 branching on r3 and storing r3 through r4 (a visible use)", t_f0n % "bsr F2\nnop" + t_f2 + t_f3.replace("K1:\n", "K1:\nmov.l r3,@r4\n"), "0,0,0", "0,2000,2000")
+t_f3s = t_f3.replace("K1:\n", "K1:\nmov.l r3,@r4\n")
+raw("t8", "t7 with F2 testing the copy itself (`mov r13,r3 ; tst r3,r3`) before the call: an op operand", t_f0n % "bsr F2\nnop" + t_f2.replace("mov r13,r3\n", "mov r13,r3\ntst r3,r3\n") + t_f3s, "0,0,0", "0,2000,2000")
+raw("t9", "t7 with the copy in r4 (`mov r13,r4`), F3 storing r4 through r5 (a convention register handed to the callee)", t_f0n % "bsr F2\nnop" + t_f2.replace("mov r13,r3\n", "mov r13,r4\n") + t_f3s.replace("tst r3,r3\nbf K1\nmov.w @r14+,r1\n", "").replace("mov.l r3,@r4", "mov.l r4,@r5"), "0,0,0", "0,2000,2000")
+raw("t10", "t7 with the copy in r1 (`mov r13,r1`), F3 branching on r1", t_f0n % "bsr F2\nnop" + t_f2.replace("mov r13,r3\n", "mov r13,r1\n") + t_f3s.replace("tst r3,r3", "tst r1,r1").replace("mov.l r3,@r4", "mov.l r1,@r4"), "0,0,0", "0,2000,2000")
+out = ["# Area 3 round 37 review (mk.py): A3-255 and A3-256's change. Run: W=<SaturnExplorer> S=<scratch> run.sh [name]"]
 for n, why, body in fx:
     out.append("# %s: %s" % (n, why))
     out.append("name %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400" % n)
