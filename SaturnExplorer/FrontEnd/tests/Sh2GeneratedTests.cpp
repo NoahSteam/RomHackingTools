@@ -22777,6 +22777,44 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
         }
     }
+    // A3-274 (area 3 round 40 review, tools/a3_round40 fixtures ph3, ph14, ph16, ph19, ph23): the exact address of a pushed saved word handed to a callee
+    // that is not lent (ph3: r7 with r4-r6 unset; ph23: `mov r3,r0` in the callee), kept by a lent callee in memory (ph14: stored to a global, a later callee
+    // writes through it), handed back in r0 and written through by the caller (ph19), or handed in a stack word (ph16). The frame clobber of Apply wrote
+    // the word over before A3-270's rule looked; each run returns r10 changed (7) and the text said no caution.
+    {
+        const struct { const char* name; const char* funcs; const char* returns; const char* clobbers; const char* words; } pins[] = {
+            { "ph3", "0/0/18,20/20/32,40/40/48,60/60/66", "0,0,0,0", "0,400,0,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 67F3 B00B 0009 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 E107 2712 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+            { "ph14", "0/0/18,20/20/36,40/40/48,60/60/6c,80/80/86", "0,0,0,0,0", "0,400,0,0,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 65F3 B00B 0009 B019 0009 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 D117 2152 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 D10F 6112 E207 2122 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0603 0000" },
+            { "ph16", "0/0/18,20/20/36,40/40/4a,60/60/66", "0,0,0,0", "0,400,0,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 61F3 2F16 B00A 0009 7F04 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 61F2 E207 2122 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+            { "ph19", "0/0/18,20/20/36,40/40/46,60/60/66", "0,0,0,0", "0,400,0,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 65F3 B00B 0009 E107 2012 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 6053 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+            { "ph23", "0/0/18,20/20/32,40/40/4a,60/60/66", "0,0,0,0", "0,400,0,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 65F3 B00B 0009 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 E107 2512 6033 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+        };
+        for (const auto& p : pins)
+        {
+            ModulePin pm = { "A3-274", p.words, p.funcs, nullptr, p.returns, p.clobbers, nullptr };
+            const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin 'A3-274 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", p.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
+        }
+        // control: the address handed to a callee that only reads through it (no run changes r10: a hedge at most, no finding)
+        const struct { const char* name; const char* funcs; const char* returns; const char* clobbers; const char* words; } controls[] = {
+            { "ph20", "0/0/18,20/20/32,40/40/46,60/60/66", "0,0,0,0", "0,400,0,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 65F3 B00B 0009 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 6152 000B 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },
+        };
+        for (const auto& c : controls)
+        {
+            ModulePin pm = { "A3-274", c.words, c.funcs, nullptr, c.returns, c.clobbers, nullptr };
+            const Report rep = EvaluateSubject(d, ModuleSubject(pm), true);
+            std::printf("pin 'A3-274 control %s': %zu finding(s), required %d, said %d\n", c.name, rep.findings.size(), count(rep, "caution.required"), count(rep, "caution.said"));
+            CHECK(rep.findings.empty() && count(rep, "caution.required") == 0);
+        }
+    }
     // A3-251 (grammar 2 seed 13102045, `SE_GENERATED_CAUTION=deep`, whole and shrunk): a callee F3 loads GBR (`tas.b @r5 ; ldc r5,gbr`), reached
     // through two tail-jumping thunks; the caller reads GBR after the call (`stc gbr,r3`) and calls it again, and F3 branches on r3 (`tst r3,r3 ;
     // bt`). The caution's "read after it" at the first call took the registers a later callee reads as it finds them from r8-r14, GBR and VBR

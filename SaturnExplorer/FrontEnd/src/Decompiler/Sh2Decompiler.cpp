@@ -1410,6 +1410,40 @@ private:
 
     static int64_t Wrap(int64_t v) { return static_cast<int32_t>(static_cast<uint32_t>(v)); }
 
+    // (area 3, round 40, A3-274) A saved register's word (r8-r14, GBR, VBR) that this call is handed the exact address of: the callee may write
+    // it, and the register popped back from it is then the callee's change. Clobber does this for a lent callee that stores through the
+    // register (A3-270), but the effects of a callee that is not lent are the default's, whose frame clobber (Apply) writes the word over as one
+    // that may still hold the entry value before that rule looks (ph3, ph23), and a lent callee that keeps the address in memory, hands it back
+    // (ph19) or reads it from a stack word (ph16) is not "storing through" the register at all. So the word is marked before Apply, for every
+    // way the callee has of being handed the address: the registers it stores through, lets out or returns (a lent callee's record; for one that is
+    // not lent, the convention's r2 and r4-r7 and what its walk shows it hands on, CalleeHanded: not r8-r14, which no convention hands a callee and
+    // which hold the frame pointer, an address of this frame the callee is not handed), and a stack word at or above the call's r15 that holds
+    // one. Only an exact address that lies in the word: a frame address no form bounds is the callee's model (A3-93), a pointer's offset the
+    // walk cannot place is A3-271's class.
+    void NoteHandedSavedWords(State& s, const CallEffects& e, bool signatureLent, bool haveTarget, uint32_t target)
+    {
+        const uint32_t lentRecord = e.storesThrough | e.leaks | e.outOrigins;
+        const uint32_t regs = signatureLent ? lentRecord & 0xFFu : kConvention | (haveTarget ? CalleeHanded(target) & 0xFFu : 0u);
+        std::vector<int64_t> at;
+        for (int r = 0; r < 8; ++r)
+            if ((regs >> r) & 1u)
+            {
+                const Value h = Get(s, mReg[r]);
+                if (h.kind == Value::Sp) at.push_back(h.v);
+            }
+        const Value sp = Get(s, mReg[kR15]);
+        if (sp.kind == Value::Sp && (!signatureLent || (lentRecord & origin::kMemory)))
+            for (const auto& slot : s.slots)
+                if (slot.first >= sp.v && slot.second.kind == Value::Sp) at.push_back(slot.second.v);
+        if (at.empty()) return;
+        for (auto& slot : s.slots)
+        {
+            if (!SavedRegister(slot.second) || slot.second.v < 0 || slot.second.v >= 32 || !((kModelKept >> slot.second.v) & 1u)) continue;
+            for (int64_t address : at)
+                if (Reaches(address, slot.first)) slot.second.innerChanged |= 1u << slot.second.v;
+        }
+    }
+
     void Call(State& s, uint32_t at, bool targetIsR0 = false, bool haveTarget = false, uint32_t target = 0)
     {
         CallEffects e;   // unknown: anything
@@ -1742,6 +1776,7 @@ private:
         // that copy, parted from the runs with no caution at the earlier call that changed r13).
         const Value spAtCall = Get(s, mReg[kR15]);
         const uint32_t entryReadAtCall = mNested ? EntryOfRegs(s, kConvention | (haveTarget && !signatureLent ? CalleeEntryRead(target) : 0u)) : 0u;
+        if (mTolerant) NoteHandedSavedWords(s, e, signatureLent, haveTarget, target);
         Apply(s, e, targetIsR0);
         for (const int r : entryBack)
         {
