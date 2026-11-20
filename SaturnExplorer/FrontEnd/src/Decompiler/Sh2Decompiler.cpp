@@ -5874,7 +5874,10 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                 for (uint32_t l : pv.later)
                 {
                     const uint32_t partition = l >> 29;
-                    if (partition == 2 || partition == 3 || partition == 5)
+                    // (A5-171: ...and the on-chip registers' page: a pointer whose first values are the join of a register's address and the
+                    // values after one turn (`p = (p + 4) ^ 0x20000000` from 0xFFFFFF70 holds 0xDFFFFF74 first, a do-while's exit) names no register
+                    // near, and the later turns reach SH2_SAR0, a long register a byte read returns bits 15-8 of: grammar 1 seed 12506097)
+                    if (partition == 2 || partition == 3 || partition == 5 || (partition == 7 && IsHardwareRegion(l)))
                     {
                         say = true;
                         sayAt = l;

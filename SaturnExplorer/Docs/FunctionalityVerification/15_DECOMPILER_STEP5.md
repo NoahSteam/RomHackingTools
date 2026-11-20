@@ -24218,3 +24218,41 @@ A3-245's propagation and A3-246 add no note to this range (counts identical). A3
 * Not run: the local game corpus (not in the repository), so corpus text before and after A3-243, A3-245 and A3-246 was not compared; sanitizer jobs (CI); the printed-C suite beyond what `ctest` runs. The 15 of 19 seeds of section 3 not read in full are listed in A3-247.
 
 **Verdict, area 3 round 34: not clean.** One P2, A3-246 (a caution the runs need is missing for a may-entry word put through not, neg, shifts, and, or, xor, extu or exts; the op that makes the mark, where A3-245 fixed the ops after it), found by the review of A3-243's step rule and fixed here with pins; no P1. The sweeps on the fresh ranges found no area 3 finding. By REVIEW_PROGRAM.md's rule (two consecutive rounds without P1 or P2) the count restarts after this fix, on the coordinator's decision.
+
+## Area 5, routed seeds 12908713 and 12506097
+
+Branch `review/5-routed-r35` from master `c945d815`. RelWithDebInfo, `-j2`, `ulimit -v 3500000`, one heavy binary at a time. Rows A5-170 (oracle) and A5-171 (product); one oracle rule behind `SE_A7_RULE_OFF=5170`, one product line in `Sh2Decompiler.cpp`. Pins: `TestA5170Pins` (each seed whole and shrunk).
+
+### 1. Grammar 2 seed 12908713 (A3-248): oracle fault, A5-170
+
+Reproduced with `SE_GENERATED_CAUTION=deep`: `n:` and `v:folded-store-after-access`, "the store at 0600903E the engine folded into 0600238C is printed nowhere, and the write through a pointer at 06009042 the code makes after it is made without it"; shrunk (51 evaluations) to function 0 of `mov r8,r2 ; mov.l @(lit),r6 [g = 0x0600238C] ; mov.l r2,@r6 ; mov.l r0,@(0x10,r4) ; mov.l r2,@r6` with r4 = r8 = the first parameter. The text is `xVar1 = func_0x06009040(); *(xunknown4 *)(param_1 + 0x10) = xVar1; iRam0600238c = param_1;`.
+
+Evidence from the runs, not the shape: 4 of 4 runs finish; the write through r4 lands at 0x06020110 (ordinary memory) in each; no run reads the global between the first store and the second; the second store writes the same four bytes with the same value. So the code's final memory is `g = param_1` whether or not the pointer is g's address (a write that lands on g is overwritten by the later store), and the text leaves the same. No value and no effect differs. The oracle (A5-119's pointer form: a store dropped before an access the ledger holds) counted the write through a pointer as an access made without the store, though a write reads nothing; it would matter only if the write acted on the bytes (a register: A5-118's `SCU_D0EN`).
+
+**Fix** (oracle only; A5-169's lesson kept): in the dropped-store branch, the finding is set aside (`order.folded-store.dropped-overwritten-unobserved`) when, in every run that makes the store, a later store of all its bytes follows, and between them every access is a write seen landing in ordinary memory (not `InHardwareRange`, not a marked range, not at depth above 0, no read overlapping the bytes). A hardware or marked landing, a callee's access, a read of the bytes, a run that does not overwrite them (the dropped value would stay in memory at the return), and a write no run makes (unknown destination) all keep the finding. Residual, accepted: another value of the pointer might name a register that acts on a write; the runs do not show it, as in A7-255. No hardware-landing negative pin could be built: the generator's pointer arenas never reach a register, and a literal register address is a direct access, which the rule does not touch.
+
+**Old-code evidence:** `SE_A7_RULE_OFF=5170`: the whole seed gives the two findings back and the shrunk replay one; `TestA5170Pins` fails 2 checks. With the rule: 0 findings on both.
+
+### 2. Grammar 1 seed 12506097 (fold-order sweep): product fault, A5-171
+
+Reproduced: `v:pointer-effect-unsaid`, "the read of 1 byte(s) at 0600901C reached FFFFFF80 through a pointer the output derives from register addresses, and no note says: a 1-byte read of SH2_SAR0, a 32-bit register, is an address error on the SH-2 ... Mednafen then returns bits 15-8". Shrunk (52 evaluations) to `p = &SH2_BDRBH (0xFFFFFF70) ; r3 = 4 ; do { p = (p + 4) ^ 0x20000000 } while (--r3) ; (poll the mailbox until set) ; if (r0 == 0) p = 0x25B000A0 ; r2 = *(char *)p ; *(char *)p = p`. The four turns end at 0xFFFFFF80 = SH2_SAR0 in the run where the poll is answered (the default request's runs do not finish; the request with the mailbox marked does).
+
+Why no note: a temporary print of the pointer walk at the access gave constants {0x25B000A0, 0xDFFFFF74}, `steps` set, and later values 0xFFFFFF78, 0xDFFFFF7C, 0xFFFFFF80 ... The do-while's exit value is the pointer after one turn, so the first values hold no register near the start; 0x25B000A0 is an unnamed SCSP address (no stepped note, A5-54); and A5-136's test of the later values, which exists for this case, took partitions 2, 3 and 5 (purge, address array) only, so a later value in the on-chip page was never asked. The text shows `puVar3 = &SH2_BDRBH` and a loop, and says nothing of what the access may reach. The oracle is right: the run reaches a register whose width rule changes the value read (the value is unused in this program, but the caution is the product's contract for a pointer stepped from register addresses).
+
+**Fix** (`Sh2Decompiler.cpp`, one condition): the later-values test also accepts a value in partition 7 that is a hardware register. The access then says the existing stepped note ("the pointer is stepped in a loop from 0x25B000A0: the iterations after the first reach other addresses, which are not said, among them 0xFFFFFF78 (an on-chip register address): a 1-byte read there has the effects and is subject to the width rules of that hardware"). The note's "from" address is the first register candidate (the SCSP address), not 0xFFFFFF70, which the loop's exit value does not hold; cosmetic, left. Only a pointer already stepped (`steps`) whose first values name no stepped note is touched; the corpus text was not compared (no save states here), so extra notes in game code are possible and untested.
+
+**Old-code evidence:** with the condition reverted (partitions 2, 3, 5 only) the whole seed gives 1 finding and the shrunk replay 1 (`v:pointer-effect-unsaid`, the SAR0 read); with it, 0 and 0.
+
+### 3. Runs
+
+| Run | Result |
+|---|---|
+| Pins (`SE_GENERATED_SEEDS=1`), fix on | all passed; the four pins 0 findings |
+| Pins, `SE_A7_RULE_OFF=5170` | 2 failures: 12908713 whole 2 findings, shrunk 1 |
+| Pins, product line reverted | 2 failures: 12506097 whole 1 finding, shrunk 1 |
+| Grammar 1, 10,000 from 13,300,001, canary off | **failing seeds=0; findings=0** |
+| Grammar 2 deep, 10,000 from 13,300,001, canary off | failing seeds=1; findings=2: 13307611 `n:` and `v:map-way-back` (0600904E answered with a line that does not begin with it): area 7, not analysed here (the changes of this branch only remove findings and add stepped notes) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | **failing seeds=0; findings=0** (773,376 ms), all passed |
+| `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`) | **117 of 117 passed** (686 s); `check-literal-size.py SaturnExplorer/FrontEnd`: raw string sizes ok; no C++ feature beyond what the files use |
+
+Not done: the game corpus; the sanitizer jobs; a hardware-landing negative pin for A5-170; the area 7 seed 13307611.
