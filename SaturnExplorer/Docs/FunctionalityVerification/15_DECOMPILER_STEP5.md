@@ -24509,3 +24509,41 @@ The sweeps draw none of the shapes of A3-264 to A3-266 (callee-saved registers s
 * Not run: the local game corpus (not in the repository), so no corpus text before and after was compared; the sanitizer jobs (CI).
 
 **Verdict, area 3 round 38: not clean.** P2: A3-264 (round 37's own-store rule took another register's address, a loaded pointer, GBR, an absolute address and the caller's frame as another word; found by hand fixtures, fixed with pins), A3-265 (a callee that writes the word a saved register was pushed in; older than round 37, found by hand, fixed with pins) and A3-266 (the value of a restore was no entry value for the ops after it; found by hand, fixed with pins). No P1. P3: A3-267 (accepted), A3-268 (routed). The sweeps are clean for area 3. By REVIEW_PROGRAM.md's rule the count of consecutive clean rounds restarts.
+
+## Area 3, round 39
+
+Branch `review/3-round39` from round 38's head (`4373fb37`, not yet merged). RelWithDebInfo, `-j2`, `ulimit -v 3500000`. A review of round 38's product changes in `Sh2Decompiler.cpp` (A3-264 `NoteOwnStore` and `Store`'s clears, A3-265 `Call`'s frame words, A3-266 `Load`'s restored value) with hand fixtures (`Docs/Decompiler/tools/a3_round39/`, round 38's tooling moved with `git mv`; `mk.py` now writes 387 fixtures: the mr, pw6 to pw15, jr, ow series are new), then fresh sweeps. Two P2 misses found and fixed (A3-269, A3-270), one P2 found and left open (A3-271), P3: A3-272 (over-warnings, accepted by class), A3-273 (sweeps routed, a fixture-name collision of the tooling fixed).
+
+### 1. Review
+
+* **"Provably disjoint" (A3-264).** The same register at an offset that does not overlap, and two constants that do not, were taken as two words. Both are wrong where memory repeats on the bus, and the generator's emulator repeats it as Mednafen does: 0x06030000 and its cache-through mirror 0x26030000 (mr1, mr1b a byte store, mr1d the save through the mirror), the 1 MiB work RAM repeat 0x06030000 and 0x06130000 (mr1f), the low work RAM repeat 0x00203000 and 0x00303000 (mr6), and a pointer against the pointer plus 0x100000 (mr4). Each returned r10 changed (7) and the text said no caution: A3-269. Controls (the next word mr1c, +0x400 mr4a, pre-decrement words mr2) silent. A sign or wrap of offsets: offsets are wrapped to 32 bits when made (`MoveRegConst`), so a negative gap compares right; the only wrapped overlap needs an unaligned word at offset 0x7FFFFFFF, an address error in a run. A register rewritten between the store and the load: the key is the entry value plus the offset, so `mov r5,r4` or `add #4,r4` between them gives another key (mr2d, mr2a to mr2c: said or silent as the runs need).
+* **Stores that bypass `NoteOwnStore`.** Pre-decrement (mr2, mr2a to mr2c), `tas.b` through a register or a constant (q8, mr5), `mov.l r2,@-r6` through a constant (mr5a), a joined or own-frame stack pointer with a register index over an entry made through the same pointer (mr3, mr3a to mr3f: said), a store in a branch's or a call's delay slot (q1 to q6, round 38): all clear or are told apart right. `mac.l` and `mac.w` only load. A callee's store through `Apply` is cleared by `Call` (the clear is the first thing it does); the user ops that call `Apply` without `Call` (`Write_SR` and the like are excluded; `trapa` is a call) hold no store. `and.b`, `or.b` and `xor.b` through `@(r0,gbr)` have an address with an index (not exact: clears).
+* **A3-265.** The words a callee writes at exact offsets are marked; the walk's other writes are not. Said (no change needed): a second-level callee (pw6), a thunk (pw5), a tail jump through a literal (pw8), a byte, half-word, `tas.b`, pre-decrement and read-modify-write store of the word (pw11 to pw15). Missed: the address handed in a register (pw7, A3-270, fixed), an exact word 64 words up (pw9) and an index the walk cannot place (pw10) (A3-271, open: the rule leaves out `kFrameAny`).
+* **A3-266.** The restored value's `mayEntry` survives a spill to the frame and a reload (jr1), a spill through the arena and a reload (jr5, jr9), `swap.w` and `xtrct` (jr2, jr3), a join with the restore on one path (jr4), a copy through another register and back (jr7), a push and pop with `extu.b` (jr10); another register's entry value loaded into r10 (jr6) and a half-word load (jr8) are said. No miss.
+* **Wrong restores.** None beyond A3-269: every restore a run shows changed was either said or is in A3-269's list.
+* **Over-warnings.** ow1 to ow5 (A3-272): the setjmp shape (ow4) and a store at another offset of the pointer (ow2b, ow1b) are silent; a copy through other registers (ow1, ow3) and a store through a loaded pointer (ow5) are hedges; ow2's is A3-250's load mark, not A3-264's clear. Accepted by class.
+
+### 2. Fixes
+
+* **A3-269.** `NoteOwnStore`: two accesses are told apart (`ApartOnBus`) only within 0x1000 bytes of each other, as a 32-bit wrapped distance, and not overlapping; every other pair clears the entry.
+* **A3-270.** `Clobber`: a saved register's word that a callee was handed the exact address of (`exact`, `Reaches`) is marked `innerChanged` for the register.
+* **Evidence.** Pins, `TestA3RoutedPins`: the A3-269 block (mr1, mr1b, mr1d, mr1f, mr4, mr6; controls mr1c, mr4a, mr2) and the A3-270 block (pw7). Old code (round 38's `Sh2Decompiler.cpp`, same tests, swapped and rebuilt, not committed): the seven pins `required 1, said 0`, the controls silent; new code: all pass. The 387 fixtures of the file run with no FAILED; the findings are b40 and b41 (A3-261 (b)) and pw9 and pw10 (A3-271), and the generator-class ones by design.
+* **Expected changes in game text:** a caution at a call whose callee saves a register through a pointer or an absolute address and stores 4 KiB or more away before restoring it, or hands a callee the address of a word it pushed a register in. Hand-written context code; notes only, no statement, prototype or ledger count changes. The local corpus is not in the repository: no corpus text was compared.
+
+### 3. Sweeps (`SE_GENERATED_CANARY=0`, `SE_GENERATED_PINS=0` for the first two)
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep` | 14,000,001, 10,000 seeds | failing seeds=2, findings=2: 14007491 `map-way-back` (A7-25), 14008671 `map-copy-store`: area 7, routed (A3-273) |
+| Grammar 1 | 14,100,001, 10,000 seeds | failing seeds=4, findings=6: 14102304 and 14107841 `map-way-back`, 14104677 `map-store-value`, 14105350 `map-const-join`: area 7, routed (A3-273) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | | 10,000 seeds of each grammar: failing seeds=0, findings=0, all passed (989 pin lines in it) |
+
+No area 3 class (`caution-unsaid`, `callee-saved`, `state-saved`) in either sweep. As in round 38 the sweeps draw none of the shapes under review.
+
+### 4. Runs
+
+* WIP: `ctest --test-dir build -j1` was started and stopped on a pause request; no result recorded yet.
+* `python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include SaturnExplorer/Core`: raw string sizes ok (7 raw strings in 341 files). `tools/a3_round39/selftest.sh`: ok. `run.sh` over all 387 fixtures: exit 0, none FAILED. C++17 only.
+* Not run: the local game corpus (not in the repository); the sanitizer jobs (CI).
+
+**Verdict, area 3 round 39 (WIP, ctest not yet run): not clean.** P2: A3-269 (round 38's "provably disjoint" ignored that memory repeats on the bus: mirrors and a 1 MiB gap; found by hand fixtures, fixed with pins), A3-270 (an exact address of a saved word handed to a callee; found by hand, fixed with pins), A3-271 (frame words a callee writes that the walk cannot place: open, a fix needs a bit that tells an own-frame index store from one above the entry r15). No P1. P3: A3-272 (accepted), A3-273 (routed). The sweeps are clean for area 3. The count of consecutive clean rounds restarts.
