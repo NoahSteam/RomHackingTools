@@ -22215,8 +22215,11 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         const struct { const char* name; const char* op; } ops[] = { { "not", "6AA7" }, { "neg", "6AAB" }, { "shll2", "4A08" }, { "xor", "E103 2A1A" }, { "or", "E108 2A1B" } };
         for (const auto& o : ops)
         {
-            const std::string words = head + o.op + tailw;
-            ModulePin pm = { "A3-245", nullptr, funcs, nullptr, "0,0,0", "0,400,0", nullptr };
+            // (F2 is padded to sixteen words: a two-word op leaves one nop less)
+            std::string pad = tailw;
+            if (std::strlen(o.op) > 4) pad.erase(pad.find(" 0009", pad.find("6033")), 5);
+            const std::string words = head + o.op + pad;
+            ModulePin pm = { "A3-245", nullptr, funcs, nullptr, "0,0,0", "0,400,400", nullptr };
             pm.words = words.c_str();
             const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
             const std::string kept = gMutateKind;

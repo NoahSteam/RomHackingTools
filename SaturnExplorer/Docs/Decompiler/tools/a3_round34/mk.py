@@ -53,11 +53,11 @@ ptr = head.replace("mov #5,r10\n", "mov r4,r10\nadd #8,r10\n")
 for n, why, body in [("s2p", "over: post-increment load through a real pointer, then a step back", callg + "mov.l @r15+,r10\nmov.l @r10+,r2\nadd #-4,r10\n"),
                      ("u9p", "under: pre-decrement store through the popped pointer", callg + "mov.l @r15+,r10\nmov.l r2,@-r10\n"),
                      ("u12", "under: post-increment store-free read, pointer left stepped", callg + "mov.l @r15+,r10\nmov.l @r10+,r2\n")]:
-    out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,0\n%s" % (n, why, n, ptr + body + tail.rstrip("\n")))
+    out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, ptr + body + tail.rstrip("\n")))
 out = ["# Area 3 round 34 review (mk.py): A3-243's change. Run: W=<SaturnExplorer> S=<scratch> run.sh [name]"]
 for n, why, body in fx:
     out.append("# %s: %s" % (n, why))
-    out.append("name %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,0" % n)
+    out.append("name %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400" % n)
     out.append(head + body + tail.rstrip("\n"))
 out += out_extra
 open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures.src"), "w").write("\n".join(out) + "\n")
