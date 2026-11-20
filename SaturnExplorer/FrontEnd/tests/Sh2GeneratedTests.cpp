@@ -8308,6 +8308,39 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         count("order.folded-store.dropped-unobserved");
                         continue;
                     }
+                    // (A5-170: ...but a store that a later store of all its bytes overwrites in every run that makes it, with only writes between
+                    // them, each seen landing in ordinary memory, is a value nothing observes: a write reads nothing, and the later store leaves
+                    // the bytes as the code leaves them whether the write overlapped them or not. `mov.l r2,@g ; mov.l r0,@(0x10,r4) ; mov.l
+                    // r2,@g` printed `*(param_1 + 0x10) = v; g = param_1;` (the engine joins the two stores into the later), grammar 2 seed
+                    // 12908713. Held as A5-169 holds a write: a write to a hardware register or a marked range may act on the bytes (SCU_D0EN
+                    // starts a transfer that reads them); a write no run makes has no known destination; a callee's accesses and a read of the
+                    // bytes between are not known to leave them unseen; a run that does not overwrite them leaves the dropped value in memory
+                    // at its return.)
+                    if (!dts::A7RuleOff(5170) && isWrite && viaPointer)
+                    {
+                        bool any = false, unobserved = true;
+                        for (const RunOut& run : runs)
+                            for (size_t k = 0; k < run.trace.size() && unobserved; ++k)
+                            {
+                                const TraceRec& t = run.trace[k];
+                                if (t.depth != 0 || !t.write || t.insn != f.insn) continue;
+                                any = true;
+                                bool covered = false;
+                                for (size_t i = k + 1; i < run.trace.size() && unobserved && !covered; ++i)
+                                {
+                                    const TraceRec& w = run.trace[i];
+                                    const bool overlaps = w.addr < f.address + f.size && f.address < w.addr + static_cast<uint32_t>(w.size);
+                                    if (w.depth != 0 || (!w.write && overlaps) || InHardwareRange(w.addr) || inMarked(w.addr)) unobserved = false;
+                                    else if (w.write && w.addr <= f.address && f.address + f.size <= w.addr + static_cast<uint32_t>(w.size)) covered = true;
+                                }
+                                unobserved = unobserved && covered;
+                            }
+                        if (any && unobserved)
+                        {
+                            count("order.folded-store.dropped-overwritten-unobserved");
+                            continue;
+                        }
+                    }
                     // (...and the text assigns the global nowhere before that access: a line that does, named after another store of it, may be
                     // this one's, which the engine joined there (the mapping names one instruction of two: grammar 1 seed 4007292). A5-118's text
                     // assigns it after the DMA enable only.)
@@ -20469,6 +20502,46 @@ void TestA5168Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 5, routed seeds (A5-170, A5-171), each whole and shrunk. A5-170, grammar 2 seed 12908713 (`n:` and `v:folded-store-after-access`, oracle): `mov.l r2,@g ;
+// mov.l r0,@(0x10,r4) ; mov.l r2,@g` -- the engine joins the two stores into the later, printed after the pointer write, which nothing reads
+// (SE_A7_RULE_OFF=5170 gives the finding back: 2 whole, 1 shrunk). A5-171, grammar 1 seed 12506097 (`v:pointer-effect-unsaid`, product,
+// Sh2Decompiler.cpp): a do-while stepping a pointer from SH2_BDRBH (`p = (p + 4) ^ 0x20000000`), joined with an SCSP address, whose later turns reach
+// SH2_SAR0; the stepped note was not said. The product's old line (the partition test without partition 7) gives 1 finding on both.
+void TestA5170Pins(Sh2Decompiler& d)
+{
+    {
+        const Report rep = Evaluate(d, MakeV2(12908713), true);
+        std::printf("pin 'A5-170 grammar 2 seed 12908713': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const ModulePin pin = { "A5-170 grammar 2 seed 12908713 shrunk",
+                                "2F86 2F96 2FA6 2FE6 4F22 7FE0 6EF3 6843 6953 6A63 B014 0009 6483 6593 66A3 6283 D606 2622 1404 2622 7E20 6FE3 4F26 6EF6 6AF6 69F6 68F6 000B 0009 0009 0600 238C "
+                                "2F86 2F96 2FA6 2FB6 2FD6 2FE6 4F22 7FF4 6EF3 6843 6953 6A63 6B73 2FC6 B013 6483 6483 6593 66A3 67B3 6CF6 62C3 1523 6041 7E0C 6FE3 4F26 6EF6 6DF6 6BF6 6AF6 69F6 68F6 "
+                                "000B 0009 7FF0 6286 7F10 000B 0009",
+                                "0/0/3a,40/40/86,86/86/90", nullptr, "0,1,0", "1100,1100,1100", "0,1000,100" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(pin), true);
+        std::printf("pin '%s': %zu finding(s)\n", pin.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const Report rep = Evaluate(d, Generate(12506097u), true);
+        std::printf("pin 'A5-171 grammar 1 seed 12506097': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        const Subject subject = RawSubjectWithEnv("D60A E304 7604 D10A 261A 4310 8BFA D709 6072 C801 89FC 3030 8B00 D607 6260 2660 D606 E154 2612 000B 0009 0009 FFFF FF70 2000 0000 2600 1014 25B0 00A0 2600 3018",
+                                                  "26001010-2600101f", "26001014:until-set", "5:06003C14");
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin 'A5-171 shrunk': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 // Area 5, round 4 (A5-165, A5-166): two order-class oracle findings whose text is value-correct, each whole and shrunk. A5-165, grammar 2 seed 12247189
 // (`n:read-after-folded-store`): `mov.l r0,@r6 ; mov.w @r7,r1 ; mov.l r0,@r6`, the second store the same value at the same address as the first, which
 // the engine joins into it. A5-166, grammar 1 seed 12260346 (`v:folded-read-after-pointer-write`): a read in the slot of `bf/s` whose register is
@@ -22710,6 +22783,7 @@ void TestGenerated()
         RUN(TestA5162Pins(d));
         RUN(TestA5165Pins(d));
         RUN(TestA5168Pins(d));
+        RUN(TestA5170Pins(d));
         RUN(TestA7FlowRecordPins(d));
         RUN(TestArea7Review24Pins(d));
         RUN(TestArea7Round25Pins(d));
