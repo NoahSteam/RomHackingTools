@@ -109,6 +109,31 @@ one sla-compiler-leak    0  "$FM"                                               
 $SLA_PASS"
 one sla-no-pass-line     0  "$FM"                                                                        0 fail "all passed" "" "CHECK failed at line 90: rc == 0"
 
+# A binary that hangs is killed at the per-binary limit and fails the checker, and the other binaries still get their logs
+# (A12-53). One stub sleeps; SE_SANITIZER_TIMEOUT is 2 s here.
+hang() {
+  local build="$tmp/hang/build" logs="$tmp/hang/logs" start=$SECONDS
+  mkdir -p "$build" "$logs"
+  for n in "${NAMES[@]}"; do stub "$build" "$n" 0 "all passed"; done
+  stub "$build" SaturnExplorerLoaderFuzzTests 0 "LoaderFuzzTests: 1 cases in 1 s, 0 violation classes not in the ledger"
+  stub "$build" SaturnExplorerLiveRestoreSignalTests 0 "LiveRestoreSignalTests passed"
+  stub "$build" SaturnExplorerSlaFreshnessTests 0 "$SLA_PASS"
+  stub "$build" SaturnExplorerDecompilerFaultTests 0 "$FM"
+  printf '#!/usr/bin/env bash\nsleep 600\n' > "$build/bin/SaturnExplorerSh2DecodeTests"
+  SE_SANITIZER_TIMEOUT=2 bash "$here/run-decompiler-sanitizers.sh" "$build" "$logs" > "$tmp/hang/run.out" 2>&1
+  local rc="$(cat "$logs/SaturnExplorerSh2DecodeTests.rc" 2>/dev/null)"
+  local took=$((SECONDS - start))
+  local got=pass
+  bash "$here/check-sanitizer-logs.sh" "$logs" > "$tmp/hang/check.out" 2>&1 || got=fail
+  local ok=ok
+  # 124: timed out; the binaries after it still ran (the last one has its log); the checker fails; no 600 s wait.
+  if [ "$rc" != 124 ] || [ "$got" != fail ] || [ ! -f "$logs/SaturnExplorerDecompilerFaultTests.log" ] || [ "$took" -gt 60 ]; then
+    ok=WRONG; failures=$((failures + 1)); sed 's/^/    | /' "$tmp/hang/check.out" | tail -8
+  fi
+  printf '%-34s decode rc=%s checker=%-4s (want fail) after %ss  %s\n' hang "$rc" "$got" "$took" "$ok"
+}
+hang
+
 if [ "$failures" -ne 0 ]; then
   echo "Sanitizer harness self-test FAILED ($failures wrong outcome(s))."
   exit 1

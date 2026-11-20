@@ -1,0 +1,9 @@
+0028-all: build failed
+0010-all: applied [3, 4, 5, 7] named_hit=False pc:ok(rc0,) engine:ok(rc0,) unit:FAIL(rc1,TestArea7Round13=2,TestArea7Round25=2)
+0057-all: build failed
+0044-all: build failed
+0056-all: build failed
+0065-all: build failed
+0066-all: build failed
+0072-all: build failed
+0076-all: build failed

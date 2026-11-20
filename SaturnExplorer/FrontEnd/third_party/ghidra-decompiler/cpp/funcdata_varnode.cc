@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: the stack pointer on entry is taken to be aligned to a longword, not to 256 (patches/0052-engine-stack-pointer-longword-aligned.patch).
  * Modified for SaturnExplorer: a new output keeps the cached masks around its op a superset of the truth; totalReplace leaves that to opSetInput (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: a Varnode replaced everywhere by an equal value forwards the frame folds it was made from (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: the guards a STORE kept when it folded into a write of a register follow the volatile write's user op (patches/0099-engine-register-store-guard-kept.patch).
  */
 #include "funcdata.hh"
 
@@ -777,6 +778,25 @@ bool Funcdata::replaceVolatile(Varnode *vn)
     // The temp is the second parameter to the userop
     opSetInput(newop,tmp,2);
     opInsertAfter(newop,defop); // Insert after defining op
+    // SaturnExplorer (0099): the guards a STORE kept when it folded into this COPY of a register (opCollapseIndirectsForCopy) are the
+    // write's: the COPY goes (dead code) once its value is propagated to the user op, which they follow, as the guards of a CALLOTHER
+    // that writes a register stand before it
+    {
+      BlockBasic *bb = defop->getParent();
+      vector<PcodeOp *> guards;
+      list<PcodeOp *>::iterator git = defop->getBasicIter();
+      while(bb != (BlockBasic *)0 && git != bb->beginOp()) {
+	--git;
+	PcodeOp *ind = *git;
+	if (ind->code() != CPUI_INDIRECT || !ind->isIndirectStore() || PcodeOp::getOpFromConst(ind->getIn(1)->getAddr()) != defop) break;
+	guards.push_back(ind);
+      }
+      for(size_t k=0;k<guards.size();++k) {
+	opUninsert(guards[k]);
+	opSetInput(guards[k],newVarnodeIop(newop),1);
+	opInsertBefore(guards[k],newop);
+      }
+    }
   }
   else {			// A read value
     UserPcodeOp *vr_op = glb->userops.registerBuiltin(UserPcodeOp::BUILTIN_VOLATILE_READ);

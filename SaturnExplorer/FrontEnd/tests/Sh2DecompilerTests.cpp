@@ -19582,6 +19582,51 @@ void TestArea10Round3()
     }
 }
 
+// ===== Area 10, round 4 =================================================================================================================
+// A10-25: patch 0052's flow.cc hunk (the BadDataError for an address that is no multiple of the alignment) had no test that fails without it:
+// the A7-6 fixture's odd jump table entry (0x06009031) lands on bytes that are no instruction (0x0BE0), so flow halted there as bad data whether
+// or not the alignment was checked. Here the bytes at the odd entry are valid instructions (`nop` at 0x06009031, `mov #0,r0` at 0x06009033: the
+// halves of the two words of the cases below), so without the check flow decodes them, warns that the instruction overlaps the one at the even
+// address before it, and prints them.
+void TestArea10Round4()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const auto run = [&](const std::vector<uint16_t>& w, uint32_t entry) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        return d.Decompile(MakeSnapshot(hw), Request(entry));
+    };
+    // A7-6's function (mov.l @(lit),r2 ; mov #2,r1 ; cmp/hi r1,r4 ; bt def ; shll2 r4 ; mova table,r0 ; mov.l @(r0,r4),r1 ; jmp @r1 ; nop ; nop ; lit ;
+    // table 0x0600902C, odd, 0x06009034 ; def: rts ; mov r2,r0 ; case 0: rts ; mov #0,r0 ; words 24 and 25: 0x0000 and 0x09E0, whose bytes
+    // at 0x06009031 to 0x06009034 are 0x00 0x09 (nop) and 0xE0 0x00 (mov #0,r0) ; case 2: rts ; mov #2,r0)
+    {
+        const std::vector<uint16_t> w = { 0xD204, 0xE102, 0x3416, 0x890F, 0x4408, 0xC703, 0x014E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9034, 0x0600, 0x902C,
+                                          0x0600, 0x9031, 0x0600, 0x9034, 0x0009, 0x0009, 0x000B, 0x6023, 0x000B, 0xE000, 0x0000, 0x09E0, 0x000B, 0xE002 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A10 r4 a: a jump table entry at an odd address whose bytes decode (patch 0052)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(std::find(r.badDataAt.begin(), r.badDataAt.end(), 0x06009031u) != r.badDataAt.end());
+        for (const std::string& s : r.warnings) CHECK(!Has(s, "overlaps instruction"));
+        CHECK(Has(r.Text(), "halt_baddata();"));
+    }
+    // A10-26: patch 0090's RuleConditionalMove hunk. mov.l @(lit),r6 (0x06001010) ; tst r4,r4 ; bt L ; mov #1,r1 ; mov.l r1,@r6 ; bra J ; nop ;
+    // L: mov #0,r1 ; mov.l r1,@r6 ; J: mov.l @r7,r0 ; rts ; nop. The global is written in both arms and read through a pointer after the join.
+    {
+        const std::vector<uint16_t> w = { 0xD605, 0x2448, 0x8903, 0xE101, 0x2612, 0xA002, 0x0009, 0xE100, 0x2612, 0x6072, 0x000B, 0x0009, 0x0600, 0x1010 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A10 r4 b: two writes of a global joined, a read through a pointer after the join (patch 0090)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        // Without the hunk the join of the two writes is a boolean (`uRam06001010 = (uint4)(param_1 != 0);`), a third write the code does not make,
+        // above the read; with it the two writes stay in their arms.
+        const std::string text = r.Text();
+        size_t writes = 0;
+        for (size_t at = text.find("Ram06001010 ="); at != std::string::npos; at = text.find("Ram06001010 =", at + 1)) ++writes;
+        CHECK(writes == 2);
+        CHECK(!Has(text, "param_1 != 0"));
+    }
+}
+
 // ===== Area 5, confirming round (REVIEW_LEDGER.md A5-101 to A5-107) ===================================================================
 // The reviewer's fixtures, pinned first as the head printed them (the checks then marked DEFECT); the area 5 confirming-round fixer turned
 // each of them round (marked FIXED, with the patch or the function that fixed it) and added the controls marked so. The words are the
@@ -20567,6 +20612,7 @@ int main(int argc, char** argv)
         RUN(TestA3184Fix());
         RUN(TestArea10Round2());
         RUN(TestArea10Round3());
+        RUN(TestArea10Round4());
         RUN(TestArea5Confirm());
         RUN(TestArea5Review());
         RUN(TestArea5ReviewAfter0090());

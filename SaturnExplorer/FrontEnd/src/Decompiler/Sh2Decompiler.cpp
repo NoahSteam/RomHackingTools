@@ -874,7 +874,6 @@ private:
             uint64_t def;
             uint32_t from;
             uint32_t regs;
-            uint32_t org;   // the registers (r0-r14) the address was made from: another address made from one of them may be this one
         };
         std::vector<OwnStore> own;
     };
@@ -886,16 +885,16 @@ private:
         int64_t bo = 0;
         if (a.RegBase(br, bo) && bo != Value::kLowBase && bo != Value::kHighBase)
         {
-            k = {100, br, static_cast<uint64_t>(bo), 0, 0, 1u << br};
+            k = {100, br, static_cast<uint64_t>(bo), 0, 0};
             return true;
         }
         if (a.kind == Value::Fuzzy)
         {
             if (a.def == 0 || a.def == Value::kJoin) return false;
-            k = {static_cast<int>(a.kind), a.v, a.def, a.from, 0, a.from & 0x7FFFu};
+            k = {static_cast<int>(a.kind), a.v, a.def, a.from, 0};
             return true;
         }
-        k = {static_cast<int>(a.kind), a.v, 0, 0, 0, 0};
+        k = {static_cast<int>(a.kind), a.v, 0, 0, 0};
         return true;
     }
     static bool SameAddress(const State::OwnStore& o, const Value& a)
@@ -1735,6 +1734,7 @@ private:
         // callee does not keep with its outputs, so a copy of a kept register made in r1 or r3 (`mov r13,r3 ; bsr F3`, F3 reading r3) was read from
         // the output and the walked function was not taken to read r13 (grammar 2 seed 13602154: a later call of it, whose callee read r13 through
         // that copy, parted from the runs with no caution at the earlier call that changed r13).
+        const Value spAtCall = Get(s, mReg[kR15]);
         const uint32_t entryReadAtCall = mNested ? EntryOfRegs(s, kConvention | (haveTarget && !signatureLent ? CalleeEntryRead(target) : 0u)) : 0u;
         Apply(s, e, targetIsR0);
         for (const int r : entryBack)
@@ -1768,6 +1768,25 @@ private:
                 if (f == s.vars.end()) continue;
                 f->second.innerChanged |= 1u << r;
             }
+        }
+        // (area 3, round 38, A3-265) ...and the words of this function's frame the callee writes at exact offsets (its own walk's frame words, or a
+        // lent callee's): a word that held a register's entry value, or may still, is written over (the model only says it may still be that
+        // value: Clobber), so the register popped back from it is the callee's change. F2 pushes r10, calls G3 (`mov.l r1,@r15`), pops r10.
+        if (mNested && haveTarget && spAtCall.kind == Value::Sp)
+        {
+            const uint32_t fw = signatureLent ? e.frameWords : CalleeFrameWrites(target);
+            if (fw != 0 && fw != kUnwalked && !(fw & CallEffects::kFrameAny))
+                for (int k = 0; k < 31; ++k)
+                {
+                    if (!((fw >> k) & 1u)) continue;
+                    auto f = s.slots.find(Wrap(spAtCall.v + 4 * k));
+                    if (f == s.slots.end()) continue;
+                    Value& w = f->second;
+                    uint32_t may = w.mayEntry & ~w.stale;
+                    if (SavedRegister(w)) may |= 1u << w.v;
+                    if (w.kind == Value::Fuzzy && w.def == Value::kJoin) may |= w.entryJoin & ~w.stale;
+                    w.innerChanged |= may & kModelKept;
+                }
         }
         // (area 3, A3-210) ...and, for the caution's "read after it", what this inner call reads of the walked function's entry values (the
         // registers its walk records read as left, CalleeEntryRead; the convention's r2 and r4-r7 and the stack words for any other callee),
@@ -2747,6 +2766,7 @@ private:
         {
             if (addr.v + n > 0)   // at or above r15 on entry: the caller's frame
             {
+                s.own.clear();   // (A3-264) a pointer an entry was made through may point into the caller's frame (n5)
                 // What is written decides whether it is a hand-back: a parameter register's own value (any width) is the spill of an
                 // argument into the home area, a value computed from one is not (A3-40; a constant has no origin and counts as kFrame).
                 const bool spill = value.kind == Value::Reg || (value.kind == Value::Fuzzy && value.part >= 0);
@@ -2815,6 +2835,7 @@ private:
         // (area 3 round 12 fix, A3-92) ...or may be: the one predicate (MayBeCallerFrame), so a laundered address of the caller's frame is one.
         if (MayBeCallerFrame(s, addr))
         {
+            s.own.clear();   // (A3-264) as above, for an address that may be a word of the caller's frame (n5b)
             mCallerFrameStores |= v | origin::kFrame;
             mOwnFrameWords |= CallEffects::kFrameAny;
         }
@@ -2847,10 +2868,10 @@ private:
 
     // (area 3, round 37, A3-259) State::own after a store of 'width' bytes of 'value' through 'addr' into memory not tracked: the entries the
     // store may write into are gone, and the store is itself an entry when it puts one register's entry value, whole, at an address the key tells.
-    // An address of the same register at an offset (an entry register plus a constant) clears the entries that overlap it, one with an index
-    // or a lowered offset every entry of that register; one nothing tells from another (a join, an op the walk gave no maker) clears all.
-    // Another register's address is taken as another word (the runs hand a function disjoint pointers; two arguments that alias are the
-    // accepted residual, A3-261).
+    // (round 38, A3-264) An entry stays only past a store that is told to miss it: the same register at an offset (an entry register plus a
+    // constant) that does not overlap, or two constants that do not. Every other address may be the same word at run time (a pointer loaded
+    // from memory, another argument, GBR or an absolute address that holds the register's value, a base made with an index, n1 to n7), and
+    // the runs show it when a caller hands them so.
     void NoteOwnStore(State& s, const Value& addr, const Value* value, int64_t width)
     {
         State::OwnStore k;
@@ -2858,25 +2879,19 @@ private:
         int br = -1;
         int64_t bo = 0;
         const bool exactNew = (addr.RegBase(br, bo) && bo != Value::kLowBase && bo != Value::kHighBase) || (keyed && addr.kind == Value::Imm);
-        const uint32_t ao = addr.Origins() & 0x7FFFu;
         for (auto it = s.own.begin(); it != s.own.end();)
         {
             const bool exactOld = it->kind == 100 || it->kind == static_cast<int>(Value::Imm);
-            bool hit;
-            if (!keyed) hit = true;
-            else if (it->kind == k.kind && it->v == k.v && it->def == k.def && it->from == k.from) hit = true;
-            else if (exactNew && exactOld)
+            bool hit = true;
+            if (keyed && exactNew && exactOld)
             {
-                // the same register at offsets, or two constants: told apart by the bytes they cover; another register is another address
+                // the same register at offsets, or two constants: told apart by the bytes they cover; another register or a constant against a
+                // register is not told apart
                 if (it->kind == 100 && k.kind == 100 && it->v == k.v)
                     hit = static_cast<int64_t>(k.def) < static_cast<int64_t>(it->def) + 4 && static_cast<int64_t>(it->def) < static_cast<int64_t>(k.def) + width;
                 else if (it->kind == k.kind && it->kind != 100)
                     hit = k.v < it->v + 4 && it->v < k.v + width;
-                else
-                    hit = false;
             }
-            else if (!exactNew && !exactOld) hit = true;   // two addresses nothing tells apart (a loaded pointer twice, a base and an index made twice)
-            else hit = (it->org & ao) != 0;                // one of them from registers, the other with an index or a load from them
             if (hit) it = s.own.erase(it);
             else ++it;
         }
@@ -2993,6 +3008,9 @@ private:
             Value l = Loaded(s);
             l.from |= taint;
             l.innerChanged |= changed;
+            // (area 3, round 38, A3-266) A restore is the register's entry value, not any value read from memory with the register among its
+            // origins: the ops after it step it as they step a popped word (`mov.l @r4,r10 ; add #1,r10` is r10 changed, jn8 to jn14).
+            l.mayEntry |= ownStored;
             return l;
         }
         // (area 3, round 36, A3-256) ...and a load through a pointer that may be the frame reads some word of it, which the origins take for
@@ -3001,6 +3019,7 @@ private:
         // a store through this same address put its value in.
         Value f = FreeStack();
         f.innerChanged |= changed | (kModelKept & ~ownStored);
+        f.mayEntry |= ownStored;   // (A3-266) as above
         f.dep = Deps::All(origin::kMemory | origin::kStack | kDepArgs);
         f.from |= taint;
         // (area 3 round 13 fix, A3-106) ...and it may be a word of the frame the interpreter tracks: what one of those holds. A frame address

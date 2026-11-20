@@ -40,7 +40,14 @@ run_in() {
   local start=$SECONDS rc
   mkdir -p "$dest"
   echo "::group::$name"
-  "$@" 2>&1 | tee "$dest/$name.log"
+  # A binary that hangs is killed after SE_SANITIZER_TIMEOUT seconds (default 3600: the slowest takes 21 to 35 minutes) and
+  # its status is 124 (137 if it needed the KILL), which the checker reports. Without a limit one hung binary used the
+  # whole job timeout and the check step never ran, so the other binaries got no verdict (A12-53).
+  if command -v timeout >/dev/null 2>&1; then
+    timeout --kill-after=60 "${SE_SANITIZER_TIMEOUT:-3600}" "$@" 2>&1 | tee "$dest/$name.log"
+  else
+    "$@" 2>&1 | tee "$dest/$name.log"
+  fi
   rc="${PIPESTATUS[0]}"
   echo "::endgroup::"
   echo "$rc" > "$dest/$name.rc"

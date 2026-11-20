@@ -1,0 +1,64 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+@@ -23,6 +23,7 @@
+  * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
+  * Modified for SaturnExplorer: a STORE guard is kept against the alias analysis while the STORE is aimed at its local or pending; the frame records walk to 4,096 ops and follow a guard read through a piece (patches/0072-engine-frame-chains-and-save-slots.patch).
+  * Modified for SaturnExplorer: the host is called when a flow has been followed (patches/0096-engine-flow-done-hook.patch).
++ * Modified for SaturnExplorer: the guard a STORE put on a global stays when the STORE folds into a write of a hardware register (patches/0099-engine-register-store-guard-kept.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -1882,6 +1883,15 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
+       opInsertAfter(op, copyOp);
+     }
+     else {
++      // SaturnExplorer (0099): the COPY is a write of a hardware register (a STORE whose pointer was a join of constants when heritage guarded
++      // it, and a register's address once they folded), and the guard it put on a global (kept, address forced: Heritage::guardHardwareAccesses,
++      // 0090 and 0093) stays, as the guard of a CALLOTHER that writes a register does: the write may start a transfer that changes the global.
++      // Collapsed with the STORE, a global read before it was printed at its use after it, `SCU_D0EN = g; *p = (char)g;` for `r2 = g ; (r7 =
++      // SCU_D0EN) ; *r7 = r2 ; *p = r2`.
++      if (op->isIndirectStore() && vn1->isVolatile() && vn2->isAddrForce() && vn2->isAddrTied() && vn2->getSpace()->getType() == IPTR_PROCESSOR) {
++	iter = previter;
++	continue;
++      }
+       totalReplace(op->getOut(),op->getIn(0));
+       opDestroy(op);		// Get rid of the INDIRECT
+     }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+@@ -20,6 +20,7 @@
+  * Modified for SaturnExplorer: the stack pointer on entry is taken to be aligned to a longword, not to 256 (patches/0052-engine-stack-pointer-longword-aligned.patch).
+  * Modified for SaturnExplorer: a new output keeps the cached masks around its op a superset of the truth; totalReplace leaves that to opSetInput (patches/0054-engine-cached-masks-never-narrower.patch).
+  * Modified for SaturnExplorer: a Varnode replaced everywhere by an equal value forwards the frame folds it was made from (patches/0068-engine-deadcode-late-stack-reads.patch).
++ * Modified for SaturnExplorer: the guards a STORE kept when it folded into a write of a register follow the volatile write's user op (patches/0099-engine-register-store-guard-kept.patch).
+  */
+ #include "funcdata.hh"
+ 
+@@ -777,6 +778,25 @@ bool Funcdata::replaceVolatile(Varnode *vn)
+     // The temp is the second parameter to the userop
+     opSetInput(newop,tmp,2);
+     opInsertAfter(newop,defop); // Insert after defining op
++    // SaturnExplorer (0099): the guards a STORE kept when it folded into this COPY of a register (opCollapseIndirectsForCopy) are the
++    // write's: the COPY goes (dead code) once its value is propagated to the user op, which they follow, as the guards of a CALLOTHER
++    // that writes a register stand before it
++    {
++      BlockBasic *bb = defop->getParent();
++      vector<PcodeOp *> guards;
++      list<PcodeOp *>::iterator git = defop->getBasicIter();
++      while(bb != (BlockBasic *)0 && git != bb->beginOp()) {
++	--git;
++	PcodeOp *ind = *git;
++	if (ind->code() != CPUI_INDIRECT || !ind->isIndirectStore() || PcodeOp::getOpFromConst(ind->getIn(1)->getAddr()) != defop) break;
++	guards.push_back(ind);
++      }
++      for(size_t k=0;k<guards.size();++k) {
++	opUninsert(guards[k]);
++	opSetInput(guards[k],newVarnodeIop(newop),1);
++	opInsertBefore(guards[k],newop);
++      }
++    }
+   }
+   else {			// A read value
+     UserPcodeOp *vr_op = glb->userops.registerBuiltin(UserPcodeOp::BUILTIN_VOLATILE_READ);

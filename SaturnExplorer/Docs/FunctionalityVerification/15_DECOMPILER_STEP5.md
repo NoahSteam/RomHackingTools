@@ -24470,3 +24470,179 @@ The generator draws none of the shapes of A3-259 (its stores of callee-saved reg
 * Not run: the local game corpus (not in the repository), so no corpus text before and after was compared; the sanitizer jobs (CI).
 
 **Verdict, area 3 round 37: not clean.** P2: A3-259 (round 36's own-store rule kept an entry after the word was overwritten, narrowed or reached through another address of the same register, and a call; found by hand fixtures, fixed with pins) and A3-263 (a copy of a kept register in r1 or r3 handed to an inner call was not read; found by the deep sweep, older than round 36, fixed with pins). No P1. P3: A3-260 and A3-261 (accepted), A3-262 (routed). By REVIEW_PROGRAM.md's rule the count of consecutive clean rounds restarts.
+## Area 5, routed seeds 13401724 and 13409856
+
+Branch `review/5-routed-r36` from master `5bcf1d89`. RelWithDebInfo, `-j2`, `ulimit -v 3500000`, one heavy binary at a time. A3-258 routed both seeds (grammar 2, `SE_GENERATED_CAUTION=deep`, canary 0) as A5-164's class. Neither is that mechanism. Rows A5-173 (product, patch 0099) and A5-174 (oracle), and A5-175 (area 7, routed). Pins: `TestA5173Pins`.
+
+### 1. Seed 13401724: product fault, A5-173
+
+Reproduced: `n:folded-read-after-access`, "the read at 06009086 ... is printed (line 26) after the write at 0600908C (line 25)"; shrunk (51 evaluations) to three functions: function 0 is `mov.l @(lit),r6 [0x26002280]` running into function 1 (frame, a stack loop, `r7 = 0x06002100 ; tst r7,r7 ; bt ; r7 = 0x3DFE00E4`) and a `jmp` into function 2 (`r2 = *(r6) ; cmp/pl r6 ; bf/s ; *r7 = r2 [slot] ; ...`). The text is `Ram3dfe00e4 = xRam26002280; *param_1 = (char)xRam26002280;`.
+
+The emulator runs do not tell it apart (the generator drops hardware writes, so the global is unchanged either way); the verdict is from the rule the text breaks. The address 0x3DFE00E4 is SCU offset 0xE4 through a 128 MiB mirror, a hardware range the engine marks volatile, so it is a register write. The code reads the global before it and the text after it. Replacing the literal with SCU_D0EN gives the same text and the same finding. A5-116 and patch 0090 are the rule: a register write is a barrier a read of ordinary memory is not moved past, because a transfer the write starts may change it.
+
+Why 0090 did not hold: the pointer register is a join of two constants (the `tst`/`bt` over the second literal load), so at heritage the write is a STORE with a non-constant pointer, and its guard on the global is kept (0093). After constant propagation the STORE has a constant address, `RuleStoreVarnode` makes it a COPY of a volatile Varnode, and `opCollapseIndirectsForCopy` took the guard for no overlap and removed it. A CALLOTHER that writes a register, the form a write with a constant address has from the flow, keeps its guard. A one-function form with the same join did not discriminate old from new code and is not pinned.
+
+**Fix** (patch 0099): `opCollapseIndirectsForCopy` keeps the guard when the COPY's output is volatile and the guard's output is address forced in the processor space; `replaceVolatile` (the COPY gets a `write_volatile` CALLOTHER, and the COPY itself goes with dead code once its value is propagated into the user op) moves such guards to just before the user op, retargeted to it. A first try that left the guard on the COPY crashed `Merge::snipReads` (a guard on a destroyed op, `TestA5FoldedPins`, grammar 1 seed 7009698); one that removed the guard with the COPY in `opDestroy` lost the barrier again. The read is now made once, before the write.
+
+**Old-code evidence:** with the condition off, `TestA5173Pins` fails 2 checks (whole seed 1 finding, shrunk replay 1: both `n:folded-read-after-access`); with it, 0 and 0.
+
+### 2. Seed 13409856: oracle fault, A5-174
+
+Reproduced: `n:folded-store-after-access`, "the store at 060090AA ... folded into 0600231A is printed nowhere, and the write through a pointer at 060090B0 ... is made without it"; shrunk (84 evaluations) to one function: a `dt` loop leaving r3 = 0, then `cmp/gt ; bt L ; ... ; jmp @r1` through a table with a signed bound (the engine cannot recover it: "Could not recover jumptable ... Too many branches", "Treating indirect jump as call", signature withheld), whose cases run into `tst r3,r1 ; bt ; mov.b r0,@(0xE,r7) ; mov.l r0,@(0x18,r5)` at 0x06009062. The flow reaches that block only after the loop (r3 = 0, so `tst` always branches), and the engine says "Removing unreachable block (ram,0x06009066)" and drops the byte store. The runs reach the store through the table, where case 0 loads r3 from the global first.
+
+Verdict: oracle fault, A3-231's situation (a case of an unrecovered table is not in the text; the warnings at the block and at the jump say so). The oracle's `unrun` rule excused such a store only when no run makes it. Fix (oracle only): a store some run makes, in a block a "Removing unreachable block" warning names (`RemovedBlockInsns`), is set aside, `order.folded-store.removed-block`; mutation `SE_A7_RULE_OFF=5174` gives the findings back (whole 1, shrunk 1). No product change; nothing accepted.
+
+### 3. Runs
+
+| Run | Result |
+|---|---|
+| Pins (`SE_GENERATED_SEEDS=1`), both changes on | all passed; the four A5-173 and A5-174 pins 0 findings |
+| Pins, `SE_A7_RULE_OFF=5174` | 2 failures: 13409856 whole 1 finding, shrunk 1 |
+| Pins, patch 0099's condition off | 2 failures: 13401724 whole 1 finding, shrunk 1 |
+| Grammar 2 deep, 10,000 from 13,800,001, canary off, pins off | **failing seeds=0; findings=0** (786 s) |
+| Grammar 1, 10,000 from 13,900,001, canary off, pins off | failing seeds=1; findings=1 (644 s): 13905074 `v:map-way-back` (0600902C answered with a copy materialised before its own statement, A7-25), area 7, routed as one row, A5-175; patch 0099's branch is never taken in its shrunk replay |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | **failing seeds=0; findings=0** (717 s), all passed |
+| `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`) | **117 of 117 passed** (802 s) |
+| `check-literal-size.py FrontEnd Drivers include` | raw string sizes: ok (7 raw strings in 315 files) |
+
+Expected change in game-code text: patch 0099 adds a local variable only where a global read is held across a write of a hardware register whose address the flow found as a join of constants, not as a literal; compiled code loads a register's address from a literal, so few or no functions change. The corpus (two save states) is not in the repository and was not compared. The sanitizer jobs were not run.
+
+Not done: the game corpus; the sanitizer jobs; area 7 seed 13905074 (A5-175) and the two area 7 seeds A3-258 routed.
+
+## Area 12, round 3
+
+Reviewer of area 12, third round. Branch `review/12-round3`, cut at master `5bcf9284`. Read only on the Actions side (`gh api`: run lists, the job log of master run 44707039518); nothing was dispatched or pushed, so every workflow change below is unverified on a hosted runner. Scripts were run locally. Rows **A12-54 and A12-55** new; A12-38 (remaining part), A12-40 (1), A12-52 and A12-53 closed or narrowed.
+
+**Verdict, area 12 round 3: clean** (no P1 or P2 found). Round 2's changes held; the two new rows are P3, both in the raw-string gate that round 2 itself repaired. Round 2 was not clean, so the count of consecutive clean rounds is one.
+
+### 1. Round 2's changes, re-checked
+
+* `check-literal-size.py`: exits 2 on a missing directory and on a run that read no file (confirmed). It still passed having read less than claimed in two ways: a non-UTF-8 file was skipped silently, and the "no file read" count was over all roots together (A12-54, fixed). `Core`, which MSVC builds, was not scanned (A12-55, fixed).
+* The vendored-tree job's sparse checkout (`FrontEnd`, `Drivers`, `include`): complete for the gate (315 files, 7 raw strings). `Core` added.
+* Baseline wait (A12-46): the sanitizers job passed on master `5ce785f3` (run 44707039518, 72 minutes: Generated 1278 s, Decompiler 806 s, Runner 383 s, Fault 584 s); the 240 s wait is a hang catch only and is met.
+* Bundle Homebrew check: `deps="$(otool -L "$f")"` on its own line does stop a `bash -e` step when `otool` fails or the glob matches nothing (read again, not re-run here; round 2 tested it with a fake `otool`). `test "$checked" -ge 2` holds. The SDL3 `strings ... | grep -q` inside an `if` can pass with no `libSDL2*.dylib`, but the later launch with Homebrew's SDL removed fails then, so it is covered.
+* Release `timeout-minutes` 90, 90, 60, 15: the macOS notarisation waits with `notarytool --wait` and no timeout of its own, so the job's 60 minutes is its bound; a cancel there fails closed (the draft job `needs` it and is skipped). Past tags took 19 to 28 minutes in all.
+* Harness self-test: its 20 cases pass; `loader-omitted` and `printedc-omitted` exercise the checker's list. There was no case for a hanging binary (A12-53).
+* `REVIEW_PROGRAM.md` CI table: agrees with the workflow (fifteen binaries, four jobs); its timing figures updated to the latest run, and the per-binary limit added.
+* `SE_ROSETTA_TESTS` and `SE_DECOMPILER_TESTS`: every name is a registered test in a configure of the tree (117 tests, SDL off), the check script finds all sixteen Rosetta names, the sanitizer build list (14 targets), the runner (15 runs, the printed-C mode being the generator binary's second) and the checker's `EXPECTED` agree.
+
+### 2. Fixes
+
+* **A12-52.** CMake option `SE_FAIL_ON_SKIP` (default OFF); the `native` and Rosetta configure steps set it, and the four tests that skip themselves (Yss, Fixture, Fault, PrintedC) then carry no `SKIP_RETURN_CODE`. Evidence: a scratch project with a test that exits 77, `ctest` says `***Skipped`, "100% tests passed", exit 0 without the option and `***Failed`, exit 8 with it. The generated test files of the real tree carry `SKIP_RETURN_CODE` 5 times with the option off and once (the Area 9 full-disk case, which its own job requires) with it on. Rosetta had the same hole.
+* **A12-53.** `timeout --kill-after=60 ${SE_SANITIZER_TIMEOUT:-3600}` around each binary. The new `hang` case of the self-test runs a stub that sleeps 600 s with a 2 s limit: status 124, the checker fails, the binaries after it have their logs, 3 s in all. The job split is not done.
+* **A12-54, A12-55.** `check-literal-size.py`: on a scratch tree (a `\xe9` byte in a comment, a 20,000-byte raw string, an empty directory) the old script printed `ok (0 raw strings in 1 files)`, exit 0; the new one prints the string, `error: no C++ file was read under empty`, exit 2. The real tree, with `Core` added: `ok (7 raw strings in 341 files)`.
+* **A12-40 (1).** `-D_GLIBCXX_ASSERTIONS` in the sanitizers job's flags. Thirteen of its fifteen binaries (not the two live tests) were built in RelWithDebInfo with it and run with `ctest -j1` (Engine, Decompiler, Semantics, Decode, Generated, PrintedC, Fixture, Panel, Runner, Model, Trust, SlaFreshness, LoaderFuzz, Fault): all passed. Under ASan it is untried.
+* **A12-38.** The note on `SaturnExplorerSh2PrintedCTests` and Windows in `CMakeLists.txt`.
+
+### 3. Left open
+
+A12-40 (2) (the Rosetta ImGui font assertion, once, cause unknown), A12-42 (the release workflow does not require the CI matrix green on the tag, and starts no packaged binary on Windows), A12-43 (the nightly repeats seeds 1 to 20,000; rotating them could turn it red on the open area 7 rows, which a long run would show first), A12-44 (no Release test on macOS: wants a macOS trial), `Sh2PrintedC` under Rosetta. Minor, not filed: the Windows Release step's `-R` with `--no-tests=error` would pass if two of its three tests vanished from the registration (the build step would fail first for a removed target).
+
+### 4. Validation
+
+`python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include` prints `ok (7 raw strings in 315 files)`; the harness self-test passes (21 cases with `hang`); the workflows parse as YAML; a configure with `SE_FAIL_ON_SKIP` ON and OFF works (117 tests each). Built RelWithDebInfo, `-j2`, `ulimit -v 3500000`, with `-D_GLIBCXX_ASSERTIONS`: the fourteen suites above passed under `ctest -j1`. Not verified: any workflow change on a hosted runner (Windows or macOS with `SE_FAIL_ON_SKIP`, the sanitizers job with the new flag and timeout).
+
+## Area 12, round 4
+
+Reviewer of area 12, fourth round. Branch `review/12-round4`, cut at round 3's head `8355f280`. Read only on the Actions side (`gh api`: the run list and the three job logs of master run 44726279374: native macOS, native Windows, Rosetta); nothing was dispatched or pushed, so every workflow change below is unverified on a hosted runner. Rows **A12-56 and A12-57** new, both P3 and fixed.
+
+**Verdict, area 12 round 4: clean** (no P1 or P2 found). Round 3's changes hold; the two findings are P3 gaps of the same class as before (a gate that can be green on less than it names). Round 3 was clean, so the count of consecutive clean rounds is two.
+
+### 1. Round 3's changes, re-checked
+
+* **`SE_FAIL_ON_SKIP`.** It cannot turn a job red for a legitimate skip: the four tests that exit 77 are `YssFixture` (game save states in the checkout), `Sh2DecompilerFixture` (same), `DecompilerFault` (POSIX only; registered under `if(UNIX)`, so never on Windows) and `Sh2PrintedC` (UNIX, a C compiler). In master run 44726279374 `YssFixture` Passed on both macOS and Windows (not Skipped), `DecompilerFault` and `PrintedC` Passed on macOS (154 s, 125 s), the fixture suite's "SKIPPED" string appears nowhere, and `.yss` files are binary under `.gitattributes` `text=auto`. The in-test "SKIPPED in an MSVC Debug build" lines are cell-level skips inside a passing run and exit 0. `Area9Round5FullDisk` keeps its fixed `SKIP_RETURN_CODE 77` (Linux user namespace; its own job requires it) and no verify job runs it on Windows or macOS. A configure with the option ON and OFF: the generated `YssFixture` test carries `SKIP_RETURN_CODE` only with OFF; 117 tests either way, so `check-test-count.sh`'s floors are unaffected. Both configure steps that run tests pass the option; the sanitizers and nightly jobs run binaries directly and do not need it (the nightly already treats 77 as a failure).
+* **`timeout --kill-after=60` in `run-decompiler-sanitizers.sh`.** The script is used by one job only, `sanitizers` on `ubuntu-latest` (GNU coreutils `timeout` present); macOS and Windows never run it, and where `timeout` is missing the script falls back to running the binary unbounded, silently (a `command -v` guard). `timeout` runs the binary in its own process group and signals the group on expiry, so a forked child (the fault matrix's cells) dies with it; no test uses `killpg`, `kill(0,...)`, `setpgid`, `setsid` or reads stdin (grep), so the background group changes nothing. The self-test passes (21 cases, `hang`: rc 124, checker fails, 2 s). The slowest binary took 1278 s against 3600 s.
+* **`check-literal-size.py`.** Re-ran the workflow's exact command: `ok (7 raw strings in 341 files)`. `errors='replace'` makes a bad byte count as 3 bytes (U+FFFD), a harmless over-count. Found one more way to read less than claimed: A12-57.
+* **`Core` in the sparse checkout and the gate.** Present (17 `.cpp`/`.h` in `Core/src`, 8 in `Core/tests`, 1 in `Core/tools`). Not scanned: `Integration/Common` (three C headers, no raw strings; MSVC compiles them) and `Docs/` spikes (not built). Not filed.
+* **`-D_GLIBCXX_ASSERTIONS` with ASan.** The two flags do not interact (libstdc++'s container annotations are a separate macro, `_GLIBCXX_SANITIZE_VECTOR`, not set). The two live tests round 3 did not run with it were not run here either (the build was abandoned: the shared machine was too loaded to finish the engine in reasonable time).
+* **`REVIEW_PROGRAM.md` timings** agree with run 44707039518 (sanitizers 72 minutes).
+
+### 2. Fixes
+
+* **A12-56.** The "Windows Release `-R` would pass with two of three tests missing" observation was real, and applies as well to `SE_DECOMPILER_TESTS` (eleven tests, run once by `-R` after the full run excluded them with `-E`). New `.github/scripts/check-selected-count.sh <build> <regex> <n> [-- ctest args]`, a step before both with 11 and, on Windows with `-C Release`, 3. Evidence: with a regex naming a test that is not registered, `ctest -N -R` lists 2 and exits 0, while the new script prints `selects 2 tests (expected 3)`, exit 1; the two real selections give 3 and 11 in a configure of the tree.
+* **A12-57.** `check-literal-size.py` returned silently at a raw-string opener with no closer, so everything after it in the file went unmeasured. Scratch file `R"x(never closed` then a 20,000-byte `R"zz(...)zz"`: old `ok (0 raw strings in 1 files)`, exit 0; new `raw string opener with no closing delimiter`, exit 2. The real tree is unchanged (`ok`; no file has such an opener).
+
+### 3. Validation
+
+Workflow YAML parsed; `check-selected-count.sh` run on a real configure (SDL off, 117 tests). No ASan-with-assertions build was completed (disk and a loaded machine), so the sanitizers job's first run with the flag is the test of it, and the two live binaries (LiveRestoreSignal, LiveDecompilerCapture) remain untried with it. Not verified: any workflow change on a hosted runner.
+
+## Area 3, round 38
+
+Branch `review/3-round38` from master (`5bcf1d89`, round 37's A3-259 and A3-263 merged). RelWithDebInfo, `-j2`, `ulimit -v 3500000`. A review of round 37's product changes in `Sh2Decompiler.cpp`: A3-259 (`State::own` made only by a whole-word store of one register's entry value, `NoteOwnStore`, the clear at `Call`, the word-wide restore, the cap of 16) and A3-263 (`entryReadAtCall` read before `Apply`), with hand fixtures (`Docs/Decompiler/tools/a3_round38/`, round 37's tooling moved with `git mv`; `mk.py` now writes 335 fixtures: the n, q, pw, jn, gx and t11 to t16 series are new), then fresh sweeps. Three P2 misses found and fixed in `Sh2Decompiler.cpp`: A3-264 (found in the A3-259 rule), A3-265 (older), A3-266 (A3-259's restore). P3: A3-267 (over-warnings of the fixes, accepted by class), A3-268 (routed).
+
+### 1. Review
+
+* **The "one register's entry value" test (`mayEntry`, joins).** The store's value must be the register itself, a `mayEntry` word an inner call's model may have written over, or a join with it on one side and nothing shown changed, minus `SureChanged` and `innerChanged`. A join of the entry value with `add #1`, `extu.b`, `swap.w`, a load through the arena, a copy of another register (jn1 to jn6) is said or silent as the runs need; no changed value passed as an entry. The test holds, but the value the restore gives after it did not (A3-266).
+* **Alias of the address (A3-264).** The rule took another register's address, a loaded pointer, GBR or an absolute address as another word, and a store that never reached `NoteOwnStore` (an exact store at or above the entry r15, a pointer with only stack origins) cleared nothing. Fixtures hand the alias in: F0 stores r4 at `@r5` (n1) or at an absolute stash (n1e), passes it on the stack (n2), loads GBR with it (n4c, n4d), passes its own outgoing word (n5, n5b), or r5 = r4 (n6); n7 stores at the arena address r4 starts at. Each was `n:caution-unsaid`. A pointer a callee returns in r0 (n3) was said (the call cleared the set), and the same through an `@(r0,r1)` index of GBR or r4 (n4, n4e, n4f, b36 to b45) was said or already A3-261 (b).
+* **The cap of 16 and its eviction (q12).** 17 saved words through one base: the oldest is evicted and its restore noted; no eviction made a store silent. The saved words of nine registers (k13) stay silent.
+* **Stores a callee makes that the `Call` clear may miss (q16 to q19).** A store in a call's delay slot (runs before the callee), a callee that stores in its own `rts` slot, a thunk, `bsrf`: all said. `trapa` cannot be run by the generator's emulator (q9 not kept). A tail jump ends the path.
+* **Joins and loops with `own` (q7, q13 to q15, jn1 to jn7).** The intersection and the loop's re-walk are right; the loop of save, step and restore with a final step was a miss through the restore's value (A3-266), not the join.
+* **A3-263's ordering (t11 to t16).** A kept call between the copy and the reading call, the copy after it, a thunk to the reading callee, a second callee that reads r3, a literal `jsr`, the copy in a call's delay slot: all said, before and after.
+* **A3-265, found by the mayEntry spot.** F2 pushes r10, calls G3 which writes the pushed word (`mov #7,r1 ; mov.l r1,@r15`), pops r10: no caution, though the walk knows the exact word G3 writes (pw1 to pw5). Older than round 37 and no `State::own` involved.
+
+### 2. Fixes
+
+* **A3-264.** `NoteOwnStore`: an entry survives a store only when it is told to miss it (the same register at an offset that does not overlap, two absolute constants that do not); every other store through memory not tracked clears all entries. `OwnStore::org` is removed. `Store` clears all entries at an exact store at or above the entry r15 and at an address that may be a word of the caller's frame.
+* **A3-265.** `Call`: after `Apply`, in a walk of a callee's code, the words of this function's frame the called function writes at exact offsets (its walk's frame words, or a lent callee's) that held a register's entry value or may still are marked `innerChanged` for that register.
+* **A3-266.** `Load`: a restore's value carries the register as `mayEntry`, so the ops after it step it as they step a popped word.
+* **Evidence.** Pins, `TestA3RoutedPins`: the A3-264 block (nine pins, controls n1c, n4e, n3), the A3-265 block (pw1 to pw5), the A3-266 block (jn7 to jn12, jn14; controls gx2, jn13). Old code, A3-264: the branch parent's `Sh2Decompiler.cpp` with the same tests, swapped and rebuilt, not committed: the nine pins `required 1, said 0`, controls silent; new code: all pass. A3-265 off (the new block's `if` made false): the five pins `required 1, said 0`. A3-266 off (the two `mayEntry` lines): the seven pins `required 1, said 0`; gx1 (GBR stepped after its restore) was said without the change and is not pinned. The 314 fixtures of the file at the time were run with the code before and after A3-264: the two that changed besides the pinned ones are b12 and n3c, each a hedge (`caution.unchanged`, A3-267); the final 335 run with no FAILED and the same finding set (b40, b41 by A3-261 (b), n7's `n:dropped`, the generator-class ones by design).
+* **Expected changes in game code text** (the local corpus is not in the repository): a caution at a call whose callee saves a callee-saved register through a pointer, writes memory through another base register or an absolute address before restoring it (A3-264), restores it and then changes it (A3-266), or whose callee writes a word the walked function saved a register in (A3-265). Notes only; no statement, prototype or ledger count changes. All are hand-written context code; compiled code pushes.
+
+### 3. Sweeps (`SE_GENERATED_CANARY=0`, `SE_GENERATED_PINS=0` for the ranges)
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep` | 13,800,001, 10,000 seeds | failing seeds=0, findings=0 |
+| Grammar 1 | 13,900,001, 10,000 seeds | failing seeds=1, findings=1: 13905074 `v:map-way-back` (and `n:` in the second request; A7-25, area 7; the same with the branch parent's binary): routed (A3-268) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | | 10,000 seeds of each grammar: failing seeds=0, findings=0 (798 s with the machine shared; the canary and 979 pin lines in it) |
+
+The sweeps draw none of the shapes of A3-264 to A3-266 (callee-saved registers stored through a pointer and restored, an alias handed by the caller, a callee writing a word its caller pushed), so they neither found nor tested them; the hand fixtures and pins did.
+
+### 4. Runs
+
+* `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`): **117 of 117 passed** (685 s). `python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include`: raw string sizes ok (7 raw strings in 315 files). `tools/a3_round38/selftest.sh`: ok. `run.sh` over all 335 fixtures: exit 0, none FAILED. C++17 only.
+* Not run: the local game corpus (not in the repository), so no corpus text before and after was compared; the sanitizer jobs (CI).
+
+**Verdict, area 3 round 38: not clean.** P2: A3-264 (round 37's own-store rule took another register's address, a loaded pointer, GBR, an absolute address and the caller's frame as another word; found by hand fixtures, fixed with pins), A3-265 (a callee that writes the word a saved register was pushed in; older than round 37, found by hand, fixed with pins) and A3-266 (the value of a restore was no entry value for the ops after it; found by hand, fixed with pins). No P1. P3: A3-267 (accepted), A3-268 (routed). The sweeps are clean for area 3. By REVIEW_PROGRAM.md's rule the count of consecutive clean rounds restarts.
+
+## Area 10, round 4
+
+Branch `review/10-round4c` from the first-pass commit of an earlier agent on this round (a mutation harness and the whole-patch results for patches 0001 to 0078), merged with master `90d3f88a`; patches 0001 to 0098 (88 files). Reviewer of area 10 (`REVIEW_PROGRAM.md`: "the reproduction job; one review per patch against pinned upstream; upstream bugs filed"), round 4, independent of rounds 1 to 3; the oracle of this round is the mutation of each patch against every test that exists, so that a patch (or a hunk of one) that no test fails without is found. **Verdict, area 10: not clean.** **A10-25 and A10-26 are P2** (patch 0052's alignment check and patch 0090's `RuleConditionalMove` guard had no test that fails without them; both are pinned now by `TestArea10Round4`, no product change). No P1. Three P3 rows (A10-27 to A10-29) record survivors that are redundant, fail-closed or sanitizer-only code, accepted on A10-14's and A10-10's grounds.
+
+### 1. Method
+
+`tools/a10_round4/mut.py` (committed with the first pass): reverts a patch's hunks in the vendored tree with `git apply -R` (the hunks `tools/a11_round2/patch_mutants.py --check` can revert alone), rebuilds, runs the oracles (`pc` = `SaturnExplorerSh2GeneratedTests` with `SE_GENERATED_PRINTEDC=only`, `engine`, `unit`, `gen`, `fault`, plus `sem`, `decode`, `runner` where a patch names them), restores the tree (`git status` clean under `third_party/` and `Sh2SpecData.h` after every mutant; it is checked before the harness exits), and records the failing test functions. Two passes:
+
+* **Pass 1 (whole patch, 0001 to 0078): `tools/a10_round4/results.tsv`** (65 rows, the earlier agent's): 38 killed by the test the README names, 10 killed by another, 4 survived (0001, 0040, 0052, 0060), 9 did not build, 2 have no hunk that reverts alone (0019, 0037), 1 spec regeneration failed (0038).
+* **Pass 2 (per hunk group): `results_groups.tsv`**, jobs by `jobs_gen.py` (`jobs_pass2.json`, 110 mutants, `pass2.log`). A group is the hunks of one patch in one function of one file, so a mutant is one route of the patch. Run for the four survivors of pass 1, the nine that did not build, and the multi-hunk patches 0078 to 0098 that round 3 had mutated whole (0082, 0085 and 0094 were per hunk in round 3). The harness stops at the first failing oracle, cheapest first (`pc`, `engine`, `unit`, `gen`), and runs `fault` last (the fault matrix, 94 jobs, 70 to 140 s). The survivors of the first four oracles were rerun with `fault` (ids ending `f`; every `0001` group also with `runner`). The earlier agent's own second pass (the groups of 0059, 0062, 0064, 0067, 0070, 0073, 0077 and 0078-g1; log `a10_mut2c_partial.log`, 43 mutants) was killed by a container restart; its results are taken as they are: every group was killed by some oracle but `0064-g13`, `0064-g14` and `0070-g1`, which are in A10-29 here; `0064-g7` and `0073-g1` did not build.
+* **Pass 3 (all hunks of the nine that did not build, headers included): `results_whole_with_headers.tsv`**: 0010 builds and is killed (`TestArea7Round13`, `TestArea7Round25`); 0028, 0044, 0056, 0057, 0065, 0066, 0072 and 0076 do not build with every hunk reverted (0028 removes `FuncProto::setEffects`, which the host calls; the others are overlapped by later patches, so their hunks cannot be reverted without the later ones). They are covered through the groups of the later patches. Not reverted by hand.
+
+Builds: RelWithDebInfo, `-j2`, every compile and test run under `ulimit -v 3500000`. The shared disk went to 1.9 GB free once; five old regenerable binaries of the scratchpad were deleted.
+
+### 2. Findings
+
+| Row | Sev | Mutant | Result |
+|---|---|---|---|
+| A10-25 | P2 | 0052 hunk 3 (`flow.cc`, the alignment check) | survived all five oracles; the A7-6 fixture's odd entry lands on bytes that are no instruction. **Fixed as a test**: `TestArea10Round4` a (the bytes at the odd entry decode); reverted: 2 checks fail |
+| A10-26 | P2 | 0090 hunk 13 (`RuleConditionalMove`) | survived all five oracles. **Fixed as a test**: `TestArea10Round4` b (two writes of a global joined, a read through a pointer after the join); reverted: both checks fail (`uRam06001010 = (uint4)(param_1 != 0);` is a third write) |
+| A10-27 | P3 | 0056 h4, h11, h12; 0060 h1, h4; 0065 h2, h9, h10, h13; 0066 h1, h4, h5, h14, h15, h17 | the stack-escape family's redundant or fail-closed hunks (A10-14's reasoning); accepted |
+| A10-28 | P3 | 0072 h5, h24, h33; 0076 h5; 0078 h3; 0056 h10; 0065 h8 | resets of per-analysis state and constructors on paths the host does not take; accepted |
+| A10-29 | P3 | 0001 h2, h7, h8; 0064 h23, h24; 0070 h1; 0086 h8, h9; 0083 h1 to h3; 0040 (13 groups) | cancel check-points that `Action::perform` makes redundant for results; signed division and remainder of an xunknown read untested; compiler-warning and LeakSanitizer-only patches; accepted |
+
+Killed per hunk (each by at least one test of the suite; the table of failing functions is `results_groups.tsv`): 0072 h1, h3, h7, h11, h15 and h16, h18, h23, h30 to h32 (`TestA3130Fix`, `TestLeftoverSeedPins`, `TestPrintedC`); 0076 h2, h6; 0078 h1, h2 (`TestA3155Fix`); 0079 whole (11 hunks, `TestArea7Round7`, `Round10`, `Round18`); 0081 (12 `A2-...` pins); 0084 h2, h3; 0086 h2 and h4 to h7; 0087 h2, h4; 0088 h2 (`TestArea10Round3`), h3; 0090 h2, h4, h10, h12; 0093; 0096 h4; 0098 h1; 0056 h7 and h8; 0060 h2 (the fault matrix: 2 jobs fail). 0040 h4 crashes `unit` (rc -11).
+
+Builds that fail with one hunk reverted (the declaration or helper of a header or of another hunk remains): 0010 (3 groups; the whole patch builds and is killed), 0028, 0038 (spec regeneration), 0040 g3, 0044 g3, 0056 g1, 0057, 0065 g2, g5, g6, 0066 g2, g6, g7, g10, 0072 g4, g7, g9, g11 to g13, 0076 g1, 0086 g1, g3, 0087 g1, 0088 g1. Pass 3 above covers the patches among them. Their hunks are not individually shown to be tested.
+
+### 3. The new tests
+
+`TestArea10Round4` (`Sh2DecompilerTests.cpp`, registered after `TestArea10Round3`; the `patches/README.md` cells of 0052 and 0090 name it):
+
+* a: the A7-6 function (`TestRoutedSeeds`) with words 24 and 25 changed to `0x0000` and `0x09E0`, so the bytes at the odd table entry `0x06009031` are `nop` and `mov #0,r0`. Passes on the tree (a bad-data halt at `0x06009031`, no "overlaps instruction", `halt_baddata();`); with `flow.cc`'s check removed (`git apply -R` of hunk 3 of 0052, rebuilt) it fails 2 checks and `Sh2DecompilerTests` reports no other failure.
+* b: `mov.l @(lit),r6 ; tst r4,r4 ; bt ; mov #1,r1 ; mov.l r1,@r6 ; bra ; nop ; mov #0,r1 ; mov.l r1,@r6 ; mov.l @r7,r0 ; rts ; nop` with the literal `0x06001010`. Passes on the tree (two writes in the arms); with hunk 13 of 0090 reverted it prints the third write and fails both checks.
+
+### 4. Runs
+
+* `check-vendored-tree.py lint` and the literal check: see the end of this section. Both A10-25 and A10-26 changed `Sh2DecompilerTests.cpp`, a test file, and the README, not the vendored tree: `check` against upstream is unaffected (not rerun: no blobless clone of upstream; the vendored sources are byte-identical to the commit this round started from, `git diff 9c6d52ca -- third_party` is empty).
+* Unmutated baseline before the second pass was not run separately: the first mutant of each pass (0001-g1 `pc`, `engine`, `unit`, `gen` all `ok`) and the fault matrix (`fault matrix: 0 of 94 job(s) failed, 137.7 s` with one job) show the tree passes; the final `ctest` is below.
+* Not done: the mutation of 0001 to 0058's multi-hunk patches per group (the earlier agent's second pass did 0059 on; the whole-patch pass 1 killed 38 of them by the named test); hand-made reverts of the nine that do not build (the later patches' groups cover the code); the LeakSanitizer reading of 0040 (`fault` under the sanitizers job; no sanitizer build here); a fixture for 0086 h8 and h9 (signed division of a CONCAT), 0066 h5 (the cap of 256); nothing filed upstream (A10-24 stays open).
+* `ctest --test-dir build -j1` (RelWithDebInfo, under `ulimit -v 3500000`), after the final build: `100%% tests passed, 0 tests failed out of 117`, 702 s. `check-vendored-tree.py lint`: `vendored tree: ok (lint)`; `check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include`: `raw string sizes: ok`. `git status` clean under `third_party/` after every mutant and at the end.
