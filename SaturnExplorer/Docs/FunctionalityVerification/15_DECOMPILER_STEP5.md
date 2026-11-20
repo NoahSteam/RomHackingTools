@@ -24834,3 +24834,38 @@ Stays open: the drafts are in the record, nothing was filed (none can be from he
 
 EOF
 `ctest --test-dir build -j1` (RelWithDebInfo, `-j2`, `ulimit -v 3500000`) after the final build: `100% tests passed, 0 tests failed out of 117`. `check-vendored-tree.py lint`: `vendored tree: ok (lint)`. `check-literal-size.py`: `raw string sizes: ok (7 raw strings in 341 files)`. `git status` clean under `third_party/` after every mutant.
+## Area 3, round 40
+
+Branch `review/3-round40` from the coordinator's master with round 39 merged (`77a452a1`). RelWithDebInfo, `-j2`, `ulimit -v 3500000`. A review of round 39's product changes in `Sh2Decompiler.cpp` (A3-269 `NoteOwnStore`/`ApartOnBus`, A3-270 `Clobber`'s `innerChanged` for an exact address handed to a callee) with hand fixtures (`Docs/Decompiler/tools/a3_round40/`, round 39's tooling moved with `git mv`; `mk.py` now writes 424 fixtures: the ab, ph and ov series are new), then fresh sweeps. One P2 miss found and fixed (A3-274); P3: A3-275 (in A3-271's accepted class), A3-276 (the window's cost, accepted), A3-277 (a register saved in a hardware address, accepted), A3-278 (sweeps routed). A3-271 not reopened.
+
+### 1. Review
+
+* **A3-269, `ApartOnBus`.** No miss. The generator's bus repeats the 4 KiB cache data array under partitions 4 and 6 and the 1 MiB work RAMs; nothing it repeats is tighter than 0x1000. Words at 0xC0000FFC and 0xC0000000 or 0xC0001000 (ab1, ab2, ab4) are different words and silent; 0xC0000000 and 0xC0001000 (ab3) are one and said. An aliased store inside the window needs a start 0x1000 + j from the word with j between minus the width and 3, and a distance below 0x1000 makes j negative: an aligned store cannot (an unaligned one is an address error). Overlapping byte and half-word stores (ab5, ab9) are said; the window's two ends at r4 plus and minus 0xFFC (ab6, ab7) are other words. A distance wrapped at 32 bits compares right (`Wrap`), a register base plus a negative offset likewise, and a store of another width than the word is judged by its own width. Hardware repeats tighter than 0x1000 (SMPC every 0x80 bytes, the SCU and VDP registers) are no memory a register is saved in. Mednafen's `ss.cpp` was not read (`_emu/mednafen` is absent here); the generator's own map was used.
+* **A3-270, exact address handed to a callee.** Said: r5 and r6 (ph2), an address copied through r8 (ph10), a lent callee with r4 to r7 shown (ph3b), a second-level callee (ph5), a tail jump through a literal (ph6), a caller-made `sub` (ph9), a byte store (ph12), `@(r0,r5)` (ph13), a re-pushed word (ph17), an own-frame word that is no push (ph18). **Missed, P2 (A3-274):** the address in r7 to a callee that is not lent (ph3), `pw7` with a callee that returns r3 (ph23, ph24 through a second level), the address stored by a lent callee in a global and written by a later callee (ph14), handed back in r0 and written through by the caller (ph19), and handed in a stack word (ph16). In each r10 came back 7 and the text said no caution. Cause: for a callee that is not lent `Apply`'s frame clobber (the default effects write at and above the call's r15) wrote the word over as one that may still hold the entry value before A3-270's rule in `Clobber` looked for a saved register; a lent callee that keeps or returns the address does not "store through" the register.
+* **Misses left, in A3-271's class (A3-275, P3 accepted by class):** the callee steps the handed pointer (ph7, ph8) or stores past the object (ph11), and an address in r13 (ph4).
+* **Interaction with A3-264 to A3-266.** No new miss: the frame words and restored values of rounds 38 and 39 are unchanged on all fixtures of the file but ph*.
+* **Over-warnings.** A3-276: a store 4 KiB or more from the saved word (two globals 8 KiB apart, a pointer plus 6 KiB, a copy loop 8 KiB on: ov1 to ov3, ab8) is a hedge, `caution.unchanged`, a "may". A3-274's fix adds the same hedge where a callee only reads through the handed address (ph20, ph21). No wrong statement.
+
+### 2. Fix
+
+* **A3-274.** `NoteHandedSavedWords`, called from `Call` before `Apply` in the probe and the walked callees: a saved register's word (r8-r14, GBR, VBR) that an exact stack address handed to the call lies in is marked `innerChanged` for the register. The addresses: for a lent callee those in r0-r7 named by `storesThrough`, `leaks` or `outOrigins`; for a callee that is not lent the convention's (r2, r4-r7) and what its walk shows it hands on (`CalleeHanded`, r0-r7 only: r8-r14 hold the frame pointer); and an exact stack address in a word at or above the call's r15, for a callee not lent or one that loads from memory.
+* **Evidence.** Pins, `TestA3RoutedPins`: the A3-274 block (ph3, ph14, ph16, ph19, ph23; control ph20). Old code (round 39's head, same fixtures, the generator binary kept and run beside the new one; not committed): ph3, ph14, ph16, ph19, ph23, ph24 `n:caution-unsaid`, required 1, said 0; new code: all said, no finding. Each pin runs with cautions taken out and is then `caution-unsaid`. A diff of the file's 418 run lines between the two binaries: only ph3, ph14, ph16, ph19, ph23, ph24 (said now) and ph20, ph21 (a hedge) differ.
+* **Expected changes in game text:** none from compiled code (no local is the address of a saved register's word; a frame pointer r14 = r15 is not handed); notes only, no statement, prototype or ledger count changes. The local corpus is not in the repository: no corpus text was compared.
+
+### 3. Sweeps (`SE_GENERATED_CANARY=0`, `SE_GENERATED_PINS=0` for the first two)
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep` | 14,200,001, 10,000 seeds | failing seeds=1, findings=2: 14204452 `map-const-join`: area 7, routed (A3-278) |
+| Grammar 1 | 14,300,001, 10,000 seeds | failing seeds=2, findings=5: 14307638 `map-way-back` (A7-25), 14309635 `map-copy-store`: area 7, routed (A3-278) |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | | 10,000 seeds of each grammar: all passed (canary 240 programs, 0 failing; 999 pin lines, six of A3-274) |
+
+No area 3 class (`caution-unsaid`, `callee-saved`, `state-saved`) in either sweep. As in rounds 38 and 39 the sweeps draw none of the shapes under review.
+
+### 4. Runs
+
+* `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`): **117 of 117 passed** (696 s).
+* `python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include SaturnExplorer/Core`: raw string sizes ok (7 raw strings in 341 files). `tools/a3_round40/selftest.sh`: ok. `run.sh` over all 424 fixtures: exit 0, none FAILED (findings: A3-261 (b) b40 and b41, A3-271 pw9 and pw10, A3-275 ph4, ph7, ph8, ph11, A3-277 ab11 and ab11b, and the generator-class ones by design). C++17 only.
+* Not run: the local game corpus (not in the repository); the sanitizer jobs (CI).
+
+**Verdict, area 3 round 40 (A3-274 fixed): not clean.** P2: A3-274 (round 39's A3-270 reached only a lent callee that stores through a register; the exact address of a pushed word handed to a callee that is not lent, kept by one in memory, returned, or put in a stack word still came back changed with no caution; found by hand, fixed with pins). No P1. P3: A3-275 (in A3-271's class, accepted), A3-276 and A3-277 (accepted), A3-278 (routed). A3-269's window holds: no miss. The sweeps are clean for area 3. The count of consecutive clean rounds restarts.
