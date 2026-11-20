@@ -29,6 +29,8 @@ for m in re.finditer(r"/\* (.*?) \*/", flat):
 cnt = re.search(r"^checks: (.*)$", out, re.M)
 cc = " ".join(x for x in (cnt.group(1).split() if cnt else []) if x.startswith("caution.") or x.startswith("excluded.stale"))
 finds = sorted(set(re.findall(r"^  \[([nv]:[^\]]+)\]", out, re.M)))
+if int(re.search(r"^(\d+) finding\(s\)$", out, re.M).group(1)) and not finds:
+    sys.stdout.write(out); print("%s: FAILED (a nonzero finding count with no finding line)" % sys.argv[1]); sys.exit(1)
 print("%s: %s | %s | %s | findings %s" % (sys.argv[1], " ".join(rets), "; ".join(notes) or "no note", cc, ",".join(finds) or "none"))
 for l in out.splitlines():
     if l.startswith("  [") and "caution" in l: print("    " + l.strip()[:400])

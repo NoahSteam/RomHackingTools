@@ -24342,3 +24342,13 @@ External review of PR #70 found that `tools/a3_round35/run.sh` printed `findings
 **Fix.** `run.py` now accepts a run only when it printed `N finding(s)` and either exited 0 with `all passed` and no CHECK, or exited 1 with N > 0 and exactly the one CHECK `rep.findings.empty()` (how the generator reports findings). Any other outcome prints the child's lines and `RUN FAILED`, and exits non-zero. Such outcomes include a crash, a `timeout` (124), another CHECK, a missing summary, or a fixture that does not assemble. `run.sh` runs with `pipefail`, prints `<fixture>: FAILED`, and exits 1 if any fixture failed. `selftest.sh` substitutes four failing generators: a CHECK with exit 42, exit 124, exit 0 with no summary, and exit 1 with a CHECK other than the findings one. It passes with the new runner and fails all four with the old one.
 
 **Did it hide a recorded result?** All 82 fixtures were rerun through both runners. 80 summaries are byte-identical. Two fixtures, x7 and p6, never ran: they used `mov.b Rm,@(disp,r15)` with Rm not r0, which SH-2 does not encode. The old runner showed them as `findings none`. Neither is cited in the round 35 section. They now store through a copy of r15. Each gives a "may change" note and no finding, which is A3-249's stated residual (a partial store of the same bytes) and A3-252's class.
+
+**Follow-up review.** ChatGPT's next review of PR #70 found two more gaps, both now fixed:
+- **Generator findings were dropped.** `run.py` filtered out the generator's own finding lines (`  [n:generator:...`). A run whose only findings were of that class still read `findings none`. `run.py` now prints one line per generator class, and `run.sh` fails any run that has a nonzero finding count and no finding line. Seven summaries changed:
+  - j3 now reads `n:generator:callee-saved`: the fixture changes r11 on purpose.
+  - h4 to h7, h10 and h11 now read `n:generator:state-saved`: F2 leaves gbr loaded on purpose.
+
+  Their caution counts are unchanged, and those are what the round 35 record and A3-251 cite ("h4 to h11 ... are all said").
+- **Regeneration brought back the bad stores.** `mk.py` still emitted the two stores that don't assemble. Its x7 and p6 bodies now match `fixtures.src`, and regenerated output is identical to the committed file.
+
+`selftest.sh` now also checks three finished runs. A generator-class finding and an ordinary finding are each named in the summary, and a clean run reads `none`. With all 82 fixtures rerun, none failed.

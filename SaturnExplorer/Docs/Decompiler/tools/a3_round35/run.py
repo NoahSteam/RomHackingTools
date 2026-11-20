@@ -54,7 +54,15 @@ if not done:
     sys.exit(p.returncode or 1)
 out = r[r.find('default request'):] if 'default request' in r else r
 keep = os.environ.get('FULL')
+gen = {}
 for l in out.splitlines():
     if keep or not (l.startswith('  warning') or l.startswith('  fates') or l.startswith('  [n:generator') or l.startswith('CHECK') or 'ms total' in l or l.startswith('  note')) :
         print(l)
     elif l.startswith('  note'): print(l[:230])
+    elif l.startswith('  [n:generator'):
+        k = l.split(']')[0] + ']'; gen[k] = gen.get(k, 0) + 1
+# The generator's own findings (a fixture that breaks the callee-saved convention on purpose, say) are not printed line by line, but they
+# are findings: one line per class keeps them in run.sh's summary (A3-254), so a nonzero finding count never reads as "none".
+if not keep:
+    for k, c in sorted(gen.items()): print('%s (generator finding, %d line(s))' % (k, c))
+

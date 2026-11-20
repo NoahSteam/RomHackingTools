@@ -89,7 +89,7 @@ for n, why, body in [
   ("p3", "under: part store of r10's own byte over the pushed marked word", callg + "mov.l @r15+,r10\nnot r10,r10\nmov.l r10,@-r15\nmov.b r10,@r15\nmov.l @r15+,r10\n"),
   ("p4", "under: part store of r3 over the pushed marked word (r3 unknown)", callg + "mov.l @r15+,r10\nneg r10,r10\nmov.l r10,@-r15\nmov.b r3,@r15\nmov.l @r15+,r10\n"),
   ("p5", "under: pushed marked word, a second inner call G over it, popped", callg + "mov.l @r15+,r10\nnot r10,r10\nmov.l r10,@-r15\nbsr G\nnop\nmov.l @r15+,r10\n"),
-  ("p6", "under: marked word pushed, part store to the neighbour word at r15+4 (untouched), popped", callg + "mov.l @r15+,r10\nnot r10,r10\nmov.l r10,@-r15\nmov #1,r1\nmov.b r1,@(4,r15)\nmov.l @r15+,r10\n"),
+  ("p6", "under: marked word pushed, part store to the neighbour word at r15+4 (untouched), popped (through a copy of r15, as x7)", callg + "mov.l @r15+,r10\nnot r10,r10\nmov.l r10,@-r15\nmov #1,r1\nmov r15,r2\nadd #4,r2\nmov.b r1,@r2\nmov.l @r15+,r10\n"),
   ("p7", "under: marked word stored to a frame slot with r15 offset, popped by a load at the displacement", callg + "mov.l @r15+,r10\nnot r10,r10\nadd #-8,r15\nmov.l r10,@(4,r15)\nmov.l @(4,r15),r10\nadd #8,r15\n"),
   ("p8", "under: marked word pushed, byte store over it with an unknown address (r4 +0 into the stack?) not applicable; byte into the word through r1 = r15", callg + "mov.l @r15+,r10\nnot r10,r10\nmov.l r10,@-r15\nmov r15,r1\nmov #1,r2\nmov.b r2,@r1\nmov.l @r15+,r10\n"),
   ]:
@@ -102,7 +102,7 @@ for n, why, body in [
   ("x4", "push r10, a full-word store of 1 over it, pop (control: exact, said by A3-197)", "mov #1,r1\nmov.l r1,@r15\nmov.l @r15+,r10\n"),
   ("x5", "push r10, byte store through a copy of r15, pop", "mov r15,r1\nmov #1,r2\nmov.b r2,@r1\nmov.l @r15+,r10\n"),
   ("x6", "push r10, inner call, byte store of 1 over it, pop", callg + "mov #1,r1\nmov.b r1,@r15\nmov.l @r15+,r10\n"),
-  ("x7", "push r10, byte store of r10's own low byte over it, pop (the byte is the same only in the low position)", "mov.b r10,@(3,r15)\nmov.l @r15+,r10\n"),
+  ("x7", "push r10, byte store of r10's own low byte over it, pop (the byte is the same only in the low position) (through a copy of r15: `mov.b Rm,@(disp,Rn)` stores only r0, so the first version never assembled)", "mov r15,r1\nadd #3,r1\nmov.b r10,@r1\nmov.l @r15+,r10\n"),
   ]:
     out_extra.append("# %s: %s\nname %s\nret 0,0,0\nenv SE_GENERATED_CLOBBERS=0,400,400\n%s" % (n, why, n, head + body + tail.rstrip("\n")))
 # q*: a marked value through memory (pointer store, load); the pointer is r10's own entry value in q1..q3 (r10 = r4 + 8 going in)
