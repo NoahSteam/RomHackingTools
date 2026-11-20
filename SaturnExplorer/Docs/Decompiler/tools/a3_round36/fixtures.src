@@ -2485,7 +2485,7 @@ G:
 mov #4,r10
 rts
 mov r3,r0
-# p6: under: marked word pushed, part store to the neighbour word at r15+4 (untouched), popped (through a copy of r15, as x7)
+# p6: under: marked word pushed, part store to the neighbour word at r15+4 (a spare word, not the saved PR: round 36 added it), popped (through a copy of r15, as x7)
 name p6
 ret 0,0,0
 env SE_GENERATED_CLOBBERS=0,400,400
@@ -2507,12 +2507,14 @@ bsr G
 nop
 mov.l @r15+,r10
 not r10,r10
+add #-4,r15
 mov.l r10,@-r15
 mov #1,r1
 mov r15,r2
 add #4,r2
 mov.b r1,@r2
 mov.l @r15+,r10
+add #4,r15
 .word 0x4F26
 rts
 mov r3,r0

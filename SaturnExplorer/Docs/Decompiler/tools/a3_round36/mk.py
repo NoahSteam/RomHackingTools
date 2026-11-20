@@ -89,7 +89,7 @@ for n, why, body in [
   ("p3", "under: part store of r10's own byte over the pushed marked word", callg + "mov.l @r15+,r10\nnot r10,r10\nmov.l r10,@-r15\nmov.b r10,@r15\nmov.l @r15+,r10\n"),
   ("p4", "under: part store of r3 over the pushed marked word (r3 unknown)", callg + "mov.l @r15+,r10\nneg r10,r10\nmov.l r10,@-r15\nmov.b r3,@r15\nmov.l @r15+,r10\n"),
   ("p5", "under: pushed marked word, a second inner call G over it, popped", callg + "mov.l @r15+,r10\nnot r10,r10\nmov.l r10,@-r15\nbsr G\nnop\nmov.l @r15+,r10\n"),
-  ("p6", "under: marked word pushed, part store to the neighbour word at r15+4 (untouched), popped (through a copy of r15, as x7)", callg + "mov.l @r15+,r10\nnot r10,r10\nmov.l r10,@-r15\nmov #1,r1\nmov r15,r2\nadd #4,r2\nmov.b r1,@r2\nmov.l @r15+,r10\n"),
+  ("p6", "under: marked word pushed, part store to the neighbour word at r15+4 (a spare word, not the saved PR: round 36 added it), popped (through a copy of r15, as x7)", callg + "mov.l @r15+,r10\nnot r10,r10\nadd #-4,r15\nmov.l r10,@-r15\nmov #1,r1\nmov r15,r2\nadd #4,r2\nmov.b r1,@r2\nmov.l @r15+,r10\nadd #4,r15\n"),
   ("p7", "under: marked word stored to a frame slot with r15 offset, popped by a load at the displacement", callg + "mov.l @r15+,r10\nnot r10,r10\nadd #-8,r15\nmov.l r10,@(4,r15)\nmov.l @(4,r15),r10\nadd #8,r15\n"),
   ("p8", "under: marked word pushed, byte store over it with an unknown address (r4 +0 into the stack?) not applicable; byte into the word through r1 = r15", callg + "mov.l @r15+,r10\nnot r10,r10\nmov.l r10,@-r15\nmov r15,r1\nmov #1,r2\nmov.b r2,@r1\nmov.l @r15+,r10\n"),
   ]:
