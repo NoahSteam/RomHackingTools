@@ -22456,12 +22456,12 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(rep.findings.empty() && count(rep, "caution.notes") == 0);
         }
     }
-    // A3-259 (area 3 round 37 review, tools/a3_round37 fixtures b1 to b25, k8): round 36's rule "a load through the same address as a store on
+    // A3-259 (area 3 round 37 review, tools/a3_round37 fixtures b1 to b25, k8, b42, b45): round 36's rule "a load through the same address as a store on
     // the way here is a restore" took the store for one that left the register's entry value in the word, whatever else was written there
     // after it, and whatever the load reads: a second store of another register or a constant at the same address (b1, b2, b3, b14, k8), a
     // narrower store over it (b4), a store through the same register at an overlapping offset (b11, b13) or an index (b21) or a pointer joined
     // of two (b22), a store of a value made from the register (b7, b8, b9: the value stored was r10 + 1), an inner call that writes the
-    // word (b10: said before, not pinned), a store on one path only before the join (b16, b18), a narrower load of it (b5, b6), and an absolute address (b23, b25). In each the runs return r10 changed and the text, which stores r10 after the call, said
+    // word (b10: said before, not pinned), a store on one path only before the join (b16, b18), a narrower load of it (b5, b6), an absolute address (b23, b25), and a store through another address of the same register made with an index or loaded (b42, b45: a pointer r4 + r6 with r6 = 0 in the runs). In each the runs return r10 changed and the text, which stores r10 after the call, said
     // no caution (`n:caution-unsaid`). Now State::own holds, per address, the one register whose entry value is the whole word there (a full
     // word store of exactly that value), a later store that may write any of its bytes (NoteOwnStore) or a call takes the entry out, and a
     // load of another width is no restore. As printed: no finding, the caution required and said; with every caution taken out, `caution-unsaid`.
@@ -22488,6 +22488,8 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             { "b23", "0/0/18,20/20/32,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 E207 2122 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0603 0000" },   // an absolute address, a constant stored over it
             { "b25", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 D20F E007 2200 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0603 0000 0603 0001" },   // an absolute address, a byte stored over its low end
             { "k8", "0/0/18,20/20/2e,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 25A2 25B2 6A52 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10, then r11, stored through r5
+            { "b42", "0/0/18,20/20/36,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 5643 6143 316C 21A2 E207 2422 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r1 = r4 + r6 (r6 loaded, 0), 7 stored through r4 over it
+            { "b45", "0/0/18,20/20/3a,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 5643 6143 316C 21A2 6243 326C E307 2232 6A12 4F26 000B 6033 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r1 and r2 = r4 + r6 made twice, 7 stored through r2
         };
         for (const auto& p : pins)
         {
@@ -22504,6 +22506,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
         }
         const struct { const char* name; const char* funcs; const char* returns; const char* clobbers; const char* words; } controls[] = {
+            { "b43", "0/0/18,20/20/32,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 5643 6143 316C 21A2 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r6 loaded from memory (0), r10 stored and loaded through r4 + r6 (a restore through an indexed address)
             { "b31", "0/0/18,20/20/34,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 24A2 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // push, inner call, pop, store through r4, load back (q4 shape through another address)
             { "b1c", "0/0/18,20/20/2e,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 24B2 6B42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10, then r11, stored through r4; r11 loaded back
             { "b24", "0/0/18,20/20/2e,40/40/46", "0,0,0", "0,400,400", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 D10F 21A2 6A12 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0603 0000" },   // absolute address, restore

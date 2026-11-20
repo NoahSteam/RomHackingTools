@@ -874,6 +874,7 @@ private:
             uint64_t def;
             uint32_t from;
             uint32_t regs;
+            uint32_t org;   // the registers (r0-r14) the address was made from: another address made from one of them may be this one
         };
         std::vector<OwnStore> own;
     };
@@ -885,16 +886,16 @@ private:
         int64_t bo = 0;
         if (a.RegBase(br, bo) && bo != Value::kLowBase && bo != Value::kHighBase)
         {
-            k = {100, br, static_cast<uint64_t>(bo), 0, 0};
+            k = {100, br, static_cast<uint64_t>(bo), 0, 0, 1u << br};
             return true;
         }
         if (a.kind == Value::Fuzzy)
         {
             if (a.def == 0 || a.def == Value::kJoin) return false;
-            k = {static_cast<int>(a.kind), a.v, a.def, a.from, 0};
+            k = {static_cast<int>(a.kind), a.v, a.def, a.from, 0, a.from & 0x7FFFu};
             return true;
         }
-        k = {static_cast<int>(a.kind), a.v, 0, 0, 0};
+        k = {static_cast<int>(a.kind), a.v, 0, 0, 0, 0};
         return true;
     }
     static bool SameAddress(const State::OwnStore& o, const Value& a)
@@ -2851,18 +2852,26 @@ private:
         const bool keyed = OwnKey(addr, k);
         int br = -1;
         int64_t bo = 0;
-        const bool based = addr.RegBase(br, bo);
-        const bool exactBase = based && bo != Value::kLowBase && bo != Value::kHighBase;
+        const bool exactNew = (addr.RegBase(br, bo) && bo != Value::kLowBase && bo != Value::kHighBase) || (keyed && addr.kind == Value::Imm);
+        const uint32_t ao = addr.Origins() & 0x7FFFu;
         for (auto it = s.own.begin(); it != s.own.end();)
         {
+            const bool exactOld = it->kind == 100 || it->kind == static_cast<int>(Value::Imm);
             bool hit;
-            if (!keyed && !based) hit = true;
-            else if (based && it->kind == 100 && it->v == br)
-                hit = !exactBase || (bo < static_cast<int64_t>(it->def) + 4 && static_cast<int64_t>(it->def) < bo + width);
-            else if (keyed && !based && addr.kind == Value::Imm && it->kind == k.kind)
-                hit = k.v < it->v + 4 && it->v < k.v + width;
-            else
-                hit = keyed && it->kind == k.kind && it->v == k.v && it->def == k.def && it->from == k.from;
+            if (!keyed) hit = true;
+            else if (it->kind == k.kind && it->v == k.v && it->def == k.def && it->from == k.from) hit = true;
+            else if (exactNew && exactOld)
+            {
+                // the same register at offsets, or two constants: told apart by the bytes they cover; another register is another address
+                if (it->kind == 100 && k.kind == 100 && it->v == k.v)
+                    hit = static_cast<int64_t>(k.def) < static_cast<int64_t>(it->def) + 4 && static_cast<int64_t>(it->def) < static_cast<int64_t>(k.def) + width;
+                else if (it->kind == k.kind && it->kind != 100)
+                    hit = k.v < it->v + 4 && it->v < k.v + width;
+                else
+                    hit = false;
+            }
+            else if (!exactNew && !exactOld) hit = true;   // two addresses nothing tells apart (a loaded pointer twice, a base and an index made twice)
+            else hit = (it->org & ao) != 0;                // one of them from registers, the other with an index or a load from them
             if (hit) it = s.own.erase(it);
             else ++it;
         }
