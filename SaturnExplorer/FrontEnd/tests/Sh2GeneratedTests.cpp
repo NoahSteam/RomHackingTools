@@ -22399,6 +22399,63 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(rep.findings.empty() && (c.noted ? count(rep, "caution.said") > 0 : count(rep, "caution.notes") == 0));
         }
     }
+    // A3-255 (area 3 round 36 review, tools/a3_round36 fixtures a1 to a24, f1 to f6): a register changed by a load through an address made from it, or
+    // through another address after this function stored a value made from it to memory it does not track, was no change for certain when
+    // the store (A3-250's `mOwnLeaks`, then a member set for the whole walk) had been made anywhere, on another path included: the stated
+    // residual (a1, a2, a7, a15, a17) and its order dependence (a3, a21: the walk reached the store's path first; with the load's path
+    // first the caution was said). F2 stores r10, or not on this path, and chases or loads into it; F0 stores r10 after the call; the runs
+    // return r10 changed. Now a store keeps the address it was made through in the state (State::own, kept across a join only when every side
+    // has it), a load through that same address is a restore (the controls: a9, a10, a11, a20, a23, a24), any other load marks the registers
+    // the address was made from and every register this function stored (a15, a17, a21: `mOwnStored`); a load through a pointer that may be the frame reads some word of it and marks every register but the ones this function stored through that address (A3-256: f1, f2, f4; the controls f5, f6). As printed: no finding, the caution
+    // required and said; with every caution taken out, `caution-unsaid`.
+    {
+        const struct { const char* name; const char* funcs; const char* words; } pins[] = {
+            { "a1", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // F2 stores r10 through r4, then `mov.l @r10,r10`
+            { "a2", "0/0/18,20/20/2e,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 61A3 2412 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // the same through a copy r1 of r10
+            { "a3", "0/0/18,20/20/34,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2338 8B02 24A2 A001 0009 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // a store of r10 on the r3 = 0 path, the chase on the other (the walk reached the store first)
+            { "a7", "0/0/18,20/20/30,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 24A2 6AA2 7F04 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // F2 pushes r10, stores it through r4, chases, drops the frame word
+            { "a12", "0/0/18,20/20/30,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2338 8900 2AA2 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through itself on one path only, the chase after the join
+            { "a14", "0/0/18,20/20/2e,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2AA2 7A04 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through itself, stepped by 4, chased through the new address
+            { "a15", "0/0/18,20/20/2e,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 7404 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through r4, r4 stepped, `mov.l @r4,r10`
+            { "a17", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 25A2 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through r5, `mov.l @r4,r10`
+            { "a21", "0/0/18,20/20/34,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2338 8B02 25A2 A001 0009 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through r5 on one path, `mov.l @r4,r10` on the other (the walk reached the store first)
+            { "f1", "0/0/18,20/20/32,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 61F3 316C 6A12 7F04 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // F2 pushes r10, r1 = r15 + r6, `mov.l @r1,r10` (a frame word at an index the walk cannot place)
+            { "f2", "0/0/18,20/20/30,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 6063 0AFE 7F04 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // push r10, `mov.l @(r0,r15),r10` with r0 = r6
+            { "f4", "0/0/18,20/20/32,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 6AF3 3A6C 6AA2 7F04 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // push r10, `mov r15,r10 ; add r6,r10 ; mov.l @r10,r10`
+        };
+        for (const auto& p : pins)
+        {
+            ModulePin pm = { "A3-255", p.words, p.funcs, nullptr, "0,0,0", "0,400,400", nullptr };
+            const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin 'A3-255 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", p.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
+        }
+        const struct { const char* name; const char* funcs; const char* words; } controls[] = {
+            { "a9", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 24A2 6A42 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through r4, loaded back through r4
+            { "a10", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2AA2 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through itself, loaded back
+            { "a11", "0/0/18,20/20/36,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2338 8902 2AA2 A001 0009 2AA2 6AA2 4F26 000B 6033 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // the same store on both paths, the chase through the same address
+            { "a20", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 14A1 5A41 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored at @(4,r4), loaded from @(4,r4) (the address made twice)
+            { "a23", "0/0/18,20/20/2e,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 25A2 6653 6A62 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored through r5, loaded back through a copy of r5
+            { "a24", "0/0/18,20/20/30,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 15A1 6653 7604 6A62 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // r10 stored at @(4,r5), loaded through a copy of r5 stepped by 4
+            { "f5", "0/0/18,20/20/2c,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 6AF6 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // push r10, pop r10 (the exact restore)
+            { "f6", "0/0/18,20/20/30,40/40/46", "4F22 2FA6 6A43 7A08 2A42 B009 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 4F22 2FA6 E000 0AFE 7F04 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009" },   // push r10, `mov #0,r0 ; mov.l @(r0,r15),r10` (the register's own slot, an exact index)
+        };
+        for (const auto& c : controls)
+        {
+            ModulePin pm = { "A3-255", c.words, c.funcs, nullptr, "0,0,0", "0,400,400", nullptr };
+            const Report rep = EvaluateSubject(d, ModuleSubject(pm), true);
+            std::printf("pin 'A3-255 control %s': %zu finding(s), notes %d\n", c.name, rep.findings.size(), count(rep, "caution.notes"));
+            for (const Finding& x : rep.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(rep.findings.empty() && count(rep, "caution.notes") == 0);
+        }
+    }
     // A3-251 (grammar 2 seed 13102045, `SE_GENERATED_CAUTION=deep`, whole and shrunk): a callee F3 loads GBR (`tas.b @r5 ; ldc r5,gbr`), reached
     // through two tail-jumping thunks; the caller reads GBR after the call (`stc gbr,r3`) and calls it again, and F3 branches on r3 (`tst r3,r3 ;
     // bt`). The caution's "read after it" at the first call took the registers a later callee reads as it finds them from r8-r14, GBR and VBR
