@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Area 3 round 36 (round 35's fixtures plus the r36 block): writes fixtures.src (A3-243's change under review). Each fixture: F0 pushes r10, sets it to 5, calls F2 (the callee
+"""Area 3 round 37 (round 36's fixtures plus the r37 block): writes fixtures.src (A3-243's change under review). Each fixture: F0 pushes r10, sets it to 5, calls F2 (the callee
 under test, not lent), stores r10 through r4, pops, returns; G (the last function) sets r10 to 4. The body of F2 is given per fixture."""
 import os
 head = """.word 0x4F22
