@@ -24429,3 +24429,42 @@ The two ranges were run on the merged code (A3-250, A3-251) and again on this br
 * Not run: the local game corpus (not in the repository), so no corpus text before and after was compared; the sanitizer jobs (CI). The two sweeps were run first on the merged code and then on this branch's final code (the second binary a copy of the build before one temporary switch was deleted: the switch was off unless its environment variable was set).
 
 **Verdict, area 3 round 36: not clean.** P2: A3-255 (the own-store hedge of A3-250's `Load` was per walk, not per path and address: the stated residual, an order dependence and a load through another pointer left no caution) and A3-256 (a load through a frame pointer at an index the walk cannot place), both found by hand fixtures and fixed here with pins; neither is drawn by a generator grammar. A3-251's change held under 25 chain fixtures (no finding). No P1. P3: A3-257 (hedges that note a restore, accepted by class), A3-258 (routed). By REVIEW_PROGRAM.md's rule the count of consecutive clean rounds restarts.
+
+## Area 5, routed seeds 13401724 and 13409856
+
+Branch `review/5-routed-r36` from master `5bcf1d89`. RelWithDebInfo, `-j2`, `ulimit -v 3500000`, one heavy binary at a time. A3-258 routed both seeds (grammar 2, `SE_GENERATED_CAUTION=deep`, canary 0) as A5-164's class. Neither is that mechanism. Rows A5-173 (product, patch 0099) and A5-174 (oracle), and A5-175 (area 7, routed). Pins: `TestA5173Pins`.
+
+### 1. Seed 13401724: product fault, A5-173
+
+Reproduced: `n:folded-read-after-access`, "the read at 06009086 ... is printed (line 26) after the write at 0600908C (line 25)"; shrunk (51 evaluations) to three functions: function 0 is `mov.l @(lit),r6 [0x26002280]` running into function 1 (frame, a stack loop, `r7 = 0x06002100 ; tst r7,r7 ; bt ; r7 = 0x3DFE00E4`) and a `jmp` into function 2 (`r2 = *(r6) ; cmp/pl r6 ; bf/s ; *r7 = r2 [slot] ; ...`). The text is `Ram3dfe00e4 = xRam26002280; *param_1 = (char)xRam26002280;`.
+
+The emulator runs do not tell it apart (the generator drops hardware writes, so the global is unchanged either way); the verdict is from the rule the text breaks. The address 0x3DFE00E4 is SCU offset 0xE4 through a 128 MiB mirror, a hardware range the engine marks volatile, so it is a register write. The code reads the global before it and the text after it. Replacing the literal with SCU_D0EN gives the same text and the same finding. A5-116 and patch 0090 are the rule: a register write is a barrier a read of ordinary memory is not moved past, because a transfer the write starts may change it.
+
+Why 0090 did not hold: the pointer register is a join of two constants (the `tst`/`bt` over the second literal load), so at heritage the write is a STORE with a non-constant pointer, and its guard on the global is kept (0093). After constant propagation the STORE has a constant address, `RuleStoreVarnode` makes it a COPY of a volatile Varnode, and `opCollapseIndirectsForCopy` took the guard for no overlap and removed it. A CALLOTHER that writes a register, the form a write with a constant address has from the flow, keeps its guard. A one-function form with the same join did not discriminate old from new code and is not pinned.
+
+**Fix** (patch 0099): `opCollapseIndirectsForCopy` keeps the guard when the COPY's output is volatile and the guard's output is address forced in the processor space; `replaceVolatile` (the COPY gets a `write_volatile` CALLOTHER, and the COPY itself goes with dead code once its value is propagated into the user op) moves such guards to just before the user op, retargeted to it. A first try that left the guard on the COPY crashed `Merge::snipReads` (a guard on a destroyed op, `TestA5FoldedPins`, grammar 1 seed 7009698); one that removed the guard with the COPY in `opDestroy` lost the barrier again. The read is now made once, before the write.
+
+**Old-code evidence:** with the condition off, `TestA5173Pins` fails 2 checks (whole seed 1 finding, shrunk replay 1: both `n:folded-read-after-access`); with it, 0 and 0.
+
+### 2. Seed 13409856: oracle fault, A5-174
+
+Reproduced: `n:folded-store-after-access`, "the store at 060090AA ... folded into 0600231A is printed nowhere, and the write through a pointer at 060090B0 ... is made without it"; shrunk (84 evaluations) to one function: a `dt` loop leaving r3 = 0, then `cmp/gt ; bt L ; ... ; jmp @r1` through a table with a signed bound (the engine cannot recover it: "Could not recover jumptable ... Too many branches", "Treating indirect jump as call", signature withheld), whose cases run into `tst r3,r1 ; bt ; mov.b r0,@(0xE,r7) ; mov.l r0,@(0x18,r5)` at 0x06009062. The flow reaches that block only after the loop (r3 = 0, so `tst` always branches), and the engine says "Removing unreachable block (ram,0x06009066)" and drops the byte store. The runs reach the store through the table, where case 0 loads r3 from the global first.
+
+Verdict: oracle fault, A3-231's situation (a case of an unrecovered table is not in the text; the warnings at the block and at the jump say so). The oracle's `unrun` rule excused such a store only when no run makes it. Fix (oracle only): a store some run makes, in a block a "Removing unreachable block" warning names (`RemovedBlockInsns`), is set aside, `order.folded-store.removed-block`; mutation `SE_A7_RULE_OFF=5174` gives the findings back (whole 1, shrunk 1). No product change; nothing accepted.
+
+### 3. Runs
+
+| Run | Result |
+|---|---|
+| Pins (`SE_GENERATED_SEEDS=1`), both changes on | all passed; the four A5-173 and A5-174 pins 0 findings |
+| Pins, `SE_A7_RULE_OFF=5174` | 2 failures: 13409856 whole 1 finding, shrunk 1 |
+| Pins, patch 0099's condition off | 2 failures: 13401724 whole 1 finding, shrunk 1 |
+| Grammar 2 deep, 10,000 from 13,800,001, canary off, pins off | **failing seeds=0; findings=0** (786 s) |
+| Grammar 1, 10,000 from 13,900,001, canary off, pins off | failing seeds=1; findings=1 (644 s): 13905074 `v:map-way-back` (0600902C answered with a copy materialised before its own statement, A7-25), area 7, routed as one row, A5-175; patch 0099's branch is never taken in its shrunk replay |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | **failing seeds=0; findings=0** (717 s), all passed |
+| `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`) | **117 of 117 passed** (802 s) |
+| `check-literal-size.py FrontEnd Drivers include` | raw string sizes: ok (7 raw strings in 315 files) |
+
+Expected change in game-code text: patch 0099 adds a local variable only where a global read is held across a write of a hardware register whose address the flow found as a join of constants, not as a literal; compiled code loads a register's address from a literal, so few or no functions change. The corpus (two save states) is not in the repository and was not compared. The sanitizer jobs were not run.
+
+Not done: the game corpus; the sanitizer jobs; area 7 seed 13905074 (A5-175) and the two area 7 seeds A3-258 routed.
