@@ -79,7 +79,7 @@ struct InsnLink                 // 8 bytes; plain data, C++14
 {
     uint32_t addr = 0;          // canonical
     LinkRole role = LinkRole::Value;
-    uint8_t flags = 0;          // kLinkCandidate, kLinkBadData, kLinkPartial (writes some of the displayed bytes), kLinkHalt (where flow stopped; not an effect)
+    uint8_t flags = 0;          // kLinkCandidate, kLinkBadData, kLinkPartial (writes some of the displayed bytes), kLinkHalt (where flow stopped; not an effect), kLinkBehind / kLinkAhead (an effect's store is before or after the statement on its path)
     uint16_t span = 0xFFFF;     // token index in its line; 0xFFFF = the statement as a whole
 };
 enum class StatementKind : uint8_t { None, Store, Assign, Branch, Call, Return, Halt, Label };
@@ -199,6 +199,10 @@ walk link is **proven** only if every edge on its path preserves the displayed b
 | MULTIEQUAL, walking **forwards** (a store after a join) | no: the store may write another arm's value. The link is `kLinkCandidate` |
 | INDIRECT whose effect op may write these bytes, any arithmetic, CAST, INT_ZEXT/SEXT, a load | no: the walk stops; what it found so far is `kLinkCandidate` |
 
+A link found walking backwards carries `kLinkBehind`, one found walking forwards `kLinkAhead`; an effect of a flow op
+itself is `kLinkBehind` at its own instruction. The execution witness (section 5, check 9) uses the direction to pair
+each store with one execution of the statement.
+
 So a statement on one arm of an `if` is never given the other arm's store as a proven effect: the only path between
 them crosses a join forwards. Where the proof is incomplete the panel says "candidates", which the policy accepts;
 it never names a proven primary it cannot prove. A link proven this way names the store by identity, so "the store of
@@ -248,7 +252,7 @@ instruction, over the four corpus dumps and the generator's pins.
 | 2b | (if the count passes the threshold) the Twin, Merged and Forwarded records | | +80 engine, patch record | the count falls below the threshold; vendored lint and reproduction job pass |
 | 3 | `ForwardLookup`, `ReverseLookup`, `LinkCursor`; the panel, hover text and menu use them; the fallback label. **The old fields stay authoritative**: the old oracle still judges them, and the new functions are added beside them, not derived into them | `LineInstructions`, `LineOriginText`, `InstructionLineIndex` | +350, -200 | panel tests; new contract checks (section 5) run beside the old oracle |
 | 4a | Delete (i) `MarkMaterialisedReads` and the A7-145 block; (ii) `RetargetTwinExtensions`, `RetargetHoistedConversions`, `RetargetInputOperandToStore`, `MoveDrawnTokens`; (iii) `AddJoinConstantTokens`, `MovtNumber`; one commit each, diffing dumps before and after | the passes | -345, -620, -330 | the pins of each pass's rows hold under the contract; pins are rewritten only under section 7's rule (question 7) and listed |
-| 5 | Oracle: remove the value reconstruction and the rules tuned to it; keep structure, coverage, the contract, the narrowed value check (8) and the execution witness (9); rebase the mutations, including the two-arm join mutation, which must be rejected, and the valid two-arm and partial-store controls, which must pass. **Before step 4b**, so a deleted walker is never the only check of its class | 87 rules | 5,945 to about 2,400, with a ceiling of 2,800 | every mutation kind is reported; SE_A7_RULE_OFF list empty |
+| 5 | Oracle: remove the value reconstruction and the rules tuned to it; keep structure, coverage, the contract, the narrowed value check (8) and the execution witness (9); rebase the mutations, including the two-arm join mutation, which must be rejected, and the valid two-arm, partial-store and changing-value loop controls, which must pass. **Before step 4b**, so a deleted walker is never the only check of its class | 87 rules | 5,945 to about 2,400, with a ceiling of 2,800 | every mutation kind is reported; SE_A7_RULE_OFF list empty |
 | 4b | Delete (iv) `AddFrameStoreTokens` and (v) the value walkers, **split by statement kind** (stores at a call, at a return, at a block's end, frame stores; then each walker once unused), one commit each with dumps diffed | the rest | -1,750, -1,890, in about six commits | as 4a |
 | 6 | Remove the old fields; acceptance per the policy (two clean rounds, the overnight run) | `Token::addr` and friends | -150 | policy's done criterion |
 
@@ -313,24 +317,30 @@ Rules that become unnecessary: `firstAddrWrong`, the address-set round trip (`ro
    join, and pins protect examples, not fresh shapes. The generator already runs each function on the emulator and
    compiles and runs the printed C on the same inputs (the printed-C oracle). The witness instruments each printed
    statement on a memory variable to log (line, address, value) and records the emulator's store events (instruction,
-   address, value). It is **path-aware**: a statement after a join may have one proven `Effect` per input path, and
-   only one of those stores runs on a given execution. So the check is made per execution of the statement, over that
-   execution's **window**: the emulator events from the statement's previous execution (or the function's entry) to
-   its next execution (or the function's exit), which covers a store made on the path before the statement (a join's
-   inputs) and one made after it (a store whose value the statement shows ahead of it, A7-19). For each execution of
-   a statement with proven `Effect` links:
-   - **coverage**: every displayed byte is written, inside the window, by a store event of one of the statement's
-     proven `Effect` instructions, with the logged value's byte (`kLinkPartial` links jointly cover the bytes; no
-     single link need cover them all);
-   - **no wrong effect**: every proven `Effect` instruction that executed inside the window wrote the logged value's
-     bytes for the bytes it covers.
-   Effects of paths not taken in that run are not required to execute. It is bounded (the runs the generator makes
+   address, value). It is **path-aware** and **per execution**: a statement after a join may have one proven `Effect`
+   per input path, only one of those stores runs on a given execution, and in a loop the same store runs once per
+   iteration with a different value. So store events are **matched to individual executions** of the statement, one
+   to one, never checked across overlapping windows:
+   - Each proven `Effect` link records its direction, `kLinkBehind` (the store is on the path before the statement: a
+     join's inputs, a value shown again) or `kLinkAhead` (the store follows it: a value the statement shows on a path
+     ahead of its store, A7-19).
+   - For the k-th execution of the statement, a `kLinkBehind` link is matched to that instruction's **last** store
+     event after the statement's (k-1)-th execution (or the function's entry) and at or before the k-th; a `kLinkAhead`
+     link to its **first** event after the k-th execution and before the (k+1)-th (or the exit). An event is matched to
+     at most one execution, so a loop's iterations pair with their own stores.
+   - **Coverage**: every displayed byte of the k-th execution is written by a matched event, and that event wrote the
+     k-th logged value's byte (`kLinkPartial` links jointly cover the bytes; each matched store is compared only over
+     its own byte range).
+   - A linked instruction with no matched event in that execution (a path not taken) is not required. A matched event
+     whose bytes differ from the logged value is a failure. It is bounded (the runs the generator makes
    anyway) and independent of the engine's records and of the product's walk. It rejects the two-arm mutation below:
-   on a run that takes the statement's arm, the store the mutation links is on the other arm, does not execute in the
-   window, and the displayed bytes are not covered. A **valid two-arm control** must pass beside it: a statement after
-   a join with one proven `Effect` per arm (each arm storing a different value), run on inputs that take each arm; and
-   a **partial-store control** (a word built by two byte stores, `kLinkPartial`), where each store is checked only
-   against its own byte range. Candidate links are not checked by it.
+   on a run that takes the statement's arm, the store the mutation links is on the other arm: it either has no event
+   to match (the bytes are uncovered) or, in a loop, matches an earlier iteration's event of the other arm, whose value
+   differs. Three **controls** must pass beside it: a **valid two-arm control** (a statement after a join with one
+   proven `Effect` per arm, each arm storing a different value, run on inputs that take each arm); a **partial-store
+   control** (a word built by two byte stores, `kLinkPartial`, each store checked only against its own byte range);
+   and a **changing-value loop control** (a store just before the statement inside a loop, writing a different value
+   each iteration, so a window-based check would see the next iteration's store). Candidate links are not checked by it.
 
 The oracle keeps a size ceiling (2,800 lines after step 5) so that it does not grow back into a second
 reconstruction; a new rule that would cross it needs a design note.
@@ -456,6 +466,10 @@ product code changes until these decisions are approved.
   window (partial links jointly), and no proven effect that ran may have written other bytes. ChatGPT's re-review
   found the same gap and asked for a valid two-arm control that must pass beside the wrong-arm mutation that must
   fail; both are now in check 9 and in step 5's acceptance.
+- **Fourth review (PR #73, Codex).** A window from one execution to the next overlaps a loop's next iteration, so a
+  correct store of a changing value would be judged against the wrong execution. Check 9 now matches store events to
+  individual executions, one to one, by the link's direction (`kLinkBehind`: the last event since the previous
+  execution; `kLinkAhead`: the first before the next), and a changing-value loop control must pass.
 
 It also asked that the 85 to 95% survival band be defined (step 1's census now does) and noted that the plan can
 reduce the heuristic tail but does not yet show that it ends it; the census and check 9's results on fresh seeds are
