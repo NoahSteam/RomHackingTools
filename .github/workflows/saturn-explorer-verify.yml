@@ -64,9 +64,11 @@ jobs:
         shell: bash
         run: bash ../.github/scripts/check-test-count.sh build ${{ runner.os == 'Windows' && '90' || '105' }} -- -C Debug
 
+      # The runner's default shell, not bash (A12-45): under Git Bash on Windows, SaturnExplorerSh2DecompilerEngineTests'
+      # icacls deny-write ACE was not enforced (TestUnwritableConfigDir, PR #68 run 44640816333), where it is under the default
+      # shell. The regex comes in as an expression so the line reads the same in pwsh and bash.
       - name: Run CTest (all but the decompiler suites, which run once in the next step)
-        shell: bash
-        run: ctest --test-dir build -C Debug --output-on-failure -E "$SE_DECOMPILER_TESTS"
+        run: ctest --test-dir build -C Debug --output-on-failure -E "${{ env.SE_DECOMPILER_TESTS }}"
 
       # Passing tests print nothing above; the decompiler tests' own output (timings, the
       # decompiled fixture) is what the verification record copies (A7), so show it. They ran in the
@@ -74,8 +76,7 @@ jobs:
       # after a failure of the one above, so a run reports both.
       - name: Decompiler tests, with their output
         if: ${{ !cancelled() }}
-        shell: bash
-        run: ctest --test-dir build -C Debug -V --no-tests=error -R "$SE_DECOMPILER_TESTS"
+        run: ctest --test-dir build -C Debug -V --no-tests=error -R "${{ env.SE_DECOMPILER_TESTS }}"
 
       # The Debug runner test above uses a tenth of each cancellation fixture on Windows (the Debug
       # CRT's checked iterators make the engine ~20x slower there), and the allocation-failure cases
