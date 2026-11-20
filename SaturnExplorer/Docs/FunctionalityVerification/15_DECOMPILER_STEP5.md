@@ -24516,7 +24516,7 @@ Reviewer of area 12, fourth round. Branch `review/12-round4`, cut at round 3's h
 * **`timeout --kill-after=60` in `run-decompiler-sanitizers.sh`.** The script is used by one job only, `sanitizers` on `ubuntu-latest` (GNU coreutils `timeout` present); macOS and Windows never run it, and where `timeout` is missing the script falls back to running the binary unbounded, silently (a `command -v` guard). `timeout` runs the binary in its own process group and signals the group on expiry, so a forked child (the fault matrix's cells) dies with it; no test uses `killpg`, `kill(0,...)`, `setpgid`, `setsid` or reads stdin (grep), so the background group changes nothing. The self-test passes (21 cases, `hang`: rc 124, checker fails, 2 s). The slowest binary took 1278 s against 3600 s.
 * **`check-literal-size.py`.** Re-ran the workflow's exact command: `ok (7 raw strings in 341 files)`. `errors='replace'` makes a bad byte count as 3 bytes (U+FFFD), a harmless over-count. Found one more way to read less than claimed: A12-57.
 * **`Core` in the sparse checkout and the gate.** Present (17 `.cpp`/`.h` in `Core/src`, 8 in `Core/tests`, 1 in `Core/tools`). Not scanned: `Integration/Common` (three C headers, no raw strings; MSVC compiles them) and `Docs/` spikes (not built). Not filed.
-* **`-D_GLIBCXX_ASSERTIONS` with ASan.** The two flags do not interact (libstdc++'s container annotations are a separate macro, `_GLIBCXX_SANITIZE_VECTOR`, not set). Round 3's untried part, the two live tests, was built here in RelWithDebInfo with the flag; see section 3.
+* **`-D_GLIBCXX_ASSERTIONS` with ASan.** The two flags do not interact (libstdc++'s container annotations are a separate macro, `_GLIBCXX_SANITIZE_VECTOR`, not set). The two live tests round 3 did not run with it were not run here either (the build was abandoned: the shared machine was too loaded to finish the engine in reasonable time).
 * **`REVIEW_PROGRAM.md` timings** agree with run 44707039518 (sanitizers 72 minutes).
 
 ### 2. Fixes
@@ -24526,4 +24526,4 @@ Reviewer of area 12, fourth round. Branch `review/12-round4`, cut at round 3's h
 
 ### 3. Validation
 
-Workflow YAML parsed; `check-selected-count.sh` run on a real configure (SDL off, 117 tests). The ASan-with-assertions build of the whole sanitizers job was not run (disk), so that job's first run with the flag is the test of it. Not verified: any workflow change on a hosted runner.
+Workflow YAML parsed; `check-selected-count.sh` run on a real configure (SDL off, 117 tests). No ASan-with-assertions build was completed (disk and a loaded machine), so the sanitizers job's first run with the flag is the test of it, and the two live binaries (LiveRestoreSignal, LiveDecompilerCapture) remain untried with it. Not verified: any workflow change on a hosted runner.
