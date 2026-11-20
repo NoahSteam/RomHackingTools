@@ -22203,6 +22203,33 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") + count(clean, "caution.said.likewise") > 0 && flagged);
         }
     }
+    // A3-245 (area 3 round 34; hand fixtures, tools/a3_round34): A3-243 marked the add or subtract of a constant to a word that may still hold
+    // a register's entry value (a saved word an inner call's model wrote over, popped back) as the register's change; the other ops that give
+    // another value for any nonzero operand did not. F2 pushes r10, calls G, pops r10 and then `not`s, negates, shifts (`shll2`), xors or ors
+    // a constant register into it: the runs return r10 changed, and the text said no caution. Each as printed: no finding, the caution required
+    // and said; with every caution taken out, `caution-unsaid`.
+    {
+        const char* funcs = "0/0/14,20/20/34,40/40/46";
+        const std::string head = "4F22 2FA6 EA05 B00B 0009 24A2 6AF6 4F26 000B E000 0009 0009 0009 0009 0009 0009 4F22 2FA6 B00C 0009 6AF6 ";
+        const std::string tailw = " 4F26 000B 6033 0009 0009 0009 0009 0009 0009 0009 EA04 000B 6033 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009";
+        const struct { const char* name; const char* op; } ops[] = { { "not", "6AA7" }, { "neg", "6AAB" }, { "shll2", "4A08" }, { "xor", "E103 2A1A" }, { "or", "E108 2A1B" } };
+        for (const auto& o : ops)
+        {
+            const std::string words = head + o.op + tailw;
+            ModulePin pm = { "A3-245", nullptr, funcs, nullptr, "0,0,0", "0,400,0", nullptr };
+            pm.words = words.c_str();
+            const Report clean = EvaluateSubject(d, ModuleSubject(pm), true);
+            const std::string kept = gMutateKind;
+            gMutateKind = "caution";
+            const Report cut = EvaluateSubject(d, ModuleSubject(pm), true);
+            gMutateKind = kept;
+            const bool flagged = Has(cut, "n:caution-unsaid");
+            std::printf("pin 'A3-245 %s': as printed %zu finding(s), required %d, said %d; cautions taken out: caution-unsaid %d\n", o.name, clean.findings.size(),
+                        count(clean, "caution.required"), count(clean, "caution.said"), int(flagged));
+            for (const Finding& x : clean.findings) std::printf("  [%s] %s\n", x.sig.c_str(), x.detail.c_str());
+            CHECK(clean.findings.empty() && count(clean, "caution.required") > 0 && count(clean, "caution.said") > 0 && flagged);
+        }
+    }
     // A3-221: A3-108's note for r2 said "a frame address is in r2 here, in none of the arguments" where the same exact address was copied to r4
     // (`mov r15,r2 ; mov r2,r4`, -O0 code; 060622E0/008): shown as the call's argument, so no note. Control: the address in r2 alone says it.
     {
