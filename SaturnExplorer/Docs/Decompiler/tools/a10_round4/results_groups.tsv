@@ -1,0 +1,125 @@
+id	reverted	verdict	failing (oracle: function=checks)
+0001-g1	2	survived	
+0001-g1f	2	survived	
+0001-g2	7	survived	
+0001-g2f	7	survived	
+0001-g3	8	survived	
+0001-g3f	8	survived	
+0010-g1	3	build failed	
+0010-g2	4	build failed	
+0010-g3	5	build failed	
+0028-g1	1	build failed	
+0038-g1	2	regen failed	
+0040-g1	1	survived	
+0040-g10	10	survived	
+0040-g10f	10	survived	
+0040-g11	11	survived	
+0040-g11f	11	survived	
+0040-g12	12	survived	
+0040-g13	13	survived	
+0040-g14	14,15	survived	
+0040-g15	16	survived	
+0040-g1f	1	survived	
+0040-g2	2	survived	
+0040-g2f	2	survived	
+0040-g3	3	build failed	
+0040-g3f	3	build failed	
+0040-g4	4	other	unit(rc-11): 
+0040-g5	5	survived	
+0040-g5f	5	survived	
+0040-g6	6	survived	
+0040-g6f	6	survived	
+0040-g7	7	survived	
+0040-g7f	7	survived	
+0040-g8	8	survived	
+0040-g8f	8	survived	
+0040-g9	9	survived	
+0040-g9f	9	survived	
+0044-g1	2,3	other	pc(rc1): TestPrintedC=1 A2-37 cmp/str r6,r8;A2-37 cmp/str r6,r14
+0044-g2	5,6	other	unit(rc1): TestArea7Round4=1,TestArea7Round10=2,TestTailJumpToUnreachedCode=1,TestCallsAndTraps=9,TestArea2Round5=7
+0044-g3	7,8	build failed	
+0052-g1	3	survived	
+0056-g1	1	build failed	
+0056-g2	4	survived	
+0056-g3	7,8	other	unit(rc1): TestCallsAndTraps=2,TestArea3Round10=2,TestArea3Round10Fix=2,TestA365WalkDown=11
+0056-g4	10	survived	
+0056-g5	11	survived	
+0056-g6	12	survived	
+0057-g1	2	build failed	
+0060-g1	1	survived	
+0060-g2	2	other	fault(rc1): == alloc fixture1: FAILED in 1.0 s
+0060-g3	4	survived	
+0065-g1	2	survived	
+0065-g2	3,4	build failed	
+0065-g3	8	survived	
+0065-g4	9,10	survived	
+0065-g5	11	build failed	
+0065-g6	12	build failed	
+0065-g7	13	survived	
+0066-g1	1	survived	
+0066-g10	16	build failed	
+0066-g11	17	survived	
+0066-g2	2	build failed	
+0066-g3	3	other	pc(rc1): TestPrintedC=1 seed56_walk14 (walk14.stackarg;seed161_walk14 (walk14.stackar;seed176_walk14 (walk14.stackar
+0066-g4	4	survived	
+0066-g5	5	survived	
+0066-g6	6	build failed	
+0066-g7	7,8,9	build failed	
+0066-g8	11	other	fault(rc1): == alloc stack: FAILED in 2.3 s
+0066-g9	14,15	survived	
+0072-g1	1	other	unit(rc1): TestA3130Fix=3
+0072-g10	18	other	pc(rc1): TestPrintedC=1 frame124_143.chain;frame124_143.chain
+0072-g11	19	build failed	
+0072-g12	20	build failed	
+0072-g13	21,22	build failed	
+0072-g14	23	other	pc(rc1): TestPrintedC=5 frame124_33.chain144;frame124_61.chain144;frame124_97.chain144
+0072-g15	24	survived	
+0072-g16	30	other	unit(rc1): TestA3130Fix=3
+0072-g17	31	other	unit(rc1): TestA3130Fix=3
+0072-g18	32	other	unit(rc1): TestA3130Fix=9
+0072-g19	33	survived	
+0072-g2	3	other	unit(rc1): TestA3130Fix=4
+0072-g3	5	survived	
+0072-g4	6	build failed	
+0072-g5	7	other	gen(rc1): TestLeftoverSeedPins=1
+0072-g6	11	other	gen(rc1): TestLeftoverSeedPins=1
+0072-g7	12,13,14	build failed	
+0072-g8	15,16	other	unit(rc1): TestA3130Fix=2
+0072-g9	17	build failed	
+0076-g1	1	build failed	
+0076-g2	2	other	unit(rc1): TestA3124Fix=1
+0076-g3	5	survived	
+0076-g4	6	other	unit(rc1): TestArea7Round4=2
+0078-g1	1	other	unit(rc1): TestA3155Fix=9
+0078-g2	2	other	unit(rc1): TestA3155Fix=9
+0078-g3	3	survived	
+0079-g1	1,2,3,4,5,6,7,8,9,10,11	other	unit(rc1): TestArea7Round7=1,TestArea7Round10=1,TestArea7Round18=4
+0081-g1	1	other	pc(rc1): TestPrintedC=12
+0083-g1	1	survived	
+0083-g2	2	survived	
+0083-g3	3	survived	
+0084-g1	2	other	pc(rc1): TestPrintedC=4
+0084-g2	3	other	pc(rc1): TestPrintedC=4
+0086-g1	1	build failed	
+0086-g2	2	other	pc(rc1): TestPrintedC=2
+0086-g3	3	build failed	
+0086-g4	4	other	pc(rc1): TestPrintedC=2
+0086-g5	5	other	pc(rc1): TestPrintedC=8
+0086-g6	6	other	pc(rc1): TestPrintedC=8
+0086-g7	7	other	pc(rc1): TestPrintedC=2
+0086-g8	8	survived	
+0086-g9	9	survived	
+0087-g1	1	build failed	
+0087-g2	2	other	unit(rc1): TestArea7Round8=1,TestArea7Round13=2,TestHardwareVolatility=1,TestA3164Fix=28,TestA3173Fix=3
+0087-g3	4	other	unit(rc1): TestArea7Round12=2,TestArea7Round13=2,TestA3164Fix=4
+0088-g1	1	build failed	
+0088-g2	2	other	unit(rc1): TestArea10Round3=1
+0088-g3	3	other	unit(rc1): TestArea7Round8=4,TestArea7Round10=1,TestArea7Round18=3,TestArea5Confirm=3
+0090-g1	2	other	unit(rc1): TestArea7Round7=2,TestArea7Round8=1,TestArea7Round9=2,TestArea7Round10=3,TestArea7Round12=3
+0090-g2	4	other	unit(rc1): TestMappingOracleAtMirrors=24,TestArea7Round4=6,TestArea7Round7=4,TestArea7Round9=2,TestArea7Round11=2
+0090-g3	10	other	unit(rc1): TestArea7Round8=3,TestArea7Round10=1,TestArea7Round11=1,TestArea7Round13=2,TestArea7Round25=2
+0090-g4	12	other	unit(rc1): TestArea7Round22=1
+0090-g5	13	survived	
+0093-g1	1	other	unit(rc1): TestArea5ReviewAfter0090=4
+0096-g1	4	other	gen(rc1): TestA7FlowRecordPins=8,TestArea7Round35Pins=1
+0098-g1	1	other	gen(rc1): TestA5154Pins=3
