@@ -125,12 +125,15 @@ jobs:
         working-directory: .
         run: sudo sysctl -w vm.mmap_rnd_bits=28 || true
 
+      # -D_GLIBCXX_ASSERTIONS: libstdc++'s checked operator[], front(), back() and empty-container pops, a cheap analogue of the
+      # MSVC debug iterators that found A12-40 (1) on Windows only. Thirteen of the fifteen binaries (all but the two live tests) ran
+      # clean with it in a RelWithDebInfo build without the sanitizers (2026-11-20); not tried under ASan.
       - name: Configure (Debug, ASan + UBSan)
         run: >
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
           -DCMAKE_DISABLE_FIND_PACKAGE_SDL2=ON
           -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
-          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer"
+          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer -D_GLIBCXX_ASSERTIONS"
 
       # Built on its own first only so its build time is visible in the log.
       - name: Build decompiler engine (timed)

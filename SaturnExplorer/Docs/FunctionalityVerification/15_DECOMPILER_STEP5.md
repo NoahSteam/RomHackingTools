@@ -24470,3 +24470,36 @@ The generator draws none of the shapes of A3-259 (its stores of callee-saved reg
 * Not run: the local game corpus (not in the repository), so no corpus text before and after was compared; the sanitizer jobs (CI).
 
 **Verdict, area 3 round 37: not clean.** P2: A3-259 (round 36's own-store rule kept an entry after the word was overwritten, narrowed or reached through another address of the same register, and a call; found by hand fixtures, fixed with pins) and A3-263 (a copy of a kept register in r1 or r3 handed to an inner call was not read; found by the deep sweep, older than round 36, fixed with pins). No P1. P3: A3-260 and A3-261 (accepted), A3-262 (routed). By REVIEW_PROGRAM.md's rule the count of consecutive clean rounds restarts.
+
+## Area 12, round 3
+
+Reviewer of area 12, third round. Branch `review/12-round3`, cut at master `5bcf9284`. Read only on the Actions side (`gh api`: run lists, the job log of master run 44707039518); nothing was dispatched or pushed, so every workflow change below is unverified on a hosted runner. Scripts were run locally. Rows **A12-54 and A12-55** new; A12-38 (remaining part), A12-40 (1), A12-52 and A12-53 closed or narrowed.
+
+**Verdict, area 12 round 3: clean** (no P1 or P2 found). Round 2's changes held; the two new rows are P3, both in the raw-string gate that round 2 itself repaired. Round 2 was not clean, so the count of consecutive clean rounds is one.
+
+### 1. Round 2's changes, re-checked
+
+* `check-literal-size.py`: exits 2 on a missing directory and on a run that read no file (confirmed). It still passed having read less than claimed in two ways: a non-UTF-8 file was skipped silently, and the "no file read" count was over all roots together (A12-54, fixed). `Core`, which MSVC builds, was not scanned (A12-55, fixed).
+* The vendored-tree job's sparse checkout (`FrontEnd`, `Drivers`, `include`): complete for the gate (315 files, 7 raw strings). `Core` added.
+* Baseline wait (A12-46): the sanitizers job passed on master `5ce785f3` (run 44707039518, 72 minutes: Generated 1278 s, Decompiler 806 s, Runner 383 s, Fault 584 s); the 240 s wait is a hang catch only and is met.
+* Bundle Homebrew check: `deps="$(otool -L "$f")"` on its own line does stop a `bash -e` step when `otool` fails or the glob matches nothing (read again, not re-run here; round 2 tested it with a fake `otool`). `test "$checked" -ge 2` holds. The SDL3 `strings ... | grep -q` inside an `if` can pass with no `libSDL2*.dylib`, but the later launch with Homebrew's SDL removed fails then, so it is covered.
+* Release `timeout-minutes` 90, 90, 60, 15: the macOS notarisation waits with `notarytool --wait` and no timeout of its own, so the job's 60 minutes is its bound; a cancel there fails closed (the draft job `needs` it and is skipped). Past tags took 19 to 28 minutes in all.
+* Harness self-test: its 20 cases pass; `loader-omitted` and `printedc-omitted` exercise the checker's list. There was no case for a hanging binary (A12-53).
+* `REVIEW_PROGRAM.md` CI table: agrees with the workflow (fifteen binaries, four jobs); its timing figures updated to the latest run, and the per-binary limit added.
+* `SE_ROSETTA_TESTS` and `SE_DECOMPILER_TESTS`: every name is a registered test in a configure of the tree (117 tests, SDL off), the check script finds all sixteen Rosetta names, the sanitizer build list (14 targets), the runner (15 runs, the printed-C mode being the generator binary's second) and the checker's `EXPECTED` agree.
+
+### 2. Fixes
+
+* **A12-52.** CMake option `SE_FAIL_ON_SKIP` (default OFF); the `native` and Rosetta configure steps set it, and the four tests that skip themselves (Yss, Fixture, Fault, PrintedC) then carry no `SKIP_RETURN_CODE`. Evidence: a scratch project with a test that exits 77, `ctest` says `***Skipped`, "100% tests passed", exit 0 without the option and `***Failed`, exit 8 with it. The generated test files of the real tree carry `SKIP_RETURN_CODE` 5 times with the option off and once (the Area 9 full-disk case, which its own job requires) with it on. Rosetta had the same hole.
+* **A12-53.** `timeout --kill-after=60 ${SE_SANITIZER_TIMEOUT:-3600}` around each binary. The new `hang` case of the self-test runs a stub that sleeps 600 s with a 2 s limit: status 124, the checker fails, the binaries after it have their logs, 3 s in all. The job split is not done.
+* **A12-54, A12-55.** `check-literal-size.py`: on a scratch tree (a `\xe9` byte in a comment, a 20,000-byte raw string, an empty directory) the old script printed `ok (0 raw strings in 1 files)`, exit 0; the new one prints the string, `error: no C++ file was read under empty`, exit 2. The real tree, with `Core` added: `ok (7 raw strings in 341 files)`.
+* **A12-40 (1).** `-D_GLIBCXX_ASSERTIONS` in the sanitizers job's flags. Thirteen of its fifteen binaries (not the two live tests) were built in RelWithDebInfo with it and run with `ctest -j1` (Engine, Decompiler, Semantics, Decode, Generated, PrintedC, Fixture, Panel, Runner, Model, Trust, SlaFreshness, LoaderFuzz, Fault): all passed. Under ASan it is untried.
+* **A12-38.** The note on `SaturnExplorerSh2PrintedCTests` and Windows in `CMakeLists.txt`.
+
+### 3. Left open
+
+A12-40 (2) (the Rosetta ImGui font assertion, once, cause unknown), A12-42 (the release workflow does not require the CI matrix green on the tag, and starts no packaged binary on Windows), A12-43 (the nightly repeats seeds 1 to 20,000; rotating them could turn it red on the open area 7 rows, which a long run would show first), A12-44 (no Release test on macOS: wants a macOS trial), `Sh2PrintedC` under Rosetta. Minor, not filed: the Windows Release step's `-R` with `--no-tests=error` would pass if two of its three tests vanished from the registration (the build step would fail first for a removed target).
+
+### 4. Validation
+
+`python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include` prints `ok (7 raw strings in 315 files)`; the harness self-test passes (21 cases with `hang`); the workflows parse as YAML; a configure with `SE_FAIL_ON_SKIP` ON and OFF works (117 tests each). Built RelWithDebInfo, `-j2`, `ulimit -v 3500000`, with `-D_GLIBCXX_ASSERTIONS`: the fourteen suites above passed under `ctest -j1`. Not verified: any workflow change on a hosted runner (Windows or macOS with `SE_FAIL_ON_SKIP`, the sanitizers job with the new flag and timeout).
