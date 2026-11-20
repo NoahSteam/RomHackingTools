@@ -253,7 +253,7 @@ instruction, over the four corpus dumps and the generator's pins.
 | 3 | `ForwardLookup`, `ReverseLookup`, `LinkCursor`; the panel, hover text and menu use them; the fallback label. **The old fields stay authoritative**: the old oracle still judges them, and the new functions are added beside them, not derived into them | `LineInstructions`, `LineOriginText`, `InstructionLineIndex` | +350, -200 | panel tests; new contract checks (section 5) run beside the old oracle |
 | 4a | Delete (i) `MarkMaterialisedReads` and the A7-145 block; (ii) `RetargetTwinExtensions`, `RetargetHoistedConversions`, `RetargetInputOperandToStore`, `MoveDrawnTokens`; (iii) `AddJoinConstantTokens`, `MovtNumber`; one commit each, diffing dumps before and after | the passes | -345, -620, -330 | the pins of each pass's rows hold under the contract; pins are rewritten only under section 7's rule (question 7) and listed |
 | 5 | Oracle: remove the value reconstruction and the rules tuned to it; keep structure, coverage, the contract, the narrowed value check (8) and the execution witness (9); rebase the mutations, including the two-arm join mutation, which must be rejected, and the valid two-arm, partial-store and changing-value loop controls, which must pass. **Before step 4b**, so a deleted walker is never the only check of its class | 87 rules | 5,945 to about 2,400, with a ceiling of 2,800 | every mutation kind is reported; SE_A7_RULE_OFF list empty |
-| 4b | Delete (iv) `AddFrameStoreTokens` and (v) the value walkers, **split by statement kind** (stores at a call, at a return, at a block's end, frame stores; then each walker once unused), one commit each with dumps diffed | the rest | -1,750, -1,890, in about six commits | as 4a |
+| 4b | Delete (iv) `AddFrameStoreTokens` and (v) the value walkers, **split by statement kind** (stores at a call, at a return, at a block's end, frame stores; then each walker once unused), one commit each with dumps diffed | the rest | -1,750, -1,890, in about six commits | as 4a; and only after check 9's cross-run alignment is defined and validated (section 5), otherwise blocked |
 | 6 | Remove the old fields; acceptance per the policy (two clean rounds, the overnight run) | `Token::addr` and friends | -150 | policy's done criterion |
 
 Steps 1 and 2 change nothing a user sees and can merge early. Step 3 is the first visible one. A pass is deleted only
@@ -341,6 +341,16 @@ Rules that become unnecessary: `firstAddrWrong`, the address-set round trip (`ro
    control** (a word built by two byte stores, `kLinkPartial`, each store checked only against its own byte range);
    and a **changing-value loop control** (a store just before the statement inside a loop, writing a different value
    each iteration, so a window-based check would see the next iteration's store). Candidate links are not checked by it.
+
+   **Cross-run alignment is required and not yet designed.** The printed C and the emulator run separately
+   (`CheckPrintedC` in `Sh2GeneratedTests.cpp`), so "before" and "after" an execution of a statement are not defined
+   across the two traces, and counting events cannot supply them when the decompiler folds or moves statements. Check 9
+   therefore needs an independent alignment between a statement's executions in the printed C and points in the
+   emulator trace, one that does not use the engine's records or the product's links (for example a synchronisation
+   event both runs emit at the same program point, such as a call or a branch target whose order both traces share).
+   Designing it is part of step 5. It must be validated on the three controls and the two-arm mutation, and on loops,
+   before check 9 counts: **until then check 9 is not a gate, and step 4b (the deletion of the old value walkers) is
+   blocked.**
 
 The oracle keeps a size ceiling (2,800 lines after step 5) so that it does not grow back into a second
 reconstruction; a new rule that would cross it needs a design note.
@@ -470,6 +480,11 @@ product code changes until these decisions are approved.
   correct store of a changing value would be judged against the wrong execution. Check 9 now matches store events to
   individual executions, one to one, by the link's direction (`kLinkBehind`: the last event since the previous
   execution; `kLinkAhead`: the first before the next), and a changing-value loop control must pass.
+- **Fifth review (PR #73, Codex).** The printed C and the emulator run separately, so the matching above has no shared
+  order to work in. By the project owner's decision the alignment mechanism is left to step 5: check 9 must define an
+  independent cross-run alignment and validate it on the controls, the mutation and loops before it counts as a
+  gate, and step 4b is blocked until it does. ChatGPT reviewed the same revision with no further findings, with the
+  same caveat that the matching was checked only on aligned abstract traces.
 
 It also asked that the 85 to 95% survival band be defined (step 1's census now does) and noted that the plan can
 reduce the heuristic tail but does not yet show that it ends it; the census and check 9's results on fresh seeds are
