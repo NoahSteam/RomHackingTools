@@ -1,0 +1,3 @@
+[{"id":"0050-g4d","patch":"0050","hunks":[4],"named":[],"runs":["decode"],"where":"disppc2 slot_kind=0"},
+ {"id":"0050-g7d","patch":"0050","hunks":[13],"named":[],"runs":["decode"],"where":"rte slot kind"},
+ {"id":"0050-g1d","patch":"0050","hunks":[1],"named":[],"runs":["decode"],"where":"comment"}]
