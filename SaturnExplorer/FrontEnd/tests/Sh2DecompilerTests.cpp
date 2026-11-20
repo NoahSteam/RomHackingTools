@@ -19627,6 +19627,55 @@ void TestArea10Round4()
     }
 }
 
+// ===== Area 10, round 5 ================================================================================================================
+// A10-29's survivors 0086 hunks 8 and 9 (`TypeOpIntSdiv::getInputCast` and `TypeOpIntSrem::getInputCast` read `unsignedTextRead`): a signed division
+// or remainder of a stack word the text declares with no sign. The word is built from two pieces (`add #-4,r15 ; mov.l r5,@r15 ; mov r7,r0 ;
+// mov.w r0,@(0,r15) ; mov.l @r15,r0`, the A2-128 shape) and is read by the engine's signed division by 7 (the multiply-high shape of
+// "A2-21 control: signed x / 7"). Without the casts the text is `xStack_4 / 7`, an unsigned division in C.
+void TestArea10Round5()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const auto run = [&](const char* label, const std::vector<uint16_t>& w) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        const DecompileResult r = d.Decompile(MakeSnapshot(hw), Request(0x06009000u));
+        Print(label, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        return r;
+    };
+    // x / 7: r0 = the word, r4 = r0, then the quotient as in A2-21's control
+    {
+        const DecompileResult r = run("A10 r5 a: signed division of a named word (patch 0086)",
+                                      { 0x7FFC, 0x2F52, 0x6073, 0x81F0, 0x60F2, 0x7F04, 0x6403, 0xD106, 0x341D, 0x000A, 0x304C, 0x4021, 0x4021, 0x6203,
+                                        0x4200, 0xE200, 0x302E, 0x6003, 0x000B, 0x0009, 0x9249, 0x2493 });
+        CHECK(Has(r.Text(), "(int4)xStack_4 / 7"));
+    }
+    // c: 0064 hunks 23 and 24 (`SubvariableFlow::traceForwardSext` and `traceBackwardSext` refuse a constant right shift of a sign-extended
+    // value that does not fit the flow's size). The value a logical right shift of a sign extension returns has the extension's bits in it, so
+    // a flow narrowed to the byte or the half would lose them: exts.b ; shlr8 and exts.b/exts.w ; shlr16.
+    {
+        std::string why;
+        struct C { const char* label; std::vector<uint16_t> w; uint32_t in, out; };
+        const C cs[] = {
+            { "exts.b ; shlr16", { 0x604E, 0x4029, 0x000B, 0x0009 }, 0x80u, 0x0000FFFFu },
+            { "exts.b ; shlr8", { 0x604E, 0x4019, 0x000B, 0x0009 }, 0x80u, 0x00FFFFFFu },
+            { "exts.w ; shlr16", { 0x604F, 0x4029, 0x000B, 0x0009 }, 0x8000u, 0x0000FFFFu },
+            { "exts.w ; shlr8", { 0x604F, 0x4019, 0x000B, 0x0009 }, 0x8000u, 0x00FFFF80u } };
+        for (const C& c : cs)
+        {
+            const DecompileResult r = run(c.label, c.w);
+            std::string text = r.Text();
+            const bool ok = MayReturn(text, { c.in }, c.out, why);
+            if (!ok) std::printf("  A10 r5 c %s: %s\n", c.label, why.c_str());
+            CHECK(ok);
+        }
+    }
+    // (The remainder, hunk 9: `((x + t) & 3) - t` with t from the sign of the same word is not recovered as `%` when the word is a CONCAT of two
+    // parameters (the sign is read from param_4), and the multiply-high remainder is a division and a product; no fixture reaches
+    // `TypeOpIntSrem::getInputCast` with an xunknown, A10-29's disposition for it stands.)
+}
+
 // ===== Area 5, confirming round (REVIEW_LEDGER.md A5-101 to A5-107) ===================================================================
 // The reviewer's fixtures, pinned first as the head printed them (the checks then marked DEFECT); the area 5 confirming-round fixer turned
 // each of them round (marked FIXED, with the patch or the function that fixed it) and added the controls marked so. The words are the
@@ -20613,6 +20662,7 @@ int main(int argc, char** argv)
         RUN(TestArea10Round2());
         RUN(TestArea10Round3());
         RUN(TestArea10Round4());
+        RUN(TestArea10Round5());
         RUN(TestArea5Confirm());
         RUN(TestArea5Review());
         RUN(TestArea5ReviewAfter0090());
