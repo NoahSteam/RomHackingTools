@@ -31,6 +31,8 @@ jobs:
   macos:
     name: macOS archive
     runs-on: macos-latest
+    # Explicit (A12-42): the default is 360 minutes. The jobs took 19 to 27 minutes on the tags v1.0 to v1.3.
+    timeout-minutes: 90
     env:
       # The tag being built, baked into the app (cmake/GenerateBuildInfo.cmake) so "Check for Updates"
       # can compare it with the latest GitHub release. Empty for a manual run, which is not a release.
@@ -108,6 +110,7 @@ jobs:
   windows:
     name: Windows archive
     runs-on: windows-latest
+    timeout-minutes: 90
     env:
       # The tag being built, baked into the app (cmake/GenerateBuildInfo.cmake) so "Check for Updates"
       # can compare it with the latest GitHub release. Empty for a manual run, which is not a release.
@@ -181,6 +184,7 @@ jobs:
     if: github.ref_type == 'tag' || github.event.inputs.sign == 'true'
     needs: macos
     runs-on: macos-latest
+    timeout-minutes: 60
     # Secrets live in this environment, which can require a reviewer's approval before the job may use them.
     environment: release
     steps:
@@ -274,6 +278,7 @@ jobs:
     if: github.ref_type == 'tag'
     needs: [macos, windows, macos-sign]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
