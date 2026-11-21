@@ -1,0 +1,123 @@
+## Grammar 1, seeds 1 to 20000: 33894 functions, 844923 lines, 412060 statements, 652649 links
+
+Printed ops by origin and class (report only):
+| origin | STORE | CALL | BRANCH | RETURN | COPY | LOAD | HARDWARE | OTHER |
+|---|---|---|---|---|---|---|---|---|
+| flow | 67421 | 0 | 70368 | 31204 | 51627 | 76029 | 0 | 237907 |
+| clone | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 6 |
+| engine | 0 | 0 | 0 | 0 | 8035 | 0 | 73462 | 100230 |
+
+Statements: None 213, Store 120491, Assign 189784, Branch 70368, Call 0, Return 31204, Halt 0, Label 0
+Halt statements by type: baddata 0, halt 0, unimplemented 0, missing 0
+
+| Measure | Result | Threshold | Verdict |
+|---|---|---|---|
+| Store statements with a surviving flow op or folded COPY | 118588 of 120491 = 98.421% | go at 95% or more; 85 to 95% needs a per-class account and step 2b; below 85% rework section 3 | go |
+| Engine-made store statements: the bounded walk finds a store / candidates / nothing | 2 / 3 / 1898 of 1903 | report (feeds the next row) | - |
+| Lines that name a store today left with no proven store (candidates or nothing) / lines that name a store | 1844 of 109260 = 1.688% | go at 2% or less; 2 to 10% requires step 2b; above 10% stop | go |
+| Flow store, branch, call and return statements with exactly one proven Effect | 220160 of 220160 | every one | go |
+| Clone-made effect ops | 0 | non-zero confirms the Clone record | none seen |
+| Lines with more than one statement | 85 | report | - |
+| Lines with an op token and no statement | 0 | report | - |
+| Walk bound hits (64 ops, 8 links) | 0 of 1903 walks = 0.000% | under 0.1% | go |
+| Functions over the flow record's cap (20,000 ops) | 0 | report | - |
+| Assertions: opsEnd past flowOps / inlined clones | 0 / 0 | both zero | go |
+| Time building the links against the decompilation | 2519.5 ms of 775356.4 ms = 0.325% | within 5% of today | go |
+
+Lines against today's click target (firstAddr): 393871 lines have a proven Effect, 296788 agree, 97083 disagree (24.648%)
+Address sets (the line's token addresses against its links): equal 408624, old has more 584, new has more 1794, different 973
+The way back: 472850 instructions with an exact answer today; 744 unlinked in the model, 468746 agree on the first line, 3360 disagree
+
+Disagreements by class:
+- line.disagree/Branch/old-is-value/below: 68268
+    - C64A4572.0 | line 9 firstAddr 06009006 new 06009008 |   if (in_r1 == in_r3) {
+    - C64A4572.0 | line 13 firstAddr 0600900E new 06009010 |   if (cVar1 == '\x03') {
+    - C64A4572.0 | line 16 firstAddr 06009016 new 06009018 |   if ((uVar2 & in_r1) == 0) {
+- line.no-effect/Assign: 14770
+    - C64A4572.0 | line 10 firstAddr 0600900A new 00000000 |     cVar1 = '4';
+    - C64A4572.0 | line 12 firstAddr 06009010 new 00000000 |   uVar2 = *param_2;
+    - C64A4572.0 | line 14 firstAddr 06009014 new 00000000 |     uVar2 = uRam26001000;
+- line.disagree/Store/old-is-value/below: 9177
+    - 75D9ADEB.0 | line 18 firstAddr 06009002 new 06009026 |     *(char *)((param_2 & 0x1c) - 0x20) = -(char)uVar3;
+    - 56A28C5D.0 | line 12 firstAddr 06009006 new 0600900E |     *param_1 = (int4)iVar1;
+    - 56A28C5D.0 | line 13 firstAddr 06009006 new 0600900E |     *param_1 = (int4)iVar1;
+- line.disagree/Return/old-is-value/below: 8276
+    - 75D9ADEB.0 | line 33 firstAddr 06009042 new 06009048 |   return (int4)iVar2;
+    - 24D7C1A2.0 | line 9 firstAddr 0600900C new 06009012 |   return param_2 & 0x10;
+    - B4A6BFA4.0 | line 20 firstAddr 06009014 new 06009024 |   return CONCAT44((int4)iRam2600102a,(int4)iVar3);
+- line.disagree/Assign/old-is-value/below: 4097
+    - 75D9ADEB.0 | line 16 firstAddr 06009002 new 0600901C |   xVar1 = *(xunknown2 *)((param_2 & 0x1c) - 0x1a);
+    - 5A52AE40.0 | line 24 firstAddr 06009018 new 06009026 |     Write_VBR(in_r1 - in_r2);
+    - 5A52AE40.0 | line 25 firstAddr 06009018 new 06009026 |     Write_VBR(in_r1 - in_r2);
+- line.disagree/Store/old-is-candidate-value/below: 3131
+    - 518DA094.0 | line 23 firstAddr 06009008 new 06009016 |   *(int2 *)param_2 = iVar1 << 2;
+    - A331BC44.0 | line 25 firstAddr 06009014 new 0600901A |     *(char *)(param_1 + 2) = (char)iVar1;
+    - B950B20D.0 | line 14 firstAddr 06009010 new 0600901A |   Ram06001018 = (int4)(int2)param_2[4];
+- insn.disagree/new-effect/old-first-linked: 2535
+    - C64A4572.0 | line 12 firstAddr 06009010 new 06009010 |   uVar2 = *param_2;
+    - 9FA08CA9.0 | line 19 firstAddr 06009014 new 06009016 |     uVar4 = uVar5 - 1;
+    - 5A52AE40.0 | line 14 firstAddr 06009010 new 06009012 |     uVar1 = uVar2 - 1;
+- line.no-effect/Store: 1903
+    - B505AD7F.0 | line 13 firstAddr 06009012 new 00000000 |   xRam06001030 = 0x202;
+    - 518DA094.0 | line 12 firstAddr 06009004 new 00000000 |   uRam26001034 = uRam26001034 | 0x80000000;
+    - DC9ED954.0 | line 7 firstAddr 06009010 new 00000000 |   xRam26001018 = CONCAT11((char)in_r1,(uint1)xRam26001018);
+- line.disagree/Branch/old-is-candidate-value/below: 1696
+    - 70E03887.0 | line 19 firstAddr 06009016 new 06009018 |   if (0 < (int4)uVar2) {
+    - 70E03887.0 | line 19 firstAddr 06009016 new 06009018 |   if (0 < (int4)uVar2) {
+    - 0DD45B7E.0 | line 21 firstAddr 0600901A new 0600901C |   if (0 < (int4)uVar4) {
+- line.disagree/Assign/old-is-candidate-value/below: 1279
+    - 882F028D.0 | line 14 firstAddr 06009004 new 06009028 |   xVar1 = *(xunknown1 *)(param_1 + 1);
+    - 882F028D.0 | line 14 firstAddr 06009004 new 06009028 |   xVar1 = *(xunknown1 *)(param_1 + 1);
+    - 518DA094.0 | line 32 firstAddr 06009008 new 0600903E |     uVar7 = (uint4)(uint1)(iVar1 << 2);
+- line.disagree/Return/old-is-candidate-value/below: 978
+    - 865A7B91.0 | line 19 firstAddr 0600901E new 06009028 |   return (int4)*(char *)((int4)param_1 + 0xf) ^ (int4)param_1 + 5U;
+    - 865A7B91.0 | line 21 firstAddr 0600901E new 06009028 |   return (int4)*(char *)((int4)param_1 + 0xf) ^ (int4)param_1 + 5U;
+    - 7076F641.0 | line 17 firstAddr 06009024 new 06009028 |   return xVar2;
+- insn.disagree/new-condition/old-first-linked: 485
+    - 9FA08CA9.0 | line 19 firstAddr 06009014 new 06009014 |     uVar4 = uVar5 - 1;
+    - 5A52AE40.0 | line 13 firstAddr 0600900E new 0600900E |     uVar2 = uVar1;
+    - 5A52AE40.0 | line 14 firstAddr 06009010 new 06009010 |     uVar1 = uVar2 - 1;
+- insn.disagree/new-value/old-first-linked: 179
+    - 8D0B51E2.0 | line 28 firstAddr 06009034 new 06009034 |     iVar4 = iVar4 * 2;
+    - 978A28DA.0 | line 10 firstAddr 06009004 new 06009004 |     uVar2 = in_r1;
+    - 910D889C.0 | line 18 firstAddr 06009024 new 06009024 |     uVar2 = uVar1;
+- line.disagree/Store/old-not-linked/below: 148
+    - DADD7597.0 | line 40 firstAddr 0600902E new 06009058 |     cRam2e001024 = (char)uVar7;
+    - DADD7597.0 | line 43 firstAddr 0600902E new 0600905E |     cRam2e001024 = (char)uVar7;
+    - DADD7597.0 | line 42 firstAddr 0600902E new 06009058 |     Ram2e001024 = (char)uVar8;
+- line.no-effect/None: 128
+    - ED64B0BA.0 | line 15 firstAddr 0600900C new 00000000 |   } while( true );
+    - 81E70842.0 | line 12 firstAddr 0600900C new 00000000 |   } while( true );
+    - BBA94DCC.0 | line 19 firstAddr 06009014 new 00000000 |   } while( true );
+- insn.disagree/new-effect/old-first-unlinked: 77
+    - BFFBE3E3.0 | line 13 firstAddr 06009010 new 06009010 |     cVar1 = cRam06001000;
+    - 50173B9B.0 | line 15 firstAddr 0600901A new 0600901A |     cVar1 = cRam26001028;
+    - E214DEB1.0 | line 22 firstAddr 06009024 new 06009024 |          0xffffffff40000000;
+- insn.disagree/new-value/old-first-unlinked: 56
+    - 53ABD08C.0 | line 15 firstAddr 06009012 new 06009012 |        (uint2)((int4)cRam2e001024 << 1) | (uint2)(((int4)cRam2e001024 & 0x80000000U) != 0);
+    - 53ABD08C.0 | line 15 firstAddr 06009012 new 06009018 |        (uint2)((int4)cRam2e001024 << 1) | (uint2)(((int4)cRam2e001024 & 0x80000000U) != 0);
+    - 53ABD08C.0 | line 17 firstAddr 06009012 new 06009018 |        (uint2)((int4)cVar1 << 1) | (uint2)(((int4)cVar1 & 0x80000000U) != 0);
+- line.disagree/Assign/old-not-linked/below: 27
+    - EA492CF3.0 | line 21 firstAddr 06009002 new 06009012 |   iVar6 = in_r3 + (int2)in_r2 + (int2)puVar7 + (uint2)(0 < in_r2);
+    - 4A682BA2.0 | line 18 firstAddr 0600900C new 06009018 |   uVar5 = (uint1)uVar3 & param_2;
+    - 50CFED88.0 | line 22 firstAddr 06009012 new 0600901A |     uVar3 = (int2)cVar1 ^ (uint2)iVar5;
+- insn.disagree/new-condition/old-first-unlinked: 19
+    - E47E2BD5.0 | line 22 firstAddr 06009022 new 06009022 |   cVar1 = cRam1ffffe04;
+    - E47E2BD5.0 | line 23 firstAddr 06009022 new 06009022 |   cVar2 = cRam1ffffe04;
+    - E9F3BCE9.0 | line 15 firstAddr 06009018 new 06009018 |   cVar2 = cRam06001012;
+- insn.disagree/new-placement/old-first-linked: 5
+    - 8DBA3394.0 | line 20 firstAddr 06009028 new 06009036 |   uRam26001010 = 0;
+    - 6812BEF8.0 | line 23 firstAddr 06009034 new 06009034 |   uVar2 = uRam06002008;
+    - 6812BEF8.0 | line 23 firstAddr 06009034 new 06009034 |   uVar2 = uRam06002008;
+- insn.disagree/new-placement/old-first-unlinked: 4
+    - A9442633.0 | line 26 firstAddr 06009022 new 06009022 |     uVar3 = uRam26001028;
+    - 6E8DA67F.0 | line 16 firstAddr 06009018 new 06009018 |   uVar2 = uRam06002198;
+    - 6E8DA67F.0 | line 17 firstAddr 06009018 new 06009018 |   uVar3 = uRam06002198;
+- line.disagree/Assign/old-not-linked/above: 3
+    - 3265F316.0 | line 12 firstAddr 06009010 new 0600900E |     xRam06002108 = 0;
+    - ED878700.0 | line 7 firstAddr 0600901A new 0600900E |   uRam2600103a = 1;
+    - 3C9009FD.0 | line 11 firstAddr 06009022 new 0600900E |     xRam2e001018 = 0xffffff00;
+- line.disagree/Return/old-not-linked/below: 3
+    - 928F0F12.0 | line 5 firstAddr 06009010 new 06009012 |   return uRam26001030;
+    - EFDBA73A.0 | line 10 firstAddr 06009014 new 06009020 |   return 0x51;
+    - EFDBA73A.0 | line 10 firstAddr 06009014 new 06009020 |   return 0x51;

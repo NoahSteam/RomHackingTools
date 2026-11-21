@@ -209,11 +209,57 @@ struct Line
 {
     std::string text;
     std::vector<Token> tokens;
+    int32_t statement = -1;        // the link model's first statement on the line (DecompileResult::statements); -1 for a declaration or a brace
     uint32_t firstAddr = 0;        // the lowest token address on the line; 0 = none
     // A7-52: the line prints an operation of the function (a statement) and no instruction could be named for it: a copy of a value the
     // engine merged, whose maker the printer's records do not give. The hover text and the click say so (LineOriginText); false for a
     // declaration, a brace, a label, and any line with an address.
     bool noOrigin = false;
+};
+
+// ---- The link model (LINK_MODEL.md; step 1, a shadow of the token addresses: nothing reads it for a click, a hover or the order of the way back) ----
+// What a statement's instruction did for it. Effect performs what the statement shows (the store that writes the bytes, the branch, the call, the
+// return); Condition sets what a branch tests; Value computed or loaded a value the span shows; Placement is where the engine put a copy.
+enum class LinkRole : uint8_t { Effect, Condition, Value, Address, Placement };
+constexpr uint8_t kLinkCandidate = 1;   // one of several plausible origins the evidence cannot separate; absent = proven
+constexpr uint8_t kLinkBadData = 2;     // the word flow halted at as bad data (badDataAt): no instruction, never an Effect
+constexpr uint8_t kLinkPartial = 4;     // writes some of the displayed bytes
+constexpr uint8_t kLinkHalt = 8;        // where flow stopped (halt, unimplemented, missing): not an effect
+constexpr uint8_t kLinkBehind = 16;     // an effect's store is before the statement on its path (a flow op's own instruction is Behind)
+constexpr uint8_t kLinkAhead = 32;      // ...or after it
+struct InsnLink
+{
+    uint32_t addr = 0;                  // canonical
+    LinkRole role = LinkRole::Value;
+    uint8_t flags = 0;
+    uint16_t span = 0xFFFF;             // token index in its line (the statement's first line); 0xFFFF = the statement as a whole
+};
+enum class StatementKind : uint8_t { None, Store, Assign, Branch, Call, Return, Halt, Label };
+struct Statement
+{
+    uint32_t firstLine = 0, lineCount = 0;   // a statement can wrap
+    uint32_t linkBegin = 0, linkCount = 0;   // into DecompileResult::links
+    uint16_t spanBegin = 0, spanEnd = 0xFFFF;   // token range on the first line; the header of a `for` is three statements on one line
+    StatementKind kind = StatementKind::None;
+};
+// What step 1 counted while it built the links, for the census (tools/a7_link1). Ops are the printed ones; "flow" ops are those the flow made
+// (Funcdata::flowOps), "clone" ones copy a flow op (patch 0100), "engine" ones are made by rules and actions.
+struct LinkCensus
+{
+    uint32_t ops[3][8] = {};            // printed ops by origin (flow, clone, engine) and class (STORE, CALL, BRANCH, RETURN, COPY, LOAD, hardware, other)
+    uint32_t statements[8] = {};        // by StatementKind
+    uint32_t halts[4] = {};             // Halt statements: bad data, halt, unimplemented, missing
+    uint32_t storeFlow = 0, storeEngine = 0;       // Store statements made by a flow op (a STORE, a hardware write, a folded COPY) or by the engine
+    uint32_t walkProven = 0, walkCandidate = 0, walkNone = 0, walkBound = 0;   // engine-made store statements: what the bounded walk finds
+    uint32_t namedStoreLines = 0, lostStoreLines = 0;   // lines of a store statement whose firstAddr is a store, and those the model leaves without a proven store
+    uint32_t effectDue = 0, effectGiven = 0;      // flow store, branch, call and return statements, and those with exactly one proven Effect
+    uint32_t cloneEffects = 0;          // clone-made ops that carry an effect
+    uint32_t multiStatementLines = 0;
+    uint32_t noStatementLines = 0;      // lines with an op token and no statement
+    uint32_t opsEndDisagree = 0;        // the flow record's opsEnd past Funcdata::flowOps (step 1 asserts it never is)
+    uint32_t inlineClones = 0;          // clones made by a flow inlining a function (step 1 asserts none)
+    uint32_t overCap = 0;               // the function has more flow ops than RecordFlow's users take (20,000)
+    uint32_t linkMicros = 0;            // time spent building the links
 };
 
 // The instructions a line was decompiled from: the distinct non-zero token addresses, ascending
@@ -399,6 +445,9 @@ struct DecompileResult
     std::string name;
 
     std::vector<Line> lines;
+    std::vector<InsnLink> links;                      // the link model's shadow (step 1): grouped by statement, which index them
+    std::vector<Statement> statements;
+    LinkCensus linkCensus;
     std::vector<InspectionTarget> inspectionTargets; // owned metadata only; never capture values or engine pointers
     std::vector<CallSite> calls;                      // the calls, for the ledger's order checks
     std::vector<std::vector<int>> flowSuccessors;     // the flow's basic blocks before any action: each one's successors

@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: a write folded into the stack frame whose value nothing read is recorded when it goes (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: whether a STORE is guarded as pending, for the save slots (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a function the host calls back when a flow has been followed, to record the flow a restart follows (patches/0096-engine-flow-done-hook.patch).
+ * Modified for SaturnExplorer: each op made by cloning another is recorded with the op it copies (patches/0100-engine-op-clone-origins.patch).
  */
 #ifndef __FUNCDATA_HH__
 #define __FUNCDATA_HH__
@@ -71,6 +72,19 @@ struct AccessRecord {
   int4 size;			///< Number of bytes accessed
   AccessFate fate;		///< How it ended
   bool slot = false;		///< SaturnExplorer (0075): the op was built by the instruction in a delay slot; \b pc is its branch's
+};
+
+/// \brief An op made as a copy of another op (SaturnExplorer, 0100)
+///
+/// A clone gets a new time at the address of its original, so by time alone it reads as an op the engine made, and the host
+/// would walk a cloned STORE or folded-store COPY back to a different store of the flow (a block split by ActionReturnSplit
+/// copies a shared epilogue). The record says which op it copies.
+struct OriginRecord {
+  uintm survivor;		///< PcodeOp::getTime() of the clone
+  uintm origin;			///< ...and of the op it copies (itself a clone, perhaps)
+  Address pc;			///< The address of the copied op's instruction
+  bool slot;			///< The copied op was built by the instruction in a delay slot; \b pc is its branch's
+  uint4 kind;			///< 0: a block was split (CloneBlockOps::buildOpClone); 1: a flow inlined a function (Funcdata::cloneOp)
 };
 
 /// \brief A call of the flow that heritage guarded a stack local at: it may read it (SaturnExplorer, 0068)
@@ -156,6 +170,7 @@ class Funcdata {
   vector<FlowTable> flowTables;	///< Every indirect jump the last flow recovered, before any action resolves one to a goto (SaturnExplorer); cleared with the function
   vector<FlowInsn> flowInsns;	///< Every instruction the last flow translated, before any action removed code (SaturnExplorer); cleared with the function
   std::function<void(Funcdata &)> flowDone;	///< SaturnExplorer (0096): called at the end of every followFlow of this function (a restart follows the flow again)
+  vector<OriginRecord> originRecords;	///< Every op made by cloning another (SaturnExplorer, 0100); cleared with the function
   uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
   bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
   mutable bool frameEscaped = false;	///< SaturnExplorer (0068): a frame address escaped (FrameEscape) in this generation of the function
@@ -259,6 +274,17 @@ public:
   static bool isMarkerOrUnbuilt(const PcodeOp *op) { return op->getOpcode() == (TypeOp *)0 || op->code() == CPUI_MULTIEQUAL || op->code() == CPUI_INDIRECT; }
   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
   void setFlowDone(const std::function<void(Funcdata &)> &f) { flowDone = f; }	///< SaturnExplorer (0096): the host's call after each flow
+  const vector<OriginRecord> &getOriginRecords(void) const { return originRecords; }	///< Every op made by cloning another (SaturnExplorer, 0100)
+  uintm getFlowOps(void) const { return flowOps; }	///< SaturnExplorer (0100): ops with a lower time were made by the flow, the rest by rules and actions
+  void noteOrigin(const PcodeOp *survivor,const PcodeOp *origin,uint4 kind) {	///< SaturnExplorer (0100): \b survivor is a clone of \b origin
+    OriginRecord rec;
+    rec.survivor = survivor->getTime();
+    rec.origin = origin->getTime();
+    rec.pc = origin->getAddr();
+    rec.slot = origin->isFromDelaySlot();
+    rec.kind = kind;
+    originRecords.push_back(rec);
+  }
   const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
   void noteFrameEscaped(void) const { frameEscaped = true; }	///< SaturnExplorer (0068): FrameEscape found a frame address escaped

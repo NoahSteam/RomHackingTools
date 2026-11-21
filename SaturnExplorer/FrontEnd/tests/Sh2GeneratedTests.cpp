@@ -5448,6 +5448,7 @@ struct FnInfo
     uint32_t reads = 0;      // registers whose entry value it reads on purpose (Func::reads)
     uint32_t canary = 0;     // a constant the function stores in a local that a callee overwrites: no `return` of its text may contain it (A3-34)
     uint32_t canary2 = 0;    // ...and what the function returns of it when it uses the result (canary + 1): no `return` may contain that either (A3-44)
+    std::vector<uint32_t> stackWords;   // (A3-281) the words the function passes on its stack to a callee that reads them: the text must show each (A3-280)
     bool canaryIfLent = false;   // ...only when the signature is lent: the callee hands the value back through the caller's own frame, which the
                              // engine cannot see, so a caller withheld for it (A3-15, A3-21: the claim is the check) prints the stale local
 };
@@ -7075,6 +7076,31 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             if (!returned && (!fn.canaryIfLent || r.prototype.known) && CanaryReturned(r.Text(), fn.canary, line, fn.canary2))
                 add("canary:return", "the function stores " + Hex(fn.canary, 2) + " in a local that a callee overwrites and the run returns what the callee wrote, "
                                       "but the text returns the value from before the call: `" + line + "`");
+        }
+
+        // (A3-281) The stack arguments: the function passes words on its stack (past the four registers) to a callee that reads them, and
+        // the callee's result depends on them. A lent prototype of the register parameters only (A3-280) prints the call without them; a
+        // withheld callee keeps them. No run perturbs a stack argument, so this reads the text: each such word, as hex or decimal, is in it.
+        if (!fn.stackWords.empty())
+        {
+            count("stackarg.checked");
+            const std::string text = r.Text();
+            auto shown = [&](uint32_t w) {
+                char hx[16], dc[16];
+                std::snprintf(hx, sizeof hx, "0x%x", w);
+                std::snprintf(dc, sizeof dc, "%u", w);
+                auto word = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+                for (const char* needle : { hx, dc })
+                    for (size_t p = text.find(needle); p != std::string::npos; p = text.find(needle, p + 1))
+                    {
+                        const size_t e = p + std::strlen(needle);
+                        if ((p == 0 || !word(text[p - 1])) && (e >= text.size() || !word(text[e]))) return true;
+                    }
+                return false;
+            };
+            for (uint32_t w : fn.stackWords)
+                if (!shown(w))
+                    add("stackarg:dropped", "the function passes the stack word " + Hex(w, 4) + " to a callee that reads it, and the text does not show it (A3-280)");
         }
 
         auto inMarked = [&](uint32_t addr) {
@@ -9195,12 +9221,31 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // ---- Area 7: the mapping from the text to the instructions (MappingOracle.h) ----
         {
             // (the module's words, literal pools too: the oracle reads a literal's word as the game-code run reads the image's, A7-34)
+            // (what names this function in a report: a hash of the program's words and the function's index; seeds are not in scope here)
+            char genLabel[48];
+            {
+                uint32_t hash = 2166136261u;
+                for (uint16_t w : subject.words) hash = (hash ^ w) * 16777619u;
+                std::snprintf(genLabel, sizeof genLabel, "%08X.%d", hash, fi);
+                dts::LinkTotals::Instance().SetContext(genLabel);
+            }
             const dts::MappingAudit audit = dts::AuditMapping(
                 r, [&](uint32_t pc, uint16_t& w) {
                     if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
                     w = subject.WordAt(pc);
                     return true;
                 }, "", OriginTextUnderTest);
+            // SE_GENERATED_TOKEN_DUMP=<file> (link model step 0): every function's token and link records (DumpMappingTokens), labelled by a hash of
+            // the program's words and the function's index, so a run of this binary can be diffed with one made before the link model.
+            if (const char* dumpPath = std::getenv("SE_GENERATED_TOKEN_DUMP"))
+            {
+                static std::FILE* dump = std::fopen(dumpPath, "w");
+                dts::DumpMappingTokens(dump, r, [&](uint32_t pc, uint16_t& w) {
+                    if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                    w = subject.WordAt(pc);
+                    return true;
+                }, genLabel);
+            }
             auto flag = [&](const char* sig, int n) {
                 if (n) add(sig, std::to_string(n) + " time(s); first: " + (audit.problems.empty() ? std::string("-") : audit.problems[0]));
                 if (n && std::getenv("SE_A7R_ALL")) for (const std::string& pr : audit.problems) std::fprintf(stderr, "A7ALL %s\n", pr.c_str());
@@ -17911,6 +17956,99 @@ Subject MakeCanarySubject(int variant, std::string& label)
     return s;
 }
 
+// ---- The spill-walk family (ledger A3-280, A3-281) -----------------------------------------------------------------------------------
+// The grammar's functions read no stack argument, and no run perturbs one, so a callee that spills r4-r7 (the varargs prologue) and then reads
+// through a pointer from the spill into the words its caller passed (`va_arg` crossing from the registers into the stack) is lent a prototype of
+// four parameters and the caller's call drops the fifth word (A3-280) without any oracle noticing. The family is enumerated (as the canary's):
+// a caller passes four register arguments and one to three words on its stack, each a distinct constant; the callee reads them by a fixed loop
+// from the spill, a loop counted from r4, or through r0 (`mov.l @(r0,r2),r0`) from the entry r15, or by a fixed loop from the entry r15. The
+// check is on the text (FnInfo::stackWords): each word the callee reads must be shown. The controls read only the spilled registers and carry
+// no check.
+constexpr int kSpillWalkVariants = 60;
+
+Subject MakeSpillWalkSubject(int variant, std::string& label)
+{
+    enum Form { LoopSpill, LoopSpillOne, LoopCountR4, Indexed, LoopEntry, kForms };
+    const Form form = static_cast<Form>(variant % kForms);
+    Rng r(0x5B1A11ull + static_cast<uint64_t>(variant) * 7919u);
+    const int extra = 1 + static_cast<int>(r.Below(3));      // stack words the caller passes
+    const bool jsr = r.Chance(50);
+    const bool control = variant % 12 >= 10 && form != LoopEntry && form != Indexed;   // the callee stops before the stack words
+    const uint32_t kCallee = 0x80;
+    CanaryAsm a;
+    a.Put(0x4F22);                                           // sts.l pr,@-r15
+    a.Put(static_cast<uint16_t>(0x7F00 | ((-4 * extra) & 0xFF)));   // add #-4*extra,r15
+    std::vector<uint32_t> words;
+    for (int k = 0; k < extra; ++k)
+    {
+        words.push_back(0x2222u + 0x1111u * static_cast<uint32_t>(k));
+        a.LoadLiteral(1, words.back());
+        a.Put(static_cast<uint16_t>(0x1F10 | k));            // mov.l r1,@(4k,r15)
+    }
+    // the words read from the spill's second word (r5) on (or the first), and the stack word an Indexed callee reads
+    const int count = control ? 3 : form == LoopSpillOne ? 4 + extra : 3 + extra;
+    const int idx = form == Indexed ? static_cast<int>(r.Below(static_cast<uint32_t>(extra))) : 0;
+    const int r4 = form == LoopCountR4 ? count - 1 : form == Indexed ? idx : 3;
+    a.Put(static_cast<uint16_t>(0xE400 | r4));              // mov #n,r4
+    a.Put(0xE502);
+    a.Put(0xE603);
+    a.Put(0xE704);
+    a.Call(kCallee, jsr);
+    a.Put(static_cast<uint16_t>(0x7F00 | (4 * extra)));      // add #4*extra,r15
+    a.Put(0x4F26);                                           // lds.l @r15+,pr
+    a.Put(0x000B);
+    a.Put(0x0009);
+    const uint32_t callerEnd = a.Here();
+    std::vector<uint16_t> callee;
+    if (form == LoopSpill || form == LoopSpillOne || form == LoopCountR4)
+    {
+        for (uint16_t w : { 0x2F76, 0x2F66, 0x2F56, 0x2F46 }) callee.push_back(w);   // mov.l r7..r4,@-r15
+        if (form == LoopCountR4)
+            for (uint16_t w : { 0x6143, 0xE207, 0x2129, 0x7101 }) callee.push_back(w);   // mov r4,r1 ; mov #7,r2 ; and r2,r1 ; add #1,r1
+        else
+            callee.push_back(static_cast<uint16_t>(0xE100 | count));                     // mov #count,r1
+        callee.push_back(0x62F3);                                                          // mov r15,r2
+        if (form != LoopSpillOne) callee.push_back(0x7204);                                // add #4,r2
+        for (uint16_t w : { 0xE000, 0x6326, 0x303C, 0x4110, 0x8BFB, 0x7F10, 0x000B, 0x0009 }) callee.push_back(w);
+        // mov #0,r0 ; L: mov.l @r2+,r3 ; add r3,r0 ; dt r1 ; bf L ; add #16,r15 ; rts ; nop
+    }
+    else if (form == Indexed)
+        callee = { 0x62F3, 0x6043, 0x4008, 0x002E, 0x000B, 0x0009 };   // mov r15,r2 ; mov r4,r0 ; shll2 r0 ; mov.l @(r0,r2),r0 ; rts ; nop
+    else
+        callee = { static_cast<uint16_t>(0xE100 | extra), 0x62F3, 0xE000, 0x6326, 0x303C, 0x4110, 0x8BFB, 0x000B, 0x0009 };   // the stack words from the entry r15
+    std::vector<uint16_t> image = a.w;
+    image.resize((kCallee + 2 * callee.size() + 0x40) / 2, 0x0009);
+    for (size_t i = 0; i < callee.size(); ++i) image[kCallee / 2 + i] = callee[i];
+    for (const auto& lv : a.literalValues)
+    {
+        image[lv.first / 2] = static_cast<uint16_t>(lv.second >> 16);
+        image[lv.first / 2 + 1] = static_cast<uint16_t>(lv.second);
+    }
+    Subject s;
+    s.v2 = true;
+    FnInfo caller;
+    caller.layout.start = caller.layout.entry = kCode;
+    caller.layout.end = kCode + callerEnd;
+    caller.intent = caller.returns = true;
+    if (!control)
+        for (int k = 0; k < extra; ++k)
+            if (form != Indexed || k == idx) caller.stackWords.push_back(words[k]);
+    s.fns.push_back(caller);
+    FnInfo c;
+    c.layout.start = c.layout.entry = kCode + kCallee;
+    c.layout.end = kCode + kCallee + 2 * static_cast<uint32_t>(callee.size());
+    c.intent = c.returns = true;
+    s.fns.push_back(c);
+    s.words = image;
+    s.codeWords = image.size();
+    static const char* names[] = { "loop from the spill's second word", "loop from the spill's first word", "loop counted from r4", "r0-indexed from the entry r15",
+                                   "fixed loop from the entry r15" };
+    char buf[160];
+    std::snprintf(buf, sizeof buf, "spillwalk %d: %s, %d stack word(s), %s%s", variant, names[form], extra, jsr ? "jsr" : "bsr", control ? ", control" : "");
+    label = buf;
+    return s;
+}
+
 // ---- Area 3 round 8 (ledger A3-49, A3-50, A3-52, A3-53, A3-54) ------------------------------------------------------------------------
 // A3-49, A3-50: a join of r0's entry value with a parameter, or r0 computed from its entry value on one path, where another alternative is a word from
 // memory or a literal: lent `void` before the fix, withheld now. Seeds 112124, 117195, 400533, 66914, 77197 (grammar 2), 202318 and 207676 (grammar 2, specials)
@@ -23244,6 +23382,33 @@ void TestCanary(Sh2Decompiler& d)
     CHECK(failing == 0);
 }
 
+void TestSpillWalk(Sh2Decompiler& d)
+{
+    int failing = 0, shown = 0;
+    std::map<std::string, int> counts;
+    for (int v = 0; v < kSpillWalkVariants; ++v)
+    {
+        std::string label;
+        const Subject s = MakeSpillWalkSubject(v, label);
+        const Report rep = EvaluateSubject(d, s, false);
+        for (const auto& kv : rep.counts) counts[kv.first] += kv.second;
+        if (!rep.findings.empty())
+        {
+            ++failing;
+            std::printf("spill-walk finding: %s [%s]\n", label.c_str(), rep.findings[0].sig.c_str());
+            if (shown++ < 3)
+            {
+                const Report again = EvaluateSubject(d, s, true);
+                std::printf("%s", again.text.c_str());
+                for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            }
+        }
+    }
+    std::printf("spill-walk: %d programs, %d failing, stack-argument checks %d\n", kSpillWalkVariants, failing, counts["stackarg.checked"]);
+    CHECK(counts["stackarg.checked"] > 0);
+    CHECK(failing == 0);
+}
+
 void TestGenerated()
 {
     Sh2Decompiler d(gConfig);
@@ -23344,6 +23509,7 @@ void TestGenerated()
         RUN(TestArea7ReviewFixPins(d));
         RUN(TestArea7DecisionPoints());
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
+        RUN(TestSpillWalk(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
     const long first = single ? single : EnvNumber("SE_GENERATED_FIRST", 1);

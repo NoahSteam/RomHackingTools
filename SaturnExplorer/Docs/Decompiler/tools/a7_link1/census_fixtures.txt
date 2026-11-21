@@ -1,0 +1,110 @@
+## Fixtures and pins of Sh2DecompilerTests (464 functions): 464 functions, 9529 lines, 4441 statements, 6515 links
+
+Printed ops by origin and class (report only):
+| origin | STORE | CALL | BRANCH | RETURN | COPY | LOAD | HARDWARE | OTHER |
+|---|---|---|---|---|---|---|---|---|
+| flow | 362 | 184 | 808 | 509 | 828 | 404 | 0 | 2111 |
+| clone | 0 | 0 | 0 | 64 | 0 | 0 | 0 | 0 |
+| engine | 0 | 0 | 0 | 0 | 465 | 0 | 242 | 787 |
+
+Statements: None 25, Store 862, Assign 1750, Branch 1007, Call 184, Return 572, Halt 1, Label 40
+Halt statements by type: baddata 1, halt 0, unimplemented 0, missing 0
+
+| Measure | Result | Threshold | Verdict |
+|---|---|---|---|
+| Store statements with a surviving flow op or folded COPY | 707 of 862 = 82.019% | go at 95% or more; 85 to 95% needs a per-class account and step 2b; below 85% rework section 3 | NO-GO |
+| Engine-made store statements: the bounded walk finds a store / candidates / nothing | 2 / 0 / 153 of 155 | report (feeds the next row) | - |
+| Lines that name a store today left with no proven store (candidates or nothing) / lines that name a store | 135 of 687 = 19.651% | go at 2% or less; 2 to 10% requires step 2b; above 10% stop | NO-GO |
+| Flow store, branch, call and return statements with exactly one proven Effect | 2470 of 2470 | every one | go |
+| Clone-made effect ops | 64 | non-zero confirms the Clone record | confirms |
+| Lines with more than one statement | 79 | report | - |
+| Lines with an op token and no statement | 0 | report | - |
+| Walk bound hits (64 ops, 8 links) | 0 of 155 walks = 0.000% | under 0.1% | go |
+| Functions over the flow record's cap (20,000 ops) | 0 | report | - |
+| Assertions: opsEnd past flowOps / inlined clones | 0 / 0 | both zero | go |
+| Time building the links against the decompilation | 27.5 ms of 10164.7 ms = 0.270% | within 5% of today | go |
+
+Lines against today's click target (firstAddr): 3621 lines have a proven Effect, 2357 agree, 1264 disagree (34.907%)
+Address sets (the line's token addresses against its links): equal 3709, old has more 191, new has more 207, different 163
+The way back: 5273 instructions with an exact answer today; 363 unlinked in the model, 4651 agree on the first line, 259 disagree
+
+Disagreements by class:
+- line.disagree/Branch/old-is-value/below: 637
+    - fixture 06004000 | line 6 firstAddr 06004008 new 0600400A |   if (0 < param_1) {
+    - fixture 06006100 | line 6 firstAddr 06006100 new 06006102 |   if (0 < param_1) {
+- line.no-effect/Assign: 452
+    - fixture 06006A00 | line 7 firstAddr 06006A18 new 00000000 |     xVar1 = xRam06006a2c;
+    - fixture 06006A00 | line 10 firstAddr 06006A1E new 00000000 |     xVar1 = xRam06006a28;
+- line.no-effect/Store: 148
+    - a7_19 frame | line 15 firstAddr 06021E5A new 00000000 |   xStack_24._3_1_ = (xunknown1)param_1;
+    - a7_19 frame | line 16 firstAddr 06021E5C new 00000000 |   xStack_20._2_2_ = (xunknown2)param_2;
+- line.disagree/Return/old-is-value/below: 121
+    - fixture 06006600 | line 4 firstAddr 06006604 new 06006606 |   return 0x35353535;
+    - fixture 06050000 | line 7 firstAddr 06050036 new 06050038 |     return 0;
+- line.disagree/Store/old-is-value/below: 120
+    - fixture 06010000 | line 3 firstAddr 06010000 new 06010004 |   *param_1 = *param_1 + 1;
+    - fixture 06010000 | line 4 firstAddr 0601000C new 06010010 |   *param_1 = *param_1 + 1;
+- line.disagree/Branch/old-is-candidate-value/below: 118
+    - a7_23 | line 37 firstAddr 0600D95C new 0600D960 |   } while ((uVar2 & 1) != 0);
+    - a7_23 | line 41 firstAddr 0600D970 new 0600D974 |   while ((uVar2 & 1) != 0) {
+- line.disagree/Branch/old-not-linked/below: 115
+    - fixture 06006A00 | line 8 firstAddr 00000000 new 06006A18 |     break;
+    - mirror 26006A00 of 06006A00 | line 8 firstAddr 00000000 new 06006A18 |     break;
+- insn.disagree/new-effect/old-first-unlinked: 91
+    - fixture 06006A00 | line 6 firstAddr 06006A18 new 06006A18 |   case 0:
+    - fixture 06006A00 | line 12 firstAddr 06006A24 new 06006A24 |   default:
+- insn.disagree/new-effect/old-first-linked: 90
+    - a7_20 | line 34 firstAddr 06021CB0 new 06021CB0 |   return 0;
+    - a7_23 | line 53 firstAddr 0600D954 new 0600D954 |         uVar6 = uVar4;
+- insn.disagree/new-value/old-first-unlinked: 39
+    - fixture 06050000 | line 20 firstAddr 06050024 new 06050024 |   default:
+    - fixture 06050000 | line 4 firstAddr 0605002A new 0605002A |   case (int4 *)0x0:
+- line.disagree/Assign/old-is-value/below: 34
+    - fixture 06006100 | line 5 firstAddr 06006100 new 06006104 |   iVar1 = *(int4 *)((uint4)(0 < param_1) * -4 + 0x6006114);
+    - mirror 26006100 of 06006100 | line 5 firstAddr 06006100 new 06006104 |   iVar1 = *(int4 *)((uint4)(0 < param_1) * -4 + 0x26006114);
+- line.disagree/Store/old-is-candidate-value/below: 31
+    - a7_20 | line 12 firstAddr 06021C2E new 06021C30 |   piStack_8 = aiStack_10;
+    - copy maker | line 114 firstAddr 06048D16 new 06048D18 |     piStack_10 = &iStack_2a;
+- line.disagree/Call/old-is-candidate-value/below: 19
+    - a7_23 | line 76 firstAddr 0600D910 new 0600D9E4 |     func_0x06063aac(param_1,0x40,axStack_28);
+    - a7_23 | line 135 firstAddr 0600D910 new 0600DADA |     func_0x06063aac(param_1,*(xunknown4 *)(iVar5 + 0x60756ec),axStack_28);
+- insn.disagree/new-condition/old-first-linked: 15
+    - fixture 06006100 | line 5 firstAddr 06006100 new 06006100 |   iVar1 = *(int4 *)((uint4)(0 < param_1) * -4 + 0x6006114);
+    - mirror 26006100 of 06006100 | line 5 firstAddr 06006100 new 06006100 |   iVar1 = *(int4 *)((uint4)(0 < param_1) * -4 + 0x26006114);
+- line.disagree/Assign/old-is-candidate-value/below: 15
+    - copy maker | line 142 firstAddr 06048DE8 new 06048DEE |       iVar7 = (int4)(int2)((int2)iStack_18 + (int2)iVar7);
+    - a7_24 folded case | line 42 firstAddr 06033BCE new 06033BD4 |     uVar1 = *(uint2 *)(uVar4 * 2 + 0x60a6a48);
+- insn.disagree/new-placement/old-first-unlinked: 14
+    - a7_20 | line 17 firstAddr 06021CA0 new 06021CA0 |       return xStack_1c;
+    - a7_26 frame | line 18 firstAddr 06021844 new 06021844 |   case 1:
+- line.disagree/Return/old-is-candidate-value/below: 14
+    - a7_23 piece | line 10 firstAddr 0607000E new 06070028 |   return (xunknown1)xStack_c;
+    - a7_23 piece as it was | line 10 firstAddr 0607000E new 06070028 |   return (xunknown1)xStack_c;
+- line.disagree/Call/old-is-value/below: 13
+    - a7_24 folded case | line 16 firstAddr 06033AF2 new 06033AF8 |   uVar3 = func_0x06033878(*(xunknown1 *)(iVar5 + 1));
+    - a7_24 folded case | line 19 firstAddr 06033AFE new 06033B04 |   uVar4 = func_0x06033878(*(xunknown1 *)(iVar5 + 2));
+- line.disagree/Store/old-not-linked/below: 11
+    - a7_24 folded case | line 58 firstAddr 00000000 new 06033C44 |     break;
+    - a7_45 damaged | line 3 firstAddr 06009002 new 06009006 |   xRam06001000 = 5;
+- line.disagree/Assign/old-not-linked/below: 7
+    - copy maker | line 95 firstAddr 00000000 new 06048C96 |     break;
+    - a7_27 | line 13 firstAddr 00000000 new 06070032 |     break;
+- insn.disagree/new-condition/old-first-unlinked: 5
+    - a7_30 at a tst | line 65 firstAddr 0600D9CC new 0600D9CC |       uStack_8 = uVar6;
+    - a7_30 at a tst | line 82 firstAddr 0600DA0A new 0600DA0A |       uStack_8 = uVar6;
+- insn.disagree/new-value/old-first-linked: 4
+    - copy maker | line 136 firstAddr 06048DA4 new 06048DA4 |       iStack_2e = iRam060a8e76 + -1 + *(int2 *)(iVar8 * 0x32 + iVar11 + 0x26 + iVar1);
+    - a7_149_7807800 | line 9 firstAddr 0600900C new 0600900C |   xRam06002104 = (char)param_1;
+- line.disagree/Return/old-not-linked/below: 4
+    - a7_20 | line 17 firstAddr 06021CA0 new 06021CB0 |       return xStack_1c;
+    - a7_24 folded case | line 60 firstAddr 06033C54 new 06033C64 |     return 1;
+- line.disagree/Assign/old-not-linked/above: 3
+    - a7_85 mach | line 8 firstAddr 06009010 new 0600900A |     xRam06002108 = 0;
+    - a7_85 mach other | line 8 firstAddr 06009010 new 0600900A |     xRam06002108 = 0;
+- line.disagree/Branch/old-is-other-effect/below: 2
+    - a7_161 | line 38 firstAddr 0601FA88 new 0601FA8E |     while (iStack_c = func_0x060223cc(0,0xffffffff), iStack_c != 0) {
+    - a7_161 | line 52 firstAddr 0601FAB6 new 0601FABC |     while (iVar3 = func_0x06021200(0x40), iVar3 == 0) {
+- insn.disagree/new-placement/old-first-linked: 1
+    - copy maker | line 103 firstAddr 06048CAC new 06048CAC |     iVar8 = 0;
+- line.no-effect/Halt: 1
+    - a7_6 | line 10 firstAddr 06009031 new 00000000 |     halt_baddata();

@@ -21,6 +21,7 @@
  * Modified for SaturnExplorer: a call that goes with an unreachable block drops its frame call records (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
  * Modified for SaturnExplorer: pushMultiequals gives the new MULTIEQUAL a unique output whenever the output block joins the same address-tied storage (patches/0094-engine-forced-write-and-pushed-join.patch).
+ * Modified for SaturnExplorer: each op made by cloning another is recorded with the op it copies (patches/0100-engine-op-clone-origins.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -1026,6 +1027,7 @@ PcodeOp *CloneBlockOps::buildOpClone(PcodeOp *op)
       PcodeOp::is_cpool_transformed | PcodeOp::stop_type_propagation | PcodeOp::store_unmapped | PcodeOp::from_delay_slot);
   dup->setAdditionalFlag(fl);
 
+  data.noteOrigin(dup,op,0);	// SaturnExplorer (0100): the host reads a clone's effect through its original
   cloneList.emplace_back(dup,op);	// Map from clone to orig
   origToClone[op] = dup;		// Map from orig to clone
   return dup;
