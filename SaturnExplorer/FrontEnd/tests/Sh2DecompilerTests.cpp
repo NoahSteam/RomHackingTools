@@ -19457,6 +19457,65 @@ void TestA3184Fix()
     }
 }
 
+void TestA3280Fix()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    auto run = [&](const char* name, const std::vector<uint16_t>& words, uint32_t at, const DecompileResult* lend) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < words.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, words[i]);
+        auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(at);
+        if (lend != nullptr && lend->status == DecompileStatus::Ok && lend->prototype.known) q.prototypes.emplace_back(0x06009020u, lend->prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(name, r);
+        return r;
+    };
+    // (area 3 round 41, A3-280) A callee that spills r4-r7 (the varargs prologue) and walks a pointer from the spill up into the words its caller
+    // passed, or indexes the entry area through r0, reads a stack word of its caller at an offset the walk cannot place: it is not lent a prototype
+    // of the register parameters, and the caller's call keeps the fifth argument. The caller passes 3, 2, 3, 4 and the stack word 0x2222 to
+    // 0x06009020 (tools/a3_round41 c3w_*; the words are tools/a3_a280/words.py's).
+    struct Case
+    {
+        const char* name;
+        std::vector<uint16_t> words;
+        bool readsStackWord;   // false: a control (c3w_const3 stops before the stack word; c3w_loop_entry was withheld before, for another reason): only the call is checked
+    };
+    const Case kCases[] = {
+        { "c3w_const4", { 0x4F22, 0x7FFC, 0xD10E, 0x1F10, 0xE403, 0xE502, 0xE603, 0xE704, 0xD10C, 0x410B, 0x0009, 0x7F04, 0x4F26, 0x000B,
+          0x0009, 0x0009, 0x2F76, 0x2F66, 0x2F56, 0x2F46, 0xE104, 0x62F3, 0x7204, 0xE000, 0x6326, 0x303C, 0x4110, 0x8BFB,
+          0x7F10, 0x000B, 0x0009, 0x0009, 0x0000, 0x2222, 0x0600, 0x9020 }, true },
+        { "c3w_countr4", { 0x4F22, 0x7FFC, 0xD116, 0x1F10, 0xE403, 0xE502, 0xE603, 0xE704, 0xD114, 0x410B, 0x0009, 0x7F04, 0x4F26, 0x000B,
+          0x0009, 0x0009, 0x2F76, 0x2F66, 0x2F56, 0x2F46, 0x6143, 0xE203, 0x2129, 0x7101, 0x62F3, 0x7204, 0xE000, 0x6326,
+          0x303C, 0x4110, 0x8BFB, 0x7F10, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+          0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0000, 0x2222, 0x0600, 0x9020 }, true },
+        { "c3w_index", { 0x4F22, 0x7FFC, 0xD10E, 0x1F10, 0xE400, 0xE502, 0xE603, 0xE704, 0xD10C, 0x410B, 0x0009, 0x7F04, 0x4F26, 0x000B,
+          0x0009, 0x0009, 0x62F3, 0x6043, 0x4008, 0x002E, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+          0x0009, 0x0009, 0x0009, 0x0009, 0x0000, 0x2222, 0x0600, 0x9020 }, true },
+        { "c3w_const3", { 0x4F22, 0x7FFC, 0xD10E, 0x1F10, 0xE403, 0xE502, 0xE603, 0xE704, 0xD10C, 0x410B, 0x0009, 0x7F04, 0x4F26, 0x000B,
+          0x0009, 0x0009, 0x2F76, 0x2F66, 0x2F56, 0x2F46, 0xE103, 0x62F3, 0x7204, 0xE000, 0x6326, 0x303C, 0x4110, 0x8BFB,
+          0x7F10, 0x000B, 0x0009, 0x0009, 0x0000, 0x2222, 0x0600, 0x9020 }, false },
+        { "c3w_loop_entry", { 0x4F22, 0x7FFC, 0xD10E, 0x1F10, 0xE400, 0xE502, 0xE603, 0xE704, 0xD10C, 0x410B, 0x0009, 0x7F04, 0x4F26, 0x000B,
+          0x0009, 0x0009, 0xE104, 0x62F3, 0xE000, 0x6326, 0x303C, 0x4110, 0x8BFB, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009,
+          0x0009, 0x0009, 0x0009, 0x0009, 0x0000, 0x2222, 0x0600, 0x9020 }, false },
+    };
+    for (const Case& c : kCases)
+    {
+        const DecompileResult callee = run(c.name, c.words, 0x06009020u, nullptr);
+        const DecompileResult caller = run(c.name, c.words, 0x06009000u, &callee);   // the callee's prototype is lent to it when it has one
+        CHECK(callee.status == DecompileStatus::Ok && caller.status == DecompileStatus::Ok);
+        // the printed call carries the stack word in every case: a callee that stops at three words is withheld as well (see A3-284)
+        CHECK(Has(caller.Text(), "3,4,0x2222);"));   // (the store of the word to the stack is printed either way: the call is the check)
+        if (c.readsStackWord) CHECK(!callee.prototype.known && callee.prototypeWithheld.find("caller's frame") != std::string::npos);
+    }
+    // Still lent: a callee whose own local array is indexed through r0 (A3-9: an index stays in its object; the array lies below the entry
+    // r15, not in the spill): `add #-8,r15 ; mov r15,r2 ; mov r4,r0 ; shll2 r0 ; mov.l @(r0,r2),r0 ; rts ; add #8,r15`
+    {
+        const DecompileResult r = run("A3-280 control: a local array indexed through r0", { 0x7FF8, 0x62F3, 0x6043, 0x4008, 0x002E, 0x000B, 0x7F08, 0x0009 }, 0x06009000u, nullptr);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known && r.prototypeWithheld.empty());
+    }
+}
+
 void TestA3155Fix()
 {
     Sh2Decompiler d(gConfig);
@@ -20659,6 +20718,7 @@ int main(int argc, char** argv)
         RUN(TestA3178Fix());
         RUN(TestA3182Fix());
         RUN(TestA3184Fix());
+        RUN(TestA3280Fix());
         RUN(TestArea10Round2());
         RUN(TestArea10Round3());
         RUN(TestArea10Round4());
