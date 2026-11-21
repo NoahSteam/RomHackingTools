@@ -1,0 +1,2 @@
+0086-h8: applied [8] named_hit=True unit:FAIL(rc1,TestArea10Round5=1)
+0086-h8h9: applied [8, 9] named_hit=True unit:FAIL(rc1,TestArea10Round5=1)

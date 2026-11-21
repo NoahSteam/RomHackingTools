@@ -1,0 +1,1 @@
+{"id": "base-ff", "applied": ["edit:cpp/libdecomp.cc"], "named": ["none"], "named_hit": false, "runs": [{"oracle": "faultfull", "rc": 1, "secs": 1048, "fns": {}, "findings": [], "nfindings": 0, "canary": [], "first": "== runner-oom mailbox entry 8 j 0: FAILED in 0.0 s"}]}

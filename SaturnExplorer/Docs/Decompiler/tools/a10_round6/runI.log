@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/home/user/RomHackingTools/.claude/worktrees/agent-a0d9c8ee0454a4784/SaturnExplorer/Docs/Decompiler/tools/a10_round6/mut.py", line 229, in <module>
+    main()
+    ~~~~^^
+  File "/home/user/RomHackingTools/.claude/worktrees/agent-a0d9c8ee0454a4784/SaturnExplorer/Docs/Decompiler/tools/a10_round6/mut.py", line 223, in main
+    h.job(job)
+    ~~~~~^^^^^
+  File "/home/user/RomHackingTools/.claude/worktrees/agent-a0d9c8ee0454a4784/SaturnExplorer/Docs/Decompiler/tools/a10_round6/mut.py", line 173, in job
+    txt = open(full, encoding="utf-8").read()
+          ~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/user/RomHackingTools/.claude/worktrees/agent-a0d9c8ee0454a4784/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/libdecomp.cc'

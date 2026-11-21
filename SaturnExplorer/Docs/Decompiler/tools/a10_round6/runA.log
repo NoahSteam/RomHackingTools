@@ -1,0 +1,7 @@
+0006-g1: applied [2] named_hit=False unit:ok(rc0,) sem:FAIL(rc1,TestPredecrementStoreAlias=3)
+0006-g2: applied [3, 4, 5, 6, 8] named_hit=False unit:FAIL(rc1,TestArea7Round13=3,TestArea7Round17=1,TestHardwareVolatility=2,TestArea2Round8=192)
+0050-g1: applied [1] named_hit=False unit:ok(rc0,) sem:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0050-g4: applied [4] named_hit=False unit:ok(rc0,) sem:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)
+0050-g5: applied [5] named_hit=False unit:FAIL(rc1,TestDelaySlotPcRelative=4,TestArea2Round7SlotValues=34,TestArea2Round8=234)
+0050-g6: applied [6, 7, 8, 9, 10, 11, 12] named_hit=False unit:FAIL(rc1,TestDelaySlotPcRelative=4,TestArea2Round7SlotValues=9,TestArea2Round8=130)
+0050-g7: applied [13] named_hit=False unit:ok(rc0,) sem:ok(rc0,) gen:ok(rc0,) fault:ok(rc0,)

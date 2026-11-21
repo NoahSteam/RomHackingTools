@@ -1,0 +1,1 @@
+family3: applied ['diff:family3.diff'] named_hit=False unit:FAIL(rc1,TestArea7Round3=9,TestArea7Round4=3,TestArea7Round5=5,TestArea7Round6=6,TestArea7Round7=15,TestArea7Round8=4) pc:FAIL(rc1,TestPrintedC=18) gen:FAIL(rc1,TestLeftoverSeedPins=1,TestRound7Pins=1,TestA365Pins=3,TestA3RoutedPins=30) engine:ok(rc0,)

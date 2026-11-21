@@ -1,0 +1,3 @@
+{"id": "0050-g4d", "applied": [4], "named": [], "named_hit": false, "runs": [{"oracle": "decode", "rc": 0, "secs": 2, "fns": {}, "findings": [], "nfindings": 0, "canary": [], "first": ""}]}
+{"id": "0050-g7d", "applied": [13], "named": [], "named_hit": false, "runs": [{"oracle": "decode", "rc": 1, "secs": 2, "fns": {"TestExecution": 2}, "findings": [], "nfindings": 0, "canary": [], "first": "CHECK failed at /home/user/RomHackingTools/.claude/worktrees/agent-a0d9c8ee0454a4784/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2240: totalFails == 0"}]}
+{"id": "0050-g1d", "applied": [1], "named": [], "named_hit": false, "runs": [{"oracle": "decode", "rc": 0, "secs": 2, "fns": {}, "findings": [], "nfindings": 0, "canary": [], "first": ""}]}

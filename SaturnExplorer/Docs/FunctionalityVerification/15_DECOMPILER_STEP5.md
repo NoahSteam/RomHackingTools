@@ -24930,3 +24930,77 @@ Its box, target, label, Entry line and output all name the function it asked; th
 | the failing job (`SE_TRUST_MIX=9 SE_TRUST_FROM=2300000 SE_TRUST_STEPS=340000 SE_TRUST_OOM_STRIDE=0 SE_TRUST_FOLLOW_FOCUS=1 SE_TRUST_FOLLOW_CPU=1 SE_TRUST_NOHOVER=1`) | 7,625 sequences (seeds 2300000 to 2307624), 340,014 operations, 0 failing (819 s) |
 | seeds 2307517, 2306667, 2306574, 2502030, 20 runs each alone | 0 failing |
 | default trust run | all passed (58 s), the race pins ok |
+
+
+## Area 3, round 41
+
+Branch `review/3-round41` from the coordinator's master `8ebf0afb`. RelWithDebInfo, `-j2`, `ulimit -v 3500000`. The first round after the project owner's scope decision (A3-279, `REVIEW_PROGRAM.md` "Area 3: scope and acceptance"): the accepted class (a callee writing its caller's pushed saved-register words, saves and restores aliased through bus mirrors) was not probed. The round reviewed what compiled code does: calling conventions, prototypes and lent signatures, on fixtures shaped like SH-2 GCC and Hitachi SHC output and on a generated set of them, then the four fresh generator sweeps. One P2 miss found, not fixed (A3-280); P3: A3-281 (the oracle gap behind it), A3-282 (oracle limits and fixture authoring), A3-283 (sweeps routed). No product change in this round.
+
+### 1. Tooling
+
+`Docs/Decompiler/tools/a3_round41/` (round 40's `run.py`, `run.sh`, `selftest.sh` copied, `mk.py` new; round 40's directory untouched). `run.py` gained an `.align4` line (a function-pointer table in the code must be word aligned). `mk.py [COUNT [SEED]]` writes `fixtures.src`: the named group `c*` (about 45 fixtures) and COUNT generated modules `g*`.
+
+* **Named, compiled shapes.** r4-r7 and stack arguments beyond four (1, 2, 3 and 5 words: `c1_stack*`), an unread argument, a read on one path (`c1_*`); 64-bit add, low word only, `dmulu.l` (r0:r1), a struct returned through the hidden pointer in r2 (with and without the pointer in r0), a struct passed by value (`c2_*`); varargs spilling r4-r7 and walking a va_list, a printf-shaped callee that hands the va_list on (`c3_*`, `c3w_*`); 1, 3 and 7 callee-saved registers pushed by the callee and held across a call, a frame pointer in r14 with an address-taken local, PR kept in a register like SHC (`c4_*`); MACL and `mac.l` across calls (`c5_*`); GBR read-only, set by an init function and borrowed and restored (`c6_*`); a GCC tail call with the PR restore in the `jmp` delay slot, `bra`, two thunks in a row, a tail callee that returns on some paths (`c7_*`); recursion, mutual recursion, a callee through a function-pointer table, a callee whose r0 is ignored, r0 on some paths, a six-deep chain, r0 set in one arm of an `if` (`c8_*`).
+* **Generated modules.** A small compiler-shaped emitter: 2 to 5 functions from fourteen shapes (ALU leaf, leaf with r8-r10 pushed, field and table leaf, GBR leaf, 64-bit, struct return, varargs, `if` that reads different registers on its paths and writes r0 on one, a calling function with GCC's frame and r14 as frame pointer, locals, outgoing stack arguments, `if`-guarded and counted calls, results used, dropped, stored or passed on, tail thunks, bounded recursion), a DAG call graph. Every function obeys the convention, so the generator's own class (`n:generator:*`) does not appear.
+* **Runs.** `selftest.sh`: ok. `run.sh` over the 45 named and 300 generated modules (seed 1) in the committed file: exit 0, no FAILED fixture. Locally 1,500 modules (seed 1, 4 minutes): exit 0, no FAILED. Findings in the committed file: `c8_table` and `c8_tableret` `n:outside-body` (A3-282 (a), the oracle's limit) and generated module `g10278` `n:frame-lost:W4` (A3-280: the oracle's coincidence with the dropped stack word; a first draft also had two fixture-artifact frame-lost modules, A3-282 (b), corrected in `mk.py`); no `caution-unsaid`, `param-dropped`, `lent-*` or `claim` finding on any fixture.
+
+### 2. Review
+
+* **Prototypes on compiled shapes.** Held on every fixture the oracle can judge: r4-r7 read first are parameters; no fixture's lent return disagrees with the runs where r0 is written on one path only (`c8_r0cond`, `c8_partial`, `c7_tailret`, the `ret 2` callees of the generated modules); callee-saved registers pushed and popped by the callee are no change (no caution note on any named fixture); a tail call through `jmp` with the PR restore in its delay slot, thunks, a this-adjusting thunk and a thunk to a thunk take the target's signature; recursion and mutual recursion are withheld ("it calls itself", "whose signature is not known"); a callee reached through a table withholds its caller ("an indirect call it does not resolve"); a callee reading r2 as the hidden struct pointer gets it as a frame address note (`a frame address is in r2 here`); MACL/MACH and GBR (read, set, borrowed) match the runs.
+* **A3-280 (P2, open).** A callee that spills r4-r7 and walks a pointer up through the spill into its caller's stack words (a `va_arg` walk, `&param5`) is lent the register parameters only, and the caller's text drops the fifth argument it reads (`func_0x06009020(3,2,3,4)` for a call that passes 0x2222 as the fifth word). The same through `@(r0,r2)` with an index. The unrolled read and a fixed loop from the entry r15 are seen and withheld. The cause is the walk's loop pointer taken as a local object's address with a non-negative index (A3-9), so the read reaches no caller word; the return rule reads the stack dependences only for a void return. Not fixed: the candidate fix (a pointer based at the spill, stepped by a loop or an index, may reach the caller's words; withhold a function that loads through it) changes which functions are lent, and wants a design look before it is made (every other unplaced frame pointer must stay lent, or each function that indexes a local array loses its prototype).
+* **A3-281 (P3).** The lent-prototype oracle perturbs argument registers, not stack words, and generated functions read no stack argument; A3-280 is therefore invisible to the sweeps, which is why every sweep below is clean for it.
+* **A3-282 (P3).** `outside-body` on an indirect call into another function of the module; frame-lost on a read of an unwritten local (fixture artifact); MACH/MACL and GBR changers need `SE_GENERATED_CLOBBERS`.
+
+### 3. Sweeps (`SE_GENERATED_CANARY=0`; `SE_GENERATED_PINS=0` for the first three)
+
+| Run | Range | Result |
+|---|---|---|
+| Grammar 2, `SE_GENERATED_CAUTION=deep` | 14,400,001, 10,000 seeds | failing seeds=2, findings=3: 14404439, 14406305 `map-copy-store`: area 7, routed (A3-283) |
+| Grammar 1 | 14,500,001, 10,000 seeds | failing seeds=3, findings=4: 14501039, 14504437 `map-way-back`, 14509706 `map-store-value`: area 7, routed |
+| Grammar 2 | 14,600,001, 10,000 seeds | failing seeds=1, findings=1: 14608531 `map-way-back`: area 7, routed |
+| Default `SE_GENERATED_SEEDS=20000`, pins on | | all passed (715 s) |
+
+No area 3 class (`caution-unsaid`, `callee-saved`, `state-saved`, `param-dropped`, a lent-claim finding) in any sweep.
+
+### 4. Runs
+
+* `ctest --test-dir build -j1` (RelWithDebInfo, `ulimit -v 3500000`): **117 of 117 passed** (603 s). No product code changed.
+* `python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include SaturnExplorer/Core`: ok (output above in the run).
+* `tools/a3_round41/selftest.sh`: ok. `run.sh`: exit 0, no FAILED fixture (see 1).
+* Not run: the local game corpus (not in the repository); the sanitizer jobs (CI).
+
+**Verdict, area 3 round 41: not clean.** One P2 outside the accepted class: A3-280 (a callee that walks a pointer from its spilled r4-r7 into its caller's stack words is lent a prototype without the stack argument it reads, and the caller's text drops the word); open, with five fixtures and the oracle gap (A3-281) that hides it from the sweeps. No P1. P3: A3-281, A3-282, A3-283. The sweeps are clean for area 3; the compiled-shaped set otherwise held on conventions, saved registers, PR, MACH/MACL, GBR, thunks, tail calls, recursion and returns on some paths. The count of consecutive clean rounds stays at zero.
+
+## Area 10, round 6
+
+Branch `review/10-round6` from `08f1f47c` (master with round 5 merged); patches 0001 to 0099 (89 files, unchanged: `git diff --stat 9799e093 08f1f47c -- SaturnExplorer/FrontEnd/third_party` is empty; the only engine-facing change since round 5 is area 3 round 39's 22 lines in the host's `Sh2Decompiler.cpp`, which is not vendored). Reviewer of area 10, round 6, independent of rounds 1 to 5. Method as rounds 4 and 5: `tools/a10_round4/mut.py` (copied to `tools/a10_round6/mut.py` with a `diff` job kind and a `faultfull` oracle), `jobs_gen.py` groups, hand-made reverts; jobs, logs and results in `tools/a10_round6/`. RelWithDebInfo, `-j2`, `ulimit -v 3500000`; `git status --porcelain -- SaturnExplorer/FrontEnd/third_party` empty after every mutant (checked by the harness before the next). **Verdict, area 10: clean. No P1 or P2 found.** Three P3 rows (A10-33 to A10-35). This is the second consecutive clean round (round 5 was the first). The round is partial: see "Not done".
+
+### 1. Round 5's work checked
+
+* `TestArea10Round5` a: 0086 hunk 8 reverted alone fails exactly `TestArea10Round5` (1 check, `(int4)xStack_4 / 7`); hunks 8 and 9 together fail the same one check, so hunk 9 adds nothing the fixture sees. Nothing else in `Sh2DecompilerTests` fails. Robust: the name `xStack_4` is the stack offset (a frame layout, not a counter the engine numbers), and the check is on the cast the hunk adds. Case c stays as a control: it passes with 0064 hunks 23 and 24 reverted (by design, its comment says so) and checks by value that a logical shift of a sign extension keeps the extension's bits, which is the property the pair guards; it costs four short decompilations.
+* A10-32's 0064 hunks 23 and 24 ("a shift count at most 62"): re-judged and the claim holds on better grounds. The hunks refuse an `INT_SRIGHT` by a constant above `calc_mask(flowsize)`, at least 255. The only variable-count arithmetic shift in the SuperH spec is `shad`, under `SH_VERSION == "2A"` (`sh-2.slaspec` defines "2"); the constant `s>>` counts in the spec are 1 (`shar`) and 22 (`32-10`, the MAC sign extension); `RuleDoubleArithShift` saturates a sum at the width less one (at most 63). No constant above 255 reaches a flow. Unreachable on SH-2, so not a hidden P2.
+* A10-32's 0057 `next &= calc_mask(...)`: the join test masks `off` itself (`off &= mask` at the MULTIEQUAL), so the sign decision is the same; without the mask distinct wrapped offsets of one varnode are distinct pairs until the 4,096 cap answers `atCap`, and every use of the cap fails closed (`ScopeLocal::annotateRawStackPtr` and `reachesStepDown` and `pointerSteppedDown` answer true, which adds aliasing; `ActionInputPrototype` passes `false`, which keeps the stack parameter reference). Accepted.
+* A10-32's 0015 groups 1, 3, 4: now also run in the fault matrix (default subset: `0015-g1f`, `g3f`, `g4f` survive) and, for group 3, the full matrix (A10-34). An allocation failure at those three stores is not injected by any cell; no printed text. A10-31 (the restarts): `Heritage::reprocessPendingStores` re-reads each pending STORE through its `SeqNum` and requires `CPUI_STORE` with `usesSpacebasePtr`, so a stale entry that lands on another op is settled by the same rule as a fresh one; stays P3.
+
+### 2. Round 5's "not done" list
+
+* Per-group mutation of 0006 (2 groups), 0050 (7), 0023 (9), 0032 (11) with spec regeneration and the fault matrix (`runA.log`, `runB.log`, 29 mutants; 0050 g2 and g3 are definitions the other hunks use and do not regenerate alone). Killed: 0006 g1 (`sem`) and g2 (`unit`), 0050 g5, g6 (`unit`) and g7 (`decode` `TestExecution`, 2 checks: the `rte` slot kind passes `unit`, `sem`, `gen` and `fault`), 0023 g1, g2, g6 and 0032 g2, g5, g9, g11 (fault matrix). Survivors, all judged in A10-33: comments, one redundant SLEIGH constraint (0050 g4: `slot_kind=0` on the plain `disppc2`, which the constructors for kinds 3 to 6 outrank; `decode` passes too), and allocation-failure ownership hunks that free a leak (LeakSanitizer; the plain build cannot see them). None changes printed C.
+* Re-runs under this master (`runC.log`): 0001 g1 to g3 survive all six oracles (latency of a cancel; A10-29 stands); 0040 g1, g2, g5 to g15 survive, g4 is killed in `fault`, g3 does not build (the pins of 0040 are `kPins` cells that leak under LeakSanitizer only, A10-10); 0052 hunk 3 is killed by `TestArea10Round4` (2 checks); 0060 g2 is killed in `fault`, g1 and g3 survive (g3 is an `#ifdef OPACTION_DEBUG` line; g1 is the stack-escape family's, below).
+* 0066's cap (64 hops of `pointerSteppedDown`): reachable only with 64 INDIRECTs of one spilled pointer (64 calls); where it answers true it gives what `FrameEscape::classifyExact` gives any pointer with no exact offset, and the helper's own revert changes no text. No fixture can distinguish it; recorded in A10-35.
+* The stack-escape family 0056, 0065, 0066, 0072, 0076 as a unit (A10-35). All 89 patches reverse-apply cleanly to the final tree, which gives the pinned upstream of the patched files with no checkout (`mkstack.py`); replaying all gives the final tree exactly. `replay.py` replays without the five; 21 later patches no longer apply whole (0057, 0060, 0061, 0063, 0067, 0068, 0073, 0075, 0078, 0079, 0082, 0083, 0085, 0087, 0088, 0090, 0093, 0094, 0096, 0098, 0099), and a version that drops them does not build the host (`isFromDelaySlot`, `AccessRecord::slot`), so their non-conflicting hunks are kept (`git apply --reject`) and `fix.py` restores the three declarations their code needs. With that revert (`family3.diff`) `unit` fails 34 functions, `pc` 18 checks, `gen` 4 functions, `engine` passes; each member's named pin fails (listed in A10-35), and the ones that do not (`A3-136`, `A3-138`, `A3-142`, `A3-144 LOOP L2` to `L4`) are vacuous or coincide without the patch, with other pins of the same member failing.
+
+### 3. Patches changed since round 5
+
+None. Patch 0099 was reviewed in round 5 and is unchanged.
+
+### 4. A10-24
+
+Stays open: the drafts are in the record, nothing was filed (none can be from here). No patch was added, so no new upstream defect.
+
+### 5. Not done
+
+A sanitizer build of the fault matrix over the allocation-ownership survivors of A10-33 and A10-34 (the CI `sanitizers` job is their oracle; no sanitizer build was made here); a fixture that makes `ProtoStoreInternal::setInput` or the 0032 prototype replacement fail an allocation; `TestGameCode` for the family (no game image); 0086 hunk 9's fixture (A10-32); a per-hunk (not per-group) pass of 0006 and 0050.
+
+### 6. Runs
+
+`ctest --test-dir build -j1` (RelWithDebInfo, `-j2`, `ulimit -v 3500000`) after the last rebuild of the unmutated tree: `100% tests passed, 0 tests failed out of 117`. `check-vendored-tree.py lint`: `vendored tree: ok (lint)`. `check-literal-size.py`: `raw string sizes: ok (7 raw strings in 341 files)`. The full fault matrix (`SE_FAULT_FULL=1`) on the unmutated tree under the `ulimit` fails 10 of 447 jobs (`runner-oom mailbox entry 8` and `13`), the same 10 as with 0015 group 3 or 0032 group 8 reverted; the default subset in ctest passes. `git status` clean under `third_party/` after every mutant.
