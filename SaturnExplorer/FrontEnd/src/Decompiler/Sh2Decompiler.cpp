@@ -441,6 +441,10 @@ public:
     // After Run(): the origins of what the function writes at an exact offset at or above its entry r15, a word of its caller's frame
     // (A3-21); a constant counts as origin::kFrame, which no signature holds. 0 when it writes none.
     uint32_t CallerFrameStores() const { return mCallerFrameStores; }
+    // (area 3, A3-280) After Run(): whether it loads through a frame address that may be at or above the entry r15 and that no exact offset
+    // places: a walk from the entry r15 or from the spill of r4-r7 up into the words its caller passed. Which word that is, and so whether the
+    // signature holds it, is not known: the callee is not lent (as a fixed read of a fifth argument shows to the engine's own analysis).
+    bool ReadsUnplacedCallerWord() const { return mReadsUnplacedCaller; }
 
     // Empty when every return reached goes to the caller, else why not. 'effects' is then this
     // function's own summary.
@@ -459,6 +463,7 @@ public:
         mReturnData = mReturnCtl = mReturnJoinsR0 = 0;
         mDef = 0;
         mCallerFrameStores = 0;
+        mReadsUnplacedCaller = false;
         mOwnFrameWords = 0;
         mFrameWords = 0;
         mStoresThrough = 0;
@@ -1250,10 +1255,30 @@ private:
         return (o & origin::kStack) || (s.escaped && (o & origin::kMemory));
     }
 
+    // (area 3, A3-280) Whether a stack address based at 'base' is based in the spill area: the words directly below the entry r15 that the
+    // function itself filled with the entry r4-r7 (the varargs / address-taken-parameter prologue, `mov.l r7,@-r15 ... mov.l r4,@-r15`). The
+    // caller's own stack argument words lie right above that area, so a pointer that a loop steps or a variable indexes from there reaches them
+    // (`va_arg` crossing from the spilled registers into the stack, `&param5` walks). A3-9's rule (an index stays in its object) holds for a
+    // local array, which the compiler puts below the spill, not in it; so only a base in the spill is taken as reaching up.
+    static bool SpillBase(const State& s, int64_t base)
+    {
+        if (base >= 0 || base == Value::kNoBase || base == Value::kLowBase || base == Value::kHighBase) return false;
+        const auto f = s.slots.find(base & ~int64_t(3));
+        return f != s.slots.end() && f->second.kind == Value::Reg && f->second.v >= 4 && f->second.v <= 7;
+    }
+    // ...and the flag it sets on such an address: callerHigh, which MayBeCallerFrame reads, so the word it loads is an input stack word.
+    static bool FlagSpillReach(const State& s, Value& v)
+    {
+        if (v.kind != Value::Fuzzy || !v.Frame() || v.callerHigh || !SpillBase(s, v.stackBase)) return false;
+        v.callerHigh = true;
+        return true;
+    }
+
     // The stack-address bases of every value in 'st' given up for the lowest slot (see Run).
     static void Widen(State& st)
     {
-        auto widen = [](Value& v) {
+        auto widen = [&st](Value& v) {
+            FlagSpillReach(st, v);   // before the base is given up (A3-280)
             if (v.kind == Value::Fuzzy && v.stackBase != Value::kNoBase) v.stackBase = Value::kLowBase;
             if (v.kind == Value::Fuzzy && v.baseReg >= 0) v.regOff = Value::kLowBase;   // A3-71: a loop that moves a register pointer
         };
@@ -1405,6 +1430,13 @@ private:
                 merge(v, slot.second);
                 if (!(v == Unwritten(into, slot.first))) into.slots[slot.first] = v;
             }
+        // (A3-280) A loop that steps a pointer up from the spill area joins two bases of it: the lowest stands, and the pointer may reach
+        // the caller's words above the area.
+        auto spillReach = [&changed, &into](Value& v) {
+            if (FlagSpillReach(into, v)) changed = true;
+        };
+        for (auto& v : into.vars) spillReach(v.second);
+        for (auto& v : into.slots) spillReach(v.second);
         return changed;
     }
 
@@ -3070,6 +3102,8 @@ private:
         // any register's saved entry value: a word at an index the walk cannot place (`mov r15,r1 ; add r6,r1 ; mov.l @r1,r10`, f1, f2, f4)
         // is not that value but for the one index that is the register's own slot, so every register is marked as changed by it, except one
         // a store through this same address put its value in.
+        // (a based address only: a laundered copy of r15, no base, is A3-106's, whose hand-back rules already withhold it)
+        if (addr.kind == Value::Fuzzy && addr.Frame() && addr.stackBase != Value::kNoBase && MayBeCallerFrame(s, addr)) mReadsUnplacedCaller = true;   // (A3-280)
         Value f = FreeStack();
         f.innerChanged |= changed | (kModelKept & ~ownStored);
         f.mayEntry |= ownStored;   // (A3-266) as above
@@ -3465,6 +3499,9 @@ private:
                         r.stackBase = y.kind == Value::Imm ? Value::MoveBase(x.Base(), sub ? -y.v : y.v) : Value::kLowBase;
                     else if (!sub && yb && !xb)
                         r.stackBase = x.kind == Value::Imm ? Value::MoveBase(y.Base(), x.v) : Value::kLowBase;
+                    // (A3-280) ...but an index added to an address in the spill area may reach the caller's words above it.
+                    if ((xb && !yb && y.kind != Value::Imm && SpillBase(s, x.Base())) || (!sub && yb && !xb && x.kind != Value::Imm && SpillBase(s, y.Base())))
+                        r.callerHigh = true;
                 }
                 // ...and, for a pointer that is a parameter register's entry value give or take an offset, track that offset (A3-71), unless the
                 // value is a stack address (handled above).
@@ -3879,6 +3916,7 @@ private:
     bool mExitSeen = false;
     uint32_t mReturnData = 0, mReturnCtl = 0, mReturnJoinsR0 = 0;   // ...what it was computed from, what chose the paths, of which joined with r0
     uint64_t mDef = 0;            // the op being interpreted (Value::def)
+    bool mReadsUnplacedCaller = false;   // a load through a frame address that may be the caller's, at an offset not known (A3-280)
     uint32_t mCallerFrameStores = 0;   // what was stored at an exact offset at or above the entry r15 (A3-21)
     uint32_t mFrameWords = 0;          // ...and which words of it (CallEffects::frameWords)
     bool mTolerant = false;
@@ -4176,6 +4214,7 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
     check.ShareWalkResults(walks);
     const std::string why = check.Run(effects);
     if (!why.empty()) return why;
+    if (check.ReadsUnplacedCallerWord()) return "it reads its caller's frame at a word it cannot place";   // (A3-280)
     // The return rule (A3-5, A3-13, A3-14, A3-20, A3-45, A3-49, A3-50, A3-55 to A3-59, A3-62). A function the engine made `void` is lent only
     // when no input the signature does not hold can change what it leaves in r0: neither by data (what r0 at the returns was computed from)
     // nor by choice (what decided which value it holds, when it differs by path). The engine drops a return it takes for none (A3-5: a value
