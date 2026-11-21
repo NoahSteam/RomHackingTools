@@ -1,0 +1,312 @@
+P2 rows with a fixture label: 31 of 46 P2 rows; disagreements on others: 1309
+A7-10
+  insn.disagree/new-effect/old-first-unlinked: 1
+      a7_10 mutated | line 3 firstAddr 06070104 new 06070104 | SINIT = 0xffff;
+  line.disagree/Store/old-not-linked/below: 1
+      a7_10 mutated | line 3 firstAddr 06070104 new 06070106 | SINIT = 0xffff;
+A7-11
+  insn.disagree/new-value/old-first-linked: 1
+      a7_11 mutated | line 13 firstAddr 0607102E new 0607102E | xStack_10._0_2_ = CONCAT11(0x12,(xunknown1)xStack_18);
+  line.disagree/Return/old-is-value/below: 2
+      a7_11 | line 17 firstAddr 0607103E new 0607104E | return xVar1;
+  line.no-effect/Assign: 4
+      a7_11 | line 10 firstAddr 0607100A new 00000000 | pxStack_8 = &xStack_10;
+  line.no-effect/Store: 6
+      a7_11 | line 12 firstAddr 06071006 new 00000000 | xStack_18._3_1_ = (xunknown1)param_1;
+A7-19
+  line.disagree/Branch/old-is-value/below: 6
+      a7_19 | line 3 firstAddr 06070002 new 06070004 | if (param_1 == 0) {
+  line.disagree/Return/old-is-value/below: 4
+      a7_19 | line 9 firstAddr 06070010 new 06070012 | return xRam06080004;
+  line.no-effect/Assign: 8
+      a7_19 | line 4 firstAddr 0607000C new 00000000 | xRam06080004 = param_3;
+  line.no-effect/Store: 10
+      a7_19 frame | line 15 firstAddr 06021E5A new 00000000 | xStack_24._3_1_ = (xunknown1)param_1;
+A7-20
+  insn.disagree/new-effect/old-first-linked: 1
+      a7_20 | line 34 firstAddr 06021CB0 new 06021CB0 | return 0;
+  insn.disagree/new-placement/old-first-unlinked: 1
+      a7_20 | line 17 firstAddr 06021CA0 new 06021CA0 | return xStack_1c;
+  line.disagree/Branch/old-is-value/below: 2
+      a7_20 | line 16 firstAddr 06021C3E new 06021C40 | if (99 < iStack_14) {
+  line.disagree/Return/old-not-linked/below: 1
+      a7_20 | line 17 firstAddr 06021CA0 new 06021CB0 | return xStack_1c;
+  line.disagree/Store/old-is-candidate-value/below: 1
+      a7_20 | line 12 firstAddr 06021C2E new 06021C30 | piStack_8 = aiStack_10;
+  line.disagree/Store/old-is-value/below: 1
+      a7_20 | line 31 firstAddr 06021C96 new 06021C9A | iStack_14 = iStack_14 + 1;
+  line.no-effect/Store: 1
+      a7_20 | line 33 firstAddr 06021C8C new 00000000 | xStack_1c = 0;
+A7-22
+  line.disagree/Branch/old-is-value/below: 4
+      a7_22 | line 5 firstAddr 06070004 new 0607000C | if ((param_1 == 1) || (iVar1 = 0, param_1 == 2)) {
+  line.no-effect/Assign: 2
+      a7_22 | line 6 firstAddr 06070008 new 00000000 | iVar1 = 0;
+A7-23
+  insn.disagree/new-effect/old-first-linked: 6
+      a7_23 | line 53 firstAddr 0600D954 new 0600D954 | uVar6 = uVar4;
+  line.disagree/Branch/old-is-candidate-value/below: 51
+      a7_23 | line 37 firstAddr 0600D95C new 0600D960 | } while ((uVar2 & 1) != 0);
+  line.disagree/Branch/old-is-value/below: 38
+      a7_23 | line 15 firstAddr 0600D91A new 0600D91C | if (param_1 == 1) {
+  line.disagree/Branch/old-not-linked/below: 6
+      a7_23 | line 54 firstAddr 00000000 new 0600D954 | break;
+  line.disagree/Call/old-is-candidate-value/below: 8
+      a7_23 | line 76 firstAddr 0600D910 new 0600D9E4 | func_0x06063aac(param_1,0x40,axStack_28);
+  line.disagree/Return/old-is-candidate-value/below: 2
+      a7_23 piece | line 10 firstAddr 0607000E new 06070028 | return (xunknown1)xStack_c;
+  line.disagree/Return/old-is-value/below: 9
+      a7_23 | line 89 firstAddr 0600DA18 new 0600DB52 | return uVar6 & 0xff;
+  line.no-effect/Assign: 40
+      a7_23 | line 19 firstAddr 0600D93C new 00000000 | uStack_8 = param_2;
+A7-26
+  insn.disagree/new-placement/old-first-unlinked: 2
+      a7_26 frame | line 18 firstAddr 06021844 new 06021844 | case 1:
+  line.disagree/Assign/old-is-candidate-value/below: 4
+      a7_26 frame | line 90 firstAddr 0602178C new 060217A2 | uVar1 = *(uint2 *)(param_1 + 5);
+  line.disagree/Branch/old-is-candidate-value/below: 2
+      a7_26 frame | line 107 firstAddr 060217EA new 060217FA | if (((uint2)(iVar2 - 0x37U) < 2) || (iVar2 == 0x39)) {
+  line.disagree/Branch/old-is-value/below: 8
+      a7_26 | line 5 firstAddr 06070004 new 0607000C | if ((param_1 == 1) || (iVar1 = 0, param_1 == 2)) {
+  line.disagree/Branch/old-not-linked/below: 12
+      a7_26 frame | line 17 firstAddr 00000000 new 0602177A | goto code_r0x0602183e;
+  line.disagree/Call/old-is-value/below: 2
+      a7_26 frame | line 93 firstAddr 060217A6 new 060217B4 | func_0x06008670(0x60a6a60,*(xunknown4 *)((uint4)uVar1 * 4 + 0x607b120),0x25a18040,0x3e540);
+  line.disagree/Store/old-is-candidate-value/below: 6
+      a7_26 frame | line 88 firstAddr 0602178C new 06021798 | *(int2 *)(param_1 + 5) = (int2)*(char *)(param_1 + 4);
+  line.no-effect/Assign: 18
+      a7_26 | line 6 firstAddr 06070008 new 00000000 | iVar1 = 0;
+  line.no-effect/Store: 10
+      a7_26 frame | line 126 firstAddr 0602176E new 00000000 | iStack_8 = 0;
+A7-28
+  insn.disagree/new-effect/old-first-unlinked: 1
+      a7_28 damaged | line 5 firstAddr 0607000A new 0607000A | xRam0603ac00 = 4;
+  insn.disagree/new-placement/old-first-unlinked: 2
+      a7_28 after the stores | line 18 firstAddr 06021844 new 06021844 | case 1:
+  line.disagree/Assign/old-is-candidate-value/below: 4
+      a7_28 after the stores | line 90 firstAddr 0602178C new 060217A2 | uVar1 = *(uint2 *)(param_1 + 5);
+  line.disagree/Branch/old-is-candidate-value/below: 2
+      a7_28 after the stores | line 107 firstAddr 060217EA new 060217FA | if (((uint2)(iVar2 - 0x37U) < 2) || (iVar2 == 0x39)) {
+  line.disagree/Branch/old-is-value/below: 6
+      a7_28 slot | line 3 firstAddr 06070004 new 06070006 | if (param_1 == 4) {
+  line.disagree/Branch/old-not-linked/below: 12
+      a7_28 after the stores | line 17 firstAddr 00000000 new 0602177A | goto code_r0x0602183e;
+  line.disagree/Call/old-is-value/below: 2
+      a7_28 after the stores | line 93 firstAddr 060217A6 new 060217B4 | func_0x06008670(0x60a6a60,*(xunknown4 *)((uint4)uVar1 * 4 + 0x607b120),0x25a18040,0x3e540);
+  line.disagree/Store/old-is-candidate-value/below: 6
+      a7_28 after the stores | line 88 firstAddr 0602178C new 06021798 | *(int2 *)(param_1 + 5) = (int2)*(char *)(param_1 + 4);
+  line.no-effect/Assign: 20
+      a7_28 slot | line 5 firstAddr 06070010 new 00000000 | xRam0603ac00 = 4;
+  line.no-effect/Store: 10
+      a7_28 after the stores | line 126 firstAddr 0602176E new 00000000 | iStack_8 = 0;
+A7-31
+  insn.disagree/new-effect/old-first-linked: 11
+      a7_31 | line 17 firstAddr 06009040 new 06009040 | piVar1 = piVar1 + -1;
+  line.disagree/Branch/old-is-value/below: 12
+      a7_31 | line 11 firstAddr 0600900E new 06009010 | } while (iVar2 != 0);
+  line.disagree/Return/old-is-value/below: 11
+      a7_31 | line 21 firstAddr 06009048 new 06009050 | return 0xffffffc2;
+  line.no-effect/Assign: 35
+      a7_31 | line 12 firstAddr 06009014 new 00000000 | xStack_14 = param_1;
+A7-32
+  insn.disagree/new-effect/old-first-linked: 3
+      a7_32 | line 13 firstAddr 06009040 new 06009040 | piVar2 = piVar2 + -1;
+  line.disagree/Branch/old-is-value/below: 3
+      a7_32 | line 16 firstAddr 06009042 new 06009044 | } while (iVar1 != 0);
+  line.disagree/Return/old-is-value/below: 3
+      a7_32 | line 17 firstAddr 06009048 new 06009050 | return 0xffffffc2;
+  line.no-effect/Assign: 10
+      a7_32 | line 8 firstAddr 06009014 new 00000000 | xStack_14 = param_1;
+A7-35
+  insn.disagree/new-effect/old-first-linked: 1
+      a7_35 | line 10 firstAddr 06009014 new 06009014 | xRam26002204 = 0;
+  line.disagree/Branch/old-is-value/below: 2
+      a7_35 | line 9 firstAddr 0600900E new 06009010 | } while (iVar1 != 0);
+  line.no-effect/Assign: 2
+      a7_35 | line 10 firstAddr 06009014 new 00000000 | xRam26002204 = 0;
+A7-37
+  line.disagree/Branch/old-is-value/below: 1
+      a7_37 | line 8 firstAddr 06009002 new 06009006 | if (((in_r3 | in_r1) & in_r0) != 0) {
+  line.disagree/Return/old-is-value/below: 1
+      a7_37 rts | line 7 firstAddr 06009002 new 06009006 | return in_r3 | in_r1;
+  line.disagree/Store/old-is-value/below: 1
+      a7_37 | line 9 firstAddr 06009002 new 0600900A | *(uint4 *)(param_2 + 0x30) = in_r3 | in_r1;
+A7-39
+  insn.disagree/new-effect/old-first-linked: 1
+      a7_39 fresh | line 11 firstAddr 0600901E new 0600901E | piVar2 = piVar2 + -1;
+  line.disagree/Branch/old-is-value/below: 9
+      a7_39 a | line 11 firstAddr 06009006 new 06009008 | } while (iVar2 != 0);
+  line.no-effect/Assign: 4
+      a7_39 fresh | line 8 firstAddr 0600901A new 00000000 | piVar2 = aiStack_10;
+A7-41
+  insn.disagree/new-effect/old-first-linked: 1
+      a7_41 | line 10 firstAddr 06009016 new 06009016 | xRam26001008 = 0;
+  line.disagree/Branch/old-is-value/below: 2
+      a7_41 | line 9 firstAddr 0600900E new 06009010 | } while (iVar1 != 0);
+  line.no-effect/Assign: 2
+      a7_41 | line 10 firstAddr 06009016 new 00000000 | xRam26001008 = 0;
+A7-42
+  line.disagree/Branch/old-is-value/below: 1
+      a7_42 | line 9 firstAddr 06009004 new 06009006 | } while (iVar1 != 0);
+A7-44
+  line.disagree/Branch/old-is-value/below: 1
+      a7_44 | line 10 firstAddr 0600900C new 0600900E | } while (iVar1 != 0);
+  line.no-effect/Assign: 2
+      a7_44 | line 5 firstAddr 06009000 new 00000000 | iRam06002308 = -0x10;
+A7-52
+  insn.disagree/new-effect/old-first-linked: 2
+      a7_52 silent | line 13 firstAddr 0600900E new 0600900E | } while (iVar1 != 0);
+  line.disagree/Assign/old-not-linked/below: 4
+      a7_52 silent | line 8 firstAddr 00000000 new 06009008 | iVar1 = 1;
+  line.disagree/Branch/old-is-value/below: 8
+      a7_52 | line 7 firstAddr 06009004 new 06009006 | } while ((uRam2600200c & 1) == 0);
+  line.no-effect/Assign: 4
+      a7_52 | line 9 firstAddr 06009002 new 00000000 | uRam2600200f = uRam2600200c;
+A7-55
+  insn.disagree/new-effect/old-first-linked: 1
+      a7_55 input | line 19 firstAddr 06009028 new 06009028 | piVar2 = piVar2 + -1;
+  line.disagree/Branch/old-is-value/below: 5
+      a7_55 move | line 10 firstAddr 0600900A new 0600900C | } while (iVar1 != 0);
+  line.no-effect/Assign: 5
+      a7_55 move | line 6 firstAddr 06009000 new 00000000 | iRam26002130 = param_1;
+A7-56
+  line.disagree/Branch/old-is-value/below: 4
+      a7_56 or | line 10 firstAddr 06009006 new 06009008 | } while (iVar1 != 0);
+  line.no-effect/Assign: 1
+      a7_56 self compare | line 10 firstAddr 0600900C new 00000000 | uRam26001004 = 4;
+A7-57
+  insn.disagree/new-effect/old-first-linked: 1
+      a7_57 gbr | line 8 firstAddr 0600900C new 0600900C | return (int4)(int2)xRam26002080;
+  line.disagree/Branch/old-is-value/below: 1
+      a7_57 gbr | line 6 firstAddr 06009006 new 06009008 | } while ((uRam06001034 & 1) == 0);
+  line.disagree/Return/old-is-candidate-value/below: 1
+      a7_57 gbr | line 8 firstAddr 0600900C new 06009014 | return (int4)(int2)xRam26002080;
+  line.disagree/Return/old-is-value/below: 1
+      a7_57 movt | line 12 firstAddr 06009008 new 06009018 | return (uint4)bVar1;
+  line.disagree/Store/old-is-candidate-value/below: 1
+      a7_57 gbr | line 7 firstAddr 0600900A new 0600900C | *(uint2 *)(unaff_gbr + 0xc) = uRam06001034 << 2;
+  line.disagree/Store/old-is-value/below: 2
+      a7_57 extension | line 5 firstAddr 06009012 new 06009018 | uRam26002188 = (uint4)param_2;
+  line.no-effect/Store: 1
+      a7_57 extension | line 4 firstAddr 06009012 new 00000000 | uRam2600219c = (uint4)param_2;
+A7-58
+  line.disagree/Branch/old-is-value/below: 22
+      a7_58 shll8 | line 9 firstAddr 06009000 new 06009002 | if (in_r0 != in_r2) {
+  line.disagree/Return/old-is-value/below: 4
+      a7_58 tst | line 18 firstAddr 0600901E new 06009022 | return 0;
+  line.disagree/Store/old-is-candidate-value/below: 2
+      a7_58 tst | line 13 firstAddr 06009012 new 06009014 | *param_4 = -(uint4)uVar2 - param_2;
+  line.no-effect/Assign: 2
+      a7_58 tst bit | line 9 firstAddr 06009028 new 00000000 | uStack_8 = 0;
+A7-59
+  insn.disagree/new-effect/old-first-linked: 1
+      a7_59 call output | line 13 firstAddr 0600901C new 0600901C | piVar2 = piVar2 + -1;
+  line.disagree/Branch/old-is-value/below: 1
+      a7_59 call output | line 16 firstAddr 0600901E new 06009020 | } while (iVar1 != 0);
+  line.disagree/Store/old-is-candidate-value/below: 1
+      a7_59 call output | line 20 firstAddr 06009024 new 06009032 | *param_1 = (int2)((unkuint6)Var4 >> 0x20);
+  line.no-effect/Assign: 4
+      a7_59 call output | line 10 firstAddr 06009018 new 00000000 | piVar2 = aiStack_14;
+A7-62
+  insn.disagree/new-effect/old-first-linked: 1
+      a7_62 | line 11 firstAddr 06009010 new 06009010 | uVar1 = uRamc000000c;
+  line.disagree/Assign/old-is-value/below: 1
+      a7_62 | line 24 firstAddr 0600901E new 0600902C | uVar2 = in_r0 + 0x46U & uRam04000014;
+  line.disagree/Branch/old-is-value/below: 4
+      a7_62 | line 15 firstAddr 06009016 new 06009018 | } while (iVar3 != 0);
+  line.no-effect/Assign: 3
+      a7_62 | line 8 firstAddr 06009000 new 00000000 | uVar2 = uRam0400000c;
+A7-78
+  insn.disagree/new-condition/old-first-linked: 2
+      a7_78_3302704 | line 13 firstAddr 0600900E new 0600900E | uVar3 = uVar4 - 1;
+  insn.disagree/new-effect/old-first-linked: 11
+      a7_78_3302704 | line 11 firstAddr 0600900A new 0600900A | uVar4 = uVar3;
+  insn.disagree/new-effect/old-first-unlinked: 6
+      a7_78_3706722 | line 13 firstAddr 06009024 new 06009024 | case (xunknown4 *)0x0:
+  insn.disagree/new-placement/old-first-unlinked: 2
+      a7_78_3628408 | line 20 firstAddr 0600905E new 0600905E | case 4:
+  insn.disagree/new-value/old-first-unlinked: 2
+      a7_78_3628408 | line 11 firstAddr 06009062 new 06009062 | default:
+  line.disagree/Branch/old-is-value/below: 42
+      a7_78_902 | line 8 firstAddr 06009006 new 06009008 | } while ((uRam26001034 & 1) != 0);
+  line.disagree/Branch/old-not-linked/below: 8
+      a7_78_3706722 | line 14 firstAddr 00000000 new 06009024 | break;
+  line.disagree/Call/old-is-candidate-value/below: 1
+      a7_78_3601551 | line 19 firstAddr 06009022 new 06009036 | xVar3 = func_0x06009054((char)param_1,param_2,param_3);
+  line.disagree/Return/old-is-value/below: 4
+      a7_78_3706722 | line 21 firstAddr 0600904A new 0600904E | return *pxVar2;
+  line.disagree/Store/old-is-candidate-value/below: 1
+      a7_78_3804173 | line 14 firstAddr 06009000 new 06009018 | xRam26002188 = (int2)in_r3;
+  line.disagree/Store/old-is-value/below: 2
+      a7_78_902 | line 10 firstAddr 0600900A new 06009010 | *param_2 = in_r3 & (uint2)uRam26001034;
+  line.no-effect/Assign: 34
+      a7_78_3300988 | line 9 firstAddr 0600900C new 00000000 | xRam26001042 = (int2)in_r1;
+  line.no-effect/Store: 3
+      a7_78_3706930 | line 14 firstAddr 06009010 new 00000000 | uRam26002380 = CONCAT22((int2)uVar2,uRam26002380._2_2_);
+A7-158
+  line.disagree/Branch/old-is-value/below: 5
+      a7_158 | line 4 firstAddr 06009004 new 06009006 | if (param_1 == 0) {
+  line.disagree/Store/old-is-value/below: 1
+      a7_158_7701445 | line 19 firstAddr 0600900A new 0600902A | *(uint4 *)(param_3 | 0xffffffc0) = uVar2;
+  line.no-effect/Assign: 9
+      a7_158 | line 3 firstAddr 06009000 new 00000000 | xRam26001018 = 0;
+A7-159
+  line.disagree/Branch/old-is-value/below: 2
+      a7_159 | line 6 firstAddr 0600900C new 06009010 | if (param_1 == 0) {
+  line.no-effect/Assign: 2
+      a7_159 | line 5 firstAddr 06009014 new 00000000 | cRam26001018 = '\0';
+A7-161
+  insn.disagree/new-effect/old-first-linked: 4
+      a7_161 | line 55 firstAddr 0601FAC4 new 0601FAC4 | if (iVar3 == 0) {
+  line.disagree/Assign/old-is-value/below: 2
+      a7_161 | line 53 firstAddr 0601FAC2 new 0601FAC4 | iVar3 = *(int4 *)(iRam060583b8 + 0x3c) + -1;
+  line.disagree/Branch/old-is-candidate-value/below: 1
+      a7_161 | line 27 firstAddr 0601FA5A new 0601FA5E | if ((auStack_18[0] & 0xf) == 9) {
+  line.disagree/Branch/old-is-other-effect/below: 2
+      a7_161 | line 38 firstAddr 0601FA88 new 0601FA8E | while (iStack_c = func_0x060223cc(0,0xffffffff), iStack_c != 0) {
+  line.disagree/Branch/old-is-value/below: 11
+      a7_161 | line 24 firstAddr 0601FA50 new 0601FA52 | if (iRam060583b4 != 0) {
+  line.disagree/Call/old-is-candidate-value/below: 4
+      a7_161 | line 23 firstAddr 0601FA2A new 0601FA4A | func_0x06020154(auStack_18);
+  line.disagree/Return/old-is-candidate-value/below: 2
+      a7_161 | line 25 firstAddr 0601FBB4 new 0601FBC0 | return iRam060583b4;
+  line.no-effect/Assign: 8
+      a7_161 | line 20 firstAddr 0601FA32 new 00000000 | iRam060583b8 = param_1;
+A7-171
+  line.disagree/Branch/old-is-candidate-value/below: 1
+      a7_171 | line 20 firstAddr 06009012 new 06009014 | if ((in_r1 & (uint4)param_1) == 0) {
+  line.disagree/Branch/old-is-value/below: 3
+      a7_171 | line 15 firstAddr 06009006 new 06009008 | if ((in_r0 & param_2) == 0) {
+  line.no-effect/Assign: 1
+      a7_171 | line 13 firstAddr 06009002 new 00000000 | cRam26001008 = (char)iVar1;
+  line.no-effect/Store: 1
+      a7_171 | line 29 firstAddr 0600901A new 00000000 | cRam26001008 = cVar2;
+A7-175
+  insn.disagree/new-effect/old-first-linked: 2
+      a7_175 damaged | line 13 firstAddr 06009014 new 06009014 | cVar2 = (char)iVar1;
+  line.disagree/Branch/old-is-candidate-value/below: 8
+      a7_175 | line 23 firstAddr 06009012 new 06009014 | if ((in_r1 & (uint4)param_1) == 0) {
+  line.disagree/Branch/old-is-value/below: 21
+      a7_175 | line 14 firstAddr 06009006 new 06009008 | if ((in_r0 & param_2) == 0) {
+  line.disagree/Store/old-is-value/below: 9
+      a7_175 | line 24 firstAddr 06009004 new 0600901A | Ram26001008 = in_r2 - cVar2;
+  line.disagree/Store/old-not-linked/below: 2
+      a7_175 loop | line 30 firstAddr 06009006 new 0600901C | Ram26001008 = (char)in_r2;
+  line.no-effect/Assign: 6
+      a7_175 | line 13 firstAddr 06009002 new 00000000 | cVar2 = (char)iVar1;
+  line.no-effect/Store: 2
+      a7_175 join | line 35 firstAddr 06009024 new 00000000 | cRam26001008 = cVar2;
+A7-176
+  line.disagree/Branch/old-is-candidate-value/below: 4
+      a7_176 | line 25 firstAddr 06009014 new 06009016 | if ((in_r1 & (uint4)param_1) == 0) {
+  line.disagree/Branch/old-is-value/below: 16
+      a7_176 | line 19 firstAddr 06009008 new 0600900A | if ((in_r0 & param_2) == 0) {
+  line.no-effect/Assign: 8
+      a7_176 | line 18 firstAddr 06009010 new 00000000 | xRam26001008 = (xunknown1)iVar1;
+A7-177
+  line.disagree/Assign/old-not-linked/above: 1
+      a7_177 chain | line 6 firstAddr 06009010 new 0600900C | iVar1 = 0x3c;
+  line.disagree/Branch/old-is-value/below: 5
+      a7_177 | line 8 firstAddr 0600900A new 0600900C | if ((in_r0 & 4) == 0) {
+  line.no-effect/Assign: 1
+      a7_177 | line 12 firstAddr 06009014 new 00000000 | xRam26001010 = xVar1;

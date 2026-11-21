@@ -153,7 +153,13 @@ and lists these classes as open until they are fixed.
    never to the branch (A7-21). A statement that keeps its drawn tokens at its instruction beside
    the stores it names (a copy the engine materialised at a call or a store that may alias) marks
    them `Token::materialised`, and `InstructionLineIndex` offers the instruction's own statement
-   before it (A7-25). `AddJoinConstantTokens` addresses a number the engine
+   before it (A7-25). Beside all of these, `BuildLinks` (`Sh2Decompiler.cpp`) fills a shadow of the
+   link model (`DecompileResult::links` and `statements`, `Line::statement`; area 7 redesign step 1,
+   `Docs/Decompiler/LINK_MODEL.md`) from the p-code's own identity: the printer's `<statement>`
+   elements and each token's op (`MarkupOps`), `Funcdata::getFlowOps()` to tell flow ops from ones
+   rules made, and patch 0100's clone records for ops a block split copied. Nothing reads it for a
+   click, a hover or an order; `tests/LinkCensus.h` (`SE_LINK_CENSUS`) measures it against the token
+   addresses. `AddJoinConstantTokens` addresses a number the engine
    merged (a COPY that is no flow op, at an instruction that does not make the number into the
    COPY's register: a collapsed MULTIEQUAL at a join; or a copy of a temporary the engine made of a
    number and prints in place, A7-40's triage, even on a line it shares with that copy, A7-47) to the instruction on each path that set the

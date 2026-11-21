@@ -277,6 +277,8 @@ unexplained changes on a P2-pinned row takes precedence over every percentage:
 | Functions over the flow record's cap (20,000 ops, `RecordFlow`'s users) | report only; such a function's links are identity-only and its engine-made statements say "unknown" |
 | Build time and memory on the largest functions (area 6's stress inputs) | within 5% of today |
 
+**Step 1 result** (branch `review/7-step1`; the numbers and classes are in `FunctionalityVerification/15_DECOMPILER_STEP5.md`, "Area 7, link model steps 0 and 1"). The shadow model is in, the old fields untouched and the printed output identical on 8,258 functions. Over 20,000 seeds per grammar the go thresholds are met (store survival 98.4% and 99.7%; lines that name a store today and are left with no proven store 1.69% and 0.34%; every flow store, branch, call and return statement has one proven `Effect`; clone-made effect ops confirmed, 11 in grammar 2). On the pins and fixtures the lost-store share is 3.4% and 19.7%, and the game corpus rows were not run (no images in the working container); step 2b is likely and the corpus census should precede step 2. Two things the census found are ledger rows: case labels carry no link (A7-343) and engine-made merged stores have no identity (A7-344). Two choices this section leaves open: the bounded walk of "Stores" is only counted in step 1 (it builds no links), and `Placement` is given to every engine-made statement root at the address the rule put it.
+
 ## 5. The oracle contract
 
 Checks, all on the pure functions the panel calls:

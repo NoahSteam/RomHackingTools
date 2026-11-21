@@ -1,0 +1,138 @@
+functions                                                    8258
+insn.agree                                                   86014
+insn.disagree                                                3109
+insn.disagree/new-address/old-first-linked                   2
+insn.disagree/new-address/old-first-unlinked                 45
+insn.disagree/new-condition/old-first-linked                 75
+insn.disagree/new-condition/old-first-unlinked               6
+insn.disagree/new-effect/old-first-linked                    1293
+insn.disagree/new-effect/old-first-unlinked                  1465
+insn.disagree/new-value/old-first-linked                     29
+insn.disagree/new-value/old-first-unlinked                   194
+insn.exact                                                   90571
+insn.unlinked                                                1448
+line.agree                                                   53334
+line.disagree                                                20112
+line.disagree/Assign/old-is-candidate-value/below            196
+line.disagree/Assign/old-is-value/below                      800
+line.disagree/Assign/old-not-linked/above                    5
+line.disagree/Assign/old-not-linked/below                    7
+line.disagree/Assign/old-not-linked/none                     26
+line.disagree/Branch/old-is-candidate-value/below            595
+line.disagree/Branch/old-is-value/below                      11989
+line.disagree/Branch/old-not-linked/above                    6
+line.disagree/Branch/old-not-linked/below                    1
+line.disagree/Branch/old-not-linked/none                     1582
+line.disagree/Call/old-is-candidate-value/below              160
+line.disagree/Call/old-is-value/below                        179
+line.disagree/Call/old-not-linked/above                      99
+line.disagree/Call/old-not-linked/none                       15
+line.disagree/Return/old-is-candidate-value/below            184
+line.disagree/Return/old-is-value/below                      1734
+line.disagree/Return/old-not-linked/below                    1
+line.disagree/Store/old-is-candidate-value/below             516
+line.disagree/Store/old-is-value/below                       1865
+line.disagree/Store/old-not-linked/above                     1
+line.disagree/Store/old-not-linked/below                     55
+line.disagree/Store/old-not-linked/none                      96
+line.effect                                                  73446
+line.no-effect/Assign                                        4547
+line.no-effect/None                                          13
+line.no-effect/Store                                         599
+lines                                                        79092
+set.different                                                480
+set.equal                                                    75852
+set.newHasMore                                               2053
+set.oldHasMore                                               444
+SAMPLE insn.disagree/new-address/old-first-linked | 80B81374.0 06009000 insn 0600901C old line 30 new line 29
+SAMPLE insn.disagree/new-address/old-first-linked | 80B81374.0 06009000 insn 0600901C old line 30 new line 29
+SAMPLE insn.disagree/new-address/old-first-unlinked | D803D5FD.0 06009000 insn 06009050 old line 25 new line 26
+SAMPLE insn.disagree/new-address/old-first-unlinked | CEF3EDCB.0 06009000 insn 06009030 old line 19 new line 20
+SAMPLE insn.disagree/new-address/old-first-unlinked | ED4AE57E.0 06009000 insn 06009036 old line 32 new line 29
+SAMPLE insn.disagree/new-condition/old-first-linked | 883F4F8A.0 06009000 insn 06009012 old line 22 new line 23
+SAMPLE insn.disagree/new-condition/old-first-linked | 9705BCBF.0 06009000 insn 06009012 old line 22 new line 23
+SAMPLE insn.disagree/new-condition/old-first-linked | A53E4163.0 06009000 insn 0600903E old line 34 new line 35
+SAMPLE insn.disagree/new-condition/old-first-unlinked | AE988327.2 060090D8 insn 0600910C old line 16 new line 24
+SAMPLE insn.disagree/new-condition/old-first-unlinked | CF1EA3D9.0 06009000 insn 06009022 old line 8 new line 11
+SAMPLE insn.disagree/new-condition/old-first-unlinked | CF1EA3D9.0 06009000 insn 0600903A old line 11 new line 14
+SAMPLE insn.disagree/new-effect/old-first-linked | 75A858B6.1 06009050 insn 06009060 old line 12 new line 7
+SAMPLE insn.disagree/new-effect/old-first-linked | CB35EACD.1 06009050 insn 06009060 old line 12 new line 7
+SAMPLE insn.disagree/new-effect/old-first-linked | CB35EACD.1 06009050 insn 0600906A old line 17 new line 12
+SAMPLE insn.disagree/new-effect/old-first-unlinked | 77956ADA.0 06009000 insn 06009048 old line 17 new line 27
+SAMPLE insn.disagree/new-effect/old-first-unlinked | E865D3D4.1 0600903A insn 06009078 old line 27 new line 28
+SAMPLE insn.disagree/new-effect/old-first-unlinked | C3E2FE94.0 06009000 insn 06009014 old line 22 new line 11
+SAMPLE insn.disagree/new-value/old-first-linked | A738D4EC.0 06009000 insn 06009010 old line 25 new line 14
+SAMPLE insn.disagree/new-value/old-first-linked | A738D4EC.0 06009000 insn 06009010 old line 25 new line 14
+SAMPLE insn.disagree/new-value/old-first-linked | 546D55D5.0 06009000 insn 0600902E old line 30 new line 29
+SAMPLE insn.disagree/new-value/old-first-unlinked | CDC359BF.1 0600902A insn 06009060 old line 14 new line 15
+SAMPLE insn.disagree/new-value/old-first-unlinked | CDC359BF.0 06009006 insn 06009060 old line 22 new line 23
+SAMPLE insn.disagree/new-value/old-first-unlinked | 6866F805.0 06009000 insn 06009014 old line 4 new line 6
+SAMPLE line.disagree/Assign/old-is-candidate-value/below | ADC657BA.0 06009000 line 7 firstAddr 06009000 new 06009002 |   xVar2 = *(xunknown4 *)(param_1 + 1);
+SAMPLE line.disagree/Assign/old-is-candidate-value/below | 47FB07B5.0 06009000 line 6 firstAddr 06009000 new 06009002 |   xVar1 = param_1[1];
+SAMPLE line.disagree/Assign/old-is-candidate-value/below | 75A858B6.1 06009050 line 12 firstAddr 06009060 new 0600906A |     xVar1 = *(xunknown4 *)((int4)pxVar2 + -2);
+SAMPLE line.disagree/Assign/old-is-value/below | 77956ADA.2 060090D0 line 8 firstAddr 060090D2 new 060090D6 |   xVar1 = *(xunknown2 *)((xunknown4 *)(param_1 ^ 0x20000000) + 2);
+SAMPLE line.disagree/Assign/old-is-value/below | 9FF9DC4D.0 06009000 line 32 firstAddr 06009022 new 06009040 |     iVar4 = (int4)*(int2 *)(param_2 + -4);
+SAMPLE line.disagree/Assign/old-is-value/below | 9FF9DC4D.0 06009000 line 34 firstAddr 06009022 new 06009040 |     iVar5 = (int4)*(int2 *)(param_2 + -4);
+SAMPLE line.disagree/Assign/old-not-linked/above | CF1EA3D9.0 06009000 line 15 firstAddr 06009042 new 0600903E |     } while (iVar1 != 0);
+SAMPLE line.disagree/Assign/old-not-linked/above | CF1EA3D9.0 06009000 line 17 firstAddr 06009046 new 06009042 |   return;
+SAMPLE line.disagree/Assign/old-not-linked/above | 618AD651.0 06009000 line 18 firstAddr 06009022 new 0600901E |   iVar1 = 6;
+SAMPLE line.disagree/Assign/old-not-linked/below | 35422918.0 06009000 line 14 firstAddr 06009040 new 06009044 |   case 3:
+SAMPLE line.disagree/Assign/old-not-linked/below | C8FDDA0C.0 06009000 line 14 firstAddr 06009040 new 06009044 |   case 3:
+SAMPLE line.disagree/Assign/old-not-linked/below | 76655D66.0 06009000 line 57 firstAddr 0600903A new 0600903C |   xRam26001004 = VDP2_MPABN0;
+SAMPLE line.disagree/Assign/old-not-linked/none | 1B3C3E9A.0 06009000 line 14 firstAddr 00000000 new 0600903C |     break;
+SAMPLE line.disagree/Assign/old-not-linked/none | 90C8A09A.1 06009078 line 25 firstAddr 00000000 new 06009100 |     break;
+SAMPLE line.disagree/Assign/old-not-linked/none | 35422918.0 06009000 line 15 firstAddr 00000000 new 06009044 |     break;
+SAMPLE line.disagree/Branch/old-is-candidate-value/below | 7FEB15BD.0 06009000 line 23 firstAddr 06009014 new 06009016 |   if (0 < (int4)param_3) {
+SAMPLE line.disagree/Branch/old-is-candidate-value/below | 7FEB15BD.0 06009000 line 23 firstAddr 06009014 new 06009016 |   if (0 < (int4)param_3) {
+SAMPLE line.disagree/Branch/old-is-candidate-value/below | 1B31AE7F.0 06009000 line 22 firstAddr 0600902C new 0600902E |   if (0 < (int4)in_r2) {
+SAMPLE line.disagree/Branch/old-is-value/below | 5987FA99.0 06009000 line 8 firstAddr 06009000 new 06009002 |   if (in_r1 == 0) {
+SAMPLE line.disagree/Branch/old-is-value/below | 75A858B6.1 06009050 line 8 firstAddr 0600905C new 0600905E |   if (pxVar2 == (xunknown4 *)0x0) {
+SAMPLE line.disagree/Branch/old-is-value/below | 75A858B6.1 06009050 line 11 firstAddr 06009066 new 06009068 |   if (param_4 == 0) {
+SAMPLE line.disagree/Branch/old-not-linked/above | CF1EA3D9.0 06009000 line 11 firstAddr 0600903A new 06009024 |   if (unaff_r12 == 0) {
+SAMPLE line.disagree/Branch/old-not-linked/above | CF1EA3D9.0 06009000 line 14 firstAddr 06009042 new 0600903C |       iVar1 = iVar1 + -1;
+SAMPLE line.disagree/Branch/old-not-linked/above | 35422918.0 06009000 line 9 firstAddr 0600903C new 06009026 |   case 1:
+SAMPLE line.disagree/Branch/old-not-linked/below | 54835870.0 06009000 line 27 firstAddr 06009012 new 0600902E |   if ((((uint4)param_2 & (uint4)param_1) == 0) && (xRam0600208c = (int2)iVar3, param_1 != param_2))
+SAMPLE line.disagree/Branch/old-not-linked/none | 77956ADA.0 06009000 line 16 firstAddr 00000000 new 06009036 |       break;
+SAMPLE line.disagree/Branch/old-not-linked/none | 77956ADA.0 06009000 line 18 firstAddr 00000000 new 0600901E |       goto code_r0x06009048;
+SAMPLE line.disagree/Branch/old-not-linked/none | 77956ADA.0 06009000 line 20 firstAddr 00000000 new 0600903C |       break;
+SAMPLE line.disagree/Call/old-is-candidate-value/below | 7935CEE6.0 06009000 line 8 firstAddr 06009006 new 0600900C |     xVar1 = (**(code **)((int4)param_2 * 4 + 0x6009014))();
+SAMPLE line.disagree/Call/old-is-candidate-value/below | 156C2873.0 06009000 line 9 firstAddr 06009006 new 0600900C |     xVar2 = (**(code **)((int4)param_1 * 4 + 0x6009014))();
+SAMPLE line.disagree/Call/old-is-candidate-value/below | 6F89092F.0 06009000 line 19 firstAddr 06009014 new 0600901A |     xVar7 = (**(code **)((int4)param_2 * 4 + 0x6009024))();
+SAMPLE line.disagree/Call/old-is-value/below | D61315ED.0 06009000 line 10 firstAddr 06009014 new 06009020 |   func_0x06009044(param_1,param_1,(int4)*(int2 *)(unaff_gbr + 0x1a),param_2);
+SAMPLE line.disagree/Call/old-is-value/below | D61315ED.0 06009000 line 10 firstAddr 06009014 new 06009020 |   func_0x06009044(param_1,param_1,(int4)*(int2 *)(unaff_gbr + 0x1a),param_2);
+SAMPLE line.disagree/Call/old-is-value/below | B7F9692B.0 06009000 line 33 firstAddr 06009030 new 06009036 |     xVar7 = (**(code **)(param_4 * 4 + 0x6009040))(param_1,param_2,iVar6);
+SAMPLE line.disagree/Call/old-not-linked/above | 5F847524.0 06009000 line 7 firstAddr 06009012 new 0600900A |   *param_1 = extraout_r12;
+SAMPLE line.disagree/Call/old-not-linked/above | 5F847524.0 06009000 line 8 firstAddr 0600901A new 0600900E |   return;
+SAMPLE line.disagree/Call/old-not-linked/above | 90889F6A.0 06009000 line 5 firstAddr 06009010 new 06009004 |   return 0;
+SAMPLE line.disagree/Call/old-not-linked/none | 6866F805.0 06009000 line 5 firstAddr 00000000 new 0600900C | }
+SAMPLE line.disagree/Call/old-not-linked/none | 6362212C.0 06009000 line 5 firstAddr 00000000 new 0600900C | }
+SAMPLE line.disagree/Call/old-not-linked/none | 90889F6A.0 06009000 line 6 firstAddr 00000000 new 06009008 | }
+SAMPLE line.disagree/Return/old-is-candidate-value/below | 0C740E94.0 06009000 line 12 firstAddr 06009028 new 0600903C |   return (int4)(int2)xRam06002080;
+SAMPLE line.disagree/Return/old-is-candidate-value/below | 0C740E94.0 06009000 line 16 firstAddr 0600902E new 0600903C |   return (int4)(int2)xRam06002080;
+SAMPLE line.disagree/Return/old-is-candidate-value/below | 14D0C7A3.1 06009038 line 29 firstAddr 0600907C new 0600909E |   return CONCAT44(*param_2,(int4)xVar4);
+SAMPLE line.disagree/Return/old-is-value/below | CB35EACD.1 06009050 line 17 firstAddr 0600906A new 06009076 |   return (int4)iVar1;
+SAMPLE line.disagree/Return/old-is-value/below | 77956ADA.2 060090D0 line 11 firstAddr 060090D2 new 060090EE |   return *(xunknown4 *)(param_1 ^ 0x20000000);
+SAMPLE line.disagree/Return/old-is-value/below | 77956ADA.1 0600904C line 17 firstAddr 0600908C new 060090A8 |   return CONCAT44(0x6a,(int4)*param_2);
+SAMPLE line.disagree/Return/old-not-linked/below | 11568199.0 06009000 line 13 firstAddr 0600901C new 0600902A |   return 0x7c;
+SAMPLE line.disagree/Store/old-is-candidate-value/below | 7FEB15BD.0 06009000 line 24 firstAddr 0600901A new 0600901C |     *(int2 *)(param_2 + 6) = (int2)param_3[4];
+SAMPLE line.disagree/Store/old-is-candidate-value/below | 7FEB15BD.0 06009000 line 30 firstAddr 0600902A new 0600902E |     *(int2 *)(param_1 + 10) = (int2)param_4[0xe];
+SAMPLE line.disagree/Store/old-is-candidate-value/below | 7FEB15BD.0 06009000 line 24 firstAddr 0600901A new 0600901C |     *(int2 *)(param_2 + 6) = (int2)param_3[4];
+SAMPLE line.disagree/Store/old-is-value/below | 75A858B6.1 06009050 line 7 firstAddr 0600905A new 06009060 |   *(int2 *)((int4)pxVar2 + -2) = (int2)*pxVar2;
+SAMPLE line.disagree/Store/old-is-value/below | CB35EACD.1 06009050 line 7 firstAddr 0600905A new 06009060 |   *(int2 *)((int4)pxVar2 + -2) = (int2)*pxVar2;
+SAMPLE line.disagree/Store/old-is-value/below | E865D3D4.1 0600903A line 11 firstAddr 0600903E new 06009044 |     param_3[0xc] = (int4)iStack_16;
+SAMPLE line.disagree/Store/old-not-linked/above | CF1EA3D9.0 06009000 line 12 firstAddr 0600903E new 06009026 |     iVar1 = 2;
+SAMPLE line.disagree/Store/old-not-linked/below | 45E26669.0 06009000 line 29 firstAddr 06009034 new 06009050 |     VDP2_ZMXIN0 = (int2)xVar4;
+SAMPLE line.disagree/Store/old-not-linked/below | 45E26669.0 06009000 line 32 firstAddr 06009034 new 06009058 |   VDP2_ZMXIN0 = (int2)xVar4;
+SAMPLE line.disagree/Store/old-not-linked/below | 74D09816.1 06009060 line 12 firstAddr 0600907E new 06009096 |     *param_2 = (char)uVar2;
+SAMPLE line.disagree/Store/old-not-linked/none | 54906C69.2 060090F0 line 24 firstAddr 00000000 new 06009142 |     break;
+SAMPLE line.disagree/Store/old-not-linked/none | 54906C69.2 060090F0 line 24 firstAddr 00000000 new 06009142 |     break;
+SAMPLE line.disagree/Store/old-not-linked/none | 5F847524.0 06009000 line 9 firstAddr 00000000 new 06009012 | }
+SAMPLE line.no-effect/Assign | 75A858B6.1 06009050 line 6 firstAddr 06009054 |   pxVar2 = (xunknown4 *)(param_1 & 0x1ffffff0 | 0xa0000000);
+SAMPLE line.no-effect/Assign | CB35EACD.1 06009050 line 6 firstAddr 06009054 |   pxVar2 = (xunknown4 *)(param_1 & 0x1ffffff0 | 0xa0000000);
+SAMPLE line.no-effect/Assign | 77956ADA.0 06009000 line 11 firstAddr 06009016 |   pcVar5 = param_2;
+SAMPLE line.no-effect/None | E99DA17D.0 06009000 line 8 firstAddr 0600900A |   } while( true );
+SAMPLE line.no-effect/None | F2725E14.0 06009000 line 9 firstAddr 0600900A |   } while( true );
+SAMPLE line.no-effect/None | 66B89302.0 06009000 line 9 firstAddr 0600900C |   } while( true );
+SAMPLE line.no-effect/Store | C3E2FE94.0 06009000 line 22 firstAddr 06009014 |     uRam0600220c = uRam0600220c | 0x80000000;
+SAMPLE line.no-effect/Store | E5348F92.0 06009000 line 16 firstAddr 0600900C |     xRam26001038 = CONCAT22((int2)in_r3,xRam26001038._2_2_);
+SAMPLE line.no-effect/Store | 1B31AE7F.0 06009000 line 16 firstAddr 06009016 |   uRam26002304 = CONCAT22(uRam26002304._0_2_,in_r1);

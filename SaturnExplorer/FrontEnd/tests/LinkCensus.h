@@ -41,6 +41,7 @@ public:
     void Add(const sfe::decomp::DecompileResult& r, const std::string& whereGiven)
     {
         const std::string& where = whereGiven.empty() ? mContext : whereGiven;
+        mLabelled = !whereGiven.empty();
         using namespace sfe::decomp;
         if (!mEnabled || r.status != DecompileStatus::Ok) return;
         ++mCount["functions"];
@@ -166,6 +167,7 @@ public:
         for (const auto& kv : mClass) std::fprintf(out, "CLASS %s %llu\n", kv.first.c_str(), static_cast<unsigned long long>(kv.second));
         for (const auto& kv : mSamples)
             for (const std::string& s : kv.second) std::fprintf(out, "SAMPLE %s | %s\n", kv.first.c_str(), s.c_str());
+        for (const std::string& s : mAll) std::fprintf(out, "LABELLED %s\n", s.c_str());
     }
 
 private:
@@ -196,9 +198,12 @@ private:
         char b[96];
         std::snprintf(b, sizeof b, "line %zu firstAddr %08X new %08X", line, l.firstAddr, at);
         Sample(cls, where, std::string(b) + " | " + l.text);
+        // (a labelled function is a pin or a fixture: every disagreement is listed, for the rows whose pins must hold)
+        if (mLabelled && mAll.size() < 50000) mAll.push_back(cls + " | " + where + " | " + std::string(b) + " | " + l.text);
     }
 
-    bool mEnabled = false;
+    bool mEnabled = false, mLabelled = false;
+    std::vector<std::string> mAll;
     std::string mPath, mContext;
     std::map<std::string, uint64_t> mCount, mClass;
     std::map<std::string, std::vector<std::string>> mSamples;
