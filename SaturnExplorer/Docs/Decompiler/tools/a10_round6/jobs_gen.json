@@ -1,0 +1,817 @@
+[
+{
+"id": "0006-g1",
+"patch": "0006",
+"hunks": [
+2
+],
+"named": [],
+"runs": [
+"unit",
+"sem",
+"gen"
+],
+"where": "disppc2: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=1 & slot_tgt"
+},
+{
+"id": "0006-g2",
+"patch": "0006",
+"hunks": [
+3,
+4,
+5,
+6,
+8
+],
+"named": [],
+"runs": [
+"unit",
+"sem",
+"gen"
+],
+"where": "MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {"
+},
+{
+"id": "0023-g1",
+"patch": "0023",
+"hunks": [
+1,
+2
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0023-g2",
+"patch": "0023",
+"hunks": [
+3,
+4,
+5,
+6,
+7,
+8,
+9,
+10,
+11,
+12,
+13,
+14,
+15,
+16,
+17
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0023-g3",
+"patch": "0023",
+"hunks": [
+21
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0023-g4",
+"patch": "0023",
+"hunks": [
+22,
+23,
+24
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0023-g5",
+"patch": "0023",
+"hunks": [
+25
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0023-g6",
+"patch": "0023",
+"hunks": [
+26,
+27
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0023-g7",
+"patch": "0023",
+"hunks": [
+28,
+29,
+30,
+31,
+32
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0023-g8",
+"patch": "0023",
+"hunks": [
+33,
+34
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0023-g9",
+"patch": "0023",
+"hunks": [
+35
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0032-g1",
+"patch": "0032",
+"hunks": [
+1,
+2,
+3,
+4
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0032-g2",
+"patch": "0032",
+"hunks": [
+5,
+6,
+7,
+8,
+9
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0032-g3",
+"patch": "0032",
+"hunks": [
+10,
+11,
+12,
+13,
+14,
+15
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0032-g4",
+"patch": "0032",
+"hunks": [
+17,
+18
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0032-g5",
+"patch": "0032",
+"hunks": [
+19,
+20,
+21,
+22
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0032-g6",
+"patch": "0032",
+"hunks": [
+23
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0032-g7",
+"patch": "0032",
+"hunks": [
+25,
+26
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0032-g8",
+"patch": "0032",
+"hunks": [
+28,
+29
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0032-g9",
+"patch": "0032",
+"hunks": [
+30,
+31
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0032-g10",
+"patch": "0032",
+"hunks": [
+32,
+33
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0032-g11",
+"patch": "0032",
+"hunks": [
+34,
+35,
+36,
+37,
+38,
+39
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0050-g1",
+"patch": "0050",
+"hunks": [
+1
+],
+"named": [],
+"runs": [
+"unit",
+"sem",
+"gen"
+],
+"where": ""
+},
+{
+"id": "0050-g2",
+"patch": "0050",
+"hunks": [
+2
+],
+"named": [],
+"runs": [
+"unit",
+"sem",
+"gen"
+],
+"where": "define register offset=0x100 size=4 [sr gbr vbr mach macl pr pc];"
+},
+{
+"id": "0050-g3",
+"patch": "0050",
+"hunks": [
+3
+],
+"named": [],
+"runs": [
+"unit",
+"sem",
+"gen"
+],
+"where": "imm8: \"#\"^simm_00_07 is simm_00_07 { export *[const]:4 simm_00_07; }"
+},
+{
+"id": "0050-g4",
+"patch": "0050",
+"hunks": [
+4
+],
+"named": [],
+"runs": [
+"unit",
+"sem",
+"gen"
+],
+"where": "disppc4: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=1 & slot_tgt"
+},
+{
+"id": "0050-g5",
+"patch": "0050",
+"hunks": [
+5
+],
+"named": [],
+"runs": [
+"unit",
+"sem",
+"gen"
+],
+"where": "disppc2: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=1 & slot_tgt"
+},
+{
+"id": "0050-g6",
+"patch": "0050",
+"hunks": [
+6,
+7,
+8,
+9,
+10,
+11,
+12
+],
+"named": [],
+"runs": [
+"unit",
+"sem",
+"gen"
+],
+"where": "MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {"
+},
+{
+"id": "0050-g7",
+"patch": "0050",
+"hunks": [
+13
+],
+"named": [],
+"runs": [
+"unit",
+"sem",
+"gen"
+],
+"where": "define pcodeop Rte_PC;"
+},
+{
+"id": "0001-g1",
+"patch": "0001",
+"hunks": [
+2
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "int4 ActionPool::apply(Funcdata &data)"
+},
+{
+"id": "0001-g2",
+"patch": "0001",
+"hunks": [
+7
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "void FlowInfo::fallthru(void)"
+},
+{
+"id": "0001-g3",
+"patch": "0001",
+"hunks": [
+8
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "void FlowInfo::generateOps(void)"
+},
+{
+"id": "0040-g1",
+"patch": "0040",
+"hunks": [
+1
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "void TraceDAG::BranchPoint::createTraces(void)"
+},
+{
+"id": "0040-g2",
+"patch": "0040",
+"hunks": [
+2
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "TraceDAG::BranchPoint::BranchPoint(BlockTrace *parenttrace)"
+},
+{
+"id": "0040-g3",
+"patch": "0040",
+"hunks": [
+3
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "bool TraceDAG::checkOpen(BlockTrace *trace)"
+},
+{
+"id": "0040-g4",
+"patch": "0040",
+"hunks": [
+4
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "list<TraceDAG::BlockTrace *>::iterator TraceDAG::openBranch(BlockTrace *parent)"
+},
+{
+"id": "0040-g5",
+"patch": "0040",
+"hunks": [
+5
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "TraceDAG::~TraceDAG(void)"
+},
+{
+"id": "0040-g6",
+"patch": "0040",
+"hunks": [
+6
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "JumpTable *Funcdata::installJumpTable(const Address &addr)"
+},
+{
+"id": "0040-g7",
+"patch": "0040",
+"hunks": [
+7
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "JumpTable *Funcdata::recoverJumpTable(Funcdata &partial,PcodeOp *op,FlowInfo *fl"
+},
+{
+"id": "0040-g8",
+"patch": "0040",
+"hunks": [
+8
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "void Funcdata::truncatedFlow(const Funcdata *fd,const FlowInfo *flow)"
+},
+{
+"id": "0040-g9",
+"patch": "0040",
+"hunks": [
+9
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "int4 Funcdata::inlineFlow(Funcdata *inlinefd,FlowInfo &flow,PcodeOp *callop)"
+},
+{
+"id": "0040-g10",
+"patch": "0040",
+"hunks": [
+10
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "bool JumpBasic::sanityCheck(Funcdata *fd,PcodeOp *indop,vector<Address> &address"
+},
+{
+"id": "0040-g11",
+"patch": "0040",
+"hunks": [
+11
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "void JumpBasic2::findUnnormalized(uint4 maxaddsub,uint4 maxleftright,uint4 maxex"
+},
+{
+"id": "0040-g12",
+"patch": "0040",
+"hunks": [
+12
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "void JumpBasicOverride::buildLabels(Funcdata *fd,vector<Address> &addresstable,v"
+},
+{
+"id": "0040-g13",
+"patch": "0040",
+"hunks": [
+13
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "bool JumpAssisted::foldInGuards(Funcdata *fd,JumpTable *jump)"
+},
+{
+"id": "0040-g14",
+"patch": "0040",
+"hunks": [
+14,
+15
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "void JumpTable::recoverModel(Funcdata *fd,const JumpModel *matchModel)"
+},
+{
+"id": "0040-g15",
+"patch": "0040",
+"hunks": [
+16
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "bool JumpTable::isOverride(void) const"
+},
+{
+"id": "0052-g1",
+"patch": "0052",
+"hunks": [
+3
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "bool FlowInfo::processInstruction(const Address &curaddr,bool &startbasic)"
+},
+{
+"id": "0060-g1",
+"patch": "0060",
+"hunks": [
+1
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "bool Heritage::protectFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)"
+},
+{
+"id": "0060-g2",
+"patch": "0060",
+"hunks": [
+2
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "void AliasChecker::gatherInternal(void) const"
+},
+{
+"id": "0060-g3",
+"patch": "0060",
+"hunks": [
+4
+],
+"named": [],
+"runs": [
+"pc",
+"engine",
+"unit",
+"gen"
+],
+"where": "void MapState::addRange(uintb st,Datatype *ct,uint4 fl,RangeHint::RangeType rt,i"
+}
+]

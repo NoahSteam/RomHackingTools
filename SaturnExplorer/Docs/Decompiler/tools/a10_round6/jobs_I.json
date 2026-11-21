@@ -1,0 +1,1 @@
+[{"id":"base-ff","patch":"0000","hunks":"edits","edits":[["cpp/libdecomp.cc"," * limitations under the License."," * limitations under the License. "]],"named":["none"],"runs":["faultfull"],"where":"no-op comment edit: baseline of the full fault matrix"}]
