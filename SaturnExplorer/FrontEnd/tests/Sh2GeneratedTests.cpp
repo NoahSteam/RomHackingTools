@@ -9221,12 +9221,31 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // ---- Area 7: the mapping from the text to the instructions (MappingOracle.h) ----
         {
             // (the module's words, literal pools too: the oracle reads a literal's word as the game-code run reads the image's, A7-34)
+            // (what names this function in a report: a hash of the program's words and the function's index; seeds are not in scope here)
+            char genLabel[48];
+            {
+                uint32_t hash = 2166136261u;
+                for (uint16_t w : subject.words) hash = (hash ^ w) * 16777619u;
+                std::snprintf(genLabel, sizeof genLabel, "%08X.%d", hash, fi);
+                dts::LinkTotals::Instance().SetContext(genLabel);
+            }
             const dts::MappingAudit audit = dts::AuditMapping(
                 r, [&](uint32_t pc, uint16_t& w) {
                     if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
                     w = subject.WordAt(pc);
                     return true;
                 }, "", OriginTextUnderTest);
+            // SE_GENERATED_TOKEN_DUMP=<file> (link model step 0): every function's token and link records (DumpMappingTokens), labelled by a hash of
+            // the program's words and the function's index, so a run of this binary can be diffed with one made before the link model.
+            if (const char* dumpPath = std::getenv("SE_GENERATED_TOKEN_DUMP"))
+            {
+                static std::FILE* dump = std::fopen(dumpPath, "w");
+                dts::DumpMappingTokens(dump, r, [&](uint32_t pc, uint16_t& w) {
+                    if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                    w = subject.WordAt(pc);
+                    return true;
+                }, genLabel);
+            }
             auto flag = [&](const char* sig, int n) {
                 if (n) add(sig, std::to_string(n) + " time(s); first: " + (audit.problems.empty() ? std::string("-") : audit.problems[0]));
                 if (n && std::getenv("SE_A7R_ALL")) for (const std::string& pr : audit.problems) std::fprintf(stderr, "A7ALL %s\n", pr.c_str());

@@ -25045,3 +25045,50 @@ Results (`run.sh`): `c3w_const4`, `c3w_countr4`, `c3w_index` callee withheld, ca
 ### 5. New rows
 
 A3-284 (the control c3w_const3 is withheld now), A3-285 (the check reads text; no perturbation oracle).
+
+## Area 7, link model steps 0 and 1
+
+Branch `review/7-step1` (from master `8e0883de`). Design: `Docs/Decompiler/LINK_MODEL.md` sections 3, 4 and 7. Tools and logs: `Docs/Decompiler/tools/a7_link1/`.
+
+**Step 0** (tooling): `DumpMappingTokens` (`MappingOracle.h`) writes, beside its `F`/`L`/`T` records, an `S` record per statement, a `K` record per link, an `N` per line, a `C` of the census counters and an `O` per body instruction (today's `LineForInstruction` answer). `SE_GAME_TOKEN_DUMP` (corpus) and the new `SE_GENERATED_TOKEN_DUMP` (generator) carry them; `a7_link1/corpus.sh` wraps `a7_round2/corpus.sh`. `linkdiff.py same OLD NEW` shows that no old record moved; `linkdiff.py diff NEW` compares, per line and per body instruction, the lowest token address, the address set and the way back's first line with the model's. `tests/LinkCensus.h` (`SE_LINK_CENSUS`, fed by `AuditMapping`) makes the census in process; `census_merge.py` adds chunks and applies the thresholds; `p2rows.py` lists the disagreements of the fixtures that pin P2 rows.
+
+**Step 1** (shadow model): `DecompileResult::links`, `::statements`, `Line::statement`, built by `BuildLinks` after the printer from the printed ops' identity: the `<statement>` elements and each token's op (`MarkupOps`), `Funcdata::getFlowOps()`, patch 0100's clone records (new: `0100-engine-op-clone-origins.patch`, 4 vendored files), the op-code rule for effects and the halt types. The old fields are untouched and nothing reads the shadow. Engine-made store statements get a `Placement` at the address the rule put them; the bounded walk of section 3 only counts what it finds. Asserted per function and counted: `flow.opsEnd` never past `flowOps` (0 in every run) and no inlined clone (0). Fixtures (`TestLinkModelStep1`): fixture 1 and a shared return (controls), an irreducible loop whose exits the engine copies (a clone-made `return`, both statements an `Effect` at the one `rts`), a non-returning call (the call keeps its `Effect`, no `Halt` statement), A7-6's bad-data halt and flow into uncaptured memory (`halt_baddata()`, a `kLinkBadData` link, never an `Effect`).
+
+**Printed output unchanged.** Generator with pins, 2,000 seeds and the canary family, master build (with the dump added) against this branch: 8,258 functions, every `F`, `L`, `T` and `O` record identical (`same_pins_2000.txt`: 0 differ), the run logs identical, failing seeds 0. The decompiler unit tests (`SaturnExplorerSh2DecompilerTests`) pass.
+
+**Census**, 20,000 seeds per grammar in 20 chunks of 1,000 (`run_census.sh`), numbers from `census_grammar1.txt` and `census_grammar2.txt`; the fixtures column is the 464 functions of `Sh2DecompilerTests` that `AuditMapping` audits (the pins of the area 7 rows included, `census_fixtures.txt`):
+
+| Measure | Threshold | Grammar 1 | Grammar 2 | Fixtures |
+|---|---|---|---|---|
+| Printed ops, flow / clone / engine | report | 534,556 / 6 / 181,727 | 699,728 / 28 / 158,502 | 5,206 / 64 / 1,494 |
+| Store statements with a surviving flow op or folded COPY | go at 95% or more | 98.42% (118,588 of 120,491): go | 99.68% (90,300 of 90,587): go | 82.02% (707 of 862) |
+| Engine-made store statements: walk finds a store / candidates / nothing | report | 2 / 3 / 1,898 | 0 / 2 / 285 | 2 / 0 / 153 |
+| Lines that name a store today and are left with no proven store | go at 2% or less; 2 to 10% needs step 2b | 1.69% (1,844 of 109,260): go | 0.34% (263 of 76,925): go | 19.65% (135 of 687) |
+| Lines on a P2-pinned row where the new `Effect` differs from today's click target | zero unexplained | see below | see below | see below |
+| Flow store, branch, call and return statements with exactly one proven `Effect` | all | 220,160 of 220,160 | 276,668 of 276,668 | 2,470 of 2,470 |
+| Clone-made effect ops | non-zero confirms the record | 0 (6 clones of other ops) | 11 | 64 |
+| Lines with more than one statement | report | 85 | 9,316 | 79 |
+| Halt statements by type (bad data / halt / unimplemented / missing) | report | 0 | 0 | 1 / 0 / 0 / 0 |
+| Walk bound hits | under 0.1% | 0 of 1,903 | 0 of 287 | 0 of 155 |
+| Functions over the flow record's cap | report | 0 | 0 | 0 |
+| Time building the links against the decompilation | within 5% | 0.33% | 0.25% | 0.27% |
+| Memory on the largest functions | within 5% | not measured | not measured | not measured |
+
+The pins and 2,000 seeds of both grammars together (8,258 functions) give 96.79% store survival and 3.38% of lines lost, which is the 2 to 10% band.
+
+**Disagreements with `firstAddr`.** About 25% of the lines with a proven `Effect` (24.6% grammar 1, 28.5% grammar 2, 34.9% fixtures) have a lowest token address that is not the `Effect`. By class (grammar 2, lines; `census_grammar*.txt` list samples with the old and the new address, `diff_pins_2000.txt` the pins and 2,000 seeds with the way back):
+
+| Class | Lines | What it is |
+|---|---|---|
+| Branch, old target a value or condition instruction below the branch | 77,127 + 5,122 | `if (c)` / `while (c)` click goes to the `cmp` or `tst`; the `Effect` is the `bt`/`bf`. The defect of section 1 (c), fixed by construction |
+| Return, Call, Store, Assign likewise (old target a lower value or candidate instruction) | 10,829 + 1,359; 1,691 + 618; 11,260 + 2,627; 6,212 + 1,141 | the lowest address is the instruction that computed a value, not the `rts`, call or store |
+| Branch with no old address | 17,781 | `break;` and `goto` lines that carry no address today; the model names the `bra` |
+| Store, Assign whose old address no link names | 247, 216 | an address a pass of `Sh2Decompiler.cpp` added (A7-175's hoisted conversion at a branch, A7-52's `noOrigin` lines); the `Effect` is the instruction of the statement |
+| No `Effect` (`line.no-effect/Assign`, `/Store`) | 30,409; 286 | engine-made statements: `Placement` only (A7-344) |
+| The way back, first line differs | 25,281 instructions | 12,287 are `case` lines the model does not link (A7-343); the rest are the `Effect`-before-`Value` order the roles give |
+
+**P2-pinned rows** (`p2rows.txt`): 31 of the 46 P2 rows have a fixture under an `a7_NN` label; on them 469 lines differ from today's click target, 279 lines have no `Effect` and 67 instructions differ in the way back's first line. Every one is in a class of the table above: the old target is a lower value instruction (the large majority), is no address, or is an address an old pass added; no case was found where the new `Effect` is an instruction of another kind than its statement (the unit test decodes every `Return`, `Call` and `Branch` `Effect` as `rts`/`rte`, a call, a branch; `Store` effects are not decoded independently until the oracle's check 2, step 5). The old P2 pins assert the old target, so the differences are explained, not absent, and those pins are in the old terms: under section 7's rule 7 their rewrite belongs to step 3, listed with both answers. The 279 no-`Effect` lines are the engine-made statements of A7-344, counted against the 2% threshold above, not differences of an `Effect`.
+
+**What could not run.** The game corpus images are not in this container, so the census rows "per corpus image, alone and lent" (store survival, engine-made statements, lines lost, bound hits, the P2 rows on the four dumps, build time on the images) have not been made; `a7_link1/corpus.sh` makes them where `SE_GAME_HWRAM` names an image. Memory on the largest functions (area 6's stress inputs) was not measured. `halt_unimplemented()` cannot arise from SH-2 code (the spec has no unimplemented instruction) and `halt_missing()` did not occur in 40,000 seeds; flow into uncaptured memory is `halt_baddata()`, so the `unimplemented` and `missing` branches of `BuildLinks` are exercised by no fixture.
+
+**Verdict.** On the generator, per grammar over 20,000 seeds, every go threshold is met: store survival 98.4% and 99.7%, lines lost 1.69% and 0.34%, every flow store, branch, call and return statement has one proven `Effect`, bound hits 0, build time 0.3%. The clone record is confirmed (11 clone-made `return` ops in grammar 2 and 64 in the fixtures; grammar 1 has none). Go for the generator rows. The numbers alone do not start step 2: the fixtures and pins, which are the ledger rows' own shapes, are in the 2 to 10% band (pins and seeds 3.38%) and above it (fixtures 19.65%), and the corpus rows, where such copies are more frequent, are unmeasured. Plan step 2b (A7-344) as likely, and run the corpus census before step 2.

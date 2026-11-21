@@ -20589,6 +20589,192 @@ int TestArea7Round4Probe(const char* path)
     return 0;
 }
 
+// ---- Link model, step 1 (LINK_MODEL.md sections 3 and 4): the shadow model's statements and links, from identity only ----
+// What a fixture must show: every flow store, branch, call and return statement has one proven Effect at an instruction of its own kind, a halt
+// is never an Effect (bad data and flow that stopped are flagged links, a non-returning call's halt is not printed and the call keeps its
+// Effect), a clone-made return (a block ActionReturnSplit copied: new time, same address) is read as an effect through the engine's record, and
+// the two assertions (the host's opsEnd never past the engine's flowOps, no inlining) hold. The old fields are untouched by construction; the
+// area 7 fixtures beside this one, which judge them, still pass.
+namespace
+{
+const char* LinkMnemonic(const std::shared_ptr<MemorySnapshot>& snap, uint32_t at)
+{
+    static std::string text;
+    uint8_t b[2] = { 0, 0 };
+    if (!snap->Read(at, b, 2)) return "?";
+    const sfe::DisassembledInstruction i = sfe::Sh2Decode(at, static_cast<uint16_t>(b[0] << 8 | b[1]));
+    text = i.IsValid ? i.Mnemonic : "?";
+    return text.c_str();
+}
+
+// The invariants every function must keep; 'why' names the fixture.
+void CheckLinkModel(const DecompileResult& r, const std::shared_ptr<MemorySnapshot>& snap, const char* why)
+{
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(r.linkCensus.effectDue == r.linkCensus.effectGiven);
+    CHECK(r.linkCensus.opsEndDisagree == 0);
+    CHECK(r.linkCensus.inlineClones == 0);
+    for (size_t li = 0; li < r.lines.size(); ++li)
+    {
+        const int32_t s = r.lines[li].statement;
+        if (s < 0) continue;
+        CHECK(static_cast<size_t>(s) < r.statements.size());
+        if (static_cast<size_t>(s) < r.statements.size()) CHECK(r.statements[static_cast<size_t>(s)].firstLine <= li);
+    }
+    for (const Statement& st : r.statements)
+    {
+        CHECK(st.linkBegin + st.linkCount <= r.links.size() && st.firstLine < r.lines.size());
+        int effects = 0;
+        for (uint32_t k = st.linkBegin; k < st.linkBegin + st.linkCount && k < r.links.size(); ++k)
+        {
+            const InsnLink& l = r.links[k];
+            // (a halt's link may name the word flow stopped at, which is no instruction of the body)
+            if (!(l.flags & (kLinkBadData | kLinkHalt))) CHECK(r.InBody(l.addr));
+            if (l.role != LinkRole::Effect) continue;
+            ++effects;
+            CHECK((l.flags & (kLinkBadData | kLinkHalt)) == 0);
+            const std::string m = LinkMnemonic(snap, l.addr);
+            switch (st.kind)
+            {
+            case StatementKind::Return: CHECK(m == "rts" || m == "rte" || m == "jmp"); break;
+            case StatementKind::Call: CHECK(m == "bsr" || m == "jsr" || m == "bsrf" || m == "jmp" || m == "bra" || m == "braf"); break;
+            case StatementKind::Branch: CHECK(m.compare(0, 1, "b") == 0 || m == "jmp"); break;
+            case StatementKind::Halt: CHECK(false); break;
+            default: break;
+            }
+        }
+        if (st.kind == StatementKind::Halt) CHECK(effects == 0);
+        if (st.kind == StatementKind::Return || st.kind == StatementKind::Call) CHECK(effects == 1);
+    }
+    (void)why;
+}
+size_t LinkStatements(const DecompileResult& r, StatementKind kind)
+{
+    size_t n = 0;
+    for (const Statement& st : r.statements) n += st.kind == kind;
+    return n;
+}
+bool LinkAt(const DecompileResult& r, StatementKind kind, LinkRole role, uint32_t addr, uint8_t flag)
+{
+    for (const Statement& st : r.statements)
+        if (st.kind == kind)
+            for (uint32_t k = st.linkBegin; k < st.linkBegin + st.linkCount; ++k)
+                if (r.links[k].addr == addr && r.links[k].role == role && (r.links[k].flags & flag) == flag) return true;
+    return false;
+}
+}  // namespace
+
+void TestLinkModelStep1()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 880000;
+
+    // A control with stores, a call, a branch and a return (the first area 1 fixture).
+    {
+        auto snap = Fixture1Snapshot();
+        const DecompileResult r = d.Decompile(snap, Request(dts::kFixture1Caller));
+        Print("link model: fixture 1", r);
+        CheckLinkModel(r, snap, "fixture 1");
+        CHECK(LinkStatements(r, StatementKind::Call) >= 1 && LinkStatements(r, StatementKind::Return) >= 1);
+        CHECK(r.linkCensus.effectDue >= 2);
+    }
+
+    // An ordinary return with two ways in, `if (r4 > 0) r0 = 1; else r0 = 2; return r0;`: the control for the clone fixture below (the engine
+    // keeps the one return, so its op is the flow's own).
+    {
+        const CallFixture f = { "link model: a shared return", 0x06070000u,
+                                { 0x4415, 0x8B02, 0xE001, 0xA001, 0x0009, 0xE002, 0x000B, 0x0009 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CheckLinkModel(r, snap, "shared return");
+        CHECK(LinkAt(r, StatementKind::Return, LinkRole::Effect, f.base + 12, kLinkBehind));
+        CHECK(LinkStatements(r, StatementKind::Branch) >= 1);
+    }
+
+    // A clone-made return: a loop entered at two places (irreducible, so the exits are gotos) whose exits ActionReturnSplit copies. The copy has a
+    // new time at the `rts`'s address, so by time it reads as an op the engine made; patch 0100's record says it copies a flow op, and both
+    // `return 7;` statements are an Effect at the one `rts`.
+    {
+        const CallFixture f = { "link model: a return the engine copied", 0x06009000u,
+                                { 0x4415, 0x8902, 0x7501, 0x4515, 0x8B05, 0x7601, 0x4615, 0x89F9, 0x8B01, 0xAFF7, 0x0009, 0xE007, 0x000B, 0x0009 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CheckLinkModel(r, snap, "clone-made return");
+        CHECK(r.linkCensus.cloneEffects >= 1);
+        size_t returns = 0;
+        for (const Statement& st : r.statements)
+            if (st.kind == StatementKind::Return)
+            {
+                ++returns;
+                CHECK(st.linkCount >= 1 && r.links[st.linkBegin].role == LinkRole::Effect && r.links[st.linkBegin].addr == f.base + 0x18);
+            }
+        CHECK(returns == 2);
+    }
+
+    // A callee that never returns (the test hook; nothing in SE marks one): the call keeps its Effect, the halt flow ends in is not a statement.
+    {
+        std::vector<uint8_t> hw;
+        const uint32_t dies = 0x06060400u, caller = 0x06060500u;
+        Place(hw, dies, { 0xAFFE, 0x0009 });
+        Place(hw, caller, { 0x4F22, Bsr(caller + 2, dies), 0x0009, 0xFFFF });   // sts.l pr,@-r15 ; bsr dies ; nop ; data
+        auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(caller);
+        q.prototypes.emplace_back(dies, d.Decompile(snap, Request(dies)).prototype);
+        Sh2Decompiler::SetNoReturnForTests({ dies });
+        const DecompileResult r = d.Decompile(snap, q);
+        Sh2Decompiler::SetNoReturnForTests({});
+        Print("link model: a call that never returns", r);
+        CheckLinkModel(r, snap, "noreturn");
+        CHECK(LinkAt(r, StatementKind::Call, LinkRole::Effect, caller + 2, 0));
+        CHECK(LinkStatements(r, StatementKind::Halt) == 0);
+        for (const Statement& st : r.statements)
+            for (uint32_t k = st.linkBegin; k < st.linkBegin + st.linkCount; ++k) CHECK(r.links[k].addr != caller + 2 || st.kind != StatementKind::Return);
+    }
+
+    // Bad data (A7-6): the halt is a flagged link at the word, never an Effect.
+    {
+        const uint32_t at = 0x06009000u;
+        const CallFixture f = { "link model: a7_6, a jump table with an odd entry", at,
+                                { 0xD204, 0xE102, 0x3416, 0x890F, 0x4408, 0xC703, 0x014E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9034, 0x0600, 0x902C, 0x0600, 0x9031,
+                                  0x0600, 0x9034, 0x0009, 0x0009, 0x000B, 0x6023, 0x000B, 0xE000, 0x000B, 0xE001, 0x000B, 0xE002 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(at));
+        Print(f.name.c_str(), r);
+        CheckLinkModel(r, snap, "bad data");
+        CHECK(Has(r.Text(), "halt_baddata();"));
+        CHECK(r.linkCensus.halts[0] >= 1);
+        CHECK(LinkAt(r, StatementKind::Halt, LinkRole::Value, 0x06009031u, kLinkBadData));
+        CHECK(!LinkAt(r, StatementKind::Halt, LinkRole::Effect, 0x06009031u, 0));
+        CHECK(LinkStatements(r, StatementKind::Return) >= 3);   // (the cases' and the default's returns: controls beside the halt)
+    }
+
+    // Flow that leaves the captured memory: the engine halts there as at bad data (`halt_baddata()`), not as `missing`; the SH-2 spec has no
+    // unimplemented instruction, and the generator's census is where a `missing` halt would show (halts.missing). Both are classified by the op's
+    // halt type in the same branch of BuildLinks as the bad-data halt below.
+    {
+        std::vector<uint8_t> none;
+        auto snap = MakeSnapshot(none);
+        auto* lw = const_cast<MemoryRegion*>(snap->RegionAt(MemorySnapshot::kLwramBase));
+        const uint32_t f = 0x002FFFF0u;
+        size_t off = f - lw->base;
+        for (uint16_t w : { 0x4415, 0x8907, 0xE000, 0x000B, 0x0009 })
+        {
+            lw->bytes[off] = uint8_t(w >> 8);
+            lw->bytes[off + 1] = uint8_t(w);
+            off += 2;
+        }
+        const DecompileResult r = d.Decompile(snap, Request(f));
+        Print("link model: flow into memory that is not captured", r);
+        CheckLinkModel(r, snap, "missing");
+        CHECK(r.truncated);
+        CHECK(r.linkCensus.halts[0] >= 1);
+        CHECK(LinkAt(r, StatementKind::Halt, LinkRole::Value, 0x00300004u, kLinkBadData));
+        CHECK(LinkAt(r, StatementKind::Return, LinkRole::Effect, 0x002FFFF6u, kLinkBehind));
+    }
+}
+
 int main(int argc, char** argv)
 {
     if (argc == 5 && std::string(argv[1]) == "--engine-oom")
@@ -20659,6 +20845,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round23());
         RUN(TestArea7Review24());
         RUN(TestArea7Round25());
+        RUN(TestLinkModelStep1());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());

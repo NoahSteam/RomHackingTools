@@ -19,6 +19,7 @@
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: an access folded into the stack frame is flagged, and recorded again if a write goes with its value unread or the access with an unreachable block; a PIECE or SUBPIECE whose sizes do not add up is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: the frame call records of a call can be dropped whole (patches/0072-engine-frame-chains-and-save-slots.patch).
+ * Modified for SaturnExplorer: each op made by cloning another is recorded with the op it copies (patches/0100-engine-op-clone-origins.patch).
  */
 #include "funcdata.hh"
 
@@ -118,6 +119,7 @@ void Funcdata::clear(void)
   frameFoldsAllRead = false;
   frameLedgerCapped = false;
   flowInsns.clear();		// SaturnExplorer: the next flow records its own
+  originRecords.clear();	// SaturnExplorer (0100): ...and the clones are of ops just destroyed
   flowTables.clear();
   flowOps = 0;
   // Do not clear overrides
