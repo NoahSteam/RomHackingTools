@@ -25004,3 +25004,16 @@ A sanitizer build of the fault matrix over the allocation-ownership survivors of
 ### 6. Runs
 
 `ctest --test-dir build -j1` (RelWithDebInfo, `-j2`, `ulimit -v 3500000`) after the last rebuild of the unmutated tree: `100% tests passed, 0 tests failed out of 117`. `check-vendored-tree.py lint`: `vendored tree: ok (lint)`. `check-literal-size.py`: `raw string sizes: ok (7 raw strings in 341 files)`. The full fault matrix (`SE_FAULT_FULL=1`) on the unmutated tree under the `ulimit` fails 10 of 447 jobs (`runner-oom mailbox entry 8` and `13`), the same 10 as with 0015 group 3 or 0032 group 8 reverted; the default subset in ctest passes. `git status` clean under `third_party/` after every mutant.
+
+## Area 10, done check
+
+- **Two consecutive clean rounds:** rounds 5 and 6 found no P1 or P2.
+- **No open P1 or P2:** A10-16 (P1) is fixed by patch 0081. Every other area 10 row is P3, fixed or accepted.
+- **Upstream bugs:** A10-24 is accepted by the repository owner (2026-11-21). The bugs the patches work around stay
+  recorded in that row and are not filed upstream. This is the program's "upstream bugs filed" oracle, settled by the
+  owner's decision.
+- **Overnight generator run:** the scheduled `Generator, long run (Linux)` job (20,000 seeds) has passed every night,
+  most recently on `5ce785f3`. Patch 0099 merged after that run, so the first nightly on master `aed61996` or later
+  completes this item.
+
+Verdict: **area 10 is done** once that nightly passes. A failure there reopens the area.
