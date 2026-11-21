@@ -1,0 +1,21 @@
+Area 7 link model step 1 census on the game corpus: run log.
+Build: build-census, RelWithDebInfo (MSVC, Visual Studio 17 2022), SaturnExplorerSh2DecompilerTests.exe, Windows 11, Git Bash.
+Images: 1 MiB high work RAM (WorkRAMH, swapped to big-endian) taken from two Mednafen savestates made in Saturn Explorer:
+  nights  = Christmas NiGHTS into Dreams (USA)
+  sakura2 = Sakura Taisen 2 (Japan), disc 1
+Every table includes the built-in fixtures; base is the fixtures alone.
+$T = SaturnExplorer/Docs/Decompiler/tools, $B = the test binary, $OUT = a local scratch dir.
+a7_round2/corpus.sh has a hard 1150 s timeout; the retries ran a local copy of it with only the timeout raised to 3000 s.
+
+tag | command | wall time | rc
+base | SE_LINK_CENSUS=$OUT/census_base.txt $B $OUT/run_base | 338s | rc=0
+nights | bash $T/a7_link1/corpus.sh $B <nights hwram image> $OUT nights | 1151s | done 124
+nights_lend | SE_GAME_LEND=1 bash $T/a7_link1/corpus.sh $B <nights hwram image> $OUT nights_lend | 1150s | done 124
+sakura2 | bash $T/a7_link1/corpus.sh $B <sakura2 hwram image> $OUT sakura2 | 874s | done 0
+sakura2_lend | SE_GAME_LEND=1 bash $T/a7_link1/corpus.sh $B <sakura2 hwram image> $OUT sakura2_lend | 1152s | done 124
+nights (retry, timeout 3000) | bash $T/a7_link1/corpus.sh $B <nights hwram image> $OUT nights | 3002s | done 124
+nights_lend (retry, timeout 3000) | SE_GAME_LEND=1 bash $T/a7_link1/corpus.sh $B <nights hwram image> $OUT nights_lend | 3001s | done 124
+sakura2_lend (retry, timeout 3000) | SE_GAME_LEND=1 bash $T/a7_link1/corpus.sh $B <sakura2 hwram image> $OUT sakura2_lend | 2854s | done 0
+
+nights and nights_lend failed (rc 124, timeout) both times, inside TestGameCode (the alone pass; its token dump had reached
+function 0607E852 when killed, so the run was slow, not hung). No census was written for either, so they have no files here.
