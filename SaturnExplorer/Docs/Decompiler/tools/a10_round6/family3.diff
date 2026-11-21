@@ -1,0 +1,2184 @@
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.cc
+index ad3abd5..722ff6c 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.cc
+@@ -21,21 +21,6 @@
+  * Modified for SaturnExplorer: every load is held, not only the unused ones (patches/0018-hold-every-load.patch).
+  * Modified for SaturnExplorer: a return in the join space is consumed whole, never narrowed to its low half (patches/0033-engine-printed-value-fixes.patch).
+  * Modified for SaturnExplorer: the backward step of the consume analysis is PcodeOp::getConsumeLocal (patches/0054-engine-cached-masks-never-narrower.patch).
+- * Modified for SaturnExplorer: the entry stack pointer a loop walks down is no reference to a stack parameter, and a save slot it reaches stays mapped (patches/0056-engine-stack-walk-down-aliases.patch).
+- * Modified for SaturnExplorer: so does a save slot an indexed store's guard covers (patches/0063-engine-frame-escape-unknown-pointers.patch).
+- * Modified for SaturnExplorer: the walk down's bound keeps a stack parameter reference (patches/0066-engine-frame-escape-inexact.patch).
+- * Modified for SaturnExplorer: ActionLateDoNothing tests each block again against the graph the earlier removals left, so the two empty arms of one branch are not both removed (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
+- * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
+- * Modified for SaturnExplorer: a save slot a STORE is aimed at, or that a pending STORE may reach, stays mapped (patches/0072-engine-frame-chains-and-save-slots.patch).
+- * Modified for SaturnExplorer: a number is the address of a hardware register where the data flow uses it as one, not by a guess (patches/0073-engine-constant-pointer-guess-not-hardware.patch).
+- * Modified for SaturnExplorer: a write of a global on a path that never reaches a return is kept (patches/0087-engine-global-writes-without-return.patch).
+- * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
+- * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
+- * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
+- * Modified for SaturnExplorer: nor a copy of an earlier write of a global with an access between them (patches/0088-engine-global-piece-read-and-join-copy.patch).
+- * Modified for SaturnExplorer: a LOAD is not printed past a write of a global (patches/0090-engine-hardware-access-orders-globals.patch).
+- * Modified for SaturnExplorer: nor past an op whose output a call's INDIRECT on a global takes (patches/0094-engine-forced-write-and-pushed-join.patch).
+- * Modified for SaturnExplorer: nor is a value made from a global's own word printed past a hardware access the code makes after the read (patches/0094-engine-forced-write-and-pushed-join.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -2219,14 +2204,6 @@ int4 ActionRestrictLocal::apply(Funcdata &data)
+     }
+   }
+ 
+-  // SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): a save slot a pointer stepped down may reach stays mapped. Code
+-  // that runs on after its pops (a run-on into the next function, a frame made after a push and a pop)
+-  // walks down over the words they freed; unmapped, the slot was one variable with the register saved in
+-  // it, and a read of it after the walk printed the register (`return unaff_r13;`).
+-  AliasChecker walks;
+-  AddrSpace *stackSpc = data.getScopeLocal()->getSpaceId();
+-  walks.gather(&data,stackSpc,false);
+-  const vector<pair<uintb,uintb> > &spans( walks.getDownSpans() );
+   eiter = data.getFuncProto().effectBegin();
+   endeiter = data.getFuncProto().effectEnd();
+   for(;eiter!=endeiter;++eiter) { // Iterate through saved registers
+@@ -2241,37 +2218,6 @@ int4 ActionRestrictLocal::apply(Funcdata &data)
+ 	Varnode *outvn = op->getOut();
+ 	if (!data.getScopeLocal()->isUnaffectedStorage(outvn))	// Is this where unaffected values get saved
+ 	  continue;
+-	bool walked = false;
+-	for(int4 k=0;k<spans.size();++k) {
+-	  uintb low = spans[k].first, top = spans[k].second, off = outvn->getOffset();
+-	  if (outvn->getSpace() == stackSpc && (low <= top ? (off >= low && off <= top) : (off >= low || off <= top)))
+-	    walked = true;
+-	}
+-	// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): ...and a slot an indexed STORE may write, as its guard
+-	// (the value set analysis of the pointer) has it: a pointer stepped up from a local over the slot (`*p++ = v` past an array) wrote it,
+-	// and unmapped, the slot was one variable with the register saved in it, so a read of it after the walk printed the register
+-	// (`return unaff_gbr;`, ledger A3-102). Only a stepped-down pointer's reach was kept (0056).
+-	const list<LoadGuard> &guards( data.getStoreGuards() );
+-	for(list<LoadGuard>::const_iterator giter=guards.begin();giter!=guards.end() && !walked;++giter) {
+-	  if (!(*giter).isValid(CPUI_STORE)) continue;
+-	  if ((*giter).isGuarded(outvn->getAddr()))
+-	    walked = true;
+-	}
+-	// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): ...and a slot a STORE is aimed at (its pointer the stack
+-	// pointer plus constants, through a frame word holding it: discoverIndexedStackPointers keeps such a STORE's guards for the next
+-	// pass to fold it), or, while a STORE through a pointer read through a frame address is guarded (Heritage::reprocessPendingStores),
+-	// any slot. Unmapped, the slot had no local alias and opCollapseIndirectsForAlias removed the STORE's guard on it at once; the STORE
+-	// was folded a pass later into a write nothing read, and the slot's read was the register (`return unaff_r8;` for `*p = r5` with p =
+-	// &slot kept in a frame word: ledger A3-132; a local that starts as a callee-saved register's entry value is the same word).
+-	if (!walked && data.hasPendingFrameStores())
+-	  walked = true;
+-	for(list<PcodeOp *>::const_iterator siter=data.beginOp(CPUI_STORE);siter!=data.endOp(CPUI_STORE) && !walked;++siter) {
+-	  PcodeOp *sop = *siter;
+-	  if (sop->isDead() || !sop->usesSpacebasePtr() || outvn->getSpace() != stackSpc) continue;
+-	  if (data.storeAimedAt(sop,outvn) || data.pointerFromFrame(sop->getIn(1)))
+-	    walked = true;
+-	}
+-	if (walked) continue;
+ 	data.getScopeLocal()->markNotMapped(outvn->getSpace(),outvn->getOffset(),outvn->getSize(),false);
+       }
+     }
+@@ -4314,167 +4260,6 @@ bool ActionDeadCode::isSavePush(const Funcdata &data,const Address &addr,const V
+   return data.getArch()->translate->getRegisterName(src->getSpace(),src->getOffset(),src->getSize()) == want;
+ }
+ 
+-/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): may the STORE, not folded yet, write data into the given stack
+-/// local? Its pointer is the stack pointer plus constants overlapping the local, or it was read through a frame address (pending).
+-/// \param data is the function
+-/// \param sop is the STORE
+-/// \param local is the stack local
+-/// \return \b true if the STORE may write it
+-bool ActionDeadCode::storeMayWrite(const Funcdata &data,const PcodeOp *sop,const Varnode *local)
+-
+-{
+-  if (data.isPendingFrameStore(sop) || data.pointerFromFrame(sop->getIn(1))) return true;
+-  return data.storeAimedAt(sop,local);
+-}
+-
+-/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): will a LOAD through this frame address stay a LOAD? Back from the
+-/// pointer through copies, additions of a constant and the guards of STOREs still pending (a chain of slots unfolding: each such STORE is
+-/// settled, and its guard on the slot removed, once the slots before it are folded, Heritage::reprocessPendingStores), to the stack pointer:
+-/// then RuleLoadVarnode makes the LOAD a direct stack read in a pass or two, and dead code that runs meanwhile is undone by heritage's late
+-/// reads (0068's delay). Anything else on the way stays: a join (a loop's pointer, two frame addresses; A3-144's slot, whose loop holds the
+-/// pending STORE's guard), the guard of any other STORE (an indexed one, whose range covers the slot: A3-145) or of a call, a variable
+-/// added, a value from memory or from a call.
+-/// \param data is the function
+-/// \param vn is the pointer
+-/// \return \b true if the LOAD stays one
+-static bool frameLoadStays(const Funcdata &data,const Varnode *vn)
+-
+-{
+-  for(int4 hops=0;hops<64;++hops) {
+-    if (vn->isSpacebase() && vn->isInput()) return false;
+-    if (!vn->isWritten()) return true;
+-    const PcodeOp *op = vn->getDef();
+-    if (op->code() == CPUI_COPY)
+-      vn = op->getIn(0);
+-    else if (op->code() == CPUI_INT_ADD && op->getIn(1)->isConstant())
+-      vn = op->getIn(0);
+-    else if (op->code() == CPUI_INT_ADD && op->getIn(0)->isConstant())
+-      vn = op->getIn(1);
+-    else if (op->code() == CPUI_INDIRECT && op->isIndirectStore()) {
+-      const PcodeOp *sop = PcodeOp::getOpFromConst(op->getIn(1)->getAddr());
+-      if (sop == (const PcodeOp *)0 || sop->code() != CPUI_STORE || !data.isPendingFrameStore(sop)) return true;
+-      vn = op->getIn(0);
+-    }
+-    else
+-      return true;
+-  }
+-  return true;		// too far to follow: taken to stay (fail closed)
+-}
+-
+-/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): is the frame write overwritten whole, later in its block, before any
+-/// op that may read memory (a LOAD, a call, a return)? No LOAD can read it then.
+-/// \param vn is the write
+-/// \return \b true if it is overwritten so
+-static bool frameWriteKilled(const Varnode *vn)
+-
+-{
+-  const PcodeOp *def = vn->getDef();
+-  const BlockBasic *bl = def->getParent();
+-  if (bl == (const BlockBasic *)0) return false;
+-  list<PcodeOp *>::iterator iter = def->getBasicIter();
+-  for(++iter;iter!=bl->endOp();++iter) {
+-    const PcodeOp *op = *iter;
+-    switch(op->code()) {
+-    case CPUI_LOAD:
+-    case CPUI_CALL:
+-    case CPUI_CALLIND:
+-    case CPUI_CALLOTHER:
+-    case CPUI_RETURN:
+-    case CPUI_BRANCHIND:
+-    case CPUI_NEW:
+-      return false;
+-    default:
+-      break;
+-    }
+-    if (op->isMarker()) continue;
+-    const Varnode *out = op->getOut();
+-    if (out != (const Varnode *)0 && out->getSpace() == vn->getSpace() && out->getOffset() <= vn->getOffset() &&
+-	out->getOffset() + out->getSize() >= vn->getOffset() + vn->getSize())
+-      return true;
+-  }
+-  return false;
+-}
+-
+-/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): a LOAD left in the function whose pointer may be a frame address,
+-/// modeled or not (FrameEscape's members), and that stays a LOAD (frameLoadStays: a loop's join, the guard of an indexed STORE or of a call
+-/// between the pointer and the stack pointer), reads the frame where RuleLoadVarnode never makes it a direct stack read. Nothing links the
+-/// LOAD to the frame writes it may read, so dead code took each for a write nothing reads and removed it, and the text read memory nothing
+-/// wrote (ledger A3-144: a loop storing through a pointer behind two to four slots lost the slots' writes, the compiled text crashed;
+-/// A3-145: an array filled, written at a variable index, and read through a pointer reloaded from a slot, lost its fills). While such a
+-/// LOAD lives, the frame's writes are held: fail closed, the LOAD may read any word of the frame. A LOAD whose guard heritage sank (a COPY
+-/// of each location before it, Heritage::guardLoads) is left to that guard. Not held: the pushes of callee-saved registers (saves, as for a
+-/// call: callMayReadFrame), a write a later version of its bytes is built from (that version is held), a write overwritten whole in its
+-/// block before any op that may read memory (frameWriteKilled), and a local the scope proved no pointer reaches. The hold is an address
+-/// force marked as one (Varnode::setFrameLoadForce), let go at the start of each pass of dead code and set again while the LOAD lives: once
+-/// it is folded or gone, the next pass sees the writes as before.
+-/// \param data is the function
+-/// \param worklist is the consumed Varnodes to process
+-void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist)
+-
+-{
+-  AddrSpace *stackSpc = data.getArch()->getStackSpace();
+-  if (stackSpc == (AddrSpace *)0 || !stackSpc->doesDeadcode() || !data.deadRemovalAllowed(stackSpc)) return;
+-  vector<PcodeOp *> candidates;
+-  list<PcodeOp *>::const_iterator iter = data.beginOp(CPUI_LOAD);
+-  list<PcodeOp *>::const_iterator enditer = data.endOp(CPUI_LOAD);
+-  for(;iter!=enditer;++iter) {
+-    PcodeOp *op = *iter;
+-    if (op->isDead() || op->getIn(1)->isConstant()) continue;
+-    candidates.push_back(op);
+-  }
+-  // ...but for a LOAD whose guard kept the writes of its range (a COPY of each location heritaged with the guard there; a guard made after
+-  // the frame was heritaged, by reprocessFreeStores, has none: A3-144's LOAD through the slot reloaded in the loop)
+-  if (!candidates.empty() && !data.getLoadGuards().empty()) {
+-    const list<LoadGuard> &guards(data.getLoadGuards());
+-    for(list<LoadGuard>::const_iterator giter=guards.begin();giter!=guards.end();++giter) {
+-      if (!(*giter).isSunk() || !(*giter).isValid(CPUI_LOAD)) continue;
+-      vector<PcodeOp *>::iterator found = find(candidates.begin(),candidates.end(),(*giter).getOp());
+-      if (found != candidates.end()) candidates.erase(found);
+-    }
+-  }
+-  if (candidates.empty()) return;
+-  bool reads = false;
+-  {
+-    FrameEscape escape;
+-    escape.compute(&data,stackSpc,false);
+-    for(int4 i=0;i<candidates.size() && !reads;++i)
+-      if (escape.loadMayReadFrame(candidates[i]) && frameLoadStays(data,candidates[i]->getIn(1))) reads = true;
+-  }
+-  if (!reads) return;
+-  VarnodeLocSet::const_iterator viter = data.beginLoc(stackSpc);
+-  VarnodeLocSet::const_iterator endviter = data.endLoc(stackSpc);
+-  for(;viter!=endviter;++viter) {
+-    Varnode *vn = *viter;
+-    if (!vn->isWritten()) continue;
+-    const PcodeOp *def = vn->getDef();
+-    if (def->code() == CPUI_INDIRECT || def->code() == CPUI_MULTIEQUAL) continue;	// a marker: the writes it joins are kept
+-    if (def->code() == CPUI_COPY && def->getIn(0)->isInput() && def->getIn(0)->getSpace()->getType() == IPTR_PROCESSOR &&
+-	isSavePush(data,def->getAddr(),def->getIn(0)))
+-      continue;		// a save, no data
+-    // A write that a later version of the same bytes is built from (a piece of it taken, a word joined from its pieces: the heritage's
+-    // refinement of a word written whole and then in part) lives through that version: the latest version of each location is the write
+-    // to hold (held, it keeps alive what it was built from), not every refinement of the word on the way. Any other reader (a COPY into a
+-    // register) does not keep it: a rule may forward its value and leave the write with no reader.
+-    bool superseded = false;
+-    for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend() && !superseded;++diter) {
+-      const PcodeOp *rop = *diter;
+-      if (rop->isMarker()) continue;
+-      const Varnode *out = rop->getOut();
+-      if (out == (const Varnode *)0 || out->getSpace() != stackSpc) continue;
+-      if (out->getOffset() < vn->getOffset() + vn->getSize() && vn->getOffset() < out->getOffset() + out->getSize())
+-	superseded = true;
+-    }
+-    if (superseded) continue;
+-    // ...and none the local scope proved no pointer reaches (no local alias: below every frame address the function makes), nor one that is
+-    // no address-tied storage: the scope clears an address force on either (Funcdata::syncVarnodesWithSymbol), and a hold it cleared at each
+-    // pass was a change at each pass, a main loop that never ended (hwram007 0601A0C8)
+-    if (vn->hasNoLocalAlias() || !vn->isAddrTied()) continue;
+-    if (frameWriteKilled(vn)) continue;	// ...nor one overwritten before anything may read it (a word's refinement before its whole write)
+-    if (!vn->isAddrForce()) vn->setFrameLoadForce();	// held against the rules' removal of a write nothing reads (RuleEarlyRemoval)
+-    pushConsumed(~((uintb)0),vn,worklist);
+-  }
+-}
+-
+ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
+ 
+ {
+@@ -4496,15 +4281,6 @@ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
+     if (seen.size() >= 256) return true;
+     seen.push_back(def);
+     if (def->code() == CPUI_INDIRECT) {
+-      // (patches/0072-engine-frame-chains-and-save-slots.patch) ...but for the guard of a STORE aimed at the local (its pointer the stack
+-      // pointer plus constants, not folded yet) or one whose pointer was read through a frame address (pending): it writes data there,
+-      // which the call may read (ledger A3-132 with a call: the push slot overwritten through a pointer kept in a frame word and handed to
+-      // the callee; the store went with the guard of the call)
+-      if (def->isIndirectStore()) {
+-	const PcodeOp *sop = PcodeOp::getOpFromConst(def->getIn(1)->getAddr());
+-	if (sop != (const PcodeOp *)0 && sop->code() == CPUI_STORE && !sop->isDead() && storeMayWrite(data,sop,def->getOut()))
+-	  return true;
+-      }
+       todo.push_back(def->getIn(0));
+       continue;
+     }
+@@ -4679,7 +4455,6 @@ int4 ActionDeadCode::apply(Funcdata &data)
+     vn->clearConsumeList();
+     vn->clearConsumeVacuous();
+     vn->setConsume(0);
+-    vn->clearFrameLoadForce();	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): set again below while the LOAD lives
+     if (vn->isAddrForce()&&(!vn->isDirectWrite())&&!callMayReadFrame(data,vn))
+       vn->clearAddrForce();
+   }
+@@ -4697,9 +4472,6 @@ int4 ActionDeadCode::apply(Funcdata &data)
+     }
+   }
+ 
+-  keepFrameWritesForLoads(data,worklist);	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch)
+-  keepGlobalWritesWithoutReturn(data,worklist);	// SaturnExplorer (patches/0087-engine-global-writes-without-return.patch)
+-
+   returnConsume = gatherConsumedReturn(data);
+   for(iter=data.beginOpAlive();iter!=data.endOpAlive();++iter) {
+     op = *iter;
+@@ -5512,19 +5284,6 @@ void ActionInputPrototype::gatherParamSpacebaseRefs(list<InputRef> &refs,Funcdat
+     OpCode opc = op->code();
+     if (opc == CPUI_PTRSUB) {
+       vn = op->getIn(1);
+-      // SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): the entry stack pointer a loop walks down
+-      // (ScopeLocal::annotateRawStackPtr gives the join this PTRSUB) reaches only what lies below
+-      // it, which is no parameter.
+-      if (vn->getOffset() == 0 && !op->getOut()->hasNoDescend()) {
+-	bool walk = true;
+-	for(list<PcodeOp *>::const_iterator diter=op->getOut()->beginDescend();diter!=op->getOut()->endDescend();++diter) {
+-	  if ((*diter)->code() != CPUI_MULTIEQUAL || !AliasChecker::stepsDown(*diter,false)) {	// (0066) at its bound: a parameter reference kept
+-	    walk = false;
+-	    break;
+-	  }
+-	}
+-	if (walk) continue;
+-      }
+       addr = sbtype->getAddress(vn->getOffset(),vn->getSize(),op->getAddr());
+     }
+     else if (opc == CPUI_PTRADD) {
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.hh b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.hh
+index c502f5e..80a19bd 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.hh
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.hh
+@@ -15,9 +15,6 @@
+  *
+  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
+  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
+- * Modified for SaturnExplorer: a STORE not folded yet and aimed at a local is data a call may read there (patches/0072-engine-frame-chains-and-save-slots.patch).
+- * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
+- * Modified for SaturnExplorer: a write of a global on a path that never reaches a return is kept (patches/0087-engine-global-writes-without-return.patch).
+  */
+ /// \file coreaction.hh
+ /// \brief Core decompilation actions which are indepedent of any particular architecture
+@@ -578,14 +575,12 @@ class ActionDeadCode : public Action {
+   static uintb gatherConsumedReturn(Funcdata &data);
+   static bool lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist);
+   static bool isSavePush(const Funcdata &data,const Address &addr,const Varnode *src);	///< SaturnExplorer (0068): a push of a callee-saved register
++  static void keepGlobalWritesWithoutReturn(Funcdata &data,vector<Varnode *> &worklist);
++  static bool doomedBlocks(const Funcdata &data,vector<char> &dooms);
++  static bool globalWriteWithoutReturn(const Funcdata &data,const Varnode *vn,const vector<char> *dooms);
+   static bool callMayReadFrame(const Funcdata &data,const Varnode *vn);	///< SaturnExplorer (0068): a call's INDIRECT on an escaped frame's local
+-  static bool storeMayWrite(const Funcdata &data,const PcodeOp *sop,const Varnode *local);	///< SaturnExplorer (0072): a STORE not folded yet aimed at the local
+-  static void keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist);	///< SaturnExplorer (0076): a LOAD that may read the frame keeps its writes
+-  static void keepGlobalWritesWithoutReturn(Funcdata &data,vector<Varnode *> &worklist);	///< SaturnExplorer (0087): a global's writes on a path that never returns are kept
+ public:
+-  static bool doomedBlocks(const Funcdata &data,vector<char> &dooms);	///< SaturnExplorer (0087): the blocks a path from which never returns
+-  static bool globalWriteWithoutReturn(const Funcdata &data,const Varnode *vn,const vector<char> *dooms);	///< SaturnExplorer (0087): a global's write no RETURN may follow
+-  static bool isFoldedFlowStore(const Funcdata &data,const Varnode *vn);	///< SaturnExplorer (0087): the write a STORE of the code's became
++  static bool isFoldedFlowStore(const Funcdata &data,const Varnode *vn);
+   ActionDeadCode(const string &g) : Action(0,"deadcode",g) {}	///< Constructor
+   virtual Action *clone(const ActionGroupList &grouplist) const {
+     if (!grouplist.contains(getGroup())) return (Action *)0;
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/fspec.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/fspec.cc
+index 31f3fc7..14f25d6 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/fspec.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/fspec.cc
+@@ -16,8 +16,6 @@
+  * Modified for SaturnExplorer: a parameter's replacement is allocated before the old one is freed (patches/0015-proto-param-replace-order.patch);
+  * a host can set a function's side-effect overrides (patches/0028-funcproto-set-effects.patch).
+  * Modified for SaturnExplorer: a prototype is copied, and its store replaced, with the allocation first and the old object freed after (patches/0032-allocation-failure-order-2.patch).
+- * Modified for SaturnExplorer: a call's stack argument words stay mapped once a frame address escaped (patches/0066-engine-frame-escape-inexact.patch).
+- * Modified for SaturnExplorer: a call site whose conversion to a direct call asks for a restart is counted (patches/0078-engine-deindirect-restart-per-call-site.patch).
+  */
+ #include "fspec.hh"
+ #include "funcdata.hh"
+@@ -5709,19 +5707,6 @@ void FuncCallSpecs::checkOutputTrialUse(Funcdata &data,vector<Varnode *> &trialv
+ /// are filled in. Other Varnode inputs may be truncated or extended.  This prototype
+ /// itself is unchanged.
+ /// \param data is the calling function
+-/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): has a frame address of the calling function escaped (FrameEscape)?
+-/// \param data is the calling function
+-/// \param spc is the stack space
+-/// \return \b true if it escaped, by any of FrameEscape's causes
+-static bool frameEscaped(Funcdata &data,AddrSpace *spc)
+-
+-{
+-  if (data.getScopeLocal() == (ScopeLocal *)0 || data.getScopeLocal()->getSpaceId() != spc) return false;
+-  FrameEscape escape;
+-  escape.compute(&data,spc,false);
+-  return escape.escaped;
+-}
+-
+ void FuncCallSpecs::buildInputFromTrials(Funcdata &data)
+ 
+ {
+@@ -5773,12 +5758,7 @@ void FuncCallSpecs::buildInputFromTrials(Funcdata &data)
+     }
+     newparam.push_back(vn);
+     // Mark the stack range used to pass this parameter as unmapped
+-    // SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): ...unless a frame address escaped. The word is then no Symbol, so
+-    // the whole-frame alias of 0065 (ScopeLocal::markUnaliased) does not reach it, and a read of it after the call -- which a callee that kept
+-    // the address may have written through it, or a walk through an inexact frame address may have -- was printed as a temporary holding
+-    // the value stored before (`xVar2 = 1; ... return xVar2;` where the code returns what the callee wrote: ledger A3-117). Kept mapped, the
+-    // word is a local the alias covers, the call's argument and the read after it are reads of the local.
+-    if (isspacebase && !frameEscaped(data,spc))
++    if (isspacebase)
+       data.getScopeLocal()->markNotMapped(spc,off,sz,true);
+   }
+   data.opSetAllInput(op,newparam); // Set final parameter list
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata.cc
+index 3b069dc..29494e3 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata.cc
+@@ -18,7 +18,6 @@
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+  * Modified for SaturnExplorer: an access folded into the stack frame is flagged, and recorded again if a write goes with its value unread or the access with an unreachable block; a PIECE or SUBPIECE whose sizes do not add up is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
+- * Modified for SaturnExplorer: the frame call records of a call can be dropped whole (patches/0072-engine-frame-chains-and-save-slots.patch).
+  */
+ #include "funcdata.hh"
+ 
+@@ -114,9 +113,7 @@ void Funcdata::clear(void)
+   frameEscaped = false;		// SaturnExplorer (0068): ...and the escape found in them
+   frameCalls.clear();
+   guardReads.clear();
+-  numGuardReads = 0;
+   frameFoldsAllRead = false;
+-  frameLedgerCapped = false;
+   flowInsns.clear();		// SaturnExplorer: the next flow records its own
+   flowTables.clear();
+   flowOps = 0;
+@@ -249,9 +246,7 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
+   if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE) {
+     op->setFrameFold();
+     // A STORE whose guard on these bytes was read (and the reader forwarded) before it was folded: its value was read.
+-    map<const PcodeOp *,vector<GuardReadRecord> >::const_iterator giter = guardReads.find(op);
+-    if (giter == guardReads.end()) return;
+-    for(vector<GuardReadRecord>::const_iterator iter=(*giter).second.begin();iter!=(*giter).second.end();++iter) {
++    for(vector<GuardReadRecord>::const_iterator iter=guardReads.begin();iter!=guardReads.end();++iter) {
+       if ((*iter).store != op || (*iter).space != vn->getSpace()) continue;
+       if ((*iter).offset < vn->getOffset() + vn->getSize() && vn->getOffset() < (*iter).offset + (*iter).size)
+ 	op->setFrameFoldRead();
+@@ -289,9 +284,7 @@ void Funcdata::dropFrameCall(const PcodeOp *op,uintb off,int4 size)
+ {
+   for(size_t i=frameCalls.size();i>0;--i) {
+     const FrameCallRecord &rec(frameCalls[i-1]);
+-    if (rec.time != op->getTime()) continue;
+-    // (patches/0072-engine-frame-chains-and-save-slots.patch) a size of 0 drops every record of the call (it went with its block)
+-    if (size != 0 && (rec.offset >= off + size || off >= rec.offset + rec.size)) continue;
++    if (rec.time != op->getTime() || rec.offset >= off + size || off >= rec.offset + rec.size) continue;
+     frameCalls.erase(frameCalls.begin() + (i-1));
+   }
+ }
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata.hh b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata.hh
+index 797cb62..8f8ddd6 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata.hh
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata.hh
+@@ -18,8 +18,6 @@
+  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+  * Modified for SaturnExplorer: an op that changes keeps the cached masks around it a superset of the truth (patches/0054-engine-cached-masks-never-narrower.patch).
+  * Modified for SaturnExplorer: a write folded into the stack frame whose value nothing read is recorded when it goes (patches/0068-engine-deadcode-late-stack-reads.patch).
+- * Modified for SaturnExplorer: whether a STORE is guarded as pending, for the save slots (patches/0072-engine-frame-chains-and-save-slots.patch).
+- * Modified for SaturnExplorer: a function the host calls back when a flow has been followed, to record the flow a restart follows (patches/0096-engine-flow-done-hook.patch).
+  */
+ #ifndef __FUNCDATA_HH__
+ #define __FUNCDATA_HH__
+@@ -159,11 +157,9 @@ class Funcdata {
+   uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
+   bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
+   mutable bool frameEscaped = false;	///< SaturnExplorer (0068): a frame address escaped (FrameEscape) in this generation of the function
+-  map<const PcodeOp *,vector<GuardReadRecord> > guardReads;	///< SaturnExplorer (0068): ranges read through a STORE's guard, for its fold (0072: by STORE)
+-  int4 numGuardReads = 0;	///< SaturnExplorer (0072): the records in \b guardReads
++  vector<GuardReadRecord> guardReads;	///< SaturnExplorer (0068): ranges read through a STORE's guard, for its fold
+   vector<FrameCallRecord> frameCalls;	///< SaturnExplorer (0068): the flow's calls heritage guarded a stack local at, in this generation
+   bool frameFoldsAllRead = false;	///< SaturnExplorer (0068): a walk of noteFrameFoldForwarded passed its bound: no fold is recorded unread
+-  bool frameLedgerCapped = false;	///< SaturnExplorer (0072): ...and so the records cannot show a frame write lost (a host's ledger is unchecked)
+ 
+   VarnodeBank vbank;		///< Container of Varnode objects for \b this function
+   PcodeOpBank obank;		///< Container of PcodeOp objects for \b this function
+@@ -221,6 +217,7 @@ public:
+   int4 getSize(void) const { return size; }				///< Get the function body size in bytes
+   Architecture *getArch(void) const { return glb; }			///< Get the program/architecture owning \b this function
+   FunctionSymbol *getSymbol(void) const { return functionSymbol; }	///< Return the symbol associated with \b this function
++  bool isFrameLedgerCapped(void) const { return false; }
+   bool isHighOn(void) const { return ((flags&highlevel_on)!=0); }	///< Are high-level variables assigned to Varnodes
+   bool isProcStarted(void) const { return ((flags&processing_started)!=0); }	///< Has processing of the function started
+   bool isProcComplete(void) const { return ((flags&processing_complete)!=0); }	///< Is processing of the function complete
+@@ -265,7 +262,6 @@ public:
+   void noteFrameCall(const PcodeOp *op,uintb off,int4 size);	///< SaturnExplorer (0068): the call has a guard on a stack local (it may read it)
+   void noteGuardRead(const Varnode *vn);	///< SaturnExplorer (0068): a frame read through STOREs' guards
+   void dropFrameCall(const PcodeOp *op,uintb off,int4 size);	///< SaturnExplorer (0068): the guard went with the local's alias
+-  bool isFrameLedgerCapped(void) const { return frameLedgerCapped; }	///< SaturnExplorer (0072): did a bound of the frame records give up (the records hide any loss)?
+   const vector<FrameCallRecord> &getFrameCalls(void) const { return frameCalls; }	///< SaturnExplorer (0068): the flow's calls with a guard on a stack local
+   bool hasFrameEscaped(void) const { return frameEscaped; }	///< SaturnExplorer (0068): did a frame address escape, so a call may read the locals
+   void warning(const string &txt,const Address &ad) const;	///< Add a warning comment in the function body
+@@ -370,10 +366,6 @@ public:
+ 
+   const list<LoadGuard> &getLoadGuards(void) const { return heritage.getLoadGuards(); }		///< Get the list of guarded LOADs
+   const list<LoadGuard> &getStoreGuards(void) const { return heritage.getStoreGuards(); }	///< Get the list of guarded STOREs
+-  bool hasPendingFrameStores(void) const { return heritage.hasPendingStores(); }	///< SaturnExplorer (0072): is a STORE through a pointer read through a frame address guarded?
+-  bool isPendingFrameStore(const PcodeOp *op) const { return heritage.isPendingStore(op); }	///< SaturnExplorer (0072): ...is the given one?
+-  bool pointerFromFrame(const Varnode *vn) const;	///< SaturnExplorer (0072): a value read from the frame (a pointer kept in a frame word)
+-  bool storeAimedAt(const PcodeOp *sop,const Varnode *local) const;	///< SaturnExplorer (0072): a STORE through the stack pointer plus constants writing the local
+   const LoadGuard *getStoreGuard(PcodeOp *op) const { return heritage.getStoreGuard(op); }	///< Get LoadGuard associated with STORE op
+ 
+   // Function prototype and call specification routines
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_block.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_block.cc
+index 987be48..43f8eab 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_block.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_block.cc
+@@ -18,9 +18,6 @@
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  * Modified for SaturnExplorer: a jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
+  * Modified for SaturnExplorer: an access folded into the stack frame that goes with an unreachable block is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
+- * Modified for SaturnExplorer: a call that goes with an unreachable block drops its frame call records (patches/0072-engine-frame-chains-and-save-slots.patch).
+- * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
+- * Modified for SaturnExplorer: pushMultiequals gives the new MULTIEQUAL a unique output whenever the output block joins the same address-tied storage (patches/0094-engine-forced-write-and-pushed-join.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -337,10 +334,6 @@ void Funcdata::blockRemoveInternal(BlockBasic *bb,bool unreachable)
+       recordAccessFate(*iter,isstore,accsize,accaddr,unreachable ? fate_unreachable : fate_dead);
+     else if ((*iter)->isFrameFold() && unreachable)
+       recordFrameEnd(*iter,fate_frame_removed);	// (0068) an access of the frame the code no longer makes
+-    // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): a call that goes with its block reads nothing of the frame;
+-    // its guards on the locals were kept for a host's frame ledger (noteFrameCall), which took it for a read (ledger A3-136)
+-    if ((*iter)->isCall())
+-      dropFrameCall(*iter,0,0);
+   }
+   accessesRecorded = true;
+   desc_warning = false;
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_op.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_op.cc
+index a7526ed..b2b1a80 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_op.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_op.cc
+@@ -21,9 +21,6 @@
+  * Modified for SaturnExplorer: and of the non-zero bits of what was worked out from that output (patches/0049-engine-nzmask-forgotten-downstream.patch).
+  * Modified for SaturnExplorer: every change to an op keeps the non-zero and consume masks around it a superset of the truth, in place of 0046 and 0049 (patches/0054-engine-cached-masks-never-narrower.patch).
+  * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
+- * Modified for SaturnExplorer: a STORE guard is kept against the alias analysis while the STORE is aimed at its local or pending; the frame records walk to 4,096 ops and follow a guard read through a piece (patches/0072-engine-frame-chains-and-save-slots.patch).
+- * Modified for SaturnExplorer: the host is called when a flow has been followed (patches/0096-engine-flow-done-hook.patch).
+- * Modified for SaturnExplorer: the guard a STORE put on a global stays when the STORE folds into a write of a hardware register (patches/0099-engine-register-store-guard-kept.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -58,13 +55,6 @@ void Funcdata::noteGuardRead(const Varnode *vn)
+   const Varnode *v = vn;
+   for(int4 hops=0;hops<64 && v->isWritten();++hops) {
+     const PcodeOp *ind = v->getDef();
+-    // (patches/0072-engine-frame-chains-and-save-slots.patch) a read of part of a guarded word is a SUBPIECE of the word's chain: the
+-    // STOREs guarded there are read in the read's own bytes too (frame124 seed 4101580.chain: a byte of a word read twice and xored, the
+-    // word stored through the reloaded pointer, was a false loss: ledger A3-142)
+-    if (ind->code() == CPUI_SUBPIECE && ind->getIn(0) != (Varnode *)0 && ind->getIn(0)->getSpace() == vn->getSpace()) {
+-      v = ind->getIn(0);
+-      continue;
+-    }
+     if (ind->code() != CPUI_INDIRECT || ind->numInput() != 2 || ind->getIn(0) == (Varnode *)0 || ind->getIn(1) == (Varnode *)0) return;
+     PcodeOp *iop = PcodeOp::getOpFromConst(ind->getIn(1)->getAddr());
+     if (iop == (PcodeOp *)0 || iop->code() != CPUI_STORE) return;
+@@ -74,19 +64,14 @@ void Funcdata::noteGuardRead(const Varnode *vn)
+     rec.offset = vn->getOffset();
+     rec.size = vn->getSize();
+     bool have = false;
+-    vector<GuardReadRecord> &recs( guardReads[iop] );
+-    for(vector<GuardReadRecord>::const_iterator g=recs.begin();g!=recs.end();++g)
+-      if ((*g).space == rec.space && (*g).offset == rec.offset && (*g).size == rec.size) { have = true; break; }
++    for(vector<GuardReadRecord>::const_iterator g=guardReads.begin();g!=guardReads.end();++g)
++      if ((*g).store == iop && (*g).space == rec.space && (*g).offset == rec.offset && (*g).size == rec.size) { have = true; break; }
+     if (!have) {
+-      if (numGuardReads >= 65536) {
+-	// too many to keep: every fold is taken for read (the ledger may miss, never invent), and the records say so (0072: a host's
+-	// ledger counts the function unchecked, not clean)
+-	frameFoldsAllRead = true;
+-	frameLedgerCapped = true;
++      if (guardReads.size() >= 4096) {
++	frameFoldsAllRead = true;	// too many to keep: every fold is taken for read (the ledger may miss, never invent)
+ 	return;
+       }
+-      recs.push_back(rec);
+-      numGuardReads += 1;
++      guardReads.push_back(rec);
+     }
+     v = ind->getIn(0);
+   }
+@@ -100,9 +85,8 @@ void Funcdata::noteGuardRead(const Varnode *vn)
+ /// access gone unread when it is destroyed. A frame write whose readers were all destroyed as dead never has its
+ /// value forwarded. A marker (MULTIEQUAL, INDIRECT) whose input is replaced forwards only that input's own fold:
+ /// heritage relinks markers to other versions; totalReplace and totalReplaceConstant, which give every reader an
+-/// equal value, walk for markers too. The walk back stops after 4,096 ops (64 before patch 0072); every fold of this
+-/// generation of the function is then taken as forwarded (the ledger may miss a loss, never report one that is none), and the function
+-/// is marked capped (isFrameLedgerCapped), so a host counts its frame ledger unchecked instead of clean.
++/// equal value, walk for markers too. The walk back stops after 64 ops; every fold of this generation
++/// of the function is then taken as forwarded (the ledger may miss a loss, never report one that is none).
+ /// A frame fold destroyed with its value forwarded passes the mark on to what it reads: a pop forwarded (into
+ /// `r1 & 0`, made a constant) while the stack was not yet linked is later linked to its push, which is then read.
+ /// A frame read the walk meets notes the STOREs whose guards it read through (noteGuardRead).
+@@ -119,7 +103,6 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
+     return;
+   }
+   vector<PcodeOp *> walked(1,def);
+-  set<PcodeOp *> seen;		// (0072) past 64 ops, what the walk reached, looked up in log time: the bound is 4,096 ops, not 64
+   for(size_t k=0;k<walked.size();++k) {
+     PcodeOp *d = walked[k];
+     if (d->isFrameFold())
+@@ -132,21 +115,11 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
+       Varnode *in = d->getIn(i);
+       if (in == (Varnode *)0 || !in->isWritten()) continue;
+       PcodeOp *e = in->getDef();
+-      if (walked.size() <= 64) {
+-	if (find(walked.begin(),walked.end(),e) != walked.end()) continue;
+-      }
+-      else {
+-	if (seen.empty()) seen.insert(walked.begin(),walked.end());
+-	if (seen.find(e) != seen.end()) continue;
+-      }
+-      if (walked.size() >= 4096) {
+-	// (0072) the walk's bound: every fold is taken for read, and the records say so (a host's ledger counts the function unchecked:
+-	// ledger A3-133, where 64 ops were reached by 5% to 8% of the corpus' functions, which were then reported clean)
++      if (find(walked.begin(),walked.end(),e) != walked.end()) continue;
++      if (walked.size() >= 64) {
+ 	frameFoldsAllRead = true;
+-	frameLedgerCapped = true;
+ 	return;
+       }
+-      if (!seen.empty()) seen.insert(e);
+       walked.push_back(e);
+     }
+   }
+@@ -1898,126 +1871,6 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
+   }
+ }
+ 
+-/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): the frame offset a STORE's pointer is, when it is the stack
+-/// pointer's input plus constants through copies (a frame word holding it included, once linked) and INDIRECTs: the pointer
+-/// discoverIndexedStackPointers marks with no guard record ("resolved in the next heritage pass").
+-/// \param vn is the pointer
+-/// \param spc is the stack space
+-/// \param off is set to the offset in the stack space
+-/// \return \b true if the pointer is such an offset
+-static bool exactStackPointer(const Varnode *vn,AddrSpace *spc,uintb &off)
+-
+-{
+-  uintb add = 0;
+-  for(int4 hops=0;hops<64;++hops) {
+-    if (vn->isInput()) {
+-      for(int4 i=0;i<spc->numSpacebase();++i) {
+-	const VarnodeData &sp(spc->getSpacebase(i));
+-	if (vn->getSpace() == sp.space && vn->getOffset() == sp.offset && vn->getSize() == sp.size) {
+-	  off = spc->wrapOffset(add);
+-	  return true;
+-	}
+-      }
+-      return false;
+-    }
+-    if (!vn->isWritten()) return false;
+-    const PcodeOp *op = vn->getDef();
+-    switch(op->code()) {
+-    case CPUI_COPY:
+-      vn = op->getIn(0);
+-      break;
+-    case CPUI_INDIRECT:
+-      vn = op->getIn(0);
+-      break;
+-    case CPUI_INT_ADD:
+-      if (op->getIn(1)->isConstant()) {
+-	add += op->getIn(1)->getOffset();
+-	vn = op->getIn(0);
+-      }
+-      else if (op->getIn(0)->isConstant()) {
+-	add += op->getIn(0)->getOffset();
+-	vn = op->getIn(1);
+-      }
+-      else
+-	return false;
+-      break;
+-    default:
+-      return false;
+-    }
+-  }
+-  return false;
+-}
+-
+-/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): is the value read from the stack frame and not yet linked to what
+-/// was put there: a word of the frame the heritage has not linked (a free stack Varnode), or a LOAD through the stack pointer plus
+-/// constants or through such a value, through copies, INDIRECTs, joins and the addition of constants? A pointer kept in a frame word, or
+-/// behind a chain of them, before the analysis has linked it to what was put there (a frame address, a parameter): until then it may
+-/// point anywhere into the frame.
+-/// \param vn is the value
+-/// \return \b true if it was read from the frame
+-bool Funcdata::pointerFromFrame(const Varnode *vn) const
+-
+-{
+-  vector<const Varnode *> todo(1,vn);
+-  vector<const Varnode *> seen;
+-  while(!todo.empty()) {
+-    const Varnode *v = todo.back();
+-    todo.pop_back();
+-    if (find(seen.begin(),seen.end(),v) != seen.end()) continue;
+-    if (seen.size() >= 64) return true;		// too far to follow: taken for one (fail closed)
+-    seen.push_back(v);
+-    if (!v->isWritten()) {
+-      // a word of the frame not linked to its write yet (an input of the stack space is the caller's argument, no frame word)
+-      if (v->getSpace()->getType() == IPTR_SPACEBASE && !v->isInput()) return true;
+-      continue;
+-    }
+-    const PcodeOp *op = v->getDef();
+-    switch(op->code()) {
+-    case CPUI_COPY:
+-    case CPUI_INDIRECT:
+-      todo.push_back(op->getIn(0));
+-      break;
+-    case CPUI_MULTIEQUAL:
+-      for(int4 i=0;i<op->numInput();++i)
+-	todo.push_back(op->getIn(i));
+-      break;
+-    case CPUI_INT_ADD:
+-      if (op->getIn(1)->isConstant()) todo.push_back(op->getIn(0));
+-      else if (op->getIn(0)->isConstant()) todo.push_back(op->getIn(1));
+-      break;
+-    case CPUI_LOAD:
+-    {
+-      uintb off;
+-      AddrSpace *stackSpc = glb->getStackSpace();
+-      if (stackSpc != (AddrSpace *)0 && exactStackPointer(op->getIn(1),stackSpc,off)) return true;
+-      todo.push_back(op->getIn(1));
+-      break;
+-    }
+-    default:
+-      break;
+-    }
+-  }
+-  return false;
+-}
+-
+-/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): is the STORE, not folded yet, aimed at the given stack local: its
+-/// pointer the stack pointer plus constants (exactStackPointer) and its bytes overlapping the local's?
+-/// \param sop is the STORE
+-/// \param local is the stack local
+-/// \return \b true if it writes bytes of the local
+-bool Funcdata::storeAimedAt(const PcodeOp *sop,const Varnode *local) const
+-
+-{
+-  if (sop->code() != CPUI_STORE || sop->numInput() < 3) return false;
+-  AddrSpace *spc = local->getSpace();
+-  if (spc->getType() != IPTR_SPACEBASE) return false;
+-  uintb soff;
+-  if (!exactStackPointer(sop->getIn(1),spc,soff)) return false;
+-  uintb ssz = (uintb)sop->getIn(2)->getSize();
+-  uintb loff = local->getOffset();
+-  return spc->wrapOffset(soff - loff) < (uintb)local->getSize() || spc->wrapOffset(loff - soff) < ssz;
+-}
+-
+ /// For the given op with indirect effects, run through its INDIRECTs, and
+ /// if there is no longer a possible alias for an INDIRECT address, remove the INDIRECT.
+ /// \param effectOp is the given op with indirect effects
+@@ -2038,13 +1891,6 @@ void Funcdata::opCollapseIndirectsForAlias(PcodeOp *effectOp)
+     bool shouldDestroy = false;
+     if (op->getOut()->hasNoLocalAlias() && !op->isIndirectCreation() && !op->noIndirectCollapse())
+       shouldDestroy = true;
+-    // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): a STORE not folded yet whose pointer is the stack pointer plus
+-    // constants aimed at the local (or read through a frame address: pending) writes it, whatever the alias analysis says of pointers to
+-    // it: the guard stays until the STORE is folded into a COPY (opCollapseIndirectsForCopy). Removed, the local's read took the value
+-    // before the STORE (a save slot taken for unaliased and overwritten through a pointer kept in a frame word: ledger A3-132)
+-    if (shouldDestroy && effectOp->code() == CPUI_STORE && op->getOut()->getSpace()->getType() == IPTR_SPACEBASE &&
+-	(isPendingFrameStore(effectOp) || storeAimedAt(effectOp,op->getOut()) || pointerFromFrame(effectOp->getIn(1))))
+-      shouldDestroy = false;
+     else if (guard != (const LoadGuard *)0 && !guard->isGuarded(op->getOut()->getAddr()))
+       shouldDestroy = true;
+ 
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.cc
+index e91474a..da22c98 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.cc
+@@ -12,20 +12,6 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+- *
+- * Modified for SaturnExplorer: an indexed stack access whose pointer is stepped down guards the stack below it (patches/0056-engine-stack-walk-down-aliases.patch).
+- * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0060-engine-stack-walk-down-spilled.patch).
+- * Modified for SaturnExplorer: a STORE a frame address may have escaped to is guarded, failing closed (patches/0061-engine-stack-frame-escape.patch).
+- * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
+- * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises, and a pointer a loop steps down from an unbounded index is guarded below its base (patches/0065-engine-frame-escape-whole-frame.patch).
+- * Modified for SaturnExplorer: a frame address that is no exact offset from the frame base escapes, unless a loop only steps it up, and the guard of an access through one covers the stack space (patches/0066-engine-frame-escape-inexact.patch).
+- * Modified for SaturnExplorer: a read found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped forces a call's guard on a local, and the calls guarded at a local are kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
+- * Modified for SaturnExplorer: a STORE through a pointer read through a frame address keeps its guards when the stack is first heritaged (patches/0072-engine-frame-chains-and-save-slots.patch).
+- * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD, and a held frame write is no address force of the guard's (patches/0076-engine-frame-loads-keep-writes.patch).
+- * Modified for SaturnExplorer: the pieces heritage makes at a delay slot's op for it are the slot's too (patches/0079-engine-heritage-slot-pieces-marked.patch).
+- * Modified for SaturnExplorer: a read of a piece of a global the range holds wider is read into a temporary, not written to the piece (patches/0088-engine-global-piece-read-and-join-copy.patch).
+- * Modified for SaturnExplorer: a hardware access is a barrier to the writes and reads of a global (patches/0090-engine-hardware-access-orders-globals.patch).
+- * Modified for SaturnExplorer: the guard a STORE through a pointer puts on a global is kept, as a call's is (patches/0093-engine-pointer-store-guard-kept.patch).
+  */
+ #include "heritage.hh"
+ #include "funcdata.hh"
+@@ -245,7 +231,6 @@ Heritage::Heritage(Funcdata *data)
+   fd = data;
+   pass = 0;
+   deadcodeBumped = false;
+-  pendingSpace = (AddrSpace *)0;
+   maxdepth = -1;
+ }
+ 
+@@ -676,7 +661,7 @@ void Heritage::findAddressForces(vector<PcodeOp *> &copySinks,vector<PcodeOp *>
+     for(int4 i=0;i<maxIn;++i) {
+       Varnode *vn = op->getIn(i);
+       if (!vn->isWritten()) continue;
+-      if (vn->isAddrForce() && !vn->isFrameLoadForce()) continue;		// Already marked address forced (SaturnExplorer 0076: not as a LOAD's hold, which may go)
++      if (vn->isAddrForce()) continue;		// Already marked address forced
+       PcodeOp *newOp = vn->getDef();
+       if (newOp->isMark()) continue;		// Already visited this op
+       newOp->setMark();
+@@ -771,40 +756,6 @@ void Heritage::handleNewLoadCopies(void)
+   loadCopyOps.clear();		// We have handled all the load guard COPY ops
+ }
+ 
+-/// SaturnExplorer (patches/0065-engine-frame-escape-whole-frame.patch): is the given pointer, back through copies, INDIRECTs and additions
+-/// of a constant, the join of a loop that steps it down (AliasChecker::stepsDown)?
+-/// (patches/0066-engine-frame-escape-inexact.patch) A precision helper only: it may widen a guard, never narrow one. A pointer it does not
+-/// follow (an addition of a register, a stride loaded from memory: ledger A3-118, A3-119) is no exact frame offset, which FrameEscape takes
+-/// for an escape, and the guard of an access through it is widened there (Heritage::widenEscapedStoreGuards).
+-/// \param vn is the pointer of a LOAD or STORE
+-/// \return \b true if a loop steps it down
+-bool LoadGuard::pointerSteppedDown(Varnode *vn)
+-
+-{
+-  for(int4 k=0;k<64 && vn->isWritten();++k) {
+-    PcodeOp *def = vn->getDef();
+-    switch(def->code()) {
+-    case CPUI_MULTIEQUAL:
+-      return AliasChecker::stepsDown(def);
+-    case CPUI_COPY:
+-    case CPUI_INDIRECT:
+-      vn = def->getIn(0);
+-      break;
+-    case CPUI_INT_ADD:
+-    case CPUI_PTRADD:
+-    case CPUI_PTRSUB:
+-    case CPUI_INT_SUB:
+-      if (def->getIn(1)->isConstant()) vn = def->getIn(0);
+-      else if (def->code() == CPUI_INT_ADD && def->getIn(0)->isConstant()) vn = def->getIn(1);
+-      else return false;
+-      break;
+-    default:
+-      return false;
+-    }
+-  }
+-  return true;	// (patches/0066-engine-frame-escape-inexact.patch) too far to follow: taken to step down (fail closed)
+-}
+-
+ /// Make some determination of the range of possible values for a LOAD based
+ /// an partial value set analysis. This can sometimes get
+ ///   - minimumOffset - otherwise the original constant pulled with the LOAD is used
+@@ -827,26 +778,6 @@ void LoadGuard::establishRange(const ValueSetRead &valueSet)
+     minimumOffset = pointerBase;
+     size = 0x1000;
+     analysisState = 1;	// Don't bother doing more analysis
+-    // SaturnExplorer (patches/0065-engine-frame-escape-whole-frame.patch): a range the analysis cannot bound (a variable index added to
+-    // the frame address: `p = &buf[n]`, `p = sp + 16 - r4`) was guarded from the pointer's base up, as an index the engine takes for
+-    // non-negative (ledger A3-9, A3-17). A loop that steps the pointer down from there (`*--p = v`) reaches below the base whatever the
+-    // index is, and the stack under it went unguarded: the sentinel the walk overwrote was folded to the value stored before (the round 11
+-    // review's fixtures S17 to S19, lent with `return 5;`, the code returns 1). Guard 0xffff below the base as well, as 0056 does for a walk
+-    // whose range the analysis did see move down.
+-    if (pointerSteppedDown(op->getIn(1))) {
+-      guessedBelow = true;
+-      uintb highest = spc->getHighest();
+-      if (pointerBase >= 0xffff) {
+-	minimumOffset = pointerBase - 0xffff;
+-	size = 0xffff + 0x1000;
+-	if (minimumOffset + size - 1 > highest || minimumOffset + size - 1 < minimumOffset)
+-	  size = highest - minimumOffset + 1;
+-      }
+-      else {
+-	minimumOffset = 0;
+-	size = highest + 1;
+-      }
+-    }
+   }
+   else {
+     step = (rangeSize == 3) ? range.getStep() : 0;	// Check for consistent step
+@@ -854,33 +785,18 @@ void LoadGuard::establishRange(const ValueSetRead &valueSet)
+     if (valueSet.isLeftStable()) {
+       minimumOffset = range.getMin();
+     }
+-    else {
+-      // SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): the left end of the range moved, so the
+-      // pointer is stepped down (a pre-decrement walk, `*--p = v`), and the iterations the partial
+-      // analysis ran say nothing of how far. Upstream guarded those few iterations, or the range
+-      // from pointerBase up, so the stack below went unguarded and a store there was taken for no
+-      // store to it (ledger A3-65). Guard everything up to the highest access and 0xffff below it,
+-      // the counterpart of the 0x1000 guessed for a pointer that only moves up; a range that would
+-      // wrap below offset 0 guards the whole space. A range neither end of which held still may
+-      // move either way and is guarded both ways.
+-      uintb highest = spc->getHighest();
+-      uintb top = valueSet.isRightStable() ? range.getMax() : pointerBase;
+-      int4 accessSize = (op->code() == CPUI_STORE) ? op->getIn(2)->getSize() : op->getOut()->getSize();
+-      uintb last = top + (accessSize > 0 ? accessSize - 1 : 0);
+-      if (!valueSet.isRightStable())
+-	last = top + 0xfff;
+-      if (last < top || last > highest)
+-	last = highest;
+-      guessedBelow = true;
+-      if (top >= 0xffff) {
+-	minimumOffset = top - 0xffff;
+-	size = last - minimumOffset + 1;
++    else if (valueSet.isRightStable()) {
++      if (pointerBase < range.getEnd()) {
++	minimumOffset = pointerBase;
++	size = (range.getEnd() - pointerBase);
+       }
+       else {
+-	minimumOffset = 0;
+-	size = highest + 1;
++	minimumOffset = range.getMin();
++	size = rangeSize * range.getStep();
+       }
+     }
++    else
++      minimumOffset = pointerBase;
+   }
+   uintb max = spc->getHighest();
+   if (minimumOffset > max) {
+@@ -1038,285 +954,6 @@ static bool frameBooleanOutput(OpCode opc)
+   return false;
+ }
+ 
+-/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): the value of \b vn as a constant, through copies of one
+-/// \param vn is the given Varnode
+-/// \param val receives the constant
+-/// \return \b true if \b vn is a constant or a copy of one
+-static bool frameConstant(Varnode *vn,uintb &val)
+-
+-{
+-  for(int4 k=0;k<8;++k) {
+-    if (vn->isConstant()) {
+-      val = vn->getOffset();
+-      return true;
+-    }
+-    if (!vn->isWritten() || vn->getDef()->code() != CPUI_COPY) return false;
+-    vn = vn->getDef()->getIn(0);
+-  }
+-  return false;
+-}
+-
+-/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): read a constant step as a signed value of the given size
+-static intb frameSigned(uintb val,int4 size)
+-
+-{
+-  if (size >= 8) return (intb)val;
+-  val &= calc_mask(size);
+-  if (((val >> (8 * size - 1)) & 1) != 0) val |= ~calc_mask(size);
+-  return (intb)val;
+-}
+-
+-/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): is the given member written by an op that keeps it the frame base plus a
+-/// constant when its inputs are (a copy, an INDIRECT, an addition or subtraction of a constant, a PTRSUB, a PTRADD of constants, a join of
+-/// members), and with which inputs and steps?
+-/// \param vn is the member
+-/// \param members are the possible frame addresses
+-/// \param in receives each member input and the constant it adds
+-/// \return \b true if the op is one of those forms
+-static bool frameAffine(Varnode *vn,const set<Varnode *> &members,vector<pair<Varnode *,intb> > &in)
+-
+-{
+-  in.clear();
+-  if (!vn->isWritten()) return false;
+-  PcodeOp *def = vn->getDef();
+-  int4 sz = vn->getSize();
+-  uintb c,c2;
+-  switch(def->code()) {
+-  case CPUI_COPY:
+-  case CPUI_INDIRECT:
+-    in.push_back(pair<Varnode *,intb>(def->getIn(0),0));
+-    break;
+-  case CPUI_INT_ADD:
+-    if (frameConstant(def->getIn(1),c))
+-      in.push_back(pair<Varnode *,intb>(def->getIn(0),frameSigned(c,sz)));
+-    else if (frameConstant(def->getIn(0),c))
+-      in.push_back(pair<Varnode *,intb>(def->getIn(1),frameSigned(c,sz)));
+-    else
+-      return false;		// a register, an index: no exact offset
+-    break;
+-  case CPUI_INT_SUB:
+-    if (!frameConstant(def->getIn(1),c)) return false;
+-    in.push_back(pair<Varnode *,intb>(def->getIn(0),-frameSigned(c,sz)));
+-    break;
+-  case CPUI_PTRSUB:
+-    if (!frameConstant(def->getIn(1),c)) return false;
+-    in.push_back(pair<Varnode *,intb>(def->getIn(0),frameSigned(c,sz)));
+-    break;
+-  case CPUI_PTRADD:
+-    if (!frameConstant(def->getIn(1),c) || !frameConstant(def->getIn(2),c2)) return false;
+-    in.push_back(pair<Varnode *,intb>(def->getIn(0),frameSigned(c * c2,sz)));
+-    break;
+-  case CPUI_MULTIEQUAL:
+-    for(int4 i=0;i<def->numInput();++i)
+-      in.push_back(pair<Varnode *,intb>(def->getIn(i),0));
+-    break;
+-  default:
+-    return false;
+-  }
+-  for(int4 i=0;i<in.size();++i)
+-    if (members.find(in[i].first) == members.end()) return false;	// a constant added to another value, a join with one: no frame offset
+-  return true;
+-}
+-
+-/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): which members are no exact offset from the frame base? Each member is
+-/// given one of: an exact offset (the stack pointer's input, or a value made from one by the forms of frameAffine whose inputs have the same
+-/// exact offset on every path), \e up from an offset (a value a loop carries whose every step on the loop adds a constant that is not
+-/// negative, entered with exact or up values: it is at or above the lowest of them), or none. Anything else -- an op of another form, a
+-/// join of two different offsets, a loop with a negative step or a step that is no constant, a value whose inputs have none -- has none and
+-/// is put in \b inexactSet. The members are taken in the order of their strongly connected components (Tarjan's walk, iterative, over the
+-/// edges from a value to its inputs, which yields each component after the components of its inputs). A component too large to follow has
+-/// none (fail closed). The lowest entry offset of each loop that only steps up is kept in \b upLows, so the alias starts there.
+-/// \param spc is the stack space
+-/// \param offset holds the stack pointer's inputs (offset 0)
+-/// \param inexactSet receives the members with no exact offset
+-void FrameEscape::classifyExact(AddrSpace *spc,const map<Varnode *,uintb> &offset,vector<Varnode *> &inexactSet)
+-
+-{
+-  const int4 maxComponent = 4096;
+-  enum { kNone = 0, kExact = 1, kUp = 2, kTop = 3 };
+-  struct Pos { int4 kind; intb off; Pos(void) : kind(kNone), off(0) {} };
+-  map<Varnode *,Pos> pos;
+-  map<Varnode *,vector<pair<Varnode *,intb> > > edges;
+-  set<Varnode *> affine;
+-  // Everything here is built in the members' creation-index order, never the pointer order of the set, so the
+-  // order in which temporaries are allocated does not depend on where the allocator placed a Varnode (the fault
+-  // matrix requires the allocation sequence of a decompile to be identical between two runs of the same function).
+-  vector<Varnode *> ordered(members.begin(),members.end());
+-  sort(ordered.begin(),ordered.end(),[](Varnode *a,Varnode *b){ return a->getCreateIndex() < b->getCreateIndex(); });
+-  for(vector<Varnode *>::const_iterator iter=ordered.begin();iter!=ordered.end();++iter) {
+-    vector<pair<Varnode *,intb> > in;
+-    if (frameAffine(*iter,members,in)) {
+-      affine.insert(*iter);
+-      edges[*iter] = in;
+-    }
+-  }
+-  // Tarjan's strongly connected components, iterative. The members are taken in creation-index order, not the
+-  // pointer order of the set: the walk's own order must not depend on where the allocator placed a Varnode, or the
+-  // escape decision (and the number of guards it makes) is not reproducible between two decompiles of one function.
+-  map<Varnode *,int4> index,low;
+-  set<Varnode *> onStack;
+-  vector<Varnode *> stack;
+-  int4 counter = 0;
+-  for(vector<Varnode *>::const_iterator rootiter=ordered.begin();rootiter!=ordered.end();++rootiter) {
+-    Varnode * const *root = &(*rootiter);
+-    if (index.find(*root) != index.end()) continue;
+-    vector<pair<Varnode *,int4> > call;	// the node and the next edge to visit
+-    call.push_back(pair<Varnode *,int4>(*root,0));
+-    index[*root] = low[*root] = counter++;
+-    stack.push_back(*root);
+-    onStack.insert(*root);
+-    while(!call.empty()) {
+-      Varnode *v = call.back().first;
+-      int4 &next( call.back().second );
+-      map<Varnode *,vector<pair<Varnode *,intb> > >::const_iterator eiter = edges.find(v);
+-      const int4 nEdges = (eiter == edges.end()) ? 0 : (*eiter).second.size();
+-      if (next < nEdges) {
+-	Varnode *w = (*eiter).second[next].first;
+-	next += 1;
+-	if (index.find(w) == index.end()) {
+-	  index[w] = low[w] = counter++;
+-	  stack.push_back(w);
+-	  onStack.insert(w);
+-	  call.push_back(pair<Varnode *,int4>(w,0));
+-	}
+-	else if (onStack.find(w) != onStack.end() && index[w] < low[v])
+-	  low[v] = index[w];
+-	continue;
+-      }
+-      call.pop_back();
+-      if (!call.empty()) {
+-	Varnode *parent = call.back().first;
+-	if (low[v] < low[parent]) low[parent] = low[v];
+-      }
+-      if (low[v] != index[v]) continue;
+-      // v roots a component: its inputs' components are all decided
+-      vector<Varnode *> comp;
+-      for(;;) {
+-	Varnode *w = stack.back();
+-	stack.pop_back();
+-	onStack.erase(w);
+-	comp.push_back(w);
+-	if (w == v) break;
+-      }
+-      bool cyclic = comp.size() > 1;
+-      if (!cyclic) {
+-	map<Varnode *,vector<pair<Varnode *,intb> > >::const_iterator self = edges.find(v);
+-	if (self != edges.end())
+-	  for(int4 i=0;i<(*self).second.size();++i)
+-	    if ((*self).second[i].first == v) cyclic = true;
+-      }
+-      Pos res;
+-      if (!cyclic) {
+-	if (!v->isWritten() && offset.find(v) != offset.end()) {
+-	  res.kind = kExact;		// the stack pointer's input
+-	  res.off = 0;
+-	}
+-	else if (affine.find(v) == affine.end())
+-	  res.kind = kTop;
+-	else {
+-	  const vector<pair<Varnode *,intb> > &in( edges[v] );
+-	  bool join = v->getDef()->code() == CPUI_MULTIEQUAL;
+-	  bool anyUp = false, same = true;
+-	  intb minOff = 0;
+-	  res.kind = kExact;
+-	  for(int4 i=0;i<in.size();++i) {
+-	    const Pos &p( pos[in[i].first] );
+-	    if (p.kind != kExact && p.kind != kUp) {
+-	      res.kind = kTop;
+-	      break;
+-	    }
+-	    intb o = p.off + in[i].second;
+-	    if (p.kind == kUp) {
+-	      anyUp = true;
+-	      if (in[i].second < 0) {	// a step below a value known only to be at or above its entry
+-		res.kind = kTop;
+-		break;
+-	      }
+-	    }
+-	    if (i == 0) minOff = o;
+-	    else {
+-	      if (o != minOff) same = false;
+-	      if (o < minOff) minOff = o;
+-	    }
+-	  }
+-	  if (res.kind != kTop) {
+-	    if (anyUp) {
+-	      res.kind = kUp;
+-	      if (join) upLows.push_back(spc->wrapOffset((uintb)minOff));
+-	    }
+-	    else if (!same)
+-	      res.kind = kTop;	// a join of two different offsets: no single one
+-	    res.off = minOff;
+-	  }
+-	}
+-	pos[v] = res;
+-	continue;
+-      }
+-      // A loop: every node is a join or a constant step of another node of it (a node with one input outside cannot be on a cycle)
+-      res.kind = kExact;
+-      bool haveEntry = false, sameEntry = true, flat = true;
+-      intb minEntry = 0;
+-      set<Varnode *> inComp(comp.begin(),comp.end());
+-      if (comp.size() > maxComponent)
+-	res.kind = kTop;		// too large to follow (fail closed)
+-      for(int4 c=0;c<comp.size() && res.kind != kTop;++c) {
+-	Varnode *w = comp[c];
+-	if (affine.find(w) == affine.end()) {
+-	  res.kind = kTop;
+-	  break;
+-	}
+-	const vector<pair<Varnode *,intb> > &in( edges[w] );
+-	for(int4 i=0;i<in.size();++i) {
+-	  if (inComp.find(in[i].first) != inComp.end()) {
+-	    if (in[i].second < 0) {	// a step down, or one of unknown sign read as one
+-	      res.kind = kTop;
+-	      break;
+-	    }
+-	    if (in[i].second != 0) flat = false;
+-	    continue;
+-	  }
+-	  const Pos &p( pos[in[i].first] );
+-	  if (p.kind != kExact && p.kind != kUp) {
+-	    res.kind = kTop;
+-	    break;
+-	  }
+-	  if (p.kind == kUp) {
+-	    sameEntry = false;
+-	    if (in[i].second < 0) {
+-	      res.kind = kTop;
+-	      break;
+-	    }
+-	  }
+-	  intb o = p.off + in[i].second;
+-	  if (!haveEntry) {
+-	    minEntry = o;
+-	    haveEntry = true;
+-	  }
+-	  else {
+-	    if (o != minEntry) sameEntry = false;
+-	    if (o < minEntry) minEntry = o;
+-	  }
+-	}
+-      }
+-      if (!haveEntry) res.kind = kTop;
+-      if (res.kind != kTop) {
+-	res.off = minEntry;
+-	if (!flat || !sameEntry) {
+-	  res.kind = kUp;		// stepped up only: at or above its lowest entry
+-	  upLows.push_back(spc->wrapOffset((uintb)minEntry));
+-	}
+-      }
+-      for(int4 c=0;c<comp.size();++c)
+-	pos[comp[c]] = res;
+-    }
+-  }
+-  for(vector<Varnode *>::const_iterator iter=ordered.begin();iter!=ordered.end();++iter) {
+-    map<Varnode *,Pos>::const_iterator f = pos.find(*iter);
+-    if (f != pos.end() && (*f).second.kind != kExact && (*f).second.kind != kUp)
+-      inexactSet.push_back(*iter);
+-  }
+-}
+-
+ /// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): walk forward from the stack pointer's input over every value computed from
+ /// it, by any op, and record which possible frame addresses the stack analysis models (copies, additions, subtractions of a constant, joins,
+ /// INDIRECTs, PTRSUB and PTRADD), which it does not, and whether any escaped (see FrameEscape). Before the stack space is heritaged a read of
+@@ -1359,9 +996,6 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+ 	gaveUp = true;
+ 	escaped = true;
+ 	loose = true;
+-	// (0065) ...from the lowest frame offset any query saw (no lowest is offset 0, which aliases no local)
+-	if (fd->getScopeLocal() != (const ScopeLocal *)0 && fd->getScopeLocal()->getSpaceId() == spc)
+-	  haveLowest = fd->getScopeLocal()->getFrameFloor(lowest);
+ 	return;
+       }
+       Varnode *vn = work.back();
+@@ -1475,9 +1109,6 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+     }
+     break;
+   }
+-  // (patches/0066-engine-frame-escape-inexact.patch) the members that are no exact offset from the frame base (classifyExact)
+-  vector<Varnode *> inexactSet;
+-  classifyExact(spc,offset,inexactSet);
+   // (c): a join with a value that is no frame address
+   for(set<Varnode *>::const_iterator iter=members.begin();iter!=members.end();++iter) {
+     Varnode *vn = *iter;
+@@ -1509,10 +1140,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+       PcodeOp *op = *diter;
+       switch(op->code()) {
+       case CPUI_LOAD:
+-	if (op->getIn(1) == vn) {
+-	  escaped = true;
+-	  inexactLoads.insert(op);	// (0066) its guard covers the stack space
+-	}
++	if (op->getIn(1) == vn) escaped = true;
+ 	break;
+       case CPUI_STORE:
+ 	if (op->getIn(1) == vn) {
+@@ -1536,60 +1164,12 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+   // (0063) ...and the escapes the host knows of and the p-code does not show: a callee that keeps the address it was handed, or hands
+   // it back in a register the call has no output in (ledger A3-89, A3-91), a frame address in a register no input of the call names.
+   if (hostEscape) escaped = true;
+-  // (patches/0066-engine-frame-escape-inexact.patch) ...and a frame address that is no exact offset from the frame base (a register or an index
+-  // added or subtracted, a loop that steps it by anything but a constant that is not negative, a join of two offsets) reaches an access or a
+-  // call: it may reach any word of the frame, below the address it was made from too (`*--p` from `sp + 16 + r4`, `p[-i]`, `p += stride` with
+-  // the stride loaded: ledger A3-116, A3-118, A3-119). Recognising those walks by their form failed open on each form the list did not have; an
+-  // exact offset is the one form the stack analysis places, so every other form escapes, with the whole-frame alias (AliasChecker), and the
+-  // guard of each access through one covers the stack space (Heritage::widenEscapedStoreGuards). Such an address has not left the function's
+-  // own data flow, so the pointers it did not make are not taken to be frame addresses on its account (markUnknownStores is for the causes
+-  // above), and the save slots stay as 0063 has them (not loose).
+-  bool leftFlow = escaped;
+-  for(vector<Varnode *>::const_iterator iter=inexactSet.begin();iter!=inexactSet.end();++iter) {
+-    Varnode *vn = *iter;
+-    for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend();++diter) {
+-      PcodeOp *op = *diter;
+-      switch(op->code()) {
+-      case CPUI_LOAD:
+-	if (op->getIn(1) == vn) {
+-	  inexact = true;
+-	  inexactLoads.insert(op);
+-	}
+-	break;
+-      case CPUI_STORE:
+-	if (op->getIn(1) == vn) {
+-	  inexact = true;
+-	  unmodeledStores.insert(op);
+-	}
+-	break;
+-      case CPUI_CALL:
+-      case CPUI_CALLIND:
+-      case CPUI_CALLOTHER:
+-	inexact = true;
+-	break;
+-      default:
+-	break;
+-      }
+-    }
+-  }
+-  if (inexact) escaped = true;
+   // The lowest frame offset reached, as a signed offset in the space, for the alias boundary: the lowest a frame address takes, and the
+   // lowest stack location the function has (once the frame's own accesses are direct stack varnodes, the frame address that reached the
+   // lowest local may be gone, and a local below every frame address left would be no alias).
+   vector<uintb> candidates;
+   for(map<Varnode *,uintb>::const_iterator iter=offset.begin();iter!=offset.end();++iter)
+     candidates.push_back((*iter).second);
+-  // (patches/0065-engine-frame-escape-whole-frame.patch) ...and the lowest any earlier query of this function saw. The frame addresses and
+-  // stack locations left shrink as the actions fold: the word at a call's stack pointer becomes the call's argument, the local above it a
+-  // constant, and the lowest left rose to the address that escaped, so a local below that address lost its alias in the later queries and
+-  // was folded (ledger A3-104). The frame does not shrink: the lowest offset is kept with the function (ScopeLocal::setFrameFloor).
+-  const ScopeLocal *scope = fd->getScopeLocal();
+-  if (scope != (const ScopeLocal *)0 && scope->getSpaceId() != spc) scope = (const ScopeLocal *)0;
+-  {
+-    uintb floor;
+-    if (scope != (const ScopeLocal *)0 && scope->getFrameFloor(floor))
+-      candidates.push_back(floor);
+-  }
+   {
+     VarnodeLocSet::const_iterator liter = fd->beginLoc(spc);
+     VarnodeLocSet::const_iterator lenditer = fd->endLoc(spc);
+@@ -1608,51 +1188,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+       haveLowest = true;
+     }
+   }
+-  if (haveLowest && scope != (const ScopeLocal *)0) scope->setFrameFloor(lowest);
+-  if (leftFlow) markUnknownStores(fd);
+-  if (escaped) fd->noteFrameEscaped();	// (0068) for a host's frame ledger: any call may read the frame's locals
+-  // (patches/0072-engine-frame-chains-and-save-slots.patch) A LOAD through a frame address reads a word of the frame, which may hold a frame
+-  // address: the read is a stack read in waiting (RuleLoadVarnode makes it a direct one, and the next heritage pass links it to the write
+-  // that put the address there), as every stack read is before the stack is heritaged. A STORE through what it read, or through anything
+-  // computed from it (a LOAD through it is another such read: a chain of slots), may write the frame; it is pending, and keeps the guards
+-  // the heritage put on the frame's locals for it (reprocessFreeStores) until it is folded or its pointer is known. Only that: whether the
+-  // frame escaped is decided above, by the walk of what the analysis models (ledger A3-130: `S` behind two slots, `**pp = v`, lost).
+-  {
+-    set<Varnode *> pending;
+-    vector<Varnode *> pwork;
+-    for(set<Varnode *>::const_iterator iter=members.begin();iter!=members.end();++iter) {
+-      Varnode *vn = *iter;
+-      for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend();++diter) {
+-	PcodeOp *op = *diter;
+-	if (op->code() != CPUI_LOAD || op->getIn(1) != vn || op->getOut() == (Varnode *)0) continue;
+-	if (pending.insert(op->getOut()).second) pwork.push_back(op->getOut());
+-      }
+-    }
+-    while(!pwork.empty()) {
+-      if (pending.size() > maxMembers) {	// too far to follow: every STORE through a computed pointer is pending (fail closed)
+-	list<PcodeOp *>::const_iterator siter = fd->beginOp(CPUI_STORE);
+-	list<PcodeOp *>::const_iterator senditer = fd->endOp(CPUI_STORE);
+-	for(;siter!=senditer;++siter)
+-	  if (!(*siter)->isDead() && !(*siter)->getIn(1)->isConstant()) pendingStores.insert(*siter);
+-	break;
+-      }
+-      Varnode *vn = pwork.back();
+-      pwork.pop_back();
+-      for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend();++diter) {
+-	PcodeOp *op = *diter;
+-	if (op->code() == CPUI_STORE) {
+-	  if (op->getIn(1) == vn) pendingStores.insert(op);
+-	  continue;
+-	}
+-	if (op->code() == CPUI_LOAD && op->getIn(1) != vn) continue;
+-	if (frameBooleanOutput(op->code())) continue;
+-	if (op->code() == CPUI_INDIRECT && op->getIn(0) != vn) continue;
+-	Varnode *out = op->getOut();
+-	if (out == (Varnode *)0) continue;
+-	if (pending.insert(out).second) pwork.push_back(out);
+-      }
+-    }
+-  }
++  if (escaped) markUnknownStores(fd);
+ }
+ 
+ /// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): once a frame address has escaped, any pointer whose origin
+@@ -1756,25 +1292,11 @@ bool Heritage::markEscapedStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
+ void Heritage::widenEscapedStoreGuards(void)
+ 
+ {
+-  if (storeGuard.empty() && loadGuard.empty()) return;
++  if (storeGuard.empty()) return;
+   AddrSpace *stackSpc = fd->getArch()->getStackSpace();
+   if (stackSpc == (AddrSpace *)0) return;
+   FrameEscape escape;
+   escape.compute(fd,stackSpc,false);
+-  // (patches/0066-engine-frame-escape-inexact.patch) ...and a LOAD guard on a LOAD through a frame address that is no exact offset: the value
+-  // set analysis guarded what it saw, or the pointer's base up, and a local below that was taken for one the LOAD does not read
+-  for(list<LoadGuard>::iterator iter=loadGuard.begin();iter!=loadGuard.end();++iter) {
+-    LoadGuard &guard(*iter);
+-    if (!guard.isValid(CPUI_LOAD)) continue;
+-    if (guard.analysisState == 0) continue;
+-    if (!escape.loadIsInexact(guard.op)) continue;
+-    if (guard.minimumOffset == 0 && guard.maximumOffset == guard.spc->getHighest() && guard.guessedBelow) continue;
+-    guard.minimumOffset = 0;
+-    guard.maximumOffset = guard.spc->getHighest();
+-    guard.step = 0;
+-    guard.analysisState = 2;
+-    guard.guessedBelow = true;
+-  }
+   for(list<LoadGuard>::iterator iter=storeGuard.begin();iter!=storeGuard.end();++iter) {
+     LoadGuard &guard(*iter);
+     if (!guard.isValid(CPUI_STORE)) continue;
+@@ -2040,21 +1562,12 @@ void Heritage::reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
+   // SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): a STORE whose pointer, with the stack heritaged, may still be a frame
+   // address the stack analysis does not model (laundered, read back from memory, joined with another pointer, returned by a call it was
+   // handed to) stays a store to the stack: it was marked to be guarded, and the forward walk above cannot find it again (FrameEscape).
+-  // (patches/0072-engine-frame-chains-and-save-slots.patch) ...and so does one through a value read through a frame address, which is a
+-  // frame address in waiting (FrameEscape::pendingStores): unmarked, its guards went at once, and the store was folded a pass later into
+-  // a local whose read had been linked to the write before it (ledger A3-130).
+   {
+     FrameEscape escape;
+     escape.compute(fd,spc,false);
+     for(int4 i=0;i<freeStores.size();++i) {
+       PcodeOp *op = freeStores[i];
+-      if (op->isDead() || op->usesSpacebasePtr()) continue;
+-      if (escape.storeIsPending(op)) {
+-	fd->opMarkSpacebasePtr(op);
+-	pendingStores.push_back(op->getSeqNum());	// (0072) settled again after the next pass (reprocessPendingStores)
+-	pendingSpace = spc;
+-      }
+-      else if (escape.storeIsUnmodeled(op))
++      if (!op->isDead() && !op->usesSpacebasePtr() && escape.storeIsUnmodeled(op))
+ 	fd->opMarkSpacebasePtr(op);
+     }
+   }
+@@ -2067,62 +1580,19 @@ void Heritage::reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
+     if (op->usesSpacebasePtr()) continue;
+ 
+     // If not the STORE may have triggered INDIRECTs that are unnecessary
+-    unguardStore(spc,op);
+-  }
+-}
+-
+-/// The STORE is no longer marked as using a stack pointer: the INDIRECTs it put on the given space are removed, each output replaced by
+-/// its input.
+-/// \param spc is the stack space
+-/// \param op is the STORE
+-void Heritage::unguardStore(AddrSpace *spc,PcodeOp *op)
+-
+-{
+-  PcodeOp *indOp = op->previousOp();
+-  while(indOp != (PcodeOp *)0) {
+-    if (indOp->code() != CPUI_INDIRECT) break;
+-    Varnode *iopVn = indOp->getIn(1);
+-    if (iopVn->getSpace()->getType()!=IPTR_IOP) break;
+-    if (op != PcodeOp::getOpFromConst(iopVn->getAddr())) break;
+-    PcodeOp *nextOp = indOp->previousOp();
+-    if (indOp->getOut()->getSpace() == spc) {
+-      fd->totalReplace(indOp->getOut(),indOp->getIn(0));
+-      fd->opDestroy(indOp);		// Get rid of the INDIRECT
+-    }
+-    indOp = nextOp;
+-  }
+-}
+-
+-/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): a STORE kept guarded only because its pointer was read through a
+-/// frame address (FrameEscape::storeIsPending) is settled again after each later heritage pass, once that read has become a direct stack read
+-/// linked to the word's write: a pointer still pending, or now a possible frame address the analysis does not model, keeps the guards; one
+-/// the analysis models (a frame address it walks to: the STORE is folded into the frame) keeps the mark; any other pointer (a parameter the
+-/// slot held, a global's address) is no frame address, and the STORE loses the mark and its guards, as one settled on the first pass does
+-/// (reprocessFreeStores). A STORE already folded or removed is gone from the list.
+-void Heritage::reprocessPendingStores(void)
+-
+-{
+-  if (pendingStores.empty() || pendingSpace == (AddrSpace *)0) return;
+-  vector<PcodeOp *> ops;
+-  for(vector<SeqNum>::const_iterator iter=pendingStores.begin();iter!=pendingStores.end();++iter) {
+-    PcodeOp *op = fd->findOp(*iter);
+-    if (op == (PcodeOp *)0 || op->isDead() || op->code() != CPUI_STORE || !op->usesSpacebasePtr()) continue;
+-    ops.push_back(op);
+-  }
+-  pendingStores.clear();
+-  if (ops.empty()) return;
+-  FrameEscape escape;
+-  escape.compute(fd,pendingSpace,false);
+-  for(int4 i=0;i<ops.size();++i) {
+-    PcodeOp *op = ops[i];
+-    if (escape.storeIsPending(op)) {
+-      pendingStores.push_back(op->getSeqNum());
+-      continue;
++    PcodeOp *indOp = op->previousOp();
++    while(indOp != (PcodeOp *)0) {
++      if (indOp->code() != CPUI_INDIRECT) break;
++      Varnode *iopVn = indOp->getIn(1);
++      if (iopVn->getSpace()->getType()!=IPTR_IOP) break;
++      if (op != PcodeOp::getOpFromConst(iopVn->getAddr())) break;
++      PcodeOp *nextOp = indOp->previousOp();
++      if (indOp->getOut()->getSpace() == spc) {
++	fd->totalReplace(indOp->getOut(),indOp->getIn(0));
++	fd->opDestroy(indOp);		// Get rid of the INDIRECT
++      }
++      indOp = nextOp;
+     }
+-    if (escape.storeIsUnmodeled(op)) continue;
+-    if (escape.members.find(op->getIn(1)) != escape.members.end()) continue;
+-    fd->opClearSpacebasePtr(op);
+-    unguardStore(pendingSpace,op);
+   }
+ }
+ 
+@@ -2602,7 +2072,6 @@ void Heritage::guardLoads(uint4 fl,const Address &addr,int4 size,vector<Varnode
+     invn->setActiveHeritage();
+     fd->opSetInput(copyop,invn,0);
+     fd->opInsertBefore(copyop,guardRec.op);
+-    guardRec.sunk = true;	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch)
+     loadCopyOps.push_back(copyop);
+   }
+ }
+@@ -3875,9 +3344,6 @@ void Heritage::heritage(void)
+     placeMultiequals();
+     rename();
+   }
+-  // (patches/0072-engine-frame-chains-and-save-slots.patch) the STOREs kept as pending by an earlier pass first: this pass linked the reads
+-  // their pointers came through
+-  reprocessPendingStores();
+   if (reprocessStackCount > 0)
+     reprocessFreeStores(stackSpace, freeStores);
+   analyzeNewLoadGuards();
+@@ -4012,8 +3478,6 @@ void Heritage::clear(void)
+   maxdepth = -1;
+   pass = 0;
+   deadcodeBumped = false;
+-  pendingStores.clear();
+-  pendingSpace = (AddrSpace *)0;
+ }
+ 
+ } // End namespace ghidra
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.hh b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.hh
+index aa3e7ce..264755e 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.hh
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.hh
+@@ -13,16 +13,6 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+- *
+- * Modified for SaturnExplorer: a guard below a pointer stepped down is no array's start (patches/0056-engine-stack-walk-down-aliases.patch).
+- * Modified for SaturnExplorer: an escape analysis of the frame addresses, failing closed (patches/0061-engine-stack-frame-escape.patch).
+- * Modified for SaturnExplorer: once the frame escapes, a pointer not proved to be no frame address may be one (patches/0063-engine-frame-escape-unknown-pointers.patch).
+- * Modified for SaturnExplorer: the escape's lowest frame offset never rises over the queries of a function (patches/0065-engine-frame-escape-whole-frame.patch).
+- * Modified for SaturnExplorer: a frame address that is not an exact offset from the frame base escapes, unless a loop only steps it up (patches/0066-engine-frame-escape-inexact.patch).
+- * Modified for SaturnExplorer: the dead code delay a late read asks for, and its bound (patches/0068-engine-deadcode-late-stack-reads.patch).
+- * Modified for SaturnExplorer: a STORE through a value read through a frame address is a STORE through a frame address in waiting (patches/0072-engine-frame-chains-and-save-slots.patch).
+- * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD; whether a LOAD may read the frame (patches/0076-engine-frame-loads-keep-writes.patch).
+- * Modified for SaturnExplorer: a hardware access is a barrier to the writes and reads of a global (patches/0090-engine-hardware-access-orders-globals.patch).
+  */
+ /// \file heritage.hh
+ /// \brief Utilities for building Static Single Assignment (SSA) form 
+@@ -159,10 +149,8 @@ class LoadGuard {
+   uintb maximumOffset;	///< Maximum offset of the LOAD
+   int4 step;		///< Step of any access into this range (0=unknown)
+   int4 analysisState;	///< 0=unanalyzed, 1=analyzed(partial result), 2=analyzed(full result)
+-  bool guessedBelow;	///< SaturnExplorer: minimumOffset is a guess below a pointer stepped down, not where an array starts (patches/0056-engine-stack-walk-down-aliases.patch)
+-  bool sunk;		///< SaturnExplorer: guardLoads put a COPY of a stack location before the LOAD (patches/0076-engine-frame-loads-keep-writes.patch)
++  bool guessedBelow;
+   void establishRange(const ValueSetRead &valueSet);	///< Convert partial value set analysis into guard range
+-  static bool pointerSteppedDown(Varnode *vn);	///< SaturnExplorer (0065): is the pointer the join of a loop that steps it down
+   void finalizeRange(const ValueSetRead &valueSet);	///< Convert value set analysis to final guard range
+ 
+   /// \brief Set a new unanalyzed LOAD guard that initially guards everything
+@@ -171,15 +159,13 @@ class LoadGuard {
+   /// \param s is the (stack) space it is loading from
+   /// \param off is the base offset that is indexed from
+   void set(PcodeOp *o,AddrSpace *s,uintb off) {
+-    op = o; spc = s; pointerBase=off; minimumOffset=0; maximumOffset=s->getHighest(); step=0; analysisState=0; guessedBelow=false; sunk=false;
++    op = o; spc = s; pointerBase=off; minimumOffset=0; maximumOffset=s->getHighest(); step=0; analysisState=0; guessedBelow=false;
+   }
+ public:
+   PcodeOp *getOp(void) const { return op; }	///< Get the PcodeOp being guarded
+   uintb getMinimum(void) const { return minimumOffset; }	///< Get minimum offset of the guarded range
+   uintb getMaximum(void) const { return maximumOffset; }	///< Get maximum offset of the guarded range
+   int4 getStep(void) const { return step; }		///< Get the calculated step associated with the range (or 0)
+-  bool isGuessedBelow(void) const { return guessedBelow; }	///< SaturnExplorer: is the minimum a guess below a pointer stepped down
+-  bool isSunk(void) const { return sunk; }	///< SaturnExplorer (0076): did a heritage pass keep the stack's writes for the LOAD (a COPY of a location before it)?
+   bool isGuarded(const Address &addr) const;		///< Does \b this guard apply to the given address
+   bool isRangeLocked(void) const { return (analysisState == 2); }	///< Return \b true if the range is fully determined
+   bool isValid(OpCode opc) const { return (!op->isDead() && op->code() == opc); }	///< Return \b true if the record still describes an active LOAD
+@@ -208,26 +194,12 @@ public:
+ /// the value a call or a store may have rewritten (an INDIRECT), a parameter, and anything computed from them -- may point into the frame,
+ /// and every STORE through one is a STORE through an unmodeled frame address (guarded). Where the escaped value goes is still not followed:
+ /// that is what makes the rule closed.
+-///
+-/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): the walk down below a frame address was recognised by its form since
+-/// 0056 (a constant step, a conditional step, a spill, an index, a register stride), and each list failed open on the next form (ledger
+-/// A3-65, A3-72, A3-80, A3-116, A3-118, A3-119). Now a frame address the stack analysis cannot place exactly is an escape as well: one whose
+-/// value is not the frame base plus a constant (a register or an index added or subtracted, a join of two different offsets, a value loaded
+-/// or computed by any op the walk does not model), or one a loop carries, unless every step of the loop adds a constant that is not
+-/// negative (then it is at or above the loop's lowest entry, which is aliased). An access through such an address, or a call it is handed
+-/// to, makes the frame escape, with the whole-frame alias of 0065, and the access's guard covers the whole stack space. The forms of 0056
+-/// to 0065 stay only as helpers that add aliasing.
+ class FrameEscape {
+   void markUnknownStores(const Funcdata *fd);	///< Mark the STOREs through a pointer not proved to be no frame address (0063)
+-  void classifyExact(AddrSpace *spc,const map<Varnode *,uintb> &offset,vector<Varnode *> &inexactSet);	///< (0066) Which members are no exact offset
+ public:
+   set<Varnode *> members;		///< The possible frame addresses
+   set<Varnode *> unmodeled;		///< ...of which those reached through a form the stack analysis does not model
+   set<PcodeOp *> unmodeledStores;	///< STOREs through an unmodeled possible frame address, or, once the frame escaped, an unknown pointer
+-  set<PcodeOp *> inexactLoads;		///< LOADs through a frame address that is no exact offset (0066)
+-  set<PcodeOp *> pendingStores;		///< STOREs through a value read from the frame through a frame address (0072)
+-  vector<uintb> upLows;			///< The lowest entry offset of each loop that only steps a frame address up (0066)
+-  bool inexact;				///< A frame address that is no exact offset reaches an access or a call (0066)
+   bool memoryEscape;			///< A frame address was stored to memory
+   bool handed;				///< A frame address was handed to a call as an argument (0063)
+   bool hostEscape;			///< The host declared an escape the p-code does not show (0063)
+@@ -235,17 +207,11 @@ public:
+   bool loose;				///< ...by a form the stack analysis does not model (0061's causes, not a hand-over alone: 0063)
+   bool gaveUp;				///< The walk passed its bound: everything is taken to have escaped
+   bool haveLowest;			///< \b lowest is set
+-  uintb lowest;				///< The lowest frame offset reached (a byte offset in the stack space), or any earlier query of the function reached (0065)
+-  FrameEscape(void) : inexact(false), memoryEscape(false), handed(false), hostEscape(false), escaped(false), loose(false), gaveUp(false), haveLowest(false), lowest(0) {}
++  uintb lowest;				///< The lowest frame offset reached (a byte offset in the stack space)
++  FrameEscape(void) : memoryEscape(false), handed(false), hostEscape(false), escaped(false), loose(false), gaveUp(false), haveLowest(false), lowest(0) {}
+   void compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage);	///< Run the walk over the given stack space
+   /// \brief Is the given STORE made through a possible frame address the stack analysis does not model?
+   bool storeIsUnmodeled(PcodeOp *op) const { return gaveUp || unmodeledStores.find(op) != unmodeledStores.end(); }
+-  /// \brief Is the given LOAD made through a frame address that is no exact offset? (0066)
+-  bool loadIsInexact(PcodeOp *op) const { return gaveUp || inexactLoads.find(op) != inexactLoads.end(); }
+-  /// \brief Is the given STORE made through a value a LOAD through a frame address read, which may itself be a frame address? (0072)
+-  bool storeIsPending(PcodeOp *op) const { return gaveUp || pendingStores.find(op) != pendingStores.end(); }
+-  /// \brief May the given LOAD read the frame: is its pointer a possible frame address, modeled or not? (0076)
+-  bool loadMayReadFrame(PcodeOp *op) const { return gaveUp || members.find(op->getIn(1)) != members.end(); }
+ };
+ 
+ /// \brief Manage the construction of Static Single Assignment (SSA) form
+@@ -326,8 +292,6 @@ class Heritage {
+   int4 maxdepth;		///< Maximum depth of the dominator tree
+   int4 pass;			///< Current pass being executed
+   bool deadcodeBumped;		///< SaturnExplorer (0068): a dead code delay was raised in this generation (one restart's worth)
+-  vector<SeqNum> pendingStores;	///< SaturnExplorer (0072): STOREs kept guarded only as pending (FrameEscape::storeIsPending), settled again each pass
+-  AddrSpace *pendingSpace;	///< SaturnExplorer (0072): ...in this stack space
+ 
+   PriorityQueue pq;		///< Priority queue for phi-node placement
+   vector<FlowBlock *> merge;	///< Calculate merge points (blocks containing phi-nodes)
+@@ -369,8 +333,6 @@ class Heritage {
+   bool protectFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);
+   bool discoverIndexedStackPointers(AddrSpace *spc,vector<PcodeOp *> &freeStores,bool checkFreeStores);
+   void reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);
+-  void reprocessPendingStores(void);	///< SaturnExplorer (0072): settle the STOREs kept guarded as pending again
+-  void unguardStore(AddrSpace *spc,PcodeOp *op);	///< Remove the INDIRECTs a free STORE put in the given space
+   bool markEscapedStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);	///< SaturnExplorer: mark the STOREs a frame address may have escaped to (patches/0061-engine-stack-frame-escape.patch)
+   void widenEscapedStoreGuards(void);	///< SaturnExplorer: a STORE guard through an escaped frame address guards the whole stack (patches/0061-engine-stack-frame-escape.patch)
+   void guard(const Address &addr,int4 size,bool guardPerformed,
+@@ -430,8 +392,6 @@ public:
+   void heritage(void);				    ///< Perform one pass of heritage
+   const list<LoadGuard> &getLoadGuards(void) const { return loadGuard; }	///< Get list of LOAD ops that are guarded
+   const list<LoadGuard> &getStoreGuards(void) const { return storeGuard; }	///< Get list of STORE ops that are guarded
+-  bool hasPendingStores(void) const { return !pendingStores.empty(); }	///< SaturnExplorer (0072): is a STORE guarded as pending?
+-  bool isPendingStore(const PcodeOp *op) const { return find(pendingStores.begin(),pendingStores.end(),op->getSeqNum()) != pendingStores.end(); }	///< SaturnExplorer (0072): is the STORE guarded as pending?
+   const LoadGuard *getStoreGuard(PcodeOp *op) const;	///< Get LoadGuard record associated with given PcodeOp
+ };
+ 
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/op.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/op.cc
+index b8cf936..c87eded 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/op.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/op.cc
+@@ -19,7 +19,6 @@
+  * Modified for SaturnExplorer: the backward step of the consume analysis is a function of one op (patches/0054-engine-cached-masks-never-narrower.patch).
+  * Modified for SaturnExplorer: the non-zero mask of a signed shift by 64 or more is the sign's fill (patches/0059-engine-range-arithmetic-sound.patch).
+  * Modified for SaturnExplorer: the consume steps of PIECE and INT_LEFT shift by less than 64 (patches/0070-engine-defined-shifts.patch).
+- * Modified for SaturnExplorer: isCseMatch takes two constants for equal only at the same size (patches/0072-engine-frame-chains-and-save-slots.patch).
+  */
+ #include "op.hh"
+ #include "funcdata.hh"
+@@ -194,9 +193,7 @@ bool PcodeOp::isCseMatch(const PcodeOp *op) const
+     const Varnode *vn1 = getIn(i);
+     const Varnode *vn2 = op->getIn(i);
+     if (vn1 == vn2) continue;
+-    // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): constants of the same size. SEXT24(#0xda:2) and
+-    // SEXT14(#0xda:1) were taken for the same value (0xda and 0xffffffda), and RuleTrivialArith made their xor 0 (ledger A3-139)
+-    if (vn1->isConstant()&&vn2->isConstant()&&(vn1->getOffset()==vn2->getOffset())&&(vn1->getSize()==vn2->getSize()))
++    if (vn1->isConstant()&&vn2->isConstant()&&(vn1->getOffset()==vn2->getOffset()))
+       continue;
+     return false;
+   }
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/ruleaction.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/ruleaction.cc
+index 3b9e2ed..e289c54 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/ruleaction.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/ruleaction.cc
+@@ -21,12 +21,6 @@
+  * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more; RuleSLess2Zero takes the high bit of a sum only from an operand when the other has none (patches/0062-engine-range-set-ops-and-rule-guards.patch).
+  * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap, RuleDivTermAdd the sum not to wrap its add and RuleDivTermAdd2 the multiplier to be at most 2^n; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
+  * Modified for SaturnExplorer: RuleSignMod2nOpt2 tests that the sign steering its bias is V's own; RuleThreeWayCompare refuses unsigned constants that are neighbours only modulo 2^64; RuleShiftSub refuses a SUBPIECE that reads past the top of the shifted value (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
+- * Modified for SaturnExplorer: RulePiecePathology leaves a word of the stack frame alone, which is no register a partial write fills in; RulePullsubIndirect takes the piece of the INDIRECT's input from the lowest byte its readers take (patches/0072-engine-frame-chains-and-save-slots.patch).
+- * Modified for SaturnExplorer: RulePropagateCopy does not propagate a write of a global into the INDIRECT a STORE puts on it, nor into another marker past a memory access (patches/0082-engine-store-keeps-earlier-write.patch).
+- * Modified for SaturnExplorer: RuleMultiCollapse keeps two equal writes of a global that a memory access separates from the join, and RulePropagateCopy does not feed a global's value into the global's next write past one (patches/0085-engine-global-write-keeps-place.patch).
+- * Modified for SaturnExplorer: RuleEarlyRemoval keeps a write of a global on a path that never reaches a return (patches/0087-engine-global-writes-without-return.patch).
+- * Modified for SaturnExplorer: RulePushMulti and RuleConditionalMove do not move or join writes of a global an access holds (patches/0090-engine-hardware-access-orders-globals.patch).
+- * Modified for SaturnExplorer: RuleSubCommute does not commute a SUBPIECE into an address-forced write (patches/0094-engine-forced-write-and-pushed-join.patch).
+  */
+ #include "ruleaction.hh"
+ #include "coreaction.hh"
+@@ -1019,13 +1013,9 @@ int4 RulePullsubIndirect::applyOp(PcodeOp *op,Funcdata &data)
+   }
+   else {
+     Varnode *basevn = indir->getIn(0);
+-    // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): the piece of the input is the bytes every reader takes,
+-    // from minByte, as the output's (smalladdr2) and RulePullsubMulti's are; upstream took the truncation of the one SUBPIECE the rule
+-    // was applied to, so with two readers (`SUB41(w,1)`, `SUB41(w,0)`) the new INDIRECT read bytes 1 and 2 of w for bytes 0 and 1, and
+-    // both readers took the same byte (ledger A3-140: `return 0x88;` for the xor of two different bytes of a frame word)
+-    Varnode *small1 = RulePullsubMulti::findSubpiece(basevn,newSize,minByte);
++    Varnode *small1 = RulePullsubMulti::findSubpiece(basevn,newSize,op->getIn(1)->getOffset());
+     if (small1 == (Varnode *)0)
+-      small1 = RulePullsubMulti::buildSubpiece(basevn,newSize,minByte,data);
++      small1 = RulePullsubMulti::buildSubpiece(basevn,newSize,op->getIn(1)->getOffset(),data);
+     // Create new indirect near original indirect
+     new_ind = data.newIndirect(targ_op);
+     small2 = data.newVarnodeOut(newSize,smalladdr2,new_ind);
+@@ -10974,13 +10964,6 @@ int4 RulePiecePathology::applyOp(PcodeOp *op,Funcdata &data)
+     // register stored to the stack, a byte put into them, the longword loaded back -- is not one, and calling it so
+     // truncated the function's return to the small piece (patches/0037-engine-division-piece-and-input-names.patch).
+     if (op->getOut()->characterizeOverlap(*subOp->getIn(0)) == 0) return 0;
+-    // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): ...and a word of the stack frame is no register a partial
+-    // write fills in. A STORE through a pointer the heritage could not place yet (one reloaded from a frame slot) is guarded at the word, and
+-    // when it is folded into the word's low half, the collapse of its guard makes `word = CONCAT(SUBPIECE(word_before,#2),half)`: with the
+-    // word never written before, word_before is the frame's input, which isPathology takes for the garbage of a partial register write. The
+-    // trace below then followed the next store's guard to the RETURN and cut the function's return to the half (`return param_2;` for a
+-    // word built of two halfword stores: ledger A3-131, exposed by 0068's front piece, whose length had been 0).
+-    if (op->getOut()->getSpace()->getType() == IPTR_SPACEBASE) return 0;
+     if (!isPathology(subOp->getIn(0),data)) return 0;
+   }
+   else if (opc == CPUI_INDIRECT) {
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/subflow.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/subflow.cc
+index 742ada9..4f7ac14 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/subflow.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/subflow.cc
+@@ -15,7 +15,6 @@
+  *
+  * Modified for SaturnExplorer: an input replaced by a temporary that an operation still reads is read extended from the logical input (patches/0033-engine-printed-value-fixes.patch).
+  * Modified for SaturnExplorer: a sign-extended sub-variable is not shifted by an amount its constant cannot hold (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
+- * Modified for SaturnExplorer: a COPY folded into the frame that is split into pieces is no write gone unread (patches/0072-engine-frame-chains-and-save-slots.patch).
+  */
+ #include "subflow.hh"
+ #include "funcdata.hh"
+@@ -2796,11 +2795,6 @@ bool SplitDatatype::splitCopy(PcodeOp *copyOp,Datatype *inType,Datatype *outType
+     data.opInsertBefore(newCopyOp, copyOp);
+     resolver.inheritResolution(0,unresOutType, dataTypePieces[i].offset, outVarnodes[i], newCopyOp, -1);
+   }
+-  // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): a write folded into the frame lives on in the piece COPYs,
+-  // which write the same bytes: it is no write gone unread (a host's frame ledger reported the word lost, ledger A3-138). The pieces
+-  // carry no record of their own, so a loss of one of them later is not seen (the ledger may miss a loss, never report one that is none).
+-  if (copyOp->isFrameFold())
+-    copyOp->setFrameFoldRead();
+   data.opDestroy(copyOp);
+   return true;
+ }
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varmap.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varmap.cc
+index 77bd0b9..1a05e75 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varmap.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varmap.cc
+@@ -15,12 +15,6 @@
+  *
+  * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
+  * Modified for SaturnExplorer: a RangeHint the list cannot take is freed (patches/0032-allocation-failure-order-2.patch).
+- * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
+- * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
+- * Modified for SaturnExplorer: once a frame address escapes, every local from the lowest frame offset up is aliased (patches/0061-engine-stack-frame-escape.patch).
+- * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
+- * Modified for SaturnExplorer: once the frame escapes, every local of it is aliased, across the unmapped words between them (patches/0065-engine-frame-escape-whole-frame.patch).
+- * Modified for SaturnExplorer: the walks down are helpers that only add aliasing and fail closed at their bounds; a loop that steps a frame address up aliases from its lowest entry (patches/0066-engine-frame-escape-inexact.patch).
+  */
+ #include "varmap.hh"
+ #include "funcdata.hh"
+@@ -418,8 +412,6 @@ ScopeLocal::ScopeLocal(uint8 id,AddrSpace *spc,Funcdata *fd,Architecture *g) : S
+   hostAlias = false;
+   hostAliasStart = 0;
+   hostEscape = false;
+-  haveFrameFloor = false;
+-  frameFloor = 0;
+   restrictScope(fd);
+ } 
+ 
+@@ -488,20 +480,9 @@ void ScopeLocal::annotateRawStackPtr(void)
+   if (spVn == (Varnode *)0) return;
+   list<PcodeOp *>::const_iterator iter;
+   vector<PcodeOp *> refOps;
+-  vector<PcodeOp *> joinOps;
+   bool sawRaw = false;
+   for(iter=spVn->beginDescend();iter!=spVn->endDescend();++iter) {
+     PcodeOp *op = *iter;
+-    // SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): a loop join of the stack pointer itself (a copy of r15
+-    // walked down by `mov.l Rm,@-Rn` from the entry r15) merged the register into the loop's
+-    // pointer, which then printed as the register with the stack's own type (`register0x0000003c`,
+-    // `BADSPACEBASE *`). Its input is given the PTRSUB the other raw uses get, at the end of the
+-    // block it comes from.
+-    if (op->code() == CPUI_MULTIEQUAL && AliasChecker::stepsDown(op)) {
+-      joinOps.push_back(op);
+-      sawRaw = true;
+-      continue;
+-    }
+     if (op->getEvalType() == PcodeOp::special && !op->isCall()) continue;
+     OpCode opc = op->code();
+     if (opc == CPUI_PTRSUB) {
+@@ -528,30 +509,6 @@ void ScopeLocal::annotateRawStackPtr(void)
+     PcodeOp *ptrsub = fd->newOpBefore(op,CPUI_PTRSUB,spVn,fd->newConstant(spVn->getSize(),0));
+     fd->opSetInput(op, ptrsub->getOut(), slot);
+   }
+-  for(int4 i=0;i<joinOps.size();++i) {
+-    PcodeOp *op = joinOps[i];
+-    BlockBasic *parent = op->getParent();
+-    for(int4 slot=0;slot<op->numInput();++slot) {
+-      if (op->getIn(slot) != spVn) continue;
+-      if (slot >= parent->sizeIn()) break;
+-      BlockBasic *pred = (BlockBasic *)parent->getIn(slot);
+-      list<PcodeOp *>::iterator at = pred->endOp();
+-      Address pc = pred->getStop();
+-      if (at != pred->beginOp()) {
+-	--at;
+-	pc = (*at)->getAddr();
+-	if (!(*at)->isBranch())
+-	  ++at;
+-      }
+-      PcodeOp *ptrsub = fd->newOp(2,pc);
+-      fd->opSetOpcode(ptrsub,CPUI_PTRSUB);
+-      fd->newUniqueOut(spVn->getSize(),ptrsub);
+-      fd->opSetInput(ptrsub,spVn,0);
+-      fd->opSetInput(ptrsub,fd->newConstant(spVn->getSize(),0),1);
+-      fd->opInsert(ptrsub,pred,at);
+-      fd->opSetInput(op,ptrsub->getOut(),slot);
+-    }
+-  }
+ }
+ 
+ /// If the return value is passed back in a location whose address space holds \b this scope's variables,
+@@ -810,8 +767,6 @@ void AliasChecker::gatherInternal(void) const
+   calculated = true;
+   aliasBoundary = localExtreme;
+   trialBoundary = localExtreme;
+-  escapeAll = false;
+-  escapeLow = 0;
+   Varnode *spacebase = fd->findSpacebaseInput(space);
+   // SaturnExplorer: a pointer the host knows of and the p-code does not show. The code hands the
+   // address of a local to a callee in a register no call input names (a returned structure's
+@@ -843,215 +798,6 @@ void AliasChecker::gatherInternal(void) const
+     if (offset < aliasBoundary)
+       aliasBoundary = offset;
+   }
+-  // SaturnExplorer: the rule above takes a pointer to reach only what lies at or above its base, as
+-  // an array index does. A loop that steps the pointer down from the base (`*--p = v` over a local
+-  // array, the SH-2's `mov.l Rm,@-Rn` from a copy of r15) reaches what lies below it: the locals
+-  // there were taken for unaliased, their INDIRECTs at the stores were collapsed, and a read of one
+-  // after the loop printed the value it had before it (ledger A3-65). Such a base aliases everything
+-  // from 0xffff below it up (the distance past which markUnaliased stops trusting an alias anyway).
+-  for(vector<AddBase>::iterator iter=addBase.begin();iter!=addBase.end();++iter) {
+-    Varnode *base = (*iter).base;
+-    if (base == (Varnode *)0) continue;
+-    bool down = reachesStepDown(base);
+-    if (!down) continue;
+-    uintb offset = AddrSpace::addressToByte(gatherOffset(base),space->getWordSize());
+-    uintb low = (offset - 0xffff) & calc_mask(space->getAddrSize());
+-    downReach.push_back(low);
+-    downSpan.push_back(pair<uintb,uintb>(low,(offset - 1) & calc_mask(space->getAddrSize())));
+-    if (direction == 1) {
+-      if (low < localBoundary) continue;
+-    }
+-    else {
+-      if (low > localBoundary) continue;
+-    }
+-    if (low < aliasBoundary)
+-      aliasBoundary = low;
+-  }
+-  // SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): the walks above follow a frame address through the forms they model.
+-  // Any other form -- an op that is no copy, addition, subtraction of a constant, join, INDIRECT, PTRSUB or PTRADD; a store of it to memory;
+-  // a join with a value that is no frame address; a call it was handed to returning it -- failed open, and the locals below it were folded
+-  // (ledger A3-85, A3-88, A3-86 b). Fail closed: if any frame address escapes (FrameEscape), alias everything from the lowest
+-  // frame offset the function reaches up. Where the escaped value is used is not followed. Every local lies at or above the lowest offset
+-  // the stack pointer or a frame address takes, so the alias starts there (an alias started 0xffff below it, as a pointer stepped down's
+-  // is, lies in the unmapped stack below the scope's range, and ScopeLocal::markUnaliased turns such an alias off at the first local).
+-  // (patches/0063-engine-frame-escape-unknown-pointers.patch) The escape's alias is not asked whether a word written before a call is
+-  // the call's stack argument (hasLocalAlias, FuncCallSpecs::checkInputTrialUse): from the frame's lowest slot it would take every
+-  // outgoing argument word for a local, drop the arguments from every call of a function whose frame escaped -- the frame address
+-  // handed in a stack argument among them, so the escape that dropped it was gone too and the local it reached was folded -- and leave
+-  // the value the callee reads as a store to a local on the line before (ledger A3-99). An argument shown is a use the escape walk
+-  // follows; the locals stay aliased by the boundary below.
+-  trialBoundary = aliasBoundary;
+-  {
+-    FrameEscape escape;
+-    escape.compute(fd,space,false);
+-    if (escape.escaped) {
+-      uintb low = (escape.haveLowest ? escape.lowest : 0) & calc_mask(space->getAddrSize());
+-      downReach.push_back(low);
+-      // (0063) A frame address that escaped only by being handed over (to a call, or as the host declared) is a pointer to a local: the
+-      // locals are aliased, the save slots are not reached through it and stay unmapped. One that escaped through a form the stack
+-      // analysis does not model may be anywhere, the save slots included.
+-      if (escape.loose)
+-	downSpan.push_back(pair<uintb,uintb>(low,calc_mask(space->getAddrSize())));	// the whole frame, its save slots included
+-      bool param = (direction == 1) ? (low < localBoundary) : (low > localBoundary);
+-      if (!param && low < aliasBoundary)
+-	aliasBoundary = low;
+-      // (patches/0065-engine-frame-escape-whole-frame.patch) ...and from there every local is aliased, whatever lies between: the
+-      // words the function's calls take as stack arguments and the save slots are unmapped, and ScopeLocal::markUnaliased turns an
+-      // alias off at the first mapped range above such a word. With the call's fifth argument at the frame's lowest word, the
+-      // local above it was taken for one no pointer reaches and folded (ledger A3-104). A pointer to a local reaches the whole frame
+-      // once it has escaped (an escaped `&buf[2]` is walked down to `buf[0]`), so the escape stops at no gap.
+-      if (!param && direction == 1) {
+-	escapeAll = true;
+-	escapeLow = low;
+-      }
+-    }
+-    // (patches/0066-engine-frame-escape-inexact.patch) a loop that steps a frame address up only is at or above its lowest entry: the alias starts
+-    // there (the entry may be no base the walk above gathered, made after an INDIRECT or a join)
+-    for(int4 i=0;i<escape.upLows.size();++i) {
+-      uintb low = escape.upLows[i] & calc_mask(space->getAddrSize());
+-      bool param = (direction == 1) ? (low < localBoundary) : (low > localBoundary);
+-      if (param) continue;
+-      downReach.push_back(low);
+-      if (low < aliasBoundary)
+-	aliasBoundary = low;
+-    }
+-  }
+-}
+-
+-/// SaturnExplorer (patches/0060-engine-stack-walk-down-spilled.patch): does the pointer \b base reach a loop that steps it down?
+-/// The pointer is followed forward through copies, additions, joins and the INDIRECTs of a call or a store, which is how a
+-/// frame address kept in a stack local and read back looks once the stack is heritaged (`COPY` into the local, the call's
+-/// INDIRECT on it, the read's `COPY` out). A pointer read back after a call that may have rewritten the local is taken to be
+-/// the one written (the call can write there only an address it was given, or one of its own frame below ours), so the
+-/// walk fails closed: the base is taken to reach below itself (ledger A3-80). Patches 0056 and 0057 looked only at the
+-/// MULTIEQUALs that read the base itself.
+-/// (patches/0066-engine-frame-escape-inexact.patch) A precision helper that only adds aliasing: the escape of FrameEscape decides the rest.
+-/// \param base is a pointer into the stack (one of the AddBase records)
+-/// \return \b true if a loop the pointer reaches steps it down
+-bool AliasChecker::reachesStepDown(Varnode *base)
+-
+-{
+-  vector<Varnode *> work;
+-  set<Varnode *> seen;
+-  work.push_back(base);
+-  seen.insert(base);
+-  for(int4 k=0;k<work.size();++k) {
+-    if (work.size() >= 1024) return true;	// too far to follow: taken to step down (fail closed)
+-    Varnode *vn = work[k];
+-    for(list<PcodeOp *>::const_iterator iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
+-      PcodeOp *op = *iter;
+-      switch(op->code()) {
+-      case CPUI_MULTIEQUAL:
+-	if (stepsDown(op)) return true;
+-	break;
+-      case CPUI_COPY:
+-      case CPUI_INT_ADD:
+-	break;
+-      case CPUI_INDIRECT:
+-      case CPUI_INT_SUB:
+-      case CPUI_PTRADD:
+-      case CPUI_PTRSUB:
+-	if (op->getIn(0) != vn) continue;
+-	break;
+-      default:
+-	continue;
+-      }
+-      Varnode *out = op->getOut();
+-      if (out == (Varnode *)0) continue;
+-      if (seen.insert(out).second)
+-	work.push_back(out);
+-    }
+-  }
+-  return false;
+-}
+-
+-/// SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): follow the pointer a MULTIEQUAL joins forward, through
+-/// copies and additions, back to the MULTIEQUAL itself. If the sum on any such loop is negative, or a
+-/// value of unknown size is subtracted on it, the loop steps the pointer down. An index of unknown
+-/// value that is added is taken to be non-negative, as the rest of the alias analysis takes it.
+-/// \param multi is the MULTIEQUAL joining a pointer with its stepped value
+-/// \return \b true if some loop through \b multi lowers the pointer
+-/// (patches/0066-engine-frame-escape-inexact.patch) A precision helper: FrameEscape takes a frame address a loop carries for an escape unless
+-/// every step adds a constant that is not negative, so a "no" here removes no alias; a "yes" adds the reach below the base.
+-/// \param atCap is the answer when the walk passes its bound: \b true where a walk adds aliasing (fail closed), \b false where it would
+-/// drop a stack parameter reference (ActionInputPrototype)
+-bool AliasChecker::stepsDown(PcodeOp *multi,bool atCap)
+-
+-{
+-  // SaturnExplorer (patches/0057-engine-stack-walk-down-conditional.patch): the forward walk is keyed on (varnode, offset), not the varnode
+-  // alone. A step taken only on some paths of the loop (`if (c) *--p = v;`) makes a nested MULTIEQUAL between the step and the loop's back edge
+-  // (phi(p, p-4)); its output is reached first with offset 0 (the unstepped path), and keying on the varnode alone then pruned the stepped
+-  // path (offset -4) before it could reach the loop join, so the loop was not seen to step down (ledger A3-72). Keyed on the pair, the stepped
+-  // offset reaches the join. Offsets are masked to the varnode's size, so the set of (varnode, offset) is finite; the cap guards nested loops.
+-  vector<pair<Varnode *,uintb> > work;
+-  vector<pair<Varnode *,uintb> > seen;
+-  work.push_back(pair<Varnode *,uintb>(multi->getOut(),0));
+-  seen.push_back(pair<Varnode *,uintb>(multi->getOut(),0));
+-  // (patches/0066-engine-frame-escape-inexact.patch) The cap fails closed: a loop whose values are too many to follow is answered \b atCap
+-  // (a walk, for the alias), not "no walk", which left the locals below an unbounded base unguarded under a body of 4,100 accesses (ledger
+-  // A3-122). The bound is on every op visited, the descendants of one varnode too.
+-  int4 visits = 0;
+-  while(!work.empty()) {
+-    if (seen.size() >= 4096) return atCap;
+-    Varnode *vn = work.back().first;
+-    uintb off = work.back().second;
+-    work.pop_back();
+-    uintb mask = calc_mask(vn->getSize());
+-    for(list<PcodeOp *>::const_iterator iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
+-      if (++visits > 65536) return atCap;
+-      PcodeOp *op = *iter;
+-      uintb next = off;
+-      switch(op->code()) {
+-      case CPUI_MULTIEQUAL:
+-	if (op == multi) {
+-	  off &= mask;
+-	  if (off != 0 && ((off >> (8 * vn->getSize() - 1)) & 1) != 0)
+-	    return true;
+-	  continue;
+-	}
+-	break;
+-      case CPUI_COPY:
+-	break;
+-      case CPUI_INDIRECT:
+-	if (op->getIn(0) != vn) continue;
+-	break;
+-      case CPUI_INT_ADD:
+-      {
+-	Varnode *other = op->getIn(1 - op->getSlot(vn));
+-	if (other->isConstant())
+-	  next = off + other->getOffset();
+-	break;
+-      }
+-      case CPUI_INT_SUB:
+-	if (op->getIn(0) != vn) continue;
+-	if (!op->getIn(1)->isConstant())
+-	  return true;
+-	next = off - op->getIn(1)->getOffset();
+-	break;
+-      case CPUI_PTRADD:
+-	if (op->getIn(0) != vn) continue;
+-	if (op->getIn(1)->isConstant())
+-	  next = off + op->getIn(1)->getOffset() * op->getIn(2)->getOffset();
+-	break;
+-      case CPUI_PTRSUB:
+-	if (op->getIn(0) != vn) continue;
+-	next = off + op->getIn(1)->getOffset();
+-	break;
+-      default:
+-	continue;
+-      }
+-      Varnode *out = op->getOut();
+-      if (out == (Varnode *)0) continue;
+-      next &= calc_mask(out->getSize());
+-      bool known = false;
+-      for(int4 i=0;i<seen.size();++i)
+-	if (seen[i].first == out && seen[i].second == next) { known = true; break; }
+-      if (known) continue;
+-      seen.push_back(pair<Varnode *,uintb>(out,next));
+-      work.push_back(pair<Varnode *,uintb>(out,next));
+-    }
+-  }
+-  return false;
+ }
+ 
+ /// For the given function and address space, gather all Varnodes that are pointers into the
+@@ -1068,8 +814,6 @@ void AliasChecker::gather(const Funcdata *f,AddrSpace *spc,bool defer)
+   calculated = false;		// Defer calculation
+   addBase.clear();
+   alias.clear();
+-  downReach.clear();
+-  downSpan.clear();
+   direction = space->stackGrowsNegative() ? 1 : -1;		// direction == 1 for normal negative stack growth
+   deriveBoundaries(fd->getFuncProto());
+   if (!defer)
+@@ -1099,10 +843,6 @@ bool AliasChecker::hasLocalAlias(Varnode *vn) const
+ void AliasChecker::sortAlias(void) const
+ 
+ {
+-  // SaturnExplorer: the reach of a pointer stepped down joins the alias starts here, after
+-  // MapState::gatherOpen has read them one for one with the bases (patches/0056-engine-stack-walk-down-aliases.patch)
+-  alias.insert(alias.end(),downReach.begin(),downReach.end());
+-  downReach.clear();
+   sort(alias.begin(),alias.end());
+ }
+ 
+@@ -1467,8 +1207,6 @@ void MapState::addGuard(const LoadGuard &guard,OpCode opc,TypeFactory *typeFacto
+     int4 minItems = ((guard.getMaximum() - guard.getMinimum()) + 1) / step;
+     addRange(guard.getMinimum(),ct,0,RangeHint::open,minItems-1);
+   }
+-  else if (guard.isGuessedBelow())
+-    return;	// SaturnExplorer: no array starts at a guess (patches/0056-engine-stack-walk-down-aliases.patch)
+   else
+     addRange(guard.getMinimum(),ct,0,RangeHint::open,3);
+ }
+@@ -1724,9 +1462,7 @@ void ScopeLocal::restructureVarnode(bool aliasyes)
+ 
+   state.sortAlias();
+   if (aliasyes) {
+-    uintb escapeLow = 0;
+-    bool escapeAll = state.getEscapeLow(escapeLow);
+-    markUnaliased(state.getAlias(),escapeAll,escapeLow);
++    markUnaliased(state.getAlias());
+     checkUnaliasedReturn(state.getAlias());
+   }
+   if (!state.getAlias().empty() && state.getAlias()[0] == 0)	// If a zero offset use of the stack pointer exists
+@@ -1779,12 +1515,8 @@ bool ScopeLocal::restructure(MapState &state)
+ /// aliased by a pointer.  The method uses locked Symbol information when available to determine
+ /// how far an alias start might extend.  Otherwise a heuristic is used to determine if the Symbol
+ /// is far enough away from the start of the alias to be considered unaliased.
+-/// SaturnExplorer (patches/0065-engine-frame-escape-whole-frame.patch): once a frame address escaped, every Symbol at or above the
+-/// frame's lowest offset is aliased, across unmapped ranges and at any distance (AliasChecker::gatherInternal).
+ /// \param alias is the given set of alias starting offsets
+-/// \param escapeAll is \b true if a frame address escaped
+-/// \param escapeLow is the frame's lowest offset, when \b escapeAll
+-void ScopeLocal::markUnaliased(const vector<uintb> &alias,bool escapeAll,uintb escapeLow)
++void ScopeLocal::markUnaliased(const vector<uintb> &alias)
+ 
+ {
+   EntryMap *rangemap = maptable[space->getIndex()];
+@@ -1828,8 +1560,6 @@ void ScopeLocal::markUnaliased(const vector<uintb> &alias,bool escapeAll,uintb e
+     // NOTE: this is primarily to reset aliasing between
+     // stack parameters and stack locals
+     if (aliason && (curoff - curalias > 0xffff)) aliason = false;
+-    // SaturnExplorer (0065): an escaped frame address reaches every local of the frame
+-    if (escapeAll && curoff >= escapeLow) aliason = true;
+     if (!aliason) symbol->getScope()->setAttribute(symbol,Varnode::nolocalalias);
+     if (symbol->isTypeLocked() && alias_block_level != 0) {
+       if (alias_block_level == 3)
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varmap.hh b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varmap.hh
+index adfa57f..ee68aa7 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varmap.hh
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varmap.hh
+@@ -14,11 +14,6 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
+- * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
+- * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
+- * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
+- * Modified for SaturnExplorer: the escape's whole-frame alias and the function's lowest frame offset (patches/0065-engine-frame-escape-whole-frame.patch).
+- * Modified for SaturnExplorer: the walk down's answer at its bound (patches/0066-engine-frame-escape-inexact.patch).
+  */
+ /// \file varmap.hh
+ /// \brief Classes for keeping track of local variables and reconstructing stack layout
+@@ -159,31 +154,23 @@ private:
+   AddrSpace *space;		///< AddressSpace in which to search
+   mutable vector<AddBase> addBase; ///< Collection of pointers into the AddressSpace
+   mutable vector<uintb> alias;	///< List of aliased addresses (as offsets)
+-  mutable vector<uintb> downReach;	///< SaturnExplorer: the lowest offset a pointer stepped down from a base may reach, per such base (patches/0056-engine-stack-walk-down-aliases.patch)
+-  mutable vector<pair<uintb,uintb> > downSpan;	///< SaturnExplorer: each such reach and the byte below its base
+   mutable bool calculated;	///< Have aliases been calculated
+   uintb localExtreme;		///< Largest possible offset for a local variable
+   uintb localBoundary;		///< Boundary offset separating locals and parameters
+   mutable uintb aliasBoundary;	///< Shallowest alias
+   mutable uintb trialBoundary;	///< SaturnExplorer: the shallowest alias but an escape's (patches/0063-engine-frame-escape-unknown-pointers.patch)
+-  mutable bool escapeAll;	///< SaturnExplorer: a frame address escaped, and every local from \b escapeLow up is aliased (patches/0065-engine-frame-escape-whole-frame.patch)
+-  mutable uintb escapeLow;	///< SaturnExplorer: the frame's lowest offset, when \b escapeAll
+   int4 direction;		///< 1=stack grows negative, -1=positive
+   void deriveBoundaries(const FuncProto &proto);	///< Set up basic boundaries for the stack layout
+   void gatherInternal(void) const;	///< Run through Varnodes looking for pointers into the stack
+ public:
+-  AliasChecker() { fd = (const Funcdata *)0; space = (AddrSpace *)0; calculated=false; escapeAll=false; escapeLow=0; }	///< Constructor
++  AliasChecker() { fd = (const Funcdata *)0; space = (AddrSpace *)0; calculated=false; }	///< Constructor
+   void gather(const Funcdata *f,AddrSpace *spc,bool defer);		///< Gather Varnodes that point on the stack
+   bool hasLocalAlias(Varnode *vn) const;	///< Return \b true if it looks like the given Varnode is aliased by a pointer
+   void sortAlias(void) const;			///< Sort the alias starting offsets
+   const vector<AddBase> &getAddBase(void) const { return addBase; }	///< Get the collection of pointer Varnodes
+   const vector<uintb> &getAlias(void) const { return alias; }		///< Get the list of alias starting offsets
+-  const vector<pair<uintb,uintb> > &getDownSpans(void) const { return downSpan; }	///< SaturnExplorer: the stack a pointer stepped down may reach
+-  bool getEscapeLow(uintb &low) const { low = escapeLow; return escapeAll; }	///< SaturnExplorer: did the frame escape, and from where is every local aliased (0065)
+   static void gatherAdditiveBase(Varnode *startvn,vector<AddBase> &addbase);
+   static uintb gatherOffset(Varnode *vn);
+-  static bool stepsDown(PcodeOp *multi,bool atCap=true);	///< SaturnExplorer: does a loop step the pointer joined by \b multi down (patches/0056-engine-stack-walk-down-aliases.patch)
+-  static bool reachesStepDown(Varnode *base);	///< SaturnExplorer: does \b base reach a loop that steps it down, through a spill and its reload too (patches/0060-engine-stack-walk-down-spilled.patch)
+ };
+ 
+ /// \brief A container for hints about the data-type layout of an address space
+@@ -220,7 +207,6 @@ public:
+   bool hasParamRangeHit(void) const { return paramRangeHit; }	///< Return \b true if reference into parameter stack region has been seen
+   void sortAlias(void) { checker.sortAlias(); }		///< Sort the alias starting offsets
+   const vector<uintb> &getAlias(void) { return checker.getAlias(); }	///< Get the list of alias starting offsets
+-  bool getEscapeLow(uintb &low) const { return checker.getEscapeLow(low); }	///< SaturnExplorer: the escape's whole-frame alias (0065)
+   void gatherSymbols(const EntryMap *rangemap);		///< Add Symbol information as hints to the collection
+   void gatherVarnodes(const Funcdata &fd);		///< Add stack Varnodes as hints to the collection
+   void gatherOpen(const Funcdata &fd);			///< Add pointer references as hints to the collection
+@@ -249,12 +235,10 @@ class ScopeLocal : public ScopeInternal {
+   bool hostAlias;		///< True if the host declared a pointer into the stack that no Varnode shows (SaturnExplorer)
+   uintb hostAliasStart;		///< The offset it points to; the lowest if declared more than once (SaturnExplorer)
+   bool hostEscape;		///< True if the host declared that a frame address escaped by a way the p-code does not show (SaturnExplorer, 0063)
+-  mutable bool haveFrameFloor;	///< True if \b frameFloor is set (SaturnExplorer, 0065)
+-  mutable uintb frameFloor;	///< The lowest frame offset the escape walk has seen in this function, over every query (SaturnExplorer, 0065)
+   bool adjustFit(RangeHint &a) const;	///< Make the given RangeHint fit in the current Symbol map
+   void createEntry(const RangeHint &a);	///< Create a Symbol entry corresponding to the given (fitted) RangeHint
+   bool restructure(MapState &state);	///< Merge hints into a formal Symbol layout of the address space
+-  void markUnaliased(const vector<uintb> &alias,bool escapeAll,uintb escapeLow);	///< Mark all local symbols for which there are no aliases
++  void markUnaliased(const vector<uintb> &alias);	///< Mark all local symbols for which there are no aliases
+   void fakeInputSymbols(void);		///< Make sure all stack inputs have an associated Symbol
+   void addRecommendName(Symbol *sym);	///< Convert the given symbol to a name recommendation
+   void collectNameRecs(void);		///< Collect names of unlocked Symbols on the stack
+@@ -269,9 +253,6 @@ public:
+   bool getHostAlias(uintb &off) const;	///< Get the offset of the lowest pointer the host declared (SaturnExplorer)
+   void declareHostEscape(void) { hostEscape = true; }	///< Declare that a frame address escaped where the p-code does not show it (SaturnExplorer, 0063)
+   bool hasHostEscape(void) const { return hostEscape; }	///< Did the host declare an escape (SaturnExplorer, 0063)
+-  /// \brief The lowest frame offset the escape walk has seen in this function, over every query (SaturnExplorer, 0065)
+-  bool getFrameFloor(uintb &off) const { off = frameFloor; return haveFrameFloor; }
+-  void setFrameFloor(uintb off) const { frameFloor = off; haveFrameFloor = true; }	///< Record a new lowest frame offset (SaturnExplorer, 0065)
+ 
+   /// \brief Return \b true if \b restructure analysis discovered overlapping variables
+   bool hasOverlapProbems(void) const { return overlapProblems; }
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varnode.hh b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varnode.hh
+index a23b14f..934b6c7 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varnode.hh
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/varnode.hh
+@@ -14,7 +14,6 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: the VarnodeBank keeps a Varnode it could not put back in its lists (patches/0032-allocation-failure-order-2.patch).
+- * Modified for SaturnExplorer: a frame write kept for a LOAD that may read the frame is marked so the hold can be let go (patches/0076-engine-frame-loads-keep-writes.patch).
+  */
+ /// \file varnode.hh
+ /// \brief The Varnode and VarnodeBank classes
+@@ -133,8 +132,7 @@ public:
+     spacebase_placeholder = 0x800, ///< This varnode is inserted artificially to track a register
+ 				///< value at a specific point in the code
+     stop_uppropagation = 0x1000, ///< Data-types do not propagate from an output into \b this
+-    has_implied_field = 0x2000,	///< The varnode is implied but also has a data-type that needs resolution
+-    frameload_force = 0x4000	///< SaturnExplorer (0076): \b addrforce was set only to keep a frame write for a LOAD that may read it
++    has_implied_field = 0x2000	///< The varnode is implied but also has a data-type that needs resolution
+   };
+ private:
+   mutable uint4 flags;		///< The collection of boolean attributes for this Varnode
+@@ -269,7 +267,6 @@ public:
+   bool isMark(void) const { return ((flags&Varnode::mark)!=0); } ///< Has \b this been visited by the current algorithm?
+   bool isActiveHeritage(void) const { return ((addlflags&Varnode::activeheritage)!=0); } ///< Is \b this currently being traced by the Heritage algorithm?
+   bool isStackStore(void) const { return ((addlflags&Varnode::stack_store)!=0); } ///< Was this originally produced by an explicit STORE
+-  bool isFrameLoadForce(void) const { return ((addlflags&Varnode::frameload_force)!=0); }	///< SaturnExplorer (0076): is the address force only a hold for a LOAD?
+   bool isLockedInput(void) const { return ((addlflags&Varnode::locked_input)!=0); }	///< Is always an input, even if unused
+   bool stopsUpPropagation(void) const { return ((addlflags&Varnode::stop_uppropagation)!=0); }	///< Is data-type propagation stopped
+   bool hasImpliedField(void) const { return ((addlflags&Varnode::has_implied_field)!=0); }	///< Does \b this have an implied field
+@@ -311,10 +308,8 @@ public:
+   void clearMark(void) const { flags &= ~Varnode::mark; } ///< Clear the mark on this Varnode
+   void setDirectWrite(void) { flags |= Varnode::directwrite; } ///< Mark \b this as directly affected by a legal input
+   void clearDirectWrite(void) { flags &= ~Varnode::directwrite; } ///< Mark \b this as not directly affected by a legal input
+-  void setAddrForce(void) { setFlags(Varnode::addrforce); addlflags &= ~Varnode::frameload_force; } ///< Mark as forcing a value into \b this particular storage location (SaturnExplorer 0076: for its own sake, not as a LOAD's hold)
++  void setAddrForce(void) { setFlags(Varnode::addrforce); } ///< Mark as forcing a value into \b this particular storage location
+   void clearAddrForce(void) { clearFlags(Varnode::addrforce); }	///< Clear the forcing attribute
+-  void setFrameLoadForce(void) { setFlags(Varnode::addrforce); addlflags |= Varnode::frameload_force; }	///< SaturnExplorer (0076): hold a frame write for a LOAD
+-  void clearFrameLoadForce(void) { if ((addlflags&Varnode::frameload_force)!=0) { clearFlags(Varnode::addrforce); addlflags &= ~Varnode::frameload_force; } }	///< SaturnExplorer (0076): let the hold go
+   void setImplied(void) { setFlags(Varnode::implied); }	///< Mark \b this as an \e implied variable in the final C source
+   void clearImplied(void) { clearFlags(Varnode::implied); } ///< Clear the \e implied mark on this Varnode
+   void setExplicit(void) { setFlags(Varnode::explict); } ///< Mark \b this as an \e explicit variable in the final C source

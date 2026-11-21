@@ -1,0 +1,2 @@
+[{"id":"0032-g8ff","patch":"0032","hunks":[28,29],"named":[],"runs":["faultfull"],"where":"type.cc FuncProto replace"},
+ {"id":"0015-g3ff","patch":"0015","hunks":[3],"named":[],"runs":["faultfull"],"where":"ProtoStoreInternal::setInput"}]

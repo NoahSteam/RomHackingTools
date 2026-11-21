@@ -1,0 +1,3 @@
+0050-g4d: applied [4] named_hit=False decode:ok(rc0,)
+0050-g7d: applied [13] named_hit=False decode:FAIL(rc1,TestExecution=2)
+0050-g1d: applied [1] named_hit=False decode:ok(rc0,)

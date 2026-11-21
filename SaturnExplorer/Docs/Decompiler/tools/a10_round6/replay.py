@@ -22,7 +22,14 @@ for p in sorted(glob.glob(W + "/patches/*.patch")):
         continue
     r = g("apply", "--check", p)
     if r.returncode:
-        skipped.append(n)
+        if os.environ.get("PARTIAL"):
+            rr = g("apply", "--reject", p)
+            rej = [l for l in rr.stderr.splitlines() if "rejected hunk" in l or "Rejected hunk" in l]
+            skipped.append(n + "(partial, %d hunks rejected)" % len(rej))
+            for f in glob.glob(S + "/**/*.rej", recursive=True):
+                os.remove(f)
+        else:
+            skipped.append(n)
         continue
     g("apply", p)
 g("add", "-A")
