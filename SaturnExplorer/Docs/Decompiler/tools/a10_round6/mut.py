@@ -33,7 +33,8 @@ ORACLES = {
     "fault": ("SaturnExplorerDecompilerFaultTests", {"SE_FAULT_JOBS": "2"}, "DecompilerFaultTests.cpp", 1800),
     "faultfull": ("SaturnExplorerDecompilerFaultTests", {"SE_FAULT_JOBS": "2", "SE_FAULT_FULL": "1"}, "DecompilerFaultTests.cpp", 3000),
     "runner": ("SaturnExplorerDecompilerRunnerTests", {}, "DecompilerRunnerTests.cpp", 600),
-    "fresh": ("SaturnExplorerSlaFreshnessTests", {}, "SlaFreshnessTests.cpp", 600),
+    # No "fresh" oracle: SlaFreshnessTests takes <se-sleighc> <scratch>, not the <scratch> run_one passes, and the
+    # snapshot holds no se-sleighc, so it would fail on setup and read as a kill. No round-6 job used it.
 }
 VEN = "SaturnExplorer/FrontEnd/third_party/ghidra-decompiler"
 SPECH = "SaturnExplorer/FrontEnd/src/Decompiler/Sh2SpecData.h"

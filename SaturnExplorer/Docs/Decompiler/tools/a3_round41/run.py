@@ -71,4 +71,3 @@ for l in out.splitlines():
 # are findings: one line per class keeps them in run.sh's summary (A3-254), so a nonzero finding count never reads as "none".
 if not keep:
     for k, c in sorted(gen.items()): print('%s (generator finding, %d line(s))' % (k, c))
-
