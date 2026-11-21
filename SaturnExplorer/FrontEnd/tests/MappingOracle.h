@@ -25,6 +25,7 @@
 
 #include "Debug/Sh2Disasm.h"
 #include "Decompiler/Sh2Decompiler.h"
+#include "LinkCensus.h"
 
 #include <algorithm>
 #include <array>
@@ -2094,6 +2095,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                  const std::function<std::string(const sfe::decomp::Line&)>& originText = sfe::decomp::LineOriginText)
 {
     using namespace sfe::decomp;
+    LinkTotals::Instance().Add(r, where);   // (step 1 of the link model: the shadow against the tokens, when SE_LINK_CENSUS asks)
     MappingAudit a;
     a.functions = 1;
     auto problem = [&](const char* kind, const std::string& what) { a.Keep(std::string(kind) + ": " + where + ": " + what); };
@@ -5884,6 +5886,40 @@ inline void DumpMappingTokens(std::FILE* out, const sfe::decomp::DecompileResult
                          r.InBody(t.addr) ? 1 : 0, slot ? 1 : 0, insn.c_str(), text.c_str(), t.materialised ? 1 : 0);
         }
     }
+    // Link model, step 0 (tools/a7_link1/linkdiff.py): the shadow model next to the token records. S = a statement (index, kind, first line, lines,
+    // span begin and end, its first link, link count), K = one of its links (statement, address, role, flags, span), N = a line's statement,
+    // C = the function's census counters, O = today's way back from a body instruction (LineForInstruction: kind, the instruction it went via,
+    // the lines in the order offered), which the diff compares with the order the roles give.
+    for (size_t si = 0; si < r.statements.size(); ++si)
+    {
+        const Statement& s = r.statements[si];
+        std::fprintf(out, "S\t%zu\t%d\t%u\t%u\t%u\t%u\t%u\t%u\n", si, int(s.kind), s.firstLine, s.lineCount, unsigned(s.spanBegin), unsigned(s.spanEnd),
+                     s.linkBegin, s.linkCount);
+        for (uint32_t k = s.linkBegin; k < s.linkBegin + s.linkCount && k < r.links.size(); ++k)
+            std::fprintf(out, "K\t%zu\t%08X\t%d\t%d\t%u\n", si, r.links[k].addr, int(r.links[k].role), int(r.links[k].flags), unsigned(r.links[k].span));
+    }
+    for (size_t li = 0; li < r.lines.size(); ++li)
+        if (r.lines[li].statement >= 0) std::fprintf(out, "N\t%zu\t%d\n", li, int(r.lines[li].statement));
+    {
+        const LinkCensus& c = r.linkCensus;
+        std::fprintf(out, "C\t");
+        for (int o = 0; o < 3; ++o)
+            for (int k = 0; k < 8; ++k) std::fprintf(out, "%u,", c.ops[o][k]);
+        std::fprintf(out, "\t");
+        for (int k = 0; k < 8; ++k) std::fprintf(out, "%u,", c.statements[k]);
+        std::fprintf(out, "\t%u,%u,%u,%u\t%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n", c.halts[0], c.halts[1], c.halts[2], c.halts[3], c.storeFlow, c.storeEngine,
+                     c.walkProven, c.walkCandidate, c.walkNone, c.walkBound, c.namedStoreLines, c.lostStoreLines, c.effectDue, c.effectGiven, c.cloneEffects,
+                     c.multiStatementLines, c.noStatementLines, c.opsEndDisagree, c.inlineClones, c.overCap, c.linkMicros);
+    }
+    const sfe::decomp::InstructionLineIndex index(r);
+    for (const auto& range : r.body)
+        for (uint32_t a = range.first; a < range.second; a += 2)
+        {
+            const sfe::decomp::LineLookup found = index.Find(a);
+            std::fprintf(out, "O\t%08X\t%d\t%08X\t", a, int(found.kind), found.via);
+            for (size_t k = 0; k < found.lines.size(); ++k) std::fprintf(out, "%s%zu", k ? "," : "", found.lines[k]);
+            std::fprintf(out, "\n");
+        }
 }
 
 inline void PrintMappingAudit(const MappingAudit& a, const char* label)
