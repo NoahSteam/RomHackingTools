@@ -1,0 +1,61 @@
+## sakura2: 2028 functions, 76011 lines, 45429 statements, 81673 links
+
+Printed ops by origin and class (report only):
+| origin | STORE | CALL | BRANCH | RETURN | COPY | LOAD | HARDWARE | OTHER |
+|---|---|---|---|---|---|---|---|---|
+| flow | 7430 | 6544 | 6332 | 2098 | 7057 | 11035 | 0 | 31174 |
+| clone | 0 | 0 | 0 | 895 | 21 | 0 | 0 | 0 |
+| engine | 0 | 0 | 0 | 0 | 2588 | 0 | 487 | 8848 |
+
+Statements: None 510, Store 12648, Assign 14056, Branch 8227, Call 6480, Return 2979, Halt 14, Label 515
+Halt statements by type: baddata 14, halt 0, unimplemented 0, missing 0
+
+| Measure | Result | Threshold | Verdict |
+|---|---|---|---|
+| Store statements with a surviving flow op or folded COPY | 12147 of 12648 = 96.039% | go at 95% or more; 85 to 95% needs a per-class account and step 2b; below 85% rework section 3 | go |
+| Engine-made store statements: the bounded walk finds a store / candidates / nothing | 4 / 1 / 496 of 501 | report (feeds the next row) | - |
+| Lines that name a store today left with no proven store (candidates or nothing) / lines that name a store | 431 of 6589 = 6.541% | go at 2% or less; 2 to 10% requires step 2b; above 10% stop | needs 2b |
+| Flow store, branch, call and return statements with exactly one proven Effect | 29833 of 29833 | every one | go |
+| Clone-made effect ops | 895 | non-zero confirms the Clone record | confirms |
+| Lines with more than one statement | 1071 | report | - |
+| Lines with an op token and no statement | 0 | report | - |
+| Walk bound hits (64 ops, 8 links) | 0 of 501 walks = 0.000% | under 0.1% | go |
+| Functions over the flow record's cap (20,000 ops) | 0 | report | - |
+| Assertions: opsEnd past flowOps / inlined clones | 0 / 0 | both zero | go |
+| Time building the links against the decompilation | 61.5 ms of 166442.1 ms = 0.037% | within 5% of today | go |
+
+Lines against today's click target (firstAddr): 39114 lines have a proven Effect, 21780 agree, 17334 disagree (44.317%)
+Address sets (the line's token addresses against its links): equal 40107, old has more 856, new has more 1495, different 761
+The way back: 69377 instructions with an exact answer today; 2436 unlinked in the model, 65054 agree on the first line, 1887 disagree
+
+Disagreements by class:
+- line.disagree/Branch/old-is-value/below: 5557
+- line.disagree/Store/old-is-value/below: 4472
+- line.no-effect/Assign: 3467
+- line.disagree/Assign/old-is-value/below: 1790
+- line.disagree/Store/old-is-candidate-value/below: 1463
+- line.disagree/Call/old-is-value/below: 1000
+- line.disagree/Branch/old-not-linked/below: 840
+- insn.disagree/new-value/old-first-unlinked: 624
+- insn.disagree/new-effect/old-first-linked: 616
+- line.disagree/Call/old-is-candidate-value/below: 560
+- line.disagree/Branch/old-is-candidate-value/below: 557
+- line.no-effect/Store: 490
+- line.disagree/Assign/old-is-candidate-value/below: 434
+- insn.disagree/new-effect/old-first-unlinked: 317
+- line.disagree/Return/old-is-value/below: 294
+- insn.disagree/new-value/old-first-linked: 226
+- line.disagree/Return/old-is-candidate-value/below: 116
+- line.disagree/Assign/old-not-linked/below: 82
+- line.disagree/Store/old-not-linked/below: 62
+- line.disagree/Return/old-not-linked/below: 60
+- insn.disagree/new-condition/old-first-linked: 49
+- insn.disagree/new-placement/old-first-unlinked: 28
+- insn.disagree/new-condition/old-first-unlinked: 16
+- line.disagree/Call/old-not-linked/below: 16
+- line.disagree/Assign/old-not-linked/above: 15
+- line.disagree/Branch/old-is-other-effect/below: 15
+- line.no-effect/Halt: 14
+- insn.disagree/new-placement/old-first-linked: 11
+- line.no-effect/None: 2
+- line.disagree/Branch/old-is-placement/below: 1
