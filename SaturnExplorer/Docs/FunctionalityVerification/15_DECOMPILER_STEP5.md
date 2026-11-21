@@ -25004,3 +25004,32 @@ A sanitizer build of the fault matrix over the allocation-ownership survivors of
 ### 6. Runs
 
 `ctest --test-dir build -j1` (RelWithDebInfo, `-j2`, `ulimit -v 3500000`) after the last rebuild of the unmutated tree: `100% tests passed, 0 tests failed out of 117`. `check-vendored-tree.py lint`: `vendored tree: ok (lint)`. `check-literal-size.py`: `raw string sizes: ok (7 raw strings in 341 files)`. The full fault matrix (`SE_FAULT_FULL=1`) on the unmutated tree under the `ulimit` fails 10 of 447 jobs (`runner-oom mailbox entry 8` and `13`), the same 10 as with 0015 group 3 or 0032 group 8 reverted; the default subset in ctest passes. `git status` clean under `third_party/` after every mutant.
+
+## Area 3 fixer (A3-280, A3-281)
+
+Branch `review/3-a280-fix`, commit e53cb704. Scripts: `Docs/Decompiler/tools/a3_a280/words.py` (the assembled halfwords of a round 41 fixture, laid out as `run.py` does; the words of `TestA3280Fix`).
+
+### 1. A3-280
+
+The cause was two: a pointer that a loop steps (the join of two exact bases keeps the lowest, the widening after a few passes gives the base up for the frame's lowest slot) or that a variable indexes (`add r0,r2`, base given up the same way) from the r4-r7 spill carried a negative base, so `MayBeCallerFrame` was false; and no rule withheld a non-void callee for reading a word of its caller's frame at all (the return rule reads the stack-argument dependence for a void return only). The fix, all in `Sh2Decompiler.cpp`:
+
+- `SpillBase` and `FlagSpillReach`: a stack address whose base is a word below the entry r15 that holds the entry r4-r7 gets `callerHigh` (what `MayBeCallerFrame` and `AtOrAboveEntry` read), set in `Join` (after the merge of vars and slots), in `Widen` (before the base is given up) and at the add of a non-constant index. A local array is below the spill, so A3-9's class (a local array indexed by a variable) does not take the flag.
+- `ReturnCheck::ReadsUnplacedCallerWord`: set at a load through a Fuzzy frame address with a base (not a laundered copy of r15, which A3-106's rules already withhold) that `MayBeCallerFrame` holds for; `WithholdReason` returns `it reads its caller's frame at a word it cannot place`.
+
+Results (`run.sh`): `c3w_const4`, `c3w_countr4`, `c3w_index` callee withheld, call `func_0x06009020(3,2,3,4,0x2222)` (index: `0,2,3,4,0x2222`); `c3w_loop_entry` withheld as before (now by the new reason, which runs before the raw-stack-register text check). `c3w_const3`, the control that stops at three words, is withheld too: a loop through the spill does not say where it stops (A3-284). A local array indexed through r0 stays lent (pinned).
+
+### 2. Pins, and that they fail without the fix
+
+`TestA3280Fix` in `Sh2DecompilerTests.cpp` (five fixtures as words, the callee at 0x06009020 decompiled and its prototype lent to the caller, plus the local-array control). With `Sh2Decompiler.cpp` at HEAD the pin fails: four checks on the printed call (`3,4,0x2222);` missing: const4, countr4, index, const3) and three on the withhold reason. The generated family (section 3) fails 54 of 60 programs `n:stackarg:dropped` without the fix.
+
+### 3. A3-281
+
+`MakeSpillWalkSubject` / `TestSpillWalk` in `Sh2GeneratedTests.cpp`: an enumerated family of 60 modules (as the canary family, not drawn from the grammar, so no seed's output moves: `seeds=2000 ... failing seeds=0` is the same sweep as before, with the family run among the pins). A caller passes four register arguments and 1 to 3 stack words (distinct constants) to a callee that spills r4-r7 and reads them by a fixed loop from the spill (second or first word), a loop counted from r4, an r0-indexed read from the entry r15, or a fixed loop from the entry r15; two in twelve are controls that stop before the stack words. `FnInfo::stackWords` and the check `stackarg:dropped` (count `stackarg.checked`, 54 in the family): each word must appear in the caller's text. The limits are A3-285.
+
+### 4. Runs
+
+`cmake --build` and `ctest -j2` (`ulimit -v 4500000`): `100% tests passed, 0 tests failed out of 117`. `SE_GENERATED_SEEDS=2000`: `failing seeds=0; findings=0`, `spill-walk: 60 programs, 0 failing, stack-argument checks 54`. `check-literal-size.py`: `raw string sizes: ok (7 raw strings in 341 files)`.
+
+### 5. New rows
+
+A3-284 (the control c3w_const3 is withheld now), A3-285 (the check reads text; no perturbation oracle).
