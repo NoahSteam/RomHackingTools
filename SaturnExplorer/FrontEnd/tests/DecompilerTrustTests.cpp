@@ -35,6 +35,7 @@
 //   SE_TRUST_MIX=<k>     only mix k (see kMixNames); SE_TRUST_FROM=<seed> starts it there, to run a long mix in pieces
 //   SE_TRUST_SEED=<k>    (with SE_TRUST_MIX) one sequence of that mix, every step printed; SE_TRUST_SKIP=3,5 and SE_TRUST_LIMIT=n shrink it
 //   SE_TRUST_FOLLOW_SEED=<k>  one sequence of the Follow PC rig (mix 8), every step printed; with SE_TRUST_FOLLOW_AUTO=1 one of mix 9
+//   SE_TRUST_FOLLOW_SEEDS=a,b-c  those seeds one after another in one process (every run of one is a run of the same process; with SE_TRUST_MIX=9 set so the pins are left out)
 //   SE_TRUST_FOLLOW_SCRIPT="cpu; regsoff; cpu"   one Follow PC sequence written out (kFollowWords); SE_TRUST_FOLLOW_DUMP=1 prints the window
 //   SE_TRUST_SCRIPT="select A; t-inject failed" SE_MODEL_WORLD=C,A   one sequence written out (area 1's words, and t-...)
 //   SE_TRUST_NOHOVER=1   do not hover the badge (faster)
@@ -4816,6 +4817,17 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         // (area 8 fixer, A8-36) Enter on the entry box as the panel left it: what the tooltips tell the reader to do. It asks again what the text
         // stands for, with its origin; the rig presses it only where it knows what that is.
         if (!r.visible) return "(panel hidden: no entry box)";
+        // (area 8 fixer, A8-57) A running emulator the panel has not captured yet, followed: the panel captures on its own cadence (the retry of a
+        // PC that found no function, the auto-refresh), 30 frames after the last capture, and how many frames pass before an op is the number the
+        // wait for the engine took, which is the machine's. A capture in the click's frames installs a new output under the box that has the focus
+        // now, and Enter asks that output, as A8-42 says it asks the output shown; the rig, which took what Enter asks before the click, then
+        // named the older one (seeds 2306574, 2306667, 2307517 of mix 9: they failed one run in three alone). Not pressed where that can happen.
+        if (r.kind == DecompViewKind::LiveRunning && r.tgt == FRig::Tgt::Follow)
+        {
+            const SnapshotKey* held = r.panel.HeldKey();
+            if (!held || held->sourceId != r.source || held->deriveSerial != r.serial || held->frameNumber != r.frame)
+                return "(the panel may capture the running emulator in the click's frames: what Enter asks is not known to the rig)";
+        }
         const FRig::Prov enter = r.EnterProv();
         if (!enter.known) return "(what Enter on the box asks is not known to the rig)";
         ImVec2 a, b;
@@ -5095,6 +5107,12 @@ const char* const kFollowScriptPins[] = {
     "pct; follow; enter; refresh; enter",
 };
 
+// (area 8 fixer, A8-57) Enter on the entry box while a followed running emulator is captured by the panel's own retry in the click's frames.
+const char* const kFollowRacePins[] = {
+    "pcc; paused; pcbios; running; pct; advance; advance; enter",
+    "pcc; paused; pcbios; running; pct; advance; advance; advance; enter",
+};
+
 // (area 8 fixer, A8-36 to A8-39) Generated sequences with the evidence operations and Enter on the untouched box that failed with the fix
 // reverted: the seed, mix 9 (Auto-refresh and Show in Pseudocode), and CPU-weighted without hover.
 struct FollowPinE { uint64_t seed; bool autoMix, cpu; };
@@ -5236,7 +5254,7 @@ int main(int argc, char** argv)
     std::vector<std::string> failedList;
     if (const char* w = std::getenv("SE_TRUST_WIDTH"))
         if (*w) gRigWinW = static_cast<float>(std::atof(w));
-    const bool defaultRun = !mixEnv && !seedEnv && !std::getenv("SE_TRUST_SCRIPT") && !std::getenv("SE_TRUST_FOLLOW_SEED") &&
+    const bool defaultRun = !mixEnv && !seedEnv && !std::getenv("SE_TRUST_SCRIPT") && !std::getenv("SE_TRUST_FOLLOW_SEED") && !std::getenv("SE_TRUST_FOLLOW_SEEDS") &&
                             !std::getenv("SE_TRUST_FOLLOW_SCRIPT");
 #ifndef _WIN32
     // The real allocation failure first: it runs in a process that has not decompiled anything yet, so every child counts the same allocations
@@ -5397,6 +5415,27 @@ int main(int argc, char** argv)
                     failedList.push_back("pin: follow seed " + std::to_string(seed));
                 }
             }
+            // (area 8 fixer, A8-57) The race the rig's Enter on the box lost to the panel's own capture: whether the new output is installed before
+            // the Enter's key frame is the engine's speed against the frames, so each script runs 40 times (it failed one run in ten to one in two with the
+            // skip in EnterBox off: pcc; paused; pcbios; running; pct; then 2 or 3 advances, so that the 30th frame since the capture at the
+            // BIOS falls in the click's frames).
+            for (const char* script : kFollowRacePins)
+                for (int rep = 0; rep < 40; ++rep)
+                {
+                    std::string error;
+                    CHECK(ParseFollowScript(script, gFollowScript, error));
+                    uint64_t ops = 0;
+                    const bool ok = RunFollow(0, false, ops);
+                    gFollowScript.clear();
+                    if (!ok)
+                    {
+                        std::printf("pin follow script \"%s\" FAILED (run %d)\n", script, rep + 1);
+                        ++failedPrograms;
+                        failedList.push_back(std::string("pin: follow script ") + script);
+                        break;
+                    }
+                    if (rep == 39) std::printf("pin follow script \"%s\" ok (40 runs)\n", script);
+                }
             for (const char* script : kFollowScriptPins)
             {
                 std::string error;
@@ -5428,6 +5467,26 @@ int main(int argc, char** argv)
             std::printf("follow script: %s\n", ok ? "ok" : "FAILED");
             dts::RemoveTree(scratch);
             return ok ? 0 : 1;
+        }
+        if (const char* list = std::getenv("SE_TRUST_FOLLOW_SEEDS"))
+        {
+            // seeds a,b,c or ranges a-b, run one after another in this process (the carry-over of one into the next is what is looked for)
+            gFollowAuto = std::getenv("SE_TRUST_FOLLOW_AUTO") != nullptr;
+            std::istringstream parts(list);
+            std::string part;
+            bool allOk = true;
+            uint64_t ops = 0;
+            while (std::getline(parts, part, ','))
+            {
+                const size_t dash = part.find('-');
+                const uint64_t lo = std::strtoull(part.c_str(), nullptr, 10);
+                const uint64_t hi = dash == std::string::npos ? lo : std::strtoull(part.c_str() + dash + 1, nullptr, 10);
+                for (uint64_t seed = lo; seed <= hi; ++seed)
+                    if (!RunFollow(seed, false, ops)) allOk = false;
+            }
+            std::printf("follow seeds %s: %s\n", list, allOk ? "ok" : "FAILED");
+            dts::RemoveTree(scratch);
+            return allOk ? 0 : 1;
         }
         if (const char* fs = std::getenv("SE_TRUST_FOLLOW_SEED"))
         {

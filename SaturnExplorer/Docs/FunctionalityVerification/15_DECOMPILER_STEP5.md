@@ -24686,7 +24686,7 @@ No area 3 class (`caution-unsaid`, `callee-saved`, `state-saved`) in either swee
 
 ## Area 8, done check
 
-Branch `review/8-done` from master `5bcf9284`. **WORK IN PROGRESS: paused at the coordinator's request with the overnight run about one tenth done. No verdict yet; area 8 is not declared done.** Changed: test code only (`RunProbeDone` in `DecompilerTrustTests.cpp`, behind `SE_TRUST_PROBE_DONE=1`), `Docs/Decompiler/tools/a8_done/longrun.sh`, the ledger (A8-52 filed, A8-45's status cell given its word) and this section. No product code.
+Branch `review/8-done` from master `5bcf9284`. **Finished by the coordinator: area 8 is DONE** (verdict at the end of this section). Changed: test code only (`RunProbeDone` in `DecompilerTrustTests.cpp`, behind `SE_TRUST_PROBE_DONE=1`), `Docs/Decompiler/tools/a8_done/longrun.sh`, the ledger (A8-52 filed, A8-45's status cell given its word) and this section. No product code.
 
 ### The criteria, against the record
 
@@ -24754,6 +24754,38 @@ A failing job prints `FOLLOW FAILURE, seed N` (replay with `SE_TRUST_FOLLOW_SEED
 ### Verdict
 
 **Not given yet (paused).** As the record stands: the review-round, P3 and open-row criteria are met; the fix after round 8 had no reviewer's round, and the look made here found one P3 (A8-52, accepted); the overnight run has 800,062 operations of the Follow rig with no failure and is to be finished (chunks 2 to 7) before area 8 can be called done.
+
+### Verdict (coordinator, after the pause)
+
+The overnight run was finished by the coordinator with the same driver (`tools/a8_done/longrun.sh`, chunks 2 to 7, one job
+at a time, the binaries built from `review/8-done`), after the pause:
+
+| Chunk | Jobs | Operations | Failing |
+|---|---|---|---|
+| 1 (before the pause) | Follow, focus, hover and no hover, mixes 8 and 9 | 800,062 | 0 |
+| 2 | focus, CPU, hover, from 2,200,000 | 800,020 | 0 |
+| 3 | focus, CPU, no hover, from 2,300,000 | 800,073 | 1 (seed 2307517, mix 9) |
+| 4 | no focus, hover, from 2,400,000 | 800,016 | 0 |
+| 5 | no focus, CPU, no hover, from 2,500,000 | 800,011 | 1 (seed 2502030, mix 9) |
+| 6 | the area 1 model, `SE_MODEL_SEEDS=10000` | 10,000 seeds | 0 |
+| 7 | mixes 0 to 7, `SE_TRUST_HIDDEN_RENAME=1`, from 2,600,000 | 46,264 | 0 |
+
+About 4.05 million Follow-rig and mix operations and 10,000 model seeds. The two failures were one cause, found by the area 8
+fixer (`## Area 8 fixer (seed 2307517)`, A8-57): a timing race in the rig's "Enter on the untouched entry box" when the panel's
+own capture (Follow PC's retry, or auto-refresh, after 30 frames) is answered during the rig's click; the panel showed and
+asked the output it then held, consistently (A8-42's rule), and never over-claimed. The rig is fixed and pinned
+(`kFollowRacePins`); both seeds and their neighbours pass 20 runs alone. No product defect was found by the run.
+
+The fix after round 8 that no round had seen (A8-46, A8-50, A8-51) was reviewed by round 9 (`## Area 8, round 9`): clean.
+
+| Criterion | Final |
+|---|---|
+| Two consecutive review rounds with no P1 or P2 | Met: rounds 8 and 9 (round 9 reviewed the fixer's change after round 8) |
+| Every P3 fixed or accepted with a reason | Met: A8-52 to A8-57 accepted or fixed |
+| The generator run overnight on the area's grammar with no violation | Met: no product violation; the two rig failures are fixed (A8-57) |
+| No open P1 or P2 rows | Met |
+
+**Area 8 is done.** The driver's exit status bug found in PR #75's review is A8-56 (fixed).
 
 ## Area 8, round 9
 
@@ -24869,3 +24901,32 @@ No area 3 class (`caution-unsaid`, `callee-saved`, `state-saved`) in either swee
 * Not run: the local game corpus (not in the repository); the sanitizer jobs (CI).
 
 **Verdict, area 3 round 40 (A3-274 fixed): not clean.** P2: A3-274 (round 39's A3-270 reached only a lent callee that stores through a register; the exact address of a pushed word handed to a callee that is not lent, kept by one in memory, returned, or put in a stack word still came back changed with no caution; found by hand, fixed with pins). No P1. P3: A3-275 (in A3-271's class, accepted), A3-276 and A3-277 (accepted), A3-278 (routed). A3-269's window holds: no miss. The sweeps are clean for area 3. The count of consecutive clean rounds restarts.
+
+
+## Area 8 fixer (seed 2307517)
+
+Branch `review/8-fix-2307517` from `74fe81f7`. Test code only (`DecompilerTrustTests.cpp`); no product code changed. One row, A8-57 (P3, fixed).
+
+### The failure was not carried-over state
+
+The done check's long run failed at `FOLLOW FAILURE, seed 2307517, after operation 21` (mix 9, from 2300000, focus, CPU, no hover) and passed alone. Starting the same job at other seeds moved the failure: from 2303500 it failed at seed 2306667, from 2305500 at 2306574, and with another step count it passed. Run alone and repeated, each of those seeds fails about one run in three (`SE_TRUST_FOLLOW_SEEDS=<seed>`, new: seeds or ranges one after another in one process): 2307517 3 of 20, 2306667 7 of 20. So the outcome is timing, not the sequences before. Chunk 5's failure (seed 2502030, no focus operation) is the same class: 9 of 20 alone with the fix off, 0 of 20 with it on.
+
+### Cause
+
+Each failing sequence ends with Enter on the untouched box while the emulator runs, Follow PC is on, and the panel's held snapshot is older than the view (a PC that found no function, or a view moved while running). The panel then captures by itself: `Update` retries a followed PC that found no function, and the opt-in auto-refresh fires, once `kAutoRefreshFrames` (30) frames have passed since the last capture. The number of frames between two operations is what the rig's `Settle` waited for the engine, so it is the machine's load. When the capture is answered in the frames of the rig's click into the box (a cache hit, or a quick worker), the new output is shown under a box that has the focus and kept its text, and Enter asks the output shown (A8-42): a pin of the function just installed. The rig had read what Enter asks (`EnterProv`) before the click and held the panel to the older pin: `I1 STALE NOT MARKED`, the model `NothingAsked`, no badge, no dimming. Printed at the failure: before the Enter key the panel already wanted and showed 06000010 (T) while the box kept 06005000; after it, Follow PC off, box 06000010, shown 06000010.
+
+### Why the panel is right
+
+Its box, target, label, Entry line and output all name the function it asked; the output on screen at the Enter's frame is the one asked, and nothing on screen is claimed that is not so. The rig's expectation was the wrong one. Severity P3 (a rig defect that reported a failure that is not one). The same class as mix 8 seed 40109 (A8-29's round), which the rig already handled for the click on Follow PC only.
+
+### Fix and pins
+
+`FollowExecute`'s `EnterBox` does not press Enter when the view is a running emulator, the target is Follow PC and the held snapshot is not the view's (source, serial, frame): a capture can still land in the frames. `kFollowRacePins`: `pcc; paused; pcbios; running; pct; advance; advance; enter` and the same with three advances (the 30th frame after the capture at the BIOS falls in the click's frames), each run 40 times in the default run. With the skip off they failed 2 and 4 of 24 runs in a process (3 of 6 as single processes); with it on, 0 of 30 and 0 of 30 single processes.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| the failing job (`SE_TRUST_MIX=9 SE_TRUST_FROM=2300000 SE_TRUST_STEPS=340000 SE_TRUST_OOM_STRIDE=0 SE_TRUST_FOLLOW_FOCUS=1 SE_TRUST_FOLLOW_CPU=1 SE_TRUST_NOHOVER=1`) | 7,625 sequences (seeds 2300000 to 2307624), 340,014 operations, 0 failing (819 s) |
+| seeds 2307517, 2306667, 2306574, 2502030, 20 runs each alone | 0 failing |
+| default trust run | all passed (58 s), the race pins ok |
