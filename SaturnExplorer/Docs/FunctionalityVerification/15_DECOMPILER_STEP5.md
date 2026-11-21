@@ -25012,11 +25012,12 @@ A sanitizer build of the fault matrix over the allocation-ownership survivors of
 - **Upstream bugs:** A10-24 is accepted by the repository owner (2026-11-21). The bugs the patches work around stay
   recorded in that row and are not filed upstream. This is the program's "upstream bugs filed" oracle, settled by the
   owner's decision.
-- **Overnight generator run:** the scheduled `Generator, long run (Linux)` job (20,000 seeds) has passed every night,
-  most recently on `5ce785f3`. Patch 0099 merged after that run, so the first nightly on master `aed61996` or later
-  completes this item.
+- **Overnight generator run:** the scheduled `Generator, long run (Linux)` job (20,000 seeds and the printed-C
+  differential) passed on master `aed61996` (run 44892974496, 2026-11-21). That master carries patches 0001 to 0099,
+  the set rounds 5 and 6 reviewed.
 
-Verdict: **area 10 is done** once that nightly passes. A failure there reopens the area.
+Verdict: **area 10 is done.** Patch 0100 (the link model's Clone record, area 7) and any later patch is reviewed
+under area 10 again.
 ## Area 3 fixer (A3-280, A3-281)
 
 Branch `review/3-a280-fix`, commit e53cb704. Scripts: `Docs/Decompiler/tools/a3_a280/words.py` (the assembled halfwords of a round 41 fixture, laid out as `run.py` does; the words of `TestA3280Fix`).
