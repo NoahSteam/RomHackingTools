@@ -24,6 +24,7 @@
  * Modified for SaturnExplorer: a STORE guard is kept against the alias analysis while the STORE is aimed at its local or pending; the frame records walk to 4,096 ops and follow a guard read through a piece (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: the host is called when a flow has been followed (patches/0096-engine-flow-done-hook.patch).
  * Modified for SaturnExplorer: the guard a STORE put on a global stays when the STORE folds into a write of a hardware register (patches/0099-engine-register-store-guard-kept.patch).
+ * Modified for SaturnExplorer: each op made by cloning another is recorded with the op it copies (patches/0100-engine-op-clone-origins.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -1055,6 +1056,7 @@ PcodeOp *Funcdata::cloneOp(const PcodeOp *op,const SeqNum &seq)
   newop->setFlag(fl);
   if (op->isFromDelaySlot())
     newop->setFromDelaySlot();	// SaturnExplorer (0075)
+  noteOrigin(newop,op,1);	// SaturnExplorer (0100)
   if (op->getOut() != (Varnode *)0)
     opSetOutput(newop,cloneVarnode(op->getOut()));
   for(int4 i=0;i<op->numInput();++i)

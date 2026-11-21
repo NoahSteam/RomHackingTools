@@ -4593,6 +4593,21 @@ uint32_t CanonicalOf(uint32_t a)
 // processor register, keyed by the token's line and text range; no spelling is read back from the text.
 using TokenInputRegisters = std::map<std::tuple<size_t, uint16_t, uint16_t>, FlowVn>;
 
+// What the markup said about ops that a Line keeps no trace of, for the link model (BuildLinks): the op each token was printed from, and the
+// statements the printer opened (its <statement> elements, with the op each is rooted at), as the tokens they cover. Indices are those of the
+// lines returned; tokens that later passes add come after these.
+struct MarkupOps
+{
+    struct Stmt
+    {
+        const ghidra::PcodeOp* op = nullptr;
+        size_t line = 0, token = 0;         // the first token
+        size_t endLine = 0, endToken = 0;   // one past the last
+    };
+    std::vector<std::vector<const ghidra::PcodeOp*>> tokenOp;
+    std::vector<Stmt> statements;           // in the order they open: an enclosing statement comes before one inside it
+};
+
 // Turns the emitter's markup into lines of tokens. Each token's opref names the p-code op it
 // was printed from; that op's address is the SH-2 instruction it came from. The markup is read
 // in Ghidra's packed encoding, not XML: its XML parser drops whitespace-only text, which is every
@@ -4601,7 +4616,7 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                                   std::vector<InspectionTarget>& inspectionTargets,
                                   std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>>* printed = nullptr,
                                   const std::vector<std::pair<uint32_t, uint32_t>>* flowBlockRanges = nullptr,
-                                  TokenInputRegisters* inputRegisters = nullptr)
+                                  TokenInputRegisters* inputRegisters = nullptr, MarkupOps* markup = nullptr)
 {
     std::map<ghidra::uintm, const ghidra::PcodeOp*> ops;
     for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it) ops[(*it)->getTime()] = *it;
@@ -4636,6 +4651,7 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
     decoder.ingestStream(in);
     const ghidra::uint4 kBreak = ghidra::ELEM_BREAK.getId();
     const ghidra::uint4 kLabel = ghidra::ELEM_LABEL.getId();
+    const ghidra::uint4 kStatement = ghidra::ELEM_STATEMENT.getId();
     const ghidra::uint4 kFuncName = ghidra::ELEM_FUNCNAME.getId();
     const ghidra::uint4 kCaseLabel = ghidra::ELEM_VALUE.getId();   // EmitMarkup::tagCaseLabel
     // A7-27: the jump table's destination for a case label's value: where the table sends that value, the case's entry. The table is the
@@ -4716,6 +4732,16 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
         {
             lines.emplace_back();
             lines.back().text.assign(static_cast<size_t>(std::max(indent, 0)), ' ');
+        }
+        size_t statementAt = static_cast<size_t>(-1);
+        if (markup && elem == kStatement)
+        {
+            statementAt = markup->statements.size();
+            MarkupOps::Stmt st;
+            st.op = op;
+            st.line = lines.size() - 1;
+            st.token = lines.back().tokens.size();
+            markup->statements.push_back(st);
         }
         if (haveContent && !content.empty())
         {
@@ -4823,6 +4849,12 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                 (*inputRegisters)[std::make_tuple(lines.size() - 1, t.begin, t.end)] = reg;
             }
             line.tokens.push_back(t);
+            if (markup)
+            {
+                markup->tokenOp.resize(lines.size());
+                markup->tokenOp.back().resize(line.tokens.size() - 1, nullptr);
+                markup->tokenOp.back().push_back(elem == kCaseLabel ? nullptr : op);   // (a case label is not that op printed)
+            }
             // A case label names the first op of its case: it is a label, not that op printed again.
             if (op && printed && elem != kCaseLabel)
             {
@@ -4832,6 +4864,11 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
             }
         }
         while (decoder.peekElement() != 0) walk();
+        if (statementAt != static_cast<size_t>(-1))
+        {
+            markup->statements[statementAt].endLine = lines.size() - 1;
+            markup->statements[statementAt].endToken = lines.back().tokens.size();
+        }
         decoder.closeElement(elem);
     };
     while (decoder.peekElement() != 0) walk();
@@ -4876,6 +4913,12 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                 t.kind = TokenKind::Plain;
                 t.addr = insn;
                 line.tokens.push_back(t);
+                if (markup)
+                {
+                    markup->tokenOp.resize(lines.size());
+                    markup->tokenOp[at].resize(line.tokens.size() - 1, nullptr);
+                    markup->tokenOp[at].push_back(o);
+                }
             }
         }
 
@@ -4914,6 +4957,18 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                 if (at >= leading) moved.insert(at - leading);
             kv.second.first = std::move(moved);
         }
+    if (markup)
+    {
+        // (the lines returned begin after the leading breaks, as for `printed`)
+        markup->tokenOp.resize(lines.size());
+        markup->tokenOp.erase(markup->tokenOp.begin(), markup->tokenOp.begin() + static_cast<std::ptrdiff_t>(std::min(leading, markup->tokenOp.size())));
+        for (MarkupOps::Stmt& st : markup->statements)
+        {
+            st.line = st.line >= leading ? st.line - leading : 0;
+            st.endLine = st.endLine >= leading ? st.endLine - leading : 0;
+        }
+        markup->tokenOp.resize(out.size());
+    }
     if (inputRegisters && leading)
     {
         TokenInputRegisters moved;
@@ -11726,6 +11781,329 @@ int RetargetHoistedConversions(std::vector<Line>& lines, const PrintedOperations
     return moved;
 }
 
+// ---- The link model, step 1 (LINK_MODEL.md sections 2 to 4): links from identity only ----
+// Which instruction did a statement's effect is read from what the p-code remembers of its ops, not from a value walk. An op the flow made
+// has a time below Funcdata::flowOps (rewriting an op in place keeps it); a clone of such an op has a later time and is told by patch 0100's
+// record. Time alone is wrong for a clone (a block ActionReturnSplit copies has its STORE, CALL and RETURN at new times), so a STORE, a call,
+// a branch, a non-halt RETURN and a hardware access are an Effect at their own instruction whatever their time.
+// The model is a shadow: the token addresses and everything built on them are untouched, and nothing reads this.
+enum { kOpFlow = 0, kOpClone = 1, kOpEngine = 2 };
+
+// Whether an op is a volatile read (1) or write (2) of a hardware register (the engine's user op), else 0.
+int HardwareAccess(const ghidra::Funcdata& fd, const ghidra::PcodeOp* o)
+{
+    if (o->code() != ghidra::CPUI_CALLOTHER || o->numInput() < 1 || !o->getIn(0)->isConstant()) return 0;
+    const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(o->getIn(0)->getOffset()));
+    return !u ? 0 : u->getType() == ghidra::UserPcodeOp::volatile_write ? 2 : u->getType() == ghidra::UserPcodeOp::volatile_read ? 1 : 0;
+}
+// The census's class of an op: STORE, call, branch, RETURN, COPY, LOAD, hardware access, other.
+int OpClassOf(const ghidra::Funcdata& fd, const ghidra::PcodeOp* o)
+{
+    switch (o->code())
+    {
+    case ghidra::CPUI_STORE: return 0;
+    case ghidra::CPUI_CALL: case ghidra::CPUI_CALLIND: return 1;
+    case ghidra::CPUI_BRANCH: case ghidra::CPUI_CBRANCH: case ghidra::CPUI_BRANCHIND: return 2;
+    case ghidra::CPUI_RETURN: return 3;
+    case ghidra::CPUI_COPY: return 4;
+    case ghidra::CPUI_LOAD: return 5;
+    default: return HardwareAccess(fd, o) ? 6 : 7;
+    }
+}
+
+void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperations& printed, const ghidra::Funcdata& fd, const FlowRecord& flow)
+{
+    using namespace ghidra;
+    const auto started = std::chrono::steady_clock::now();
+    r.links.clear();   // (the pass that prints may run twice)
+    r.statements.clear();
+    r.linkCensus = LinkCensus();
+    for (Line& l : r.lines) l.statement = -1;
+    LinkCensus& census = r.linkCensus;
+    const uintm flowOps = fd.getFlowOps();
+    // (step 1's assertions, counted in the census) The host's opsEnd (one past the last flow op still in a block) can fall short of the
+    // engine's flowOps when the last flow op was removed, never pass it; and no flow inlined a function (flow.cc clones the callee's ops).
+    if (flow.opsEnd > flowOps) ++census.opsEndDisagree;
+    size_t flowTotal = 0;
+    for (const auto& ops : flow.blockOps) flowTotal += ops.size();
+    if (flowTotal > 20000) ++census.overCap;
+    std::map<uintm, const OriginRecord*> cloneOf;
+    for (const OriginRecord& rec : fd.getOriginRecords())
+    {
+        cloneOf[rec.survivor] = &rec;
+        if (rec.kind == 1) ++census.inlineClones;
+    }
+    // The flow STOREs the engine folded to a COPY that survives say so by their time (AccessRecord, patch 0017).
+    std::set<uintm> foldedStores;
+    for (const AccessRecord& rec : fd.getAccessFates())
+        if (rec.store && rec.fate == fate_folded_ordinary) foldedStores.insert(rec.time);
+
+    struct Id { int origin; uintm root; };
+    const auto identify = [&](const PcodeOp* op) {
+        uintm t = op->getTime();
+        bool cloned = false;
+        for (int hop = 0; hop < 256; ++hop)
+        {
+            const auto f = cloneOf.find(t);
+            if (f == cloneOf.end()) break;
+            t = f->second->origin;
+            cloned = true;
+        }
+        Id id;
+        id.root = t;
+        id.origin = t >= flowOps ? kOpEngine : cloned ? kOpClone : kOpFlow;
+        return id;
+    };
+    // An effect by op-code: whatever the op's time, it is the instruction's own.
+    const auto carrier = [&](const PcodeOp* o) {
+        switch (o->code())
+        {
+        case CPUI_STORE: case CPUI_CALL: case CPUI_CALLIND: case CPUI_BRANCH: case CPUI_CBRANCH: case CPUI_BRANCHIND: return true;
+        case CPUI_RETURN: return o->getHaltType() == 0;
+        default: return HardwareAccess(fd, o) != 0;
+        }
+    };
+    const auto memoryOut = [&](const PcodeOp* o) {
+        const Varnode* out = o->getOut();
+        if (!out) return false;
+        const AddrSpace* sp = out->getSpace();
+        return sp == fd.getArch()->getDefaultDataSpace() || sp->getType() == IPTR_SPACEBASE;
+    };
+    for (const auto& kv : printed)
+        ++census.ops[identify(kv.first).origin][OpClassOf(fd, kv.first)];
+
+    // The bounded walk the census asks about (section 3, "Stores"): from an engine-made copy of a memory variable, backwards to the folded
+    // stores whose value it shows again and, failing that, forwards to the store that follows it. Step 2 builds links from it; here it only
+    // counts what it finds. At most 64 ops and 8 stores.
+    struct Walk { int proven = 0, candidate = 0, ops = 0; bool bound = false, miss = false; std::set<const Varnode*> seen; };
+    const std::function<void(const Varnode*, Walk&)> back = [&](const Varnode* vn, Walk& w) {
+        if (w.bound || !w.seen.insert(vn).second) return;   // (a loop's join feeds itself)
+        if (++w.ops > 64) { w.bound = true; return; }
+        if (!vn->isWritten()) { w.miss = true; return; }
+        const PcodeOp* d = vn->getDef();
+        if (d->code() == CPUI_COPY && foldedStores.count(identify(d).root))
+        {
+            if (++w.proven > 8) w.bound = true;
+            return;
+        }
+        switch (d->code())
+        {
+        case CPUI_COPY: case CPUI_INDIRECT:
+            if (d->getIn(0)->getAddr() == vn->getAddr() && d->getIn(0)->getSize() == vn->getSize()) back(d->getIn(0), w); else w.miss = true;
+            break;
+        case CPUI_MULTIEQUAL: case CPUI_PIECE:
+            for (int4 i = 0; i < d->numInput() && !w.bound; ++i) back(d->getIn(i), w);
+            break;
+        case CPUI_SUBPIECE: back(d->getIn(0), w); break;
+        default: w.miss = true; break;
+        }
+    };
+    const std::function<void(const Varnode*, Walk&, bool)> forward = [&](const Varnode* vn, Walk& w, bool crossed) {
+        if (!w.seen.insert(vn).second) return;
+        for (auto u = vn->beginDescend(); u != vn->endDescend() && !w.bound; ++u)
+        {
+            if (++w.ops > 64) { w.bound = true; return; }
+            const PcodeOp* use = *u;
+            const Varnode* out = use->getOut();
+            if (use->code() == CPUI_COPY && foldedStores.count(identify(use).root))
+            {
+                ++(crossed ? w.candidate : w.proven);   // (a store after a join may write another arm's value: a candidate)
+                continue;
+            }
+            if (!out) continue;
+            if (use->code() == CPUI_MULTIEQUAL) forward(out, w, true);
+            else if ((use->code() == CPUI_COPY || (use->code() == CPUI_INDIRECT && use->getIn(0) == vn)) && out->getAddr() == vn->getAddr() &&
+                     out->getSize() == vn->getSize())
+                forward(out, w, crossed);
+        }
+    };
+    // 0 nothing, 1 candidates, 2 a proven store
+    const auto storeWalk = [&](const PcodeOp* root) {
+        Walk w;
+        if (root->code() == CPUI_COPY || root->code() == CPUI_INDIRECT) back(root->getIn(0), w);
+        if (w.proven == 0 && w.candidate == 0 && root->getOut() && !w.bound) forward(root->getOut(), w, false);
+        if (w.bound) ++census.walkBound;
+        const int found = w.bound ? (w.proven ? 1 : 0) : (w.proven && !w.miss) ? 2 : (w.proven || w.candidate) ? 1 : 0;
+        ++(found == 2 ? census.walkProven : found == 1 ? census.walkCandidate : census.walkNone);
+        return found;
+    };
+
+    // The statements: each <statement> the printer opened owns the tokens inside it that no statement inside it owns; the tokens of a line no
+    // statement owns (an `if (...)` or `while (...)` header, a `case`) make an implicit statement of their own.
+    struct Group
+    {
+        const PcodeOp* root = nullptr;
+        size_t line = 0, endLine = 0, spanBegin = 0, spanEnd = 0;
+        bool label = false;
+        std::vector<std::pair<size_t, size_t>> tokens;   // (line, token), in text order
+    };
+    std::vector<Group> groups;
+    std::vector<std::vector<int>> owner(r.lines.size());
+    for (size_t l = 0; l < r.lines.size(); ++l) owner[l].assign(r.lines[l].tokens.size(), -1);
+    for (const MarkupOps::Stmt& s : markup.statements)
+    {
+        if (s.line >= r.lines.size()) continue;
+        Group g;
+        g.root = s.op;
+        g.line = s.line;
+        g.endLine = std::max(s.endLine, s.line);
+        g.spanBegin = s.token;
+        g.spanEnd = s.endLine == s.line ? s.endToken : 0xFFFF;
+        const int index = static_cast<int>(groups.size());
+        for (size_t l = s.line; l <= g.endLine && l < r.lines.size(); ++l)
+            for (size_t t = (l == s.line ? s.token : 0); t < (l == s.endLine ? std::min(s.endToken, owner[l].size()) : owner[l].size()); ++t)
+                owner[l][t] = index;   // (a statement inside this one opens later and takes its tokens over)
+        groups.push_back(g);
+    }
+    for (size_t l = 0; l < owner.size(); ++l)
+        for (size_t t = 0; t < owner[l].size(); ++t)
+            if (owner[l][t] >= 0) groups[static_cast<size_t>(owner[l][t])].tokens.emplace_back(l, t);
+    const auto opOf = [&](size_t l, size_t t) -> const PcodeOp* {
+        return l < markup.tokenOp.size() && t < markup.tokenOp[l].size() ? markup.tokenOp[l][t] : nullptr;
+    };
+    for (size_t l = 0; l < r.lines.size(); ++l)
+    {
+        Group g;
+        g.line = g.endLine = l;
+        g.spanBegin = 0xFFFF;
+        bool any = false;
+        for (size_t t = 0; t < owner[l].size(); ++t)
+        {
+            if (owner[l][t] >= 0) continue;
+            if (r.lines[l].tokens[t].kind == TokenKind::Label) g.label = true;
+            const PcodeOp* o = opOf(l, t);
+            if (!o) continue;
+            if (!g.root && (o->isBranch() || o->code() == CPUI_BRANCHIND)) g.root = o;
+            g.tokens.emplace_back(l, t);
+            g.spanBegin = std::min<size_t>(g.spanBegin, t);
+            g.spanEnd = t + 1;
+            any = true;
+        }
+        if (!any && !g.label) continue;
+        if (!any) g.spanBegin = 0, g.spanEnd = 0xFFFF;
+        groups.push_back(g);
+    }
+    std::vector<size_t> order(groups.size());
+    for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        return groups[a].line != groups[b].line ? groups[a].line < groups[b].line : groups[a].spanBegin < groups[b].spanBegin;
+    });
+
+    std::vector<int> walkResult;   // by statement: 2 a proven store (a flow op's own, or the walk's), 1 candidates, 0 none
+    for (const size_t gi : order)
+    {
+        const Group& g = groups[gi];
+        Statement st;
+        st.firstLine = static_cast<uint32_t>(g.line);
+        st.lineCount = static_cast<uint32_t>(g.endLine - g.line + 1);
+        st.spanBegin = static_cast<uint16_t>(std::min<size_t>(g.spanBegin, 0xFFFF));
+        st.spanEnd = static_cast<uint16_t>(std::min<size_t>(g.spanEnd, 0xFFFF));
+        st.linkBegin = static_cast<uint32_t>(r.links.size());
+        const PcodeOp* root = g.root;
+        Id rootId = { kOpEngine, 0 };
+        if (root) rootId = identify(root);
+        const int halt = root && root->code() == CPUI_RETURN ? static_cast<int>(root->getHaltType()) : 0;
+        if (halt & PcodeOp::noreturn) continue;   // (not printed: the call's own statement keeps its Effect)
+        if (!root) st.kind = g.label ? StatementKind::Label : StatementKind::None;
+        else switch (root->code())
+        {
+        case CPUI_STORE: st.kind = StatementKind::Store; break;
+        case CPUI_CALL: case CPUI_CALLIND: st.kind = StatementKind::Call; break;
+        case CPUI_BRANCH: case CPUI_CBRANCH: case CPUI_BRANCHIND: st.kind = StatementKind::Branch; break;
+        case CPUI_RETURN: st.kind = halt ? StatementKind::Halt : StatementKind::Return; break;
+        default:
+            st.kind = HardwareAccess(fd, root) == 2 ? StatementKind::Store
+                    : memoryOut(root) && (rootId.origin == kOpEngine || foldedStores.count(rootId.root)) ? StatementKind::Store : StatementKind::Assign;
+            break;
+        }
+        const auto add = [&](uint32_t insn, LinkRole role, uint8_t flags, size_t span) {
+            const uint32_t a = CanonicalOf(insn);
+            for (size_t k = st.linkBegin; k < r.links.size(); ++k)
+                if (r.links[k].addr == a && r.links[k].role == role) return;
+            InsnLink link;
+            link.addr = a;
+            link.role = role;
+            link.flags = flags;
+            link.span = static_cast<uint16_t>(span);
+            r.links.push_back(link);
+        };
+        bool effect = false;
+        if (root)
+        {
+            if (halt)
+            {
+                const int type = (halt & PcodeOp::badinstruction) ? 0 : (halt & PcodeOp::halt) ? 1 : (halt & PcodeOp::unimplemented) ? 2 : 3;
+                ++census.halts[type];
+                add(InstructionOf(root), LinkRole::Value, type == 0 ? kLinkBadData : kLinkHalt, 0xFFFF);
+            }
+            else if (carrier(root) || rootId.origin != kOpEngine)
+            {
+                // (a clone of a flow op, or of a folded store's COPY, is its original's instruction: the clone carries the address and the slot flag)
+                add(InstructionOf(root), LinkRole::Effect, kLinkBehind, 0xFFFF);
+                effect = true;
+                if (rootId.origin == kOpClone && (carrier(root) || foldedStores.count(rootId.root))) ++census.cloneEffects;
+            }
+            else
+                add(InstructionOf(root), LinkRole::Placement, 0, 0xFFFF);   // an op the engine made: where it put it, no more
+        }
+        for (const auto& lt : g.tokens)
+        {
+            const PcodeOp* o = opOf(lt.first, lt.second);
+            if (!o || o == root) continue;
+            const Id id = identify(o);
+            const bool condition = st.kind == StatementKind::Branch && id.origin != kOpEngine && !carrier(o);
+            add(InstructionOf(o), condition ? LinkRole::Condition : LinkRole::Value, id.origin == kOpEngine ? kLinkCandidate : 0,
+                lt.first == g.line ? lt.second : 0xFFFF);
+        }
+        st.linkCount = static_cast<uint32_t>(r.links.size() - st.linkBegin);
+        ++census.statements[static_cast<size_t>(st.kind)];
+        int walked = effect ? 2 : 0;
+        if (st.kind == StatementKind::Store)
+        {
+            if (effect) ++census.storeFlow;
+            else if (root)
+            {
+                ++census.storeEngine;
+                walked = storeWalk(root);
+            }
+        }
+        if ((st.kind == StatementKind::Store || st.kind == StatementKind::Branch || st.kind == StatementKind::Call || st.kind == StatementKind::Return) &&
+            root && (carrier(root) || rootId.origin != kOpEngine))
+        {
+            ++census.effectDue;
+            int proven = 0;
+            for (size_t k = st.linkBegin; k < r.links.size(); ++k)
+                proven += r.links[k].role == LinkRole::Effect && !(r.links[k].flags & kLinkCandidate);
+            if (proven == 1) ++census.effectGiven;
+        }
+        walkResult.push_back(walked);
+        r.statements.push_back(st);
+    }
+    // The lines: each takes the first statement that starts on it (or runs onto it). Those that name a store today (the line's lowest address is
+    // an instruction that stores) and are left with no proven store are the census's measure of what the model loses.
+    for (size_t si = 0; si < r.statements.size(); ++si)
+    {
+        const Statement& st = r.statements[si];
+        for (size_t l = st.firstLine; l < st.firstLine + st.lineCount && l < r.lines.size(); ++l)
+            if (r.lines[l].statement < 0) r.lines[l].statement = static_cast<int32_t>(si);
+        if (si > 0 && r.statements[si - 1].firstLine == st.firstLine && (si < 2 || r.statements[si - 2].firstLine != st.firstLine))
+            ++census.multiStatementLines;
+        if (st.kind != StatementKind::Store || st.firstLine >= r.lines.size() || r.lines[st.firstLine].firstAddr == 0) continue;
+        const auto stores = flow.accessesByInsn.find(std::make_pair(r.lines[st.firstLine].firstAddr, true));
+        if (stores == flow.accessesByInsn.end() || stores->second.empty()) continue;
+        ++census.namedStoreLines;
+        if (walkResult[si] != 2) ++census.lostStoreLines;
+    }
+    for (size_t l = 0; l < r.lines.size(); ++l)
+    {
+        if (r.lines[l].statement >= 0) continue;
+        for (size_t t = 0; t < r.lines[l].tokens.size(); ++t)
+            if (opOf(l, t)) { ++census.noStatementLines; break; }
+    }
+    census.linkMicros += static_cast<uint32_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started).count());
+}
+
 }  // namespace
 
 // ---- the decisions of Sh2FlowDecisions.h (outside the anonymous namespace: the tests call them) ----
@@ -14684,7 +15062,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (markup.bad()) throw std::bad_alloc();
         TokenInputRegisters inputRegisters;
         r.inspectionTargets.clear();
-        r.lines = LinesFromMarkup(markup.str(), *fd, arch.get(), r.inspectionTargets, &printed, &flow.ranges, &inputRegisters);
+        MarkupOps markupOps;
+        r.lines = LinesFromMarkup(markup.str(), *fd, arch.get(), r.inspectionTargets, &printed, &flow.ranges, &inputRegisters, &markupOps);
         // A3-87 (closing A3-79): the engine prints a pointer into stack storage no local is mapped to -- a save slot a walk down
         // reaches (A3-65's recorded limit) -- as the raw stack register `register0x0000003c` (BADSPACEBASE), which is no C a caller
         // or the printed-C differential could compile (`'register0x0000003c' undeclared`). The value is right, but the text is not
@@ -14713,6 +15092,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         RetargetHoistedConversions(r.lines, printed, *fd, flow);   // A7-175
         RetargetInputOperandToStore(r.lines, *fd, flow, inputRegisters);   // A7-292
         MarkMaterialisedReads(r.lines, printed, *fd, flow);
+        BuildLinks(r, markupOps, printed, *fd, flow);   // (step 1 of the link model: a shadow, read by nothing yet)
         for (Line& l : r.lines)   // A7-12: the word flow halted at is no instruction; the line's hover text says so
             for (Token& t : l.tokens)
                 t.haltsFlow = t.addr != 0 && std::binary_search(r.badDataAt.begin(), r.badDataAt.end(), t.addr);
