@@ -486,6 +486,12 @@ for url in ("http://x/a%2f..%2f..%2fevil", "http://x/%2e%2e", "http://x/", "http
     except SystemExit:
         pass
 
+# --- the written offer names the Microsoft runtime only where it ships
+check(mso.closed_source_note([{"name": "Microsoft Visual C++ runtime", "note": "not open source; redistributed"}]) ==
+      " (every entry except Microsoft Visual C++ runtime, which is not open source)", "the Windows offer excepts the runtime")
+check(mso.closed_source_note([{"name": "libsdl2-2.0-0", "note": "Debian/Ubuntu package"}]) == "" and mso.closed_source_note(None) == "",
+      "a Linux or macOS offer has no exception")
+
 # --- the library section names what was copied
 text = mso.libraries_text([{"name": "gettext", "version": "1.0", "license": "LGPL-2.1-or-later", "files": ["libintl.8.dylib"],
                             "source": "https://example/gettext-1.0.tar.gz", "sha256": "ab", "included": "third-party-source/gettext-1.0.tar.gz"}])

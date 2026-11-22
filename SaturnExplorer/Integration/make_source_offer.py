@@ -113,9 +113,15 @@ Licences for all of the above are in the {licenses_dir} folder. The Saturn BIOS 
 included and not distributed by this project.
 
 Written offer: for three years from the date of this release, the corresponding source of the Mednafen
-build above and of each open-source library listed above (every entry except the Microsoft runtime, which
-is not open source) is available on request through the issue tracker of the repository above.
+build above and of each open-source library listed above{closed_source_note(libs)} is available on request
+through the issue tracker of the repository above.
 """
+
+
+def closed_source_note(libs):
+    """The written offer's exception for shipped entries that are not open source (the Microsoft runtime on Windows)."""
+    closed = [e["name"] for e in libs or () if "not open source" in (e.get("note") or "")]
+    return f" (every entry except {', '.join(closed)}, which {'is' if len(closed) == 1 else 'are'} not open source)" if closed else ""
 
 
 def libraries_text(libs):

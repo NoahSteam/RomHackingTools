@@ -513,6 +513,11 @@ everything in this download are in SOURCE.txt, mednafen-se-source.tar.xz and {li
 
 
 # --------------------------------------------------------------------------- assembly
+# Licenses/ folders for code only the Windows build ships: winpthreads and the static GCC runtime in
+# mednafen.exe (Linux Mednafen uses the system's C++ runtime). zlib stays: Saturn Explorer compiles it in.
+LICENSES_NOT_ON_LINUX = ("winpthreads", "gcc-runtime")
+
+
 def merge_licenses(stage, mac):
     """The repo's Licenses/ (the bundled-Mednafen case) goes beside the app on macOS, where the app's own
     texts are sealed inside the bundle. Elsewhere it is merged into the licenses/ folder the SE build
@@ -524,7 +529,10 @@ def merge_licenses(stage, mac):
     dest = os.path.join(stage, "licenses")
     if not os.path.isdir(dest):
         raise SystemExit("the SE build has no licenses/ folder; build it first (it stages one beside the exe)")
-    shutil.copytree(os.path.join(SE_ROOT, "Licenses"), dest, dirs_exist_ok=True)
+    # Linux: the bundled libraries' own texts come from their Debian packages (licenses/bundled-libraries/); the
+    # Windows-only components are not in a Linux download.
+    skip = shutil.ignore_patterns(*LICENSES_NOT_ON_LINUX) if IS_LINUX else None
+    shutil.copytree(os.path.join(SE_ROOT, "Licenses"), dest, dirs_exist_ok=True, ignore=skip)
 
 
 # --------------------------------------------------------------------------- provenance
