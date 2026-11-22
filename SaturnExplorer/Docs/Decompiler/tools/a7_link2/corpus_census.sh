@@ -14,10 +14,12 @@ BIN=$1; IMG=$2; D=$3; TAG=$4
 HERE=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$D"
 if [ ! -f "$D/census_base.txt" ]; then
-  ( ulimit -v 4500000; SE_LINK_CENSUS="$D/census_base.txt" "$BIN" "$D/runbase" > "$D/base.log" 2>&1 )
+  ( ulimit -v 4500000; unset SE_GAME_LEND; SE_LINK_CENSUS="$D/census_base.txt" "$BIN" "$D/runbase" > "$D/base.log" 2>&1 )
 fi
+# The base and alone runs clear SE_GAME_LEND (a caller's own setting would make them lent); the lent run asks for it through the `lend`
+# argument, which a7_link1/corpus.sh passes on to a7_round2/corpus.sh. corpus_census_selftest.sh checks the three modes.
 # corpus.sh names the report census_<tag>.txt, for the alone and the lent pass together; to have the two apart it is run twice
-"$HERE/../a7_link1/corpus.sh" "$BIN" "$IMG" "$D/alone" "$TAG"
+( unset SE_GAME_LEND; "$HERE/../a7_link1/corpus.sh" "$BIN" "$IMG" "$D/alone" "$TAG" )
 cp "$D/alone/census_${TAG}.txt" "$D/census_${TAG}_alone.txt" 2>/dev/null
 "$HERE/../a7_link1/corpus.sh" "$BIN" "$IMG" "$D/lent" "${TAG}_lend" lend
 cp "$D/lent/census_${TAG}_lend.txt" "$D/census_${TAG}_lent.txt" 2>/dev/null
