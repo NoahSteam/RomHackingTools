@@ -679,6 +679,30 @@ changed define, `--disable-*` set or Homebrew prefix all re-trigger it with noth
 The tuning constants (keyframe threshold, max keyframe interval, raw-queue depth, client state
 budget) live in `se_export.c` / `FrameRecorder.*` and can be measured/adjusted on-emulator.
 
+## Profiler counters (v26)
+
+`apply.py` (`process_profiler`) inserts counter increments into `sh7095.inc` (external-bus
+accesses), `sh7095_ops.inc` (SH-2 sleep / standby / bus-stall cycles), `scu.inc` (SCU DMA
+transfers and bytes, DSP cycles), `vdp1.cpp` (draw cycles, commands, unfinished draws) and
+`sound.cpp` (68000 cycles), plus the frame length at the end of `Emulate()`. They add to one
+array, `SeSsPerfC`, defined in the glue and indexed by `SePerfCounters.h` (copied into the tree
+with the other shared files). The glue hands the array to the server at the end of every frame
+(`SeMdfnPerfEndFrame`) and zeroes it. The increments are unconditional and cheap; every hook is
+an insertion after an anchor, so `--revert` removes them cleanly. An `ANCHOR MISS` here costs one
+figure in the Profiler panel (it reads zero) and is reported like any other miss.
+
+Function attribution is separate and opt-in: the client's `PRF` verb makes `SeSyncCpuHook` keep
+the continuous per-instruction callback installed (`SsDbgSetProfileActive`), and
+`SeMdfnProfSample` charges each instruction's cycles (`SsDbgCpuTimestamp` deltas, less the
+sleep/stall cycles counted meanwhile) to the innermost shadow-call-stack frame. It therefore needs
+`--enable-debugger`, costs what a tracepoint costs (the debug run loop), and is switched off by
+the server when the client disconnects.
+
+**Not yet verified against a running game**: the patched 1.32.1 tree compiles and links with
+these hooks, and the wire path is tested end to end with the real server and driver, but the
+counter magnitudes have not been compared with a known workload. See
+`Docs/Codebase/Systems/Profiler.md`.
+
 ## Saturn-only build (skip the other console cores)
 
 Mednafen builds **every** console core by default (PSX, SNES, MD, NES, PCE, PC-FX, …),

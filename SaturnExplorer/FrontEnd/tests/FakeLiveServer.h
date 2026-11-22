@@ -98,6 +98,7 @@ inline std::vector<uint8_t> Build(const Reply& r)
     if (r.version >= 15) Put32(o, 0);                            // CD block
     if (r.version >= 16) Put32(o, 0);                            // savestate blocks
     if (r.version >= 17) Put32(o, 0);                            // emulator slots
+    if (r.version >= 26) Put32(o, 0);                            // perf block (none)
     return o;
 }
 

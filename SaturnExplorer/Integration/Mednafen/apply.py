@@ -47,7 +47,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SHARED_DIR = os.path.normpath(os.path.join(HERE, "..", "Common"))
 # Copied verbatim from Common; the glue is copied from HERE with SE_MEDNAFEN_WIRED
 # prepended so no per-file build flag is needed.
-COMMON_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h", "SeStateCodec.h"]
+COMMON_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h", "SeStateCodec.h", "SePerfCounters.h"]
 GLUE_FILE = "se_mednafen_glue.c"
 
 BEGIN = "/* --- SE_EXPORT (Saturn Explorer live tap) --- */"
@@ -189,6 +189,10 @@ extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
       does not reach on its own. */
    if (a >= 0x05C00000u && a < 0x05C80000u) SsDbgVdp1LatchPokeByte(a - 0x05C00000u, (unsigned char)val);
 }
+/* An SH-2's cycle counter (v26 profiler): the glue takes the difference between two instructions
+   as the cost of the first. It restarts from near zero every frame (RebaseTS), and reads
+   SS_EVENT_DISABLED_TS while the slave is switched off; the glue discards both jumps. */
+extern "C" int SsDbgCpuTimestamp(int cpu) { return (int)CPU[cpu ? 1 : 0].timestamp; }
 /* SsDbgSoundRam (v13, SCSP RAM read) and SsDbgScspSlots (v14, decoded voices) are NOT here:
    they need the `static SS_SCSP SCSP` instance and scsp.h's private Slots[]/SlotRegs[], which
    are only visible inside sound.cpp. They are injected there instead — see process_sound()
@@ -229,6 +233,7 @@ static void SeSsBpHook(uint32 PC, bool bpoint);   /* fwd: SeSyncCpuHook installs
 static int sSeBpActive = 0;      /* >=1 execution breakpoint installed */
 static int sSeTraceActive = 0;   /* >=1 enabled tracepoint armed */
 static int sSeStepActive = 0;    /* an instruction step is in progress */
+static int sSeProfActive = 0;    /* the profiler is attributing SH-2 time to functions (v26) */
 /* Set while >=1 data (read/write) watchpoint is installed. scu.inc's DMA_Write reads it to
    cheap-gate the SCU-DMA watchpoint check (SeSsDmaWatch); C linkage + a global so scu.inc,
    which is included before debug.inc where DBG lives, can test it without the debugger guts. */
@@ -251,13 +256,15 @@ static void SeSyncCpuHook(void) {
       The handler's scope guard re-runs this as it returns, before the next instruction. */
    if (SeSsInHandler > 0) { sSeSyncPending = 1; return; }
    sSeSyncPending = 0;
-   const int on = sSeBpActive || sSeTraceActive || sSeStepActive;
+   /* Function profiling needs every instruction of both CPUs, exactly like a tracepoint. */
+   const int every = sSeTraceActive || sSeStepActive || sSeProfActive;
+   const int on = sSeBpActive || every;
    SeSsBothCpus = on;
    /* A held call/return is completed by the instructions that follow it; if the CPU is about to run
       without presenting them, it must be told (it is not told of an edit made while halted). */
-   if (!sSeHalted) SeMednafenHookMode((sSeTraceActive || sSeStepActive) != 0);
+   if (!sSeHalted) SeMednafenHookMode(every != 0);
    if (on)
-      DBG_SetCPUCallback(SeSsBpHook, (sSeTraceActive || sSeStepActive) != 0);
+      DBG_SetCPUCallback(SeSsBpHook, every != 0);
    else
       DBG_SetCPUCallback(0, false);
 }
@@ -385,8 +392,15 @@ extern "C" void SsDbgSetTraceActive(int active) {
    advertises breakpoints, watchpoints, instruction steps and tracepoints from it, so a client does
    not offer controls that the no-op stubs below would silently ignore. */
 extern "C" int SsDbgHasDebugger(void) { return 1; }
+/* Arm/disarm per-instruction function profiling (v26): the glue samples in SeMednafenTraceHook,
+   which only runs while the callback is continuous. */
+extern "C" void SsDbgSetProfileActive(int active) {
+   sSeProfActive = active ? 1 : 0;
+   SeSyncCpuHook();
+}
 #else
 extern "C" int SsDbgHasDebugger(void) { return 0; }
+extern "C" void SsDbgSetProfileActive(int active) { (void)active; }
 extern "C" { int SeSsInHandler = 0; }
 extern "C" void SeSsHandlerExit(void) {}
 extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) { (void)cpu; (void)addr; }
@@ -900,6 +914,112 @@ APPEND_EDITS = [
     ("vdp2.cpp", VDP2_POKE_ACCESSORS, "SsDbgPokeCramByte"),
 ]
 
+# ---- Profiler counters (v26). SeSsPerfC is one array of per-frame totals, defined in the glue and
+#      indexed by SePerfCounters.h (copied into the tree with the other shared files), so the
+#      emulator, the wire and the client agree on its order by construction. The increments below
+#      are unconditional: each sits on a path that already does far more work than one add (a bus
+#      access, a DMA start, a sleeping CPU's idle step), and a flag test would cost what it saves.
+#      Every hook is an INSERTION after an anchor, never a replacement, so --revert restores the
+#      file exactly by deleting the fenced blocks. ----
+PERF_DECL = (
+    "#include \"SePerfCounters.h\"\n"
+    "extern \"C\" unsigned long long SeSsPerfC[];\n"
+)
+# Which device an external-bus address belongs to, by its top 11 of 27 bits (64 KiB steps: the SCU
+# registers at 0x05FE0000 share a 512 KiB block with VDP2's). Filled once by a static constructor.
+PERF_BUS_HELPER = """\
+static unsigned char SeSsBusDev[2048];
+static struct SeSsBusDevInit {
+   SeSsBusDevInit() {
+      for (unsigned i = 0; i < 2048; ++i) {
+         const unsigned A = i << 16;
+         unsigned char d;
+         if      (A < 0x00100000u) d = SE_PERF_DEV_BIOS;
+         else if (A < 0x00180000u) d = SE_PERF_DEV_SMPC;
+         else if (A < 0x00200000u) d = SE_PERF_DEV_BACKUP;
+         else if (A < 0x00400000u) d = SE_PERF_DEV_WRAM_L;
+         else if (A < 0x02000000u) d = SE_PERF_DEV_CS0_OTHER;
+         else if (A < 0x04000000u) d = SE_PERF_DEV_ABUS_CS0;
+         else if (A < 0x05000000u) d = SE_PERF_DEV_ABUS_CS1;
+         else if (A < 0x05A00000u) d = SE_PERF_DEV_ABUS_CD;
+         else if (A < 0x05C00000u) d = SE_PERF_DEV_SCSP;
+         else if (A < 0x05E00000u) d = SE_PERF_DEV_VDP1;
+         else if (A < 0x05FE0000u) d = SE_PERF_DEV_VDP2;
+         else if (A < 0x06000000u) d = SE_PERF_DEV_SCU;
+         else                      d = SE_PERF_DEV_WRAM_H;
+         SeSsBusDev[i] = d;
+      }
+   }
+} sSeSsBusDevInit;
+/* One SH-2 external-bus access (BSC_BusRead / BSC_BusWrite in sh7095.inc: the two places every
+   access that really reaches the bus goes through -- a cache hit does not). */
+static inline void SeSsPerfBus(unsigned int A, int isWrite) {
+   ++SeSsPerfC[SE_PERF_BUS_ACCESS + SeSsBusDev[(A >> 16) & 2047] * 2 + isWrite];
+}
+"""
+
+SH2_BUSWRITE_ANCHOR = r'(void INLINE SH7095::BSC_BusWrite\(uint32 A, T V, const bool BurstHax, int32\* SH2DMAHax\)\s*\{[ \t]*\n)'
+SH2_BUSWRITE_HOOK = " SeSsPerfBus(A, 1);   /* SE_PERF_BUS_WRITE */\n"
+SH2_BUSREAD_ANCHOR = r'(T INLINE SH7095::BSC_BusRead\(uint32 A, const bool BurstHax, int32\* SH2DMAHax\)\s*\{[ \t]*\n)'
+SH2_BUSREAD_HOOK = " SeSsPerfBus(A, 0);   /* SE_PERF_BUS_READ */\n"
+
+# sh7095_ops.inc is compiled inside Step<which, ...> and inside the slave's resumable copy
+# (sh7095s_rsu.inc, which defines `which` as an enum), so `which` names the CPU in both.
+# A sleeping CPU re-executes its SLEEP pseudo-instruction every 3 cycles until an interrupt is
+# pending; standby and a DMA-burst / external-halt stall idle the same way in steps of 7.
+SH2_SLEEP_ANCHOR = r'(if\(MDFN_LIKELY\(!EPending\)\)\s*\{\s*\n\s*timestamp \+= 3;[ \t]*\n)'
+SH2_SLEEP_HOOK = "\t SeSsPerfC[SE_PERF_SH2_SLEEP + which] += 3;   /* SE_PERF_SLEEP_HOOK */\n"
+SH2_STANDBY_ANCHOR = r'(if\(MDFN_LIKELY\(Standby\)\)\s*\{\s*\n\s*timestamp \+= 7;[ \t]*\n)'
+SH2_STANDBY_HOOK = "\t SeSsPerfC[SE_PERF_SH2_SLEEP + which] += 7;   /* SE_PERF_STANDBY_HOOK */\n"
+SH2_STALL_ANCHOR = r'(if\(MDFN_LIKELY\(DMA_InBurst\(\) \|\| ExtHalt\)\)\s*\{\s*\n\s*timestamp \+= 7;[ \t]*\n)'
+SH2_STALL_HOOK = "\t SeSsPerfC[SE_PERF_SH2_STALL + which] += 7;   /* SE_PERF_STALL_HOOK */\n"
+
+# scu.inc: one count per transfer started (an indirect DMA starts one per table entry), with the
+# byte count it was started with -- on the cold path, so the per-unit copy loop is untouched.
+SCU_DMA_PERF_ANCHOR = r'(d->ReadFunc = rftab\[rb\];[ \t]*\n)'
+SCU_DMA_PERF_HOOK = (
+    " /* Saturn Explorer profiler: SCU DMA traffic by level and by bus route. */\n"
+    " ++SeSsPerfC[SE_PERF_DMA_TRANSFERS + (d - DMALevel)];\n"
+    " SeSsPerfC[SE_PERF_DMA_LEVEL_BYTES + (d - DMALevel)] += bc;\n"
+    " SeSsPerfC[SE_PERF_DMA_ROUTE_BYTES + rb * 3 + wb] += bc;\n"
+)
+SCU_DSP_PERF_ANCHOR = r'(\(\(void \(\*\)\(void\)\)\(DSP_INSTR_BASE_UIPT[^\n]*\n\s*DSP\.CycleCounter -= 2;[ \t]*\n)'
+SCU_DSP_PERF_HOOK = "  SeSsPerfC[SE_PERF_DSP_CYCLES] += 2;   /* Saturn Explorer profiler */\n"
+
+# vdp1.cpp. Update() advances VDP1 by the cycles since it last ran; while a draw is in progress
+# those are drawing cycles.
+VDP1_PERF_FWD = "/* SE_VDP1_PERF_FWD */\n" + PERF_DECL
+VDP1_PERF_UPDATE_ANCHOR = r'(int32 cycles = timestamp - lastts;\s*\n\s*lastts = timestamp;[ \t]*\n)'
+VDP1_PERF_UPDATE_HOOK = " if(DrawingActive) SeSsPerfC[SE_PERF_VDP1_DRAW_CYCLES] += cycles;\n"
+VDP1_PERF_CMD_ANCHOR = r'(memcpy\(CommandData, &VRAM\[CurCommandAddr\], sizeof\(CommandData\)\);[ \t]*\n)'
+VDP1_PERF_CMD_HOOK = "   ++SeSsPerfC[SE_PERF_VDP1_COMMANDS];\n"
+VDP1_PERF_START_ANCHOR = r'(static void StartDrawing\(void\)\s*\{[ \t]*\n)'
+VDP1_PERF_START_HOOK = (
+    " ++SeSsPerfC[SE_PERF_VDP1_DRAW_STARTS];\n"
+    " if(DrawingActive) ++SeSsPerfC[SE_PERF_VDP1_OVERRUNS];   /* the previous table was not finished */\n"
+)
+VDP1_PERF_ABORT_ANCHOR = r'(SS_DBGTI\(SS_DBG_WARNING \| SS_DBG_VDP1, "\[VDP1\] Drawing aborted by framebuffer swap\."\);[ \t]*\n)'
+VDP1_PERF_ABORT_HOOK = "     ++SeSsPerfC[SE_PERF_VDP1_OVERRUNS];   /* SE_PERF_FBSWAP_ABORT */\n"
+
+# sound.cpp: the 68000 runs in slices; a slice that starts stopped (STOP instruction) or halted
+# idles to its end, so only the others count as executed. Not in the SSF player, which has no tap.
+SOUND_PERF_FWD = "/* SE_SOUND_PERF_FWD */\n#ifndef MDFN_SSFPLAY_COMPILE\n" + PERF_DECL + "#endif\n"
+SOUND_PERF_PRE_ANCHOR = r'(int32 next_time = std::min<int32>\(next_scsp_time, run_until_time >> 32\);[ \t]*\n)'
+SOUND_PERF_PRE_HOOK = (
+    "   const int32 se_perf_t0 = SoundCPU.timestamp;\n"
+    "   const bool se_perf_idle = (SoundCPU.XPending & (M68K::XPENDING_MASK_STOPPED | M68K::XPENDING_MASK_ERRORHALTED |\n"
+    "                              M68K::XPENDING_MASK_DTACKHALTED | M68K::XPENDING_MASK_EXTHALTED)) != 0;\n"
+)
+SOUND_PERF_POST_ANCHOR = r'(SoundCPU\.Run\(next_time\);[ \t]*\n)'
+SOUND_PERF_POST_HOOK = (
+    "#ifndef MDFN_SSFPLAY_COMPILE\n"
+    "   SeSsPerfC[SE_PERF_M68K_TOTAL_CYCLES] += SoundCPU.timestamp - se_perf_t0;\n"
+    "   if(!se_perf_idle) SeSsPerfC[SE_PERF_M68K_CYCLES] += SoundCPU.timestamp - se_perf_t0;\n"
+    "#else\n"
+    "   (void)se_perf_t0; (void)se_perf_idle;\n"
+    "#endif\n"
+)
+
 # File-scope forward declarations (extern "C" is illegal inside a function body, so
 # the call sites below are plain calls that resolve to these). Prepended at BOF.
 FWD_DECLS = (
@@ -922,7 +1042,7 @@ FWD_DECLS = (
     # SeSsDmaWatch — defined at EOF after debug.inc — gated on the SeSsMemWatchArmed flag.
     "extern \"C\" int  SeSsMemWatchArmed;\n"
     "extern \"C\" void SeSsDmaWatch(unsigned int A, unsigned int len, int isWrite);\n"
-)
+) + PERF_DECL + PERF_BUS_HELPER
 
 # ---- The slave SH-2 under the debugger. ss/debug.inc's DBG_CPUHandler(which, ...) returns at its first
 #      line when `which != DBG.ActiveCPU`, and ActiveCPU is the debugger UI's "current CPU" -- the master
@@ -979,6 +1099,10 @@ FRAME_ANCHOR = r'(espec->MasterCycles\s*=\s*[^;]*;\s*\n)'
 # them, apply.py reports ANCHOR MISS and the build would record pictures but no savestates, so a
 # miss must be treated as a failed install, not a warning.
 END_FRAME_HOOK = (
+    " /* Saturn Explorer profiler: this frame's length, and whether the slave SH-2 was on for it\n"
+    "    (its timestamp reads SS_EVENT_DISABLED_TS while SMPC holds it off). */\n"
+    " SeSsPerfC[SE_PERF_FRAME_CYCLES] += end_ts;\n"
+    " if(CPU[1].timestamp != SS_EVENT_DISABLED_TS) SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] += end_ts;\n"
     " /* Saturn Explorer live tap: the frame is over; take its savestate here (rewind). */\n"
     " SeMednafenEndFrameHook();\n"
 )
@@ -1151,6 +1275,55 @@ def process_scu(src_dir, do_write):
     notes.append(n)
     if do_write and text != original:
         open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+    return notes
+
+
+def process_anchored(src_dir, fname, title, edits, do_write, prepend=None):
+    """Apply a list of (anchor, code, key) insertions to one file, with an optional
+    (code, key) block prepended first."""
+    path = os.path.join(src_dir, fname)
+    notes = [f"{fname} ({title}):"]
+    if not os.path.isfile(path):
+        return notes + [f"  MISSING  {fname}"]
+    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    if prepend:
+        text, n = apply_prepend(text, prepend[0], prepend[1])
+        notes.append(n)
+    for anchor, code, key in edits:
+        text, n = apply_anchored(text, anchor, code, key)
+        notes.append(n)
+    if do_write and text != original:
+        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+    return notes
+
+
+def process_profiler(src_dir, do_write):
+    """The profiler's counters (v26): see PERF_DECL. A miss here costs one figure in the Profiler
+    panel, which then reads zero -- it is reported like any other miss so it is not shipped unnoticed."""
+    notes = []
+    notes += process_anchored(src_dir, "sh7095.inc", "profiler: bus accesses", [
+        (SH2_BUSWRITE_ANCHOR, SH2_BUSWRITE_HOOK, "SE_PERF_BUS_WRITE"),
+        (SH2_BUSREAD_ANCHOR, SH2_BUSREAD_HOOK, "SE_PERF_BUS_READ"),
+    ], do_write)
+    notes += process_anchored(src_dir, "sh7095_ops.inc", "profiler: SH-2 idle time", [
+        (SH2_SLEEP_ANCHOR, SH2_SLEEP_HOOK, "SE_PERF_SLEEP_HOOK"),
+        (SH2_STANDBY_ANCHOR, SH2_STANDBY_HOOK, "SE_PERF_STANDBY_HOOK"),
+        (SH2_STALL_ANCHOR, SH2_STALL_HOOK, "SE_PERF_STALL_HOOK"),
+    ], do_write)
+    notes += process_anchored(src_dir, "scu.inc", "profiler: DMA + DSP", [
+        (SCU_DMA_PERF_ANCHOR, SCU_DMA_PERF_HOOK, "SE_PERF_DMA_ROUTE_BYTES"),
+        (SCU_DSP_PERF_ANCHOR, SCU_DSP_PERF_HOOK, "SE_PERF_DSP_CYCLES"),
+    ], do_write)
+    notes += process_anchored(src_dir, "vdp1.cpp", "profiler: draw time", [
+        (VDP1_PERF_UPDATE_ANCHOR, VDP1_PERF_UPDATE_HOOK, "SE_PERF_VDP1_DRAW_CYCLES"),
+        (VDP1_PERF_CMD_ANCHOR, VDP1_PERF_CMD_HOOK, "SE_PERF_VDP1_COMMANDS"),
+        (VDP1_PERF_START_ANCHOR, VDP1_PERF_START_HOOK, "SE_PERF_VDP1_DRAW_STARTS"),
+        (VDP1_PERF_ABORT_ANCHOR, VDP1_PERF_ABORT_HOOK, "SE_PERF_FBSWAP_ABORT"),
+    ], do_write, prepend=(VDP1_PERF_FWD, "SE_VDP1_PERF_FWD"))
+    notes += process_anchored(src_dir, "sound.cpp", "profiler: 68000 time", [
+        (SOUND_PERF_PRE_ANCHOR, SOUND_PERF_PRE_HOOK, "se_perf_idle ="),
+        (SOUND_PERF_POST_ANCHOR, SOUND_PERF_POST_HOOK, "SE_PERF_M68K_TOTAL_CYCLES"),
+    ], do_write, prepend=(SOUND_PERF_FWD, "SE_SOUND_PERF_FWD"))
     return notes
 
 
@@ -1403,7 +1576,8 @@ def process_build(root, do_write):
 def revert(src_dir, root):
     fence_re = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
     edited = [os.path.join(src_dir, f) for f in
-              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "scu.inc", "debug.inc", "sound.cpp", "scsp.h", "cdb.cpp", "smpc.cpp", "smpc.h")]
+              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "scu.inc", "debug.inc", "sound.cpp", "scsp.h", "cdb.cpp", "smpc.cpp", "smpc.h",
+               "sh7095.inc", "sh7095_ops.inc")]
     edited.append(os.path.join(root, TITLE_FILE))   # window-title mark (SDL frontend)
     edited.append(os.path.join(root, INPUT_FILE))   # keyboard-map hook (SDL frontend)
     for path in edited:
@@ -1483,6 +1657,7 @@ def main():
     notes += process_vdp1_drawend(src_dir, do_write)
     notes += process_sound(src_dir, do_write)
     notes += process_cd(src_dir, do_write)
+    notes += process_profiler(src_dir, do_write)
     notes += process_title(root, do_write)
     notes += process_input(root, do_write)
     notes += process_build(root, do_write)

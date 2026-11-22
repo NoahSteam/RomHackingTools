@@ -158,6 +158,43 @@ int se_live_emu_save_slot(const se_data_source* ds, uint32_t slot);
  * ignored against a pre-v18 server, which always captures. No-op if 'ds' isn't a live source. */
 void se_live_set_rewind_enabled(const se_data_source* ds, int enabled);
 
+/* ---- Profiler (v26+) ----
+ *
+ * The emulator counts, for every emulated frame, where the Saturn's time went (SH-2 sleep and
+ * bus-stall cycles, VDP1 drawing, the SCU DSP, the 68000), what crossed its buses (SH-2 accesses
+ * per device, SCU DMA bytes per level and route) -- Integration/Common/SePerfCounters.h lists the
+ * counters and is the index into 'counters' below. These cost the emulator next to nothing and
+ * arrive whenever the server has SE_LIVE_CAP_PROFILER (se_live_poke_info reports the caps).
+ *
+ * One record per completed emulated frame; a frame is never reported twice. 'frame' is the
+ * snapshot frame number of the reply that delivered it (the counters are those of the frame
+ * that finished just before that snapshot was taken). 'counter_count' is how many leading
+ * entries of 'counters' the server filled; the rest are zero. */
+#define SE_LIVE_PERF_COUNTERS 64u   /* room for SePerfCounters.h's SE_PERF_COUNT, with headroom */
+#define SE_LIVE_PERF_FUNCTIONS 64u  /* == SE_LIVE_PERF_FN_MAX */
+typedef struct se_live_perf_frame
+{
+    uint32_t seq;               /* the server's count of completed frames */
+    uint32_t flags;             /* SE_LIVE_PROF_* in force for the frame */
+    uint32_t frame;
+    uint32_t counter_count;
+    uint64_t counters[SE_LIVE_PERF_COUNTERS];
+    uint32_t fn_count;          /* hottest functions, hottest first (see SE_PERF_FN_* for the key) */
+    uint32_t fn_other_cycles;   /* attributed cycles beyond those fn_count entries */
+    uint32_t fn_key[SE_LIVE_PERF_FUNCTIONS];
+    uint32_t fn_cycles[SE_LIVE_PERF_FUNCTIONS];
+} se_live_perf_frame;
+
+/* Move up to 'max' queued records into 'out', oldest first; returns how many. The queue is
+ * bounded (ten seconds of frames), dropping the oldest, and is emptied on a reconnect. */
+uint32_t se_live_drain_perf(const se_data_source* ds, se_live_perf_frame* out, uint32_t max);
+
+/* Set the profiler options: SE_LIVE_PROF_FUNCTIONS (1) asks the emulator to attribute SH-2 time
+ * to functions, which makes it run its per-instruction loop -- several times slower -- for as
+ * long as the flag is set, so pass 0 when the user is not looking. Needs SE_LIVE_CAP_PROF_FUNCTIONS;
+ * ignored by a server without it, and not sent to one older than v26. Restated on reconnect. */
+void se_live_set_profiler(const se_data_source* ds, uint32_t flags);
+
 /* A fired tracepoint event drained from the server (v8+): the tracepoint id, the CPU
  * (0 master / 1 slave), the frame it fired on, and the captured SH-2 register file
  * (23 u32 in se_sh2_regs order: r[0..15], pc, pr, sr, gbr, vbr, mach, macl). */

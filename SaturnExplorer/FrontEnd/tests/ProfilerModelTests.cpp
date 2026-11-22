@@ -1,0 +1,216 @@
+// The profiler's arithmetic, with no emulator and no UI: a profiler that divides by the wrong
+// total still draws a plausible bar, so the shares, the history window, the function totals and
+// the memory-pool classification are pinned here against hand-worked counters.
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <vector>
+
+#include "Debug/ProfilerModel.h"
+
+using namespace sfe;
+
+namespace
+{
+int gFailures;
+#define CHECK(cond) do { if (!(cond)) { std::printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); ++gFailures; } } while (0)
+bool Near(double a, double b) { return std::fabs(a - b) < 1e-9; }
+
+PerfFrame MakeFrame(uint32_t seq, uint64_t cycles)
+{
+    PerfFrame f;
+    f.seq = seq;
+    f.frame = seq + 100;
+    f.c[SE_PERF_FRAME_CYCLES] = cycles;
+    return f;
+}
+
+void TestShares()
+{
+    uint64_t c[SE_PERF_COUNT] = {};
+    c[SE_PERF_FRAME_CYCLES] = 1000;
+    c[SE_PERF_SH2_SLEEP] = 300;          // master: 30% asleep
+    c[SE_PERF_SH2_STALL] = 100;          // 10% stalled -> 60% busy
+    c[SE_PERF_SSH2_ON_CYCLES] = 500;     // slave on for half the frame
+    c[SE_PERF_SH2_SLEEP + 1] = 200;
+    c[SE_PERF_SH2_STALL + 1] = 50;       // -> 25% busy
+    c[SE_PERF_VDP1_DRAW_CYCLES] = 250;
+    c[SE_PERF_DSP_CYCLES] = 10;
+    c[SE_PERF_M68K_CYCLES] = 40;
+    c[SE_PERF_M68K_TOTAL_CYCLES] = 400;  // the 68000's own clock, not the SH-2's
+    c[SE_PERF_VDP1_COMMANDS] = 120;
+    c[SE_PERF_VDP1_DRAW_STARTS] = 1;
+    const PerfShares s = ComputePerfShares(c);
+    CHECK(Near(s.frameCycles, 1000));
+    CHECK(Near(s.cpu[0].busy, 0.6) && Near(s.cpu[0].sleep, 0.3) && Near(s.cpu[0].stall, 0.1) && Near(s.cpu[0].off, 0.0));
+    CHECK(Near(s.cpu[1].busy, 0.25) && Near(s.cpu[1].sleep, 0.2) && Near(s.cpu[1].stall, 0.05) && Near(s.cpu[1].off, 0.5));
+    CHECK(Near(s.vdp1Draw, 0.25) && Near(s.dsp, 0.01) && Near(s.m68k, 0.1));
+    CHECK(Near(s.vdp1Commands, 120) && Near(s.vdp1DrawsPerFrame, 1));
+    for (int cpu = 0; cpu < 2; ++cpu)
+        CHECK(Near(s.cpu[cpu].busy + s.cpu[cpu].sleep + s.cpu[cpu].stall + s.cpu[cpu].off, 1.0));
+
+    // Summed over two frames the per-frame figures halve; the shares do not move.
+    uint64_t two[SE_PERF_COUNT];
+    for (int i = 0; i < SE_PERF_COUNT; ++i) two[i] = c[i] * 2;
+    const PerfShares s2 = ComputePerfShares(two, 2.0);
+    CHECK(Near(s2.frameCycles, 1000) && Near(s2.cpu[0].busy, 0.6) && Near(s2.vdp1Commands, 120));
+
+    // Idle counted past the frame (the counters are read at slightly different instants) is
+    // clamped, never a negative busy share.
+    uint64_t over[SE_PERF_COUNT] = {};
+    over[SE_PERF_FRAME_CYCLES] = 1000;
+    over[SE_PERF_SH2_SLEEP] = 1003;
+    const PerfShares so = ComputePerfShares(over);
+    CHECK(Near(so.cpu[0].busy, 0.0) && Near(so.cpu[0].sleep, 1.0));
+    // A slave that was never on is entirely "off".
+    CHECK(Near(so.cpu[1].off, 1.0) && Near(so.cpu[1].busy, 0.0));
+
+    // No data: all zero rather than a division by zero.
+    uint64_t none[SE_PERF_COUNT] = {};
+    const PerfShares sn = ComputePerfShares(none);
+    CHECK(sn.frameCycles == 0 && sn.cpu[0].busy == 0 && sn.vdp1Draw == 0);
+}
+
+void TestBuses()
+{
+    uint64_t c[SE_PERF_COUNT] = {};
+    c[SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2] = 1000;       // CPU bus read
+    c[SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2 + 1] = 400;    // CPU bus write
+    c[SE_PERF_BUS_ACCESS + SE_PERF_DEV_SCU * 2 + 1] = 7;         // SCU registers sit on the CPU bus
+    c[SE_PERF_BUS_ACCESS + SE_PERF_DEV_VDP1 * 2 + 1] = 50;       // B-bus
+    c[SE_PERF_BUS_ACCESS + SE_PERF_DEV_VDP2 * 2] = 5;            // B-bus
+    c[SE_PERF_BUS_ACCESS + SE_PERF_DEV_ABUS_CD * 2] = 30;        // A-bus
+    c[SE_PERF_DMA_ROUTE_BYTES + SE_PERF_BUS_CPU * 3 + SE_PERF_BUS_B] = 4096;   // work RAM -> VDP
+    c[SE_PERF_DMA_ROUTE_BYTES + SE_PERF_BUS_A * 3 + SE_PERF_BUS_CPU] = 2048;   // CD -> work RAM
+    const BusTotals t = ComputeBusTotals(c);
+    const int cpu = static_cast<int>(PerfBus::Cpu), a = static_cast<int>(PerfBus::A), b = static_cast<int>(PerfBus::B);
+    CHECK(t.reads[cpu] == 1000 && t.writes[cpu] == 407);
+    CHECK(t.reads[b] == 5 && t.writes[b] == 50);
+    CHECK(t.reads[a] == 30 && t.writes[a] == 0);
+    CHECK(t.dmaOut[cpu] == 4096 && t.dmaIn[b] == 4096);
+    CHECK(t.dmaOut[a] == 2048 && t.dmaIn[cpu] == 2048);
+    CHECK(t.dmaIn[a] == 0 && t.dmaOut[b] == 0);
+    // Every device has a name and belongs to a bus.
+    for (int d = 0; d < SE_PERF_DEV_COUNT; ++d) CHECK(std::strcmp(PerfDeviceName(d), "?") != 0);
+    CHECK(PerfDeviceBus(SE_PERF_DEV_SCSP) == PerfBus::B && PerfDeviceBus(SE_PERF_DEV_ABUS_CS0) == PerfBus::A);
+    CHECK(SE_PERF_COUNT == SE_PERF_BUS_ACCESS + SE_PERF_DEV_COUNT * 2);
+}
+
+void TestHistory()
+{
+    ProfilerModel m(4);
+    CHECK(m.Empty());
+    for (uint32_t i = 1; i <= 3; ++i) m.Push(MakeFrame(i, i * 100));
+    CHECK(m.Count() == 3 && m.At(0).seq == 1 && m.Latest().seq == 3);
+    m.Push(MakeFrame(3, 999));                       // the same frame delivered twice
+    CHECK(m.Count() == 3 && m.Latest().c[SE_PERF_FRAME_CYCLES] == 300);
+    m.Push(MakeFrame(4, 400));
+    m.Push(MakeFrame(5, 500));                       // wraps: the oldest goes
+    CHECK(m.Count() == 4 && m.At(0).seq == 2 && m.Latest().seq == 5);
+
+    uint64_t sum[SE_PERF_COUNT];
+    CHECK(m.Sum(2, sum) == 2 && sum[SE_PERF_FRAME_CYCLES] == 900);     // the newest two
+    CHECK(m.Sum(100, sum) == 4 && sum[SE_PERF_FRAME_CYCLES] == 1400);  // capped at what there is
+    CHECK(m.Sum(1, sum) == 1 && sum[SE_PERF_FRAME_CYCLES] == 500);
+
+    m.Push(MakeFrame(1, 50));                        // the count went backwards: a new emulator run
+    CHECK(m.Count() == 1 && m.Latest().c[SE_PERF_FRAME_CYCLES] == 50);
+    m.Clear();
+    CHECK(m.Empty() && m.Sum(10, sum) == 0 && sum[SE_PERF_FRAME_CYCLES] == 0);
+}
+
+void TestFunctions()
+{
+    ProfilerModel m(8);
+    const uint32_t fnA = 0x06004000u, fnB = 0x06010000u;
+    const uint32_t slaveB = fnB | SE_PERF_FN_SLAVE;
+    const uint32_t raw = SE_PERF_FN_RAW_PC | 0x06020040u;
+
+    PerfFrame f1 = MakeFrame(1, 1000);
+    f1.functions = true;
+    f1.fns = { { fnA, 300 }, { fnB, 100 } };
+    f1.fnOther = 10;
+    PerfFrame f2 = MakeFrame(2, 1000);               // attribution off: must not dilute anything
+    PerfFrame f3 = MakeFrame(3, 1000);
+    f3.functions = true;
+    f3.fns = { { fnB, 500 }, { slaveB, 200 }, { raw, 50 } };
+    m.Push(f1); m.Push(f2); m.Push(f3);
+
+    uint64_t total = 0;
+    size_t used = 0;
+    std::vector<PerfFunction> hot = m.HotFunctions(10, &total, &used);
+    CHECK(used == 2);
+    CHECK(total == 300 + 100 + 10 + 500 + 200 + 50);
+    CHECK(hot.size() == 4);
+    CHECK(hot[0].key == fnB && hot[0].cycles == 600);      // summed across frames
+    CHECK(hot[1].key == fnA && hot[1].cycles == 300);
+    CHECK(hot[2].key == slaveB && hot[2].Slave() && !hot[2].RawPc() && hot[2].Address() == fnB);
+    CHECK(hot[3].RawPc() && !hot[3].Slave() && hot[3].Address() == 0x06020040u);
+
+    hot = m.HotFunctions(1, &total, &used);                // the newest frame alone
+    CHECK(used == 1 && total == 750 && hot.size() == 3 && hot[0].key == fnB && hot[0].cycles == 500);
+    hot = m.HotFunctions(2, &total, &used);                // f3 and the unattributed f2
+    CHECK(used == 1 && total == 750);
+}
+
+void TestPools()
+{
+    MemoryPoolTracker t;
+    // 4 KiB: the minimum block size applies -> 256 blocks of 16 bytes.
+    std::vector<uint8_t> ram(4096, 0x00);
+    for (int i = 0; i < 16; ++i) ram[32 + i] = static_cast<uint8_t>(i);   // block 2 holds data
+    std::memset(ram.data() + 64, 0xFF, 16);                               // block 4: one value repeated = empty
+    t.Sample(0, "Colour RAM", 0x05F00000u, ram.data(), 4096);
+    const PoolUsage* u = &t.Pool(0);
+    CHECK(u->valid && u->blockSize == 16 && u->cells.size() == 256);
+    CHECK(u->usedBlocks == 1 && u->changedBlocks == 0);                   // nothing to compare with yet
+    CHECK(u->cells[2] == 1 && u->cells[4] == 0 && u->cells[0] == 0);
+    CHECK(Near(u->UsedFraction(), 1.0 / 256.0));
+
+    ram[160] = 0x12;                                                      // block 10 gains data
+    t.Sample(0, "Colour RAM", 0x05F00000u, ram.data(), 4096);
+    u = &t.Pool(0);
+    CHECK(u->usedBlocks == 2 && u->changedBlocks == 1);
+    CHECK(u->cells[10] == 255 && u->cells[2] == 1);
+
+    t.Sample(0, "Colour RAM", 0x05F00000u, ram.data(), 4096);            // unchanged: the mark fades
+    u = &t.Pool(0);
+    CHECK(u->changedBlocks == 0 && u->cells[10] < 255 && u->cells[10] > 1);
+    for (int i = 0; i < 40; ++i) t.Sample(0, "Colour RAM", 0x05F00000u, ram.data(), 4096);
+    CHECK(t.Pool(0).cells[10] == 1);                                      // ...down to "holds data", no further
+
+    ram[160] = 0x00;                                                      // cleared again
+    t.Sample(0, "Colour RAM", 0x05F00000u, ram.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 1 && t.Pool(0).usedBlocks == 1 && t.Pool(0).cells[10] == 255);
+    t.Sample(0, "Colour RAM", 0x05F00000u, ram.data(), 4096);
+    CHECK(t.Pool(0).cells[10] == 0);                                      // empty and settled
+
+    // 1 MiB caps at kMaxBlocks blocks.
+    std::vector<uint8_t> big(0x100000, 0);
+    big[0x100000 - 1] = 1;
+    t.Sample(1, "High work RAM", 0x06000000u, big.data(), 0x100000);
+    CHECK(t.Pool(1).cells.size() == MemoryPoolTracker::kMaxBlocks && t.Pool(1).blockSize == 1024);
+    CHECK(t.Pool(1).usedBlocks == 1 && t.Pool(1).cells.back() == 1);
+
+    // A region the capture does not have is reported as such, not as empty.
+    t.MarkMissing(2, "Sound RAM", 0x05A00000u, 0x80000);
+    CHECK(!t.Pool(2).valid && t.Pool(2).name == "Sound RAM" && t.Count() == 3);
+    // ...and coming back, it starts with no "changed" blocks.
+    t.Sample(2, "Sound RAM", 0x05A00000u, big.data(), 0x80000);
+    CHECK(t.Pool(2).valid && t.Pool(2).changedBlocks == 0);
+    t.Reset();
+    CHECK(t.Count() == 0);
+}
+}  // namespace
+
+int main()
+{
+    TestShares();
+    TestBuses();
+    TestHistory();
+    TestFunctions();
+    TestPools();
+    if (gFailures) { std::printf("%d check(s) failed\n", gFailures); return 1; }
+    std::printf("ProfilerModelTests passed\n");
+    return 0;
+}

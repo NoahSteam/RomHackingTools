@@ -832,6 +832,27 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerLogPanelTests COMMAND SaturnExplorerLogPanelTests)
     set_tests_properties(SaturnExplorerLogPanelTests PROPERTIES TIMEOUT 120)
 
+    # Profiler: the model's arithmetic (frame shares, bus totals, history window, hot functions,
+    # memory-pool occupancy) with no emulator and no UI, then the panel drawn headlessly.
+    add_executable(SaturnExplorerProfilerModelTests
+        FrontEnd/tests/ProfilerModelTests.cpp
+        FrontEnd/src/Debug/ProfilerModel.cpp
+    )
+    target_include_directories(SaturnExplorerProfilerModelTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    add_test(NAME SaturnExplorerProfilerModelTests COMMAND SaturnExplorerProfilerModelTests)
+
+    add_executable(SaturnExplorerProfilerPanelTests
+        FrontEnd/tests/ProfilerPanelTests.cpp
+        FrontEnd/src/ProfilerPanel.cpp
+        FrontEnd/src/Debug/ProfilerModel.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerProfilerPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    add_test(NAME SaturnExplorerProfilerPanelTests COMMAND SaturnExplorerProfilerPanelTests)
+    set_tests_properties(SaturnExplorerProfilerPanelTests PROPERTIES TIMEOUT 120)
+
     # The Memory panel -- the real panel under the app's real theme and font, against a mock
     # backend: typed digits, edit-box fit, row-height/scroll agreement, and click gating.
     add_executable(SaturnExplorerHexEditorPanelTests
@@ -1625,6 +1646,21 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         add_test(NAME SaturnExplorerLiveRestoreSignalTests
                  COMMAND SaturnExplorerLiveRestoreSignalTests)
 
+        # The profiler's wire path (v26): the real exporter hands over per-frame counters, the
+        # real driver must deliver each frame once and intact, and function attribution must be
+        # armed on request and disarmed on disconnect. Shares the default socket.
+        add_executable(SaturnExplorerLiveProfilerTests
+            FrontEnd/tests/LiveProfilerTests.cpp
+            Integration/Common/se_export.c)
+        target_include_directories(SaturnExplorerLiveProfilerTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveProfilerTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveProfilerTests
+                 COMMAND SaturnExplorerLiveProfilerTests)
+
         # A1-7: a paused emulator that is captured every UI frame (a state load nobody confirms)
         # must not make the SH-2 Pseudocode panel ask again every frame. The real exporter withholds
         # the confirmation, the real driver and context capture it through CaptureLiveFrame, and
@@ -1773,7 +1809,7 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
         target_link_libraries(SaturnExplorerLiveHaltRaceTests PRIVATE Threads::Threads)
         add_test(NAME SaturnExplorerLiveHaltRaceTests COMMAND SaturnExplorerLiveHaltRaceTests)
-        set_tests_properties(SaturnExplorerLiveRestoreSignalTests SaturnExplorerExportAttachTests
+        set_tests_properties(SaturnExplorerLiveRestoreSignalTests SaturnExplorerLiveProfilerTests SaturnExplorerExportAttachTests
                              SaturnExplorerLiveExporterRobustnessTests SaturnExplorerLiveHaltRaceTests
                              PROPERTIES RESOURCE_LOCK live_tap_socket)
     endif()
@@ -1850,6 +1886,8 @@ if(WIN32)
         FrontEnd/src/Debug/MemorySearchRunner.cpp
         FrontEnd/src/Debug/BytePatternSearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
+        FrontEnd/src/Debug/ProfilerModel.cpp
+        FrontEnd/src/ProfilerPanel.cpp
         FrontEnd/src/Debug/M68kDisasm.cpp
         FrontEnd/src/Disc/IsoFs.cpp
         FrontEnd/src/Disc/DiscImage.cpp
@@ -1942,6 +1980,8 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/MemorySearchRunner.cpp
         FrontEnd/src/Debug/BytePatternSearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
+        FrontEnd/src/Debug/ProfilerModel.cpp
+        FrontEnd/src/ProfilerPanel.cpp
         FrontEnd/src/Debug/M68kDisasm.cpp
         FrontEnd/src/Disc/IsoFs.cpp
         FrontEnd/src/Disc/DiscImage.cpp
@@ -2054,6 +2094,8 @@ else()
             FrontEnd/src/Debug/MemorySearchRunner.cpp
             FrontEnd/src/Debug/BytePatternSearch.cpp
             FrontEnd/src/Debug/AccessLog.cpp
+            FrontEnd/src/Debug/ProfilerModel.cpp
+            FrontEnd/src/ProfilerPanel.cpp
             FrontEnd/src/Debug/M68kDisasm.cpp
             FrontEnd/src/Disc/IsoFs.cpp
             FrontEnd/src/Disc/DiscImage.cpp

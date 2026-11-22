@@ -30,10 +30,17 @@
  */
 #include "se_export.h"
 #include "SeLiveProtocol.h"
+#include "SePerfCounters.h"
 
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
+
+/* The profiler's per-frame totals (v26), in SePerfCounters.h order. The code apply.py injects
+ * into the ss core adds to these where the work happens; SeMdfnPerfEndFrame hands them over and
+ * zeroes them. Defined here, outside SE_MEDNAFEN_WIRED, because the injected code references it
+ * in every build. Written by the emulate thread only. */
+unsigned long long SeSsPerfC[SE_PERF_COUNT];
 
 /* ---- Accessors the patcher injects into Mednafen ss (C linkage). Each reaches a
  *      file-scope static the glue can't see directly. Pointer accessors return the
@@ -67,6 +74,8 @@ extern void            SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int si
 extern void            SsDbgClearBps(void);                        /* Tier 3: clear PC + data breakpoints */
 extern void            SsDbgSetTraceActive(int active);           /* arm per-insn tracepoint scan */
 extern int             SsDbgHasDebugger(void);                    /* 1 in a --enable-debugger build: the CPU hooks are real */
+extern void            SsDbgSetProfileActive(int active);         /* v26: keep the per-insn hook on for function profiling */
+extern int             SsDbgCpuTimestamp(int cpu);                /* v26: an SH-2's cycle counter (rebased every frame) */
 /* Controller injection (v7+). apply.py implements this accessor through the SMPC
  * gamepad path, translating SE_PAD_* to Mednafen's bit order and atomically overlaying
  * it after each host-input refresh. `port` is 0-based (0 = controller 1). */
@@ -716,6 +725,10 @@ int SeMednafenSelfBranchTaken(int cpu, unsigned int pc)
  * (2) mirror calls/returns into the v9 shadow call stack. SsDbgSh2Regs returns
  * R0..R15,SR,GBR,VBR,MACH,MACL,PR,PC; reorder into se_sh2_regs order
  * (r[0..15],pc,pr,sr,gbr,vbr,mach,macl) which is what the event carries. */
+static int sProfOn;   /* the profiler section below owns these; the hook needs them first */
+#if defined(SE_MEDNAFEN_WIRED)
+static void SeMdfnProfSample(int cpu, unsigned int pc);
+#endif
 void SeMednafenTraceHook(int cpu, unsigned int pc)
 {
 #if defined(SE_MEDNAFEN_WIRED)
@@ -740,9 +753,135 @@ void SeMednafenTraceHook(int cpu, unsigned int pc)
         }
     }
     SeMdfnTrackFlow(cpu, pc);   /* v9 shadow call stack */
+    if (sProfOn) SeMdfnProfSample(cpu, pc);   /* after the stack: it names the function */
 #else
     (void)cpu; (void)pc;
 #endif
+}
+
+/* ============================ profiler (v26) ============================== */
+/* Function attribution. While it is on, the per-instruction hook hands every PC of both SH-2s to
+ * SeMdfnProfSample, which charges the cycles since the previous instruction of that CPU to the
+ * function that instruction was in. Which function that is comes from the shadow call stack the
+ * same hook maintains (the entry address a real bsr/jsr recorded), so it needs no symbol table
+ * and no guessing at function boundaries; code with no recorded frame -- whatever was already
+ * running when profiling began, typically the main loop -- is charged to a 16-byte bucket of
+ * its PC instead, and the client resolves that with its own function finder.
+ *
+ * The table is per frame: open addressing over SE_PROF_SLOTS keys, emptied when the frame is
+ * handed over. A game touches a few hundred functions a frame; if the table ever fills, the
+ * excess is counted in the "other" total rather than dropped silently. */
+#define SE_PROF_SLOTS 4096u    /* power of two */
+#define SE_PROF_FILL  3072u    /* stop inserting new keys at 75% so probes stay short */
+typedef struct { unsigned int key, cycles; } SeProfSlot;
+static SeProfSlot sProfTab[SE_PROF_SLOTS];
+static unsigned int sProfUsed;
+static unsigned int sProfOther;        /* cycles that found no slot */
+static int sProfOn;                    /* SE_LIVE_PROF_FUNCTIONS is in force */
+static int sProfSynced[2];             /* sProfLastTs / sProfKey hold a previous instruction */
+static int sProfLastTs[2];
+static unsigned long long sProfLastIdle[2];
+static unsigned int sProfKey[2];       /* the function the previous instruction was in */
+
+static void SeMdfnProfAdd(unsigned int key, unsigned int cycles)
+{
+    unsigned int i = (key * 2654435761u) >> 20;   /* 12 bits: SE_PROF_SLOTS */
+    unsigned int probes;
+    for (probes = 0; probes < SE_PROF_SLOTS; ++probes, i = (i + 1u) & (SE_PROF_SLOTS - 1u))
+    {
+        if (sProfTab[i].key == key) { sProfTab[i].cycles += cycles; return; }
+        if (sProfTab[i].key == 0)
+        {
+            if (sProfUsed >= SE_PROF_FILL) break;
+            sProfTab[i].key = key; sProfTab[i].cycles = cycles; ++sProfUsed;
+            return;
+        }
+    }
+    sProfOther += cycles;
+}
+
+/* The time a CPU spent asleep or held off the bus is not the function's: the counters the
+ * injected code keeps say how much of the interval that was. */
+static unsigned long long SeMdfnProfIdle(int cpu)
+{
+    return SeSsPerfC[SE_PERF_SH2_SLEEP + cpu] + SeSsPerfC[SE_PERF_SH2_STALL + cpu];
+}
+
+#if defined(SE_MEDNAFEN_WIRED)
+static void SeMdfnProfSample(int cpu, unsigned int pc)
+{
+    const int c = cpu ? 1 : 0;
+    const int ts = SsDbgCpuTimestamp(c);
+    const unsigned long long idle = SeMdfnProfIdle(c);
+    unsigned int fn;
+    if (sProfSynced[c])
+    {
+        const long long delta = (long long)ts - (long long)sProfLastTs[c];
+        const unsigned long long didle = idle - sProfLastIdle[c];
+        /* A frame is under a million cycles. Anything outside (0, 2^24) is not an instruction's
+         * cost: the per-frame rebase, the slave being switched off or on, a state load. */
+        if (delta > 0 && delta < (1 << 24) && didle < (unsigned long long)delta)
+            SeMdfnProfAdd(sProfKey[c], (unsigned int)((unsigned long long)delta - didle));
+    }
+    sProfLastTs[c] = ts;
+    sProfLastIdle[c] = idle;
+    sProfSynced[c] = 1;
+    fn = SeExportCurrentFunction(c);
+    /* Key 0 marks an empty slot; a raw-PC key always has its top bit set, and a recorded function
+     * at address 0 cannot be told from "none", so it falls to the raw-PC form as well. */
+    sProfKey[c] = ((fn & SE_PERF_FN_ADDR_MASK) != 0u
+                       ? (fn & SE_PERF_FN_ADDR_MASK)
+                       : (SE_PERF_FN_RAW_PC | (pc & SE_PERF_FN_ADDR_MASK & ~(SE_PERF_FN_PC_BUCKET - 1u)))) |
+                  (c ? SE_PERF_FN_SLAVE : 0u);
+}
+
+/* Registered with the server; runs on the emulate thread when the client's PRF flags change. */
+static void SeMdfnSetProfiler(unsigned int flags)
+{
+    sProfOn = (flags & SE_LIVE_PROF_FUNCTIONS) ? 1 : 0;
+    sProfSynced[0] = sProfSynced[1] = 0;
+    SsDbgSetProfileActive(sProfOn);
+}
+#endif
+
+/* The frame is over: hand its counters and its hottest functions to the server, and start the
+ * next frame from zero. Nothing is serialized when nobody is attached. */
+static void SeMdfnPerfEndFrame(void)
+{
+    unsigned int keys[SE_LIVE_PERF_FN_MAX], cycles[SE_LIVE_PERF_FN_MAX];
+    unsigned int n = 0, other = sProfOther, i;
+    if (SeExportHasClient())
+    {
+        if (sProfUsed)
+        {
+            /* The SE_LIVE_PERF_FN_MAX largest, hottest first, by insertion into a short sorted
+             * list: one pass over the table, once a frame. */
+            for (i = 0; i < SE_PROF_SLOTS; ++i)
+            {
+                const unsigned int k = sProfTab[i].key, cyc = sProfTab[i].cycles;
+                unsigned int j;
+                if (!k) continue;
+                if (n == SE_LIVE_PERF_FN_MAX)
+                {
+                    if (cyc <= cycles[n - 1]) { other += cyc; continue; }
+                    other += cycles[n - 1];
+                    --n;
+                }
+                for (j = n; j > 0 && cycles[j - 1] < cyc; --j) { keys[j] = keys[j - 1]; cycles[j] = cycles[j - 1]; }
+                keys[j] = k; cycles[j] = cyc;
+                ++n;
+            }
+        }
+        SeExportPublishPerf(SeSsPerfC, SE_PERF_COUNT, keys, cycles, n, other);
+    }
+    /* The idle totals restart from zero with the counters, so the samplers' copies must too. */
+    sProfLastIdle[0] = sProfLastIdle[1] = 0;
+    memset(SeSsPerfC, 0, sizeof SeSsPerfC);
+    if (sProfUsed) { memset(sProfTab, 0, sizeof sProfTab); sProfUsed = 0; }
+    sProfOther = 0;
+    /* The CPUs' cycle counters were rebased for the next frame just before this hook; the first
+     * sample of each CPU re-reads them rather than measuring across the rebase. */
+    sProfSynced[0] = sProfSynced[1] = 0;
 }
 
 /* ============================ lifecycle wiring ============================ */
@@ -759,6 +898,7 @@ void SeMednafenTraceHook(int cpu, unsigned int pc)
  * rebased, and the machine is in exactly the state the next frame will start from. */
 void SeMednafenEndFrameHook(void)
 {
+    SeMdfnPerfEndFrame();
     SeExportEndFrame();
 }
 
@@ -784,6 +924,8 @@ void SeMednafenFrameHook(void)
         SeExportSetTracepointHook(SeMdfnSetTracepoints);  /* tracepoints (v8+) */
         /* What the CPU hooks can really do (v24): all of it under --enable-debugger, none of it
          * otherwise -- the accessors are then no-op stubs, and a client must not offer them. */
+        /* Function profiling rides the same per-instruction hook; without it only the counters. */
+        if (SsDbgHasDebugger()) SeExportSetProfilerHook(SeMdfnSetProfiler);
         SeExportSetDebugCaps(SsDbgHasDebugger()
                                  ? (SE_LIVE_CAP_EXEC_BP | SE_LIVE_CAP_MEM_WATCH |
                                     SE_LIVE_CAP_INSN_STEP | SE_LIVE_CAP_TRACEPOINTS)
@@ -805,5 +947,7 @@ void SeMednafenSuppressUnusedWarnings(void)
     (void)SeMdfnSetTracepoints; (void)SeRd32LE;
     (void)SeMdfnSaveState; (void)SeMdfnLoadState;
     (void)SeMdfnApplyFlow;   /* reached only through the wired SeMdfnTrackFlow */
+    (void)SeMdfnProfAdd; (void)SeMdfnProfIdle; (void)SeMdfnPerfEndFrame; (void)sProfOn;
+    (void)sProfSynced; (void)sProfLastTs; (void)sProfLastIdle; (void)sProfKey;
 }
 #endif

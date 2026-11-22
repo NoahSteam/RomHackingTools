@@ -36,9 +36,13 @@
 #include "FrameRecorder.h"
 #include "ScrubState.h"
 #include "se_export.h"
+#include "SeLiveProtocol.h"
+#include "SePerfCounters.h"
 
 extern "C" void SeMednafenFrameHook(void);
 extern "C" void SeMednafenEndFrameHook(void);
+extern "C" void SeMednafenTraceHook(int cpu, unsigned int pc);
+extern "C" unsigned long long SeSsPerfC[];   // the glue's profiler counters (the emulator patch adds to them)
 
 // ------------------------------------------------------------------------------------------------
 // Mednafen's storage, and the apply.py accessors compiled against it.
@@ -161,6 +165,12 @@ void SsDbgAddMemBp(int, unsigned int, unsigned int, unsigned int) {}
 void SsDbgClearBps(void) {}
 void SsDbgSetTraceActive(int) {}
 int SsDbgHasDebugger(void) { return 1; }
+// Profiler (v26): the SH-2 cycle counters the glue's sampler reads, and the arming of the
+// per-instruction hook, both driven by the profiler section of main().
+static int gCpuTs[2];
+static int gProfActive;
+int SsDbgCpuTimestamp(int cpu) { return gCpuTs[cpu ? 1 : 0]; }
+void SsDbgSetProfileActive(int active) { gProfActive = active; }
 void SsDbgSetPad(unsigned int, unsigned int) {}
 unsigned short SsDbgReadOpcode(unsigned int) { return 0x0009; }
 int SsDbgQueryKeyMap(unsigned int, int out[13]) { for (int i = 0; i < 13; ++i) out[i] = -1; return 0; }
@@ -642,6 +652,91 @@ int main()
                       m + ": editing resumes once the restore has settled");
             }
         }
+    }
+
+    // ---- Profiler (v26): the glue's own half, through the real server and driver. ----
+    // The emulator patch only adds to SeSsPerfC; everything after that -- the hand-over at the end
+    // of the frame, the reset, and the per-instruction attribution of SH-2 cycles to functions --
+    // is the glue, which is what runs here.
+    {
+        std::vector<se_live_perf_frame> got;
+        auto drain = [&]
+        {
+            se_live_perf_frame b[8];
+            uint32_t n;
+            while ((n = se_live_drain_perf(&ds, b, 8)) != 0) got.insert(got.end(), b, b + n);
+        };
+        // One frame's counters reach the client, and the next frame starts from zero.
+        Until([&] { drain(); return !got.empty(); });
+        got.clear();
+        SeSsPerfC[SE_PERF_FRAME_CYCLES] = 477000;
+        SeSsPerfC[SE_PERF_VDP1_COMMANDS] = 321;
+        SeSsPerfC[SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2 + 1] = 0x100000002ull;
+        EmulatorTick();
+        Check(SeSsPerfC[SE_PERF_FRAME_CYCLES] == 0 && SeSsPerfC[SE_PERF_VDP1_COMMANDS] == 0,
+              "profiler: the glue zeroes the counters once a frame is handed over");
+        bool seen = false, zeroAfter = false;
+        Check(Until([&]
+              {
+                  drain();
+                  for (size_t i = 0; i < got.size(); ++i)
+                  {
+                      if (got[i].counters[SE_PERF_FRAME_CYCLES] != 477000) continue;
+                      seen = got[i].counter_count == SE_PERF_COUNT && got[i].counters[SE_PERF_VDP1_COMMANDS] == 321 &&
+                             got[i].counters[SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2 + 1] == 0x100000002ull;
+                      if (i + 1 < got.size()) zeroAfter = got[i + 1].counters[SE_PERF_FRAME_CYCLES] == 0;
+                  }
+                  return seen && zeroAfter;
+              }),
+              "profiler: a frame's counters arrive intact, and belong to that frame alone");
+
+        // Function attribution. Off until asked for; the request arms the emulator's hook.
+        Check(gProfActive == 0, "profiler: the per-instruction hook is not armed unasked");
+        se_live_set_profiler(&ds, SE_LIVE_PROF_FUNCTIONS);
+        Check(Until([&] { return gProfActive == 1; }), "profiler: PRF arms the per-instruction hook");
+        EmulatorTick();   // a frame boundary: the sampler starts the next frame unsynchronized
+        drain();
+        got.clear();
+
+        // Master: two instructions with no recorded call (charged to a 16-byte PC bucket), then a
+        // call is recorded and the time goes to that function -- less the cycles it slept.
+        gCpuTs[0] = 100; SeMednafenTraceHook(0, 0x06004004u);     // first sample: nothing to charge yet
+        gCpuTs[0] = 110; SeMednafenTraceHook(0, 0x06004006u);     // 10 -> bucket 06004000
+        SeExportPushFrame(0, 0x06004006u, 0x06010000u, 0x0600400Au, 0x06001000u, 0);
+        gCpuTs[0] = 135; SeMednafenTraceHook(0, 0x06010000u);     // 25 -> bucket 06004000 (the call itself)
+        SeSsPerfC[SE_PERF_SH2_SLEEP] += 15;                       // asleep for 15 of the next 45
+        gCpuTs[0] = 180; SeMednafenTraceHook(0, 0x06010002u);     // 30 -> function 06010000
+        // Slave, interleaved on its own clock.
+        gCpuTs[1] = 50;  SeMednafenTraceHook(1, 0x06020008u);
+        gCpuTs[1] = 57;  SeMednafenTraceHook(1, 0x0602000Au);     // 7 -> slave bucket 06020000
+        // A jump that is not an instruction's cost (a rebase, a state load) is not charged.
+        gCpuTs[1] = -400000; SeMednafenTraceHook(1, 0x0602000Cu);
+        SeExportPopFrame(0);
+        SeSsPerfC[SE_PERF_FRAME_CYCLES] = 5000;
+        EmulatorTick();
+        const se_live_perf_frame* f = nullptr;
+        Check(Until([&]
+              {
+                  drain();
+                  for (const se_live_perf_frame& x : got)
+                      if (x.counters[SE_PERF_FRAME_CYCLES] == 5000) f = &x;
+                  return f != nullptr;
+              }),
+              "profiler: the attributed frame arrives");
+        if (f)
+        {
+            Check((f->flags & SE_LIVE_PROF_FUNCTIONS) != 0, "profiler: the frame is flagged as attributed");
+            Check(f->fn_count == 3, "profiler: three functions were charged");
+            Check(f->fn_key[0] == (SE_PERF_FN_RAW_PC | 0x06004000u) && f->fn_cycles[0] == 35,
+                  "profiler: unrecorded code is charged to its PC bucket, hottest first");
+            Check(f->fn_key[1] == 0x06010000u && f->fn_cycles[1] == 30,
+                  "profiler: a recorded call is charged to its entry, sleep excluded");
+            Check(f->fn_key[2] == (SE_PERF_FN_RAW_PC | SE_PERF_FN_SLAVE | 0x06020000u) && f->fn_cycles[2] == 7,
+                  "profiler: the slave is charged separately, and a timestamp jump is not charged");
+            Check(f->fn_other_cycles == 0, "profiler: nothing was left over");
+        }
+        se_live_set_profiler(&ds, 0);
+        Check(Until([&] { return gProfActive == 0; }), "profiler: switching attribution off disarms the hook");
     }
 
     se_destroy(ctx);

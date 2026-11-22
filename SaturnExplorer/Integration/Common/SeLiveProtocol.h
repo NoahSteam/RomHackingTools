@@ -55,7 +55,11 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      25u   /* +v25 ESV: have the emulator save one of its own numbered slots
+#define SE_LIVE_VERSION      26u   /* +v26 profiler: a trailing perf block of per-frame hardware
+                                  * counters (SePerfCounters.h) and the PRF verb, which switches
+                                  * per-function SH-2 time attribution on and off
+                                  * (SE_LIVE_CAP_PROFILER / SE_LIVE_CAP_PROF_FUNCTIONS).
+                                  * +v25 ESV: have the emulator save one of its own numbered slots
                                   * (SE_LIVE_CAP_EMU_SAVE says the build can).
                                   * +v24 the capability word reports what this build really has:
                                   * the frame gate, rewind save/load, and the debugger hooks
@@ -165,6 +169,15 @@
                                         * connection with capture ON, so a pre-v18 client that
                                         * never sends this keeps the old behavior; a v18 client
                                         * states its setting on connect and on every change. */
+#define SE_LIVE_VERB_PROFILE "PRF\n" /* profiler options (v26+): arg = SE_LIVE_PROF_* flags. No payload.
+                                        * The hardware counters of the perf block cost next to nothing
+                                        * and are always produced; this verb only controls the
+                                        * expensive half. SE_LIVE_PROF_FUNCTIONS makes the emulator
+                                        * run its per-instruction loop (the one breakpoints use, several
+                                        * times slower) so it can attribute SH-2 cycles to functions.
+                                        * Like REW it is per connection: a server drops it when the
+                                        * client leaves, so a game nobody is profiling runs at speed. */
+#define SE_LIVE_PROF_FUNCTIONS 0x1u
 #define SE_LIVE_VERB_LEN     4
 #define SE_LIVE_REQUEST_LEN  8    /* verb(4) + arg(4, little-endian) */
 
@@ -343,6 +356,7 @@
 #define SE_LIVE_MINVER_LOADSTATE 16u    /* LST */
 #define SE_LIVE_MINVER_REWIND    18u    /* REW */
 #define SE_LIVE_MINVER_EMUSAVE   25u    /* ESV (no payload, but an older server would read it as a GET) */
+#define SE_LIVE_MINVER_PROFILE   26u    /* PRF, and the perf block */
 
 #define SE_LIVE_MAX_BKPT_DESCS   1024u              /* BKP: descriptors in one install */
 #define SE_LIVE_MAX_TRACE_DESCS  256u               /* TRACE: descriptors in one install */
@@ -356,6 +370,33 @@
  *   then 'count' records: u8 present + u8 pad[3] + u64 mtime (unix seconds, LE; 0 unknown) */
 #define SE_LIVE_EMU_SLOTS     10u
 #define SE_LIVE_EMU_SLOT_LEN  12u
+
+/* Perf section (v26+): a trailing section after the v17 slot inventory, version-gated the same
+ * way. It carries the profiler counters of COMPLETED emulated frames -- one record per frame,
+ * produced when the emulator's frame function returns. Like the savestate stream it is a queue,
+ * not a field of the snapshot: the server keeps the most recent frames and each reply carries the
+ * ones this connection has not been sent yet (oldest first), so a client that skips a snapshot
+ * still receives every frame's record, and a paused emulator sends none. A connection's first
+ * reply carries at most the newest frame. Layout, all LE:
+ *   u32 count         (<= SE_LIVE_PERF_MAX_PER_REPLY) records that follow; 0 = nothing new, or this
+ *                     build produces no counters
+ *   then per record:
+ *   u32 length        bytes of this record that follow (<= SE_LIVE_PERF_MAX_LEN)
+ *   u32 seq           the emulator's count of completed frames, monotonic per emulator run, never 0
+ *   u32 flags         the SE_LIVE_PROF_* flags that were in force for that frame
+ *   u32 counterCount  then counterCount u64 counters, in SePerfCounters.h order. A newer server
+ *                     may send more than the client knows; the client skips the surplus.
+ *   u32 fnCount       (<= SE_LIVE_PERF_FN_MAX) then fnCount records { u32 key, u32 cycles }: the
+ *                     functions the SH-2s spent the most cycles in, hottest first. Empty unless
+ *                     SE_LIVE_PROF_FUNCTIONS was in force. The key is described in SePerfCounters.h.
+ *   u32 fnOtherCycles attributed cycles that did not fit in the fnCount records
+ * A client reads 'length' bytes per record whatever it understands of them, so fields appended
+ * to a record by a newer server are skipped rather than desynchronizing the stream. */
+#define SE_LIVE_PERF_MAX_PER_REPLY 8u
+#define SE_LIVE_PERF_FN_MAX      64u
+#define SE_LIVE_PERF_FN_LEN      8u
+#define SE_LIVE_PERF_MAX_COUNTERS 256u   /* sanity bound a client applies to counterCount */
+#define SE_LIVE_PERF_MAX_LEN     (20u + SE_LIVE_PERF_MAX_COUNTERS * 8u + SE_LIVE_PERF_FN_MAX * SE_LIVE_PERF_FN_LEN)
 
 /* Memory-edit blob (v16), carried inside an LST payload and applied by the emulator right
  * after the savestate restore. Layout:
@@ -442,6 +483,9 @@
 #define SE_LIVE_CAP_INSN_STEP   32u  /* IST single-steps the halted CPU */
 #define SE_LIVE_CAP_TRACEPOINTS 64u  /* TRC tracepoints fire */
 #define SE_LIVE_CAP_EMU_SAVE   128u  /* ESV saves the emulator's own slots (v25+) */
+#define SE_LIVE_CAP_PROFILER    256u  /* the perf block carries real counters (v26+) */
+#define SE_LIVE_CAP_PROF_FUNCTIONS 512u /* PRF's SE_LIVE_PROF_FUNCTIONS works: the emulator has the
+                                      * per-instruction hook (a debugger build) to attribute with */
 #define SE_LIVE_MINVER_CAPS     24u  /* servers older than this report only SE_LIVE_CAP_VDP_POKE */
 #define SE_LIVE_MINVER_POKEINFO 23u  /* servers older than this send no poke counters or caps */
 #define SE_LIVE_SH2_REGS_LEN    92u        /* one CPU: 23 u32 (R[16],SR,GBR,VBR,MACH,MACL,PR,PC) */

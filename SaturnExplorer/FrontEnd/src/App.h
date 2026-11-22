@@ -45,6 +45,8 @@
 #include "Debug/MemorySearch.h"   // Cheat-Engine-style live RAM value scanner
 #include "Debug/MemorySearchRunner.h"   // ...and the worker that keeps its scans off the UI thread
 #include "Debug/AccessLog.h"      // "find what accesses this address" record
+#include "Debug/ProfilerModel.h"  // per-frame hardware counters + memory-pool occupancy
+#include "ProfilerPanel.h"
 #include "Disc/DiscImage.h"       // disc-image reader + ISO 9660 browser (sector -> file)
 #include "Debug/WatchList.h"
 #include "Debug/BreakpointManager.h"
@@ -169,6 +171,8 @@ private:
     void DrawBreakpoints();                 // Visual Studio-style breakpoint list
     void DrawRamSearch();                   // Cheat-Engine-style live RAM value scanner
     void DrawAccessLog();                   // "find what accesses this address"
+    void UpdateProfiler();                  // drain the emulator's counters; sample the memory pools
+    void DrawProfiler();                    // frame budget, buses, memory pools, hot functions
     void DrawSoundCpu();                    // SCSP 68000 sound-CPU disassembly (Sound RAM)
     void DrawDiscExplorer(IPlatform& platform); // disc image ISO browser (sector -> file)
     bool FetchSh2Instruction(uint32_t pc, DisassembledInstruction& ins);
@@ -414,6 +418,15 @@ private:
     bool             mRamSearchLow = true;     // scan Low work RAM (0x00200000)
     bool             mRamSearchHigh = true;    // scan High work RAM (0x06000000)
     std::string      mRamSearchStatus;         // last scan result summary
+
+    // Profiler: the emulator's per-frame counters (live only) and the occupancy of the fixed
+    // RAMs (any source). mPoolSampledSerial / mPoolSampleCountdown pace the pool sampling, which
+    // hashes every captured region.
+    ProfilerModel     mProfiler;
+    MemoryPoolTracker mPoolTracker;
+    ProfilerPanel     mProfilerPanel;
+    uint64_t          mPoolSampledSource = 0;
+    int               mPoolSampleCountdown = 0;
 
     // "Find what accesses this address" — the access log + its panel's controls.
     AccessLog        mAccessLog;
@@ -824,6 +837,7 @@ private:
         bool sound = true;        // SCSP voices (live): who's playing + Play/Export
         bool ramSearch = true;    // Cheat-Engine-style live RAM value scanner
         bool accessLog = true;    // "find what accesses this address" (data watchpoint log)
+        bool profiler = false;    // frame budget / buses / memory pools / hot functions; opened from Windows
         bool soundCpu = true;     // SCSP 68000 sound-CPU disassembly
         bool discExplorer = true; // disc image ISO 9660 browser (sector -> file)
         bool memoryCompare = false; // Frame Memory Compare: hidden until a comparison is opened

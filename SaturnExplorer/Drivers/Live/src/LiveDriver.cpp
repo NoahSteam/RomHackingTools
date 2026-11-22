@@ -182,6 +182,10 @@ struct LiveEmuSlots
     bool     valid = false;   // false on a pre-v17 server, or a build with no slot hook
 };
 
+// The profiler records one reply carried (v26 perf section): one per emulated frame completed
+// since the previous reply, oldest first. Empty on an older server or a build without counters.
+typedef std::vector<se_live_perf_frame> LivePerf;
+
 // One received savestate block (v16): a keyframe or a delta-vs-keyframe, frame-tagged. The
 // payload is the opaque, RLE-compressed emulator image (the client never interprets it, only
 // stores it and reconstructs a full image to hand back via LST). Blocks arrive lagging.
@@ -222,6 +226,7 @@ static uint32_t MinVerFor(const char* verb)
     if (is(SE_LIVE_VERB_TRACE))     return SE_LIVE_MINVER_TRACE;
     if (is(SE_LIVE_VERB_REWIND))    return SE_LIVE_MINVER_REWIND;
     if (is(SE_LIVE_VERB_EMUSAVE))   return SE_LIVE_MINVER_EMUSAVE;
+    if (is(SE_LIVE_VERB_PROFILE))   return SE_LIVE_MINVER_PROFILE;
     return 0u;
 }
 
@@ -386,6 +391,15 @@ struct LiveState
     // Guarded by ctlMtx.
     bool                  rewindWanted = true;
     bool                  rewindDirty = false;
+    // Profiler (v26). The flags follow the rewind pattern: a fresh server starts with function
+    // attribution off, so a reconnect restates them. 'perf' queues one record per completed
+    // emulated frame for the UI to drain; 'perfSeqSeen' is the server's sequence number of the
+    // newest one queued, so a record that somehow arrives twice is not counted twice.
+    // Guarded by ctlMtx (perfSeqSeen: poll thread only).
+    uint32_t              profFlags = 0;
+    bool                  profDirty = false;
+    std::deque<se_live_perf_frame> perf;
+    uint32_t              perfSeqSeen = 0;
 };
 
 // The snapshot a capture on this thread is pinned to (between begin_capture and end_capture),
@@ -911,7 +925,8 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                   StopInfo& outStop, std::vector<LiveEvent>& outEvents,
                   LiveCallStacks& outCallStacks, LiveKeyMap& outKeyMap,
                   std::vector<std::string>& outLog,
-                  std::vector<LiveStateBlock>& outStateBlocks, LiveEmuSlots& outEmuSlots)
+                  std::vector<LiveStateBlock>& outStateBlocks, LiveEmuSlots& outEmuSlots,
+                  LivePerf& outPerf)
 {
     if (!SendCommand(c, verb, arg))
     {
@@ -1193,6 +1208,54 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         outEmuSlots.valid = count != 0u;
     }
 
+    // v26: the profiler records of the emulated frames completed since this connection's last
+    // reply. Each record states its own length, so a newer server's extra counters or trailing
+    // fields are read and ignored rather than desynchronizing the stream; a count or length this
+    // protocol could never produce is a broken stream.
+    outPerf.clear();
+    if (version >= SE_LIVE_MINVER_PROFILE)
+    {
+        uint8_t cntb[4];
+        if (!ConnReadFull(c, cntb, 4)) return false;
+        const uint32_t records = Rd32LE(cntb);
+        if (records > SE_LIVE_PERF_MAX_PER_REPLY) return false;
+        std::vector<uint8_t> blk;
+        for (uint32_t rec = 0; rec < records; ++rec)
+        {
+            uint8_t lenb[4];
+            if (!ConnReadFull(c, lenb, 4)) return false;
+            const uint32_t len = Rd32LE(lenb);
+            if (len > SE_LIVE_PERF_MAX_LEN) return false;
+            blk.resize(len);
+            if (len && !ConnReadFull(c, blk.data(), len)) return false;
+            size_t off = 0;
+            auto u32 = [&](uint32_t& v) -> bool
+            {
+                if (blk.size() - off < 4) return false;
+                v = Rd32LE(blk.data() + off); off += 4; return true;
+            };
+            se_live_perf_frame f = {};
+            uint32_t counters = 0, fns = 0;
+            if (!(u32(f.seq) && u32(f.flags) && u32(counters) &&
+                  counters <= SE_LIVE_PERF_MAX_COUNTERS && (blk.size() - off) / 8 >= counters))
+                continue;   // a record this client cannot read: skipped, the stream stays aligned
+            for (uint32_t i = 0; i < counters; ++i, off += 8)
+                if (i < SE_LIVE_PERF_COUNTERS) f.counters[i] = Rd64LE(blk.data() + off);
+            f.counter_count = counters < SE_LIVE_PERF_COUNTERS ? counters : SE_LIVE_PERF_COUNTERS;
+            if (!(u32(fns) && fns <= SE_LIVE_PERF_FN_MAX &&
+                  (blk.size() - off) / SE_LIVE_PERF_FN_LEN >= fns))
+                continue;
+            for (uint32_t i = 0; i < fns; ++i, off += SE_LIVE_PERF_FN_LEN)
+            {
+                f.fn_key[i] = Rd32LE(blk.data() + off);
+                f.fn_cycles[i] = Rd32LE(blk.data() + off + 4);
+            }
+            f.fn_count = fns;
+            if (!u32(f.fn_other_cycles) || f.seq == 0u) continue;
+            outPerf.push_back(f);
+        }
+    }
+
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     if (ct >= 32)
@@ -1399,6 +1462,13 @@ void PollLoop(LiveState* st)
                 arg = st->rewindWanted ? 1 : 0;
                 st->rewindDirty = false;
             }
+            else if (st->profDirty)
+            {
+                // Like REW: it decides whether the emulator runs its slow per-instruction loop.
+                verb = SE_LIVE_VERB_PROFILE;
+                arg = static_cast<int32_t>(st->profFlags);
+                st->profDirty = false;
+            }
             else if (st->bkptsDirty)
             {
                 verb = SE_LIVE_VERB_BKPTS;
@@ -1490,6 +1560,7 @@ void PollLoop(LiveState* st)
         std::vector<std::string> logLines;
         std::vector<LiveStateBlock> stateBlocks;
         LiveEmuSlots emuSlots;
+        LivePerf perf;
 
         // One version gate, at the only point a request leaves. A server that does not know a
         // verb ignores it and never consumes the attached payload, so its next reply is read
@@ -1507,7 +1578,7 @@ void PollLoop(LiveState* st)
         }
         if (!ReadSnapshot(conn, verb, arg, payload.data(), payload.size(),
                           snap, paused, frame, sver, stop, events, callStacks, keyMap,
-                          logLines, stateBlocks, emuSlots))
+                          logLines, stateBlocks, emuSlots, perf))
         {
             // Whatever was queued belonged to this connection, and it is gone (ForgetConnection counts
             // those as lost: they were never sent). The poke that was on its way out is different: the
@@ -1608,7 +1679,23 @@ void PollLoop(LiveState* st)
             // full savestate per frame on a feature the user switched off. Unconditional: the
             // value we want is the value this connection has not been told.
             st->rewindDirty = true;
+            // Function attribution likewise starts off in a fresh server; only an "on" needs saying.
+            st->profDirty = st->profFlags != 0;
             st->connected = true;
+        }
+        if (firstOnConnection) st->perfSeqSeen = 0;   // a new emulator run counts its frames from 1
+        if (firstOnConnection || !perf.empty())
+        {
+            std::lock_guard<std::mutex> lk(st->ctlMtx);
+            if (firstOnConnection) st->perf.clear();   // the previous emulator's frames
+            for (se_live_perf_frame& f : perf)
+            {
+                if (f.seq == st->perfSeqSeen) continue;
+                st->perfSeqSeen = f.seq;
+                f.frame = static_cast<uint32_t>(frame);
+                st->perf.push_back(f);
+            }
+            while (st->perf.size() > 600) st->perf.pop_front();   // ten seconds nobody drained
         }
         if (!events.empty())
         {
@@ -1661,7 +1748,8 @@ void PollLoop(LiveState* st)
         std::vector<std::string> lg;
         std::vector<LiveStateBlock> sb;
         LiveEmuSlots es;
-        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km, lg, sb, es);  // best-effort
+        LivePerf pf;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km, lg, sb, es, pf);  // best-effort
     }
     ConnClose(conn);
 }
@@ -2331,6 +2419,35 @@ extern "C" int se_live_emu_save_slot(const se_data_source* ds, uint32_t slot)
             return SE_LIVE_EMUSAVE_LOADING;
         st->emuSaveMask |= 1u << slot;   // poll thread ships ESV next cycle
         return 0;
+    });
+}
+
+extern "C" void se_live_set_profiler(const se_data_source* ds, uint32_t flags)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return; }
+    se::GuardVoid([&]
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        // Only on a change, and never clearing the flag: see se_live_set_rewind_enabled.
+        if (flags != st->profFlags) { st->profFlags = flags; st->profDirty = true; }
+    });
+}
+
+extern "C" uint32_t se_live_drain_perf(const se_data_source* ds, se_live_perf_frame* out, uint32_t max)
+{
+    if (!ds || !ds->user || ds->close != CbClose || !out || !max) { return 0; }
+    return se::Guard(0u, [&]() -> uint32_t
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        uint32_t n = 0;
+        for (; n < max && !st->perf.empty(); ++n)
+        {
+            out[n] = st->perf.front();
+            st->perf.pop_front();
+        }
+        return n;
     });
 }
 

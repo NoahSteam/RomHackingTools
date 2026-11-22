@@ -900,6 +900,47 @@ static void SeLogPortDevices(void)
  * flag: on POSIX the local socket and the web-bridge TCP port are served by two threads. */
 static volatile int sClients;
 
+/* ---- Profiler (v26). Two halves with different costs.
+ *
+ * The hardware counters are kept by the emulator all the time (a handful of adds on paths that
+ * already do far more work) and handed over once per frame by SeExportPublishPerf, already
+ * serialized into a wire record here so the server thread only copies bytes. The last
+ * SE_PERF_RING frames are kept, each numbered, and a reply carries the ones its connection has
+ * not been sent yet: a client that skips a snapshot (the snapshot ring is 4 deep and a GET may be
+ * served the latest) still gets every frame's counters, which a per-frame history needs.
+ *
+ * Function attribution needs the emulator's per-instruction hook, which is several times slower
+ * than its fast loop, so it is strictly opt-in: the PRF verb publishes the flags the client
+ * wants, and the emulate thread applies them at its next frame boundary or gate (the hook may
+ * only be changed there, like a breakpoint install). ---- */
+typedef void (*SeSetProfilerFn)(unsigned int flags);
+static SeSetProfilerFn sSetProfiler;
+static volatile int sProfWanted;      /* SE_LIVE_PROF_* the client asked for */
+static volatile int sProfPending;     /* sProfWanted changed and has not been applied */
+static volatile int sProfApplied;     /* what the emulator is running with (emulate thread writes) */
+static volatile int sPerfWired;       /* the emulator has handed over counters at least once */
+#define SE_PERF_RING 16u
+static unsigned char sPerfBlk[SE_PERF_RING][SE_LIVE_PERF_MAX_LEN];   /* guarded by SE_LOCK */
+static unsigned int  sPerfLen[SE_PERF_RING];
+static unsigned int  sPerfSeqOf[SE_PERF_RING];   /* 0 = empty slot */
+static unsigned int  sPerfSeq;                   /* frames handed over so far */
+
+void SeExportSetProfilerHook(void (*set)(unsigned int flags))
+{
+    sSetProfiler = set;
+}
+
+unsigned int SeExportProfilerFlags(void)
+{
+    return (unsigned int)SeAtLoad(&sProfApplied);
+}
+
+static void SePublishProfiler(unsigned int flags)
+{
+    SeAtStore(&sProfWanted, (int)(flags & SE_LIVE_PROF_FUNCTIONS));
+    SeAtStore(&sProfPending, 1);
+}
+
 void SeExportSetDebugCaps(unsigned int caps)
 {
     SeAtStore(&sDebugCaps, caps & (SE_LIVE_CAP_EXEC_BP | SE_LIVE_CAP_MEM_WATCH |
@@ -934,6 +975,8 @@ static void SeOnClientDisconnect(void)
      * fork) and its events would stream to whichever client attaches next. */
     SePublishTracepoints(NULL, 0);
     SeAtStore(&sRewindWanted, 1);   /* the next client states its own setting; don't inherit this one's */
+    /* Function attribution keeps the per-instruction hook on; nobody is left to read it. */
+    SePublishProfiler(0);
     SE_LOCK();
     sEvHead = sEvCount = 0;   /* events fired for the client that left are its own */
     SeCancelSteps();
@@ -1138,6 +1181,20 @@ static void SeApplyPendingInstalls(void)
         SeAtStore(&sTpPending, 0);
         SE_SUNLOCK();
         if (sSetTracepoints) sSetTracepoints(n, sTpApply);
+    }
+    if (SeAtLoad(&sProfPending))
+    {
+        /* Cleared before the read: a PRF that lands in between sets it again and is applied next
+         * time, so the last request always wins. */
+        SeAtStore(&sProfPending, 0);
+        {
+            const int want = sSetProfiler ? SeAtLoad(&sProfWanted) : 0;
+            if (want != SeAtLoad(&sProfApplied))
+            {
+                SeAtStore(&sProfApplied, want);
+                if (sSetProfiler) sSetProfiler((unsigned int)want);
+            }
+        }
     }
 }
 
@@ -1566,6 +1623,61 @@ void SeExportPopExceptionFrame(int cpu, unsigned int sp)
     SE_UNLOCK();
 }
 
+/* The function the CPU is in, by the recorded stack: the innermost frame's entry address, or 0
+ * when nothing is recorded (code that was running before recording began). EMULATE THREAD ONLY --
+ * it is the sole writer of the stack, so it may read its own last write without the lock, and the
+ * profiler calls this once per instruction. */
+unsigned int SeExportCurrentFunction(int cpu)
+{
+    const int c = cpu ? 1 : 0;
+    const unsigned int depth = sCallDepth[c];
+    /* Frames deeper than the cap are counted, not stored: the stored top is then an ancestor of
+     * the running function, not the function itself. */
+    if (!depth || sCallOverflow[c]) return 0;
+    return sCallStack[c][depth - 1].func;
+}
+
+/* Hand over one completed frame's profile (emulate thread, once per frame). 'counters' are in
+ * SePerfCounters.h order; the function arrays are parallel, hottest first. Serialized here into
+ * the body of the v26 perf block so a reply only copies it. */
+void SeExportPublishPerf(const unsigned long long* counters, unsigned int count,
+                         const unsigned int* fnKeys, const unsigned int* fnCycles,
+                         unsigned int fnCount, unsigned int fnOtherCycles)
+{
+    unsigned char* p;
+    unsigned int i, slot;
+    if (count > SE_LIVE_PERF_MAX_COUNTERS) count = SE_LIVE_PERF_MAX_COUNTERS;
+    if (fnCount > SE_LIVE_PERF_FN_MAX) fnCount = SE_LIVE_PERF_FN_MAX;
+    if (!counters) count = 0;
+    if (!fnKeys || !fnCycles) fnCount = 0;
+    SE_LOCK();
+    ++sPerfSeq;
+    if (sPerfSeq == 0) sPerfSeq = 1;   /* 0 means "no frame yet" on the wire */
+    slot = sPerfSeq % SE_PERF_RING;
+    p = sPerfBlk[slot];
+    SeWr32(p, sPerfSeq);                                  p += 4;
+    SeWr32(p, (unsigned int)SeAtLoad(&sProfApplied));     p += 4;
+    SeWr32(p, count);                                     p += 4;
+    for (i = 0; i < count; ++i)
+    {
+        SeWr32(p, (unsigned int)(counters[i] & 0xFFFFFFFFu));
+        SeWr32(p + 4, (unsigned int)((counters[i] >> 32) & 0xFFFFFFFFu));
+        p += 8;
+    }
+    SeWr32(p, fnCount);                                   p += 4;
+    for (i = 0; i < fnCount; ++i)
+    {
+        SeWr32(p, fnKeys[i]);
+        SeWr32(p + 4, fnCycles[i]);
+        p += SE_LIVE_PERF_FN_LEN;
+    }
+    SeWr32(p, fnOtherCycles);                             p += 4;
+    sPerfLen[slot] = (unsigned int)(p - sPerfBlk[slot]);
+    sPerfSeqOf[slot] = sPerfSeq;
+    SE_UNLOCK();
+    SeAtStore(&sPerfWired, 1);
+}
+
 static volatile unsigned int sCallStackEpoch;
 
 void SeExportResetCallStack(int cpu)
@@ -1860,6 +1972,7 @@ static int SeRecvPokeStream(SeConn cl, int sound, unsigned int count, unsigned i
 }
 
 static void SeServeClientLoop(SeConn cl, SeFrame* snap);
+static void SeServeClientRequests(SeConn cl, SeFrame* snap, unsigned int* perfSentP, unsigned char* perfOut);
 
 /* Count this client in for as long as it is attached. A wrapper around the serve loop, rather
  * than a bump at each of the three accept sites: the loop returns from a dozen places on any I/O
@@ -1885,6 +1998,19 @@ static void SeServeClient(SeConn cl, SeFrame* snap)
  * scratch the size of one frame. */
 static void SeServeClientLoop(SeConn cl, SeFrame* snap)
 {
+    /* v26: the newest profiler frame this connection has been sent (0 = none yet), and the
+     * buffer its unsent records are copied into. Heap, not stack: 20 KiB, and two server
+     * threads. */
+    unsigned int perfSent = 0;
+    unsigned char* perfOut = (unsigned char*)malloc((size_t)SE_LIVE_PERF_MAX_PER_REPLY * (4u + SE_LIVE_PERF_MAX_LEN));
+    if (!perfOut) return;
+    SeServeClientRequests(cl, snap, &perfSent, perfOut);
+    free(perfOut);
+}
+
+static void SeServeClientRequests(SeConn cl, SeFrame* snap, unsigned int* perfSentP, unsigned char* perfOut)
+{
+#define perfSent (*perfSentP)
     SeLogPortDevices();   /* report the emulator's controller config on connect */
     while (SeAtLoad(&sRunning))
     {
@@ -1933,6 +2059,10 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
                 SeAtStore(&sRewindWanted, want);
                 SeStateFlushAndRekey();
             }
+        }
+        else if (memcmp(req, SE_LIVE_VERB_PROFILE, SE_LIVE_VERB_LEN) == 0)
+        {
+            SePublishProfiler(arg);   /* applied by the emulate thread */
         }
         else if (memcmp(req, SE_LIVE_VERB_ISTEP, SE_LIVE_VERB_LEN) == 0)
         {
@@ -2144,6 +2274,8 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             if (sWriteVdpByte)       caps |= SE_LIVE_CAP_VDP_POKE;
             if (SeAtLoad(&sGateSeen)) caps |= SE_LIVE_CAP_FRAME_GATE;
             if (sEmuSlotSave)        caps |= SE_LIVE_CAP_EMU_SAVE;
+            if (SeAtLoad(&sPerfWired)) caps |= SE_LIVE_CAP_PROFILER;
+            if (sSetProfiler)        caps |= SE_LIVE_CAP_PROF_FUNCTIONS;
             SE_SLOCK();
             if (sStateCap && sLoadState) caps |= SE_LIVE_CAP_STATE_REWIND;   /* the worker sized a real state */
             SE_SUNLOCK();
@@ -2343,8 +2475,38 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
                 if (SeSend(cl, rec, SE_LIVE_EMU_SLOT_LEN) != 0) return;
             }
         }
+
+        /* v26 trailing section: the profiler records this connection has not been sent yet,
+         * oldest first. u32 count, then per record u32 length + the body SeExportPublishPerf
+         * serialized. Copied out under the lock, sent outside it. */
+        {
+            unsigned char* out = perfOut;
+            unsigned char cntb[4];
+            unsigned int cnt = 0, k;
+            SE_LOCK();
+            /* A connection made mid-run starts with the newest frame only, not a stale backlog. */
+            if (perfSent == 0 && sPerfSeq > 1) perfSent = sPerfSeq - 1;
+            if (sPerfSeq < perfSent) perfSent = 0;   /* the counter wrapped */
+            if (sPerfSeq - perfSent > SE_PERF_RING) perfSent = sPerfSeq - SE_PERF_RING;
+            for (k = perfSent + 1; cnt < SE_LIVE_PERF_MAX_PER_REPLY && k != sPerfSeq + 1; ++k)
+            {
+                const unsigned int slot = k % SE_PERF_RING;
+                if (sPerfSeqOf[slot] != k || sPerfLen[slot] == 0 || sPerfLen[slot] > SE_LIVE_PERF_MAX_LEN)
+                    continue;
+                SeWr32(out, sPerfLen[slot]);
+                memcpy(out + 4, sPerfBlk[slot], sPerfLen[slot]);
+                out += 4 + sPerfLen[slot];
+                ++cnt;
+                perfSent = k;
+            }
+            SE_UNLOCK();
+            SeWr32(cntb, cnt);
+            if (SeSend(cl, cntb, 4) != 0) return;
+            if (out != perfOut && SeSend(cl, perfOut, (size_t)(out - perfOut)) != 0) return;
+        }
     }
 }
+#undef perfSent
 
 #if defined(_WIN32)
 /* --- Shutdown, the Windows half (review finding HOOK-01) ---------------------------------
@@ -2559,6 +2721,7 @@ int SeExportInit(void)
     }
     sRingWrite = 0;
     SeAtStore(&sPaused, 0); SeCancelSteps(); sFrameNo = 0; SeAtStore(&sClients, 0); SeAtStore(&sRewindWanted, 1);
+    SeAtStore(&sProfWanted, 0); SeAtStore(&sProfPending, 0); SeAtStore(&sProfApplied, 0);
     SeAtStore64(&sStopWord, 0);
     /* Savestate rewind (v16): the worker + buffer pool are created lazily when a save hook is
      * wired (SeExportSetSaveStateHook); here we only reset the bookkeeping for a fresh session. */

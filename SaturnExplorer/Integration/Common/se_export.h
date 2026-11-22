@@ -327,6 +327,25 @@ int SeExportGateHalt(void);
  * build whose hooks compile to stubs passes 0. Call once after SeExportInit. Defaults to 0. */
 void SeExportSetDebugCaps(unsigned int caps);
 
+/* ---- Profiler (v26). See SePerfCounters.h for the counters and the function key. ----
+ *
+ * SeExportPublishPerf: call once per emulated frame, on the emulate thread, with that frame's
+ * totals. It is what makes the server advertise SE_LIVE_CAP_PROFILER.
+ *
+ * SeExportSetProfilerHook: register the routine that arms or disarms function attribution in the
+ * emulator (flags = SE_LIVE_PROF_*). It is called on the emulate thread, at a frame boundary or a
+ * gate, and only when the flags change. Register it only when the emulator really has a
+ * per-instruction hook: registering is what advertises SE_LIVE_CAP_PROF_FUNCTIONS.
+ *
+ * SeExportProfilerFlags: the flags in force. SeExportCurrentFunction: entry address of the
+ * function the shadow call stack says 'cpu' is in, or 0 when it cannot say; emulate thread only. */
+void SeExportPublishPerf(const unsigned long long* counters, unsigned int count,
+                         const unsigned int* fnKeys, const unsigned int* fnCycles,
+                         unsigned int fnCount, unsigned int fnOtherCycles);
+void SeExportSetProfilerHook(void (*set)(unsigned int flags));
+unsigned int SeExportProfilerFlags(void);
+unsigned int SeExportCurrentFunction(int cpu);
+
 /* Stop the server thread and free resources. */
 void SeExportDeinit(void);
 
