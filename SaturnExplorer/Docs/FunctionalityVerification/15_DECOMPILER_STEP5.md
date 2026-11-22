@@ -25103,3 +25103,26 @@ Fix (`Sh2FunctionFinder.cpp`, `PrologueReaching`): when what follows the scan's 
 Pins: `TestAfterEndlessLoop` (synthetic bytes and ASCII, not the game's): queries at the target's first instruction, a middle one, the rts and the delay slot all return its entry, by `RtsScanEntry` and `FindFunctionContaining`; controls: an address in the text still fails with its reason. 15 checks fail on the unfixed finder, all pass with the fix.
 
 Left open: text whose first three words happen to decode as code and flow Unknown still yields the entry just after the rts, with no doubt beyond the generic one (unchanged behaviour).
+
+## Area 7, link model step 1: census on the game corpus
+
+Run on the repository owner's machine (Windows 11, MSVC RelWithDebInfo, master `9fc942dc`), counts only, in
+`Docs/Decompiler/tools/a7_link1/corpus_results/`. The image is Sakura Taisen 2 (Japan) disc 1: 1 MiB of high work RAM
+from a savestate. It is not one of the earlier `hwram007`/`hwram008` images. Every run also counts the test binary's
+fixtures; the game-only figures below are the image's run less the fixtures-only run (`census_base`).
+
+| Game code only | Alone (1,564 functions) | Lent (4,570 functions, both passes) | Threshold |
+|---|---|---|---|
+| Store statements with a surviving flow op or folded COPY | 11,440 of 11,786 = 97.1% | 29,640 of 30,477 = 97.3% | go at 95% or more |
+| Lines that name a store today with no proven store | 296 of 5,902 = 5.0% | 717 of 15,976 = 4.5% | 2 to 10%: step 2b required |
+| Walk bound hits | 0 | 0 | under 0.1% |
+| Link build time | under 0.04% | under 0.04% | within 5% |
+| Clone-made effect ops | 831 | 1,998 | any confirms the Clone record |
+| Flow statements with exactly one Effect | all | all | all |
+
+**Verdict: go to step 2, with step 2b (the Twin, Merged and Forwarded records, A7-344) scheduled and not
+optional.** No rework of section 3 is called for: store survival is above 95%, and the lost lines fall within the
+step 2b band.
+
+**Not run:** Christmas NiGHTS into Dreams (USA) took more than 50 minutes for each pass and hit the timeout twice.
+`corpus.sh` now takes `SE_CORPUS_TIMEOUT`, and that image is being rerun.
