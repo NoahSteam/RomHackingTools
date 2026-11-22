@@ -2691,7 +2691,7 @@ const Pin kPins[] = {
     { "stack", "actions", 0, 40, 213, "VarnodeBank::xref;VarnodeBank::setDef#0", "A6-14 VarnodeBank::setDef: the same" },
     { "stack", "actions", 0, 40, 60, "VarnodeBank::makeFree;Funcdata::clearDeadVarnodes#0", "A6-14 VarnodeBank::makeFree: the same" },
     { "stack", "actions", 0, 24, 26, "PcodeOpBank::destroyDead;ActionDeadCode::apply#0", "A6-14 PcodeOpBank::destroy: the op is put on the final list before it leaves the others" },
-    { "stack", "actions", 0, 8, 139, "MapState::addRange#0", "A6-14 MapState::addRange: the hint is freed when the list cannot take it" },
+    { "stack", "actions", 0, 8, 58, "MapState::addRange#0", "A6-14 MapState::addRange: the hint is freed when the list cannot take it" },
     { "stack", "actions", 0, 40, 328, "ScopeInternal::insertNameTree;ScopeInternal::renameSymbol#0", "A6-15 ScopeInternal::renameSymbol: a Symbol that cannot return to the name tree is kept" },
     { "stack", "actions", 0, 40, 83, "ScopeInternal::insertNameTree;ScopeInternal::addSymbolInternal#0", "A6-15 ScopeInternal::addSymbolInternal: a Symbol the name tree cannot take is freed (ScopeLocal::createEntry)" },
     { "stack", "actions", 0, 8, 59, "ScopeInternal::addMapInternal;Scope::addMapPoint#0", "A6-15 Scope::addMapPoint: the map entry is freed when the Symbol cannot list it" },
