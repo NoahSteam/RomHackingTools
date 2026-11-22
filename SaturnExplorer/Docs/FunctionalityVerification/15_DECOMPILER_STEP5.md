@@ -25126,3 +25126,28 @@ step 2b band.
 
 **Not run:** Christmas NiGHTS into Dreams (USA) took more than 50 minutes for each pass and hit the timeout twice.
 `corpus.sh` now takes `SE_CORPUS_TIMEOUT`, and that image is being rerun.
+
+## Area 3, round 42
+
+Branch `review/3-round42` (from master 6491e73c). Reviewer; no product code changed. Scripts: `Docs/Decompiler/tools/a3_round42/` (`mk.py` writes `fixtures.src`, 52 fixtures `d*`; `run.py`, `run.sh`, `selftest.sh` as round 41's, with `expect`/`absent` lines: the stack words the printed call must or must not show, and the lent prototypes printed per function). Run: `W=<SaturnExplorer> S=<scratch> run.sh [fixture ...]`.
+
+**Verdict: not clean.** One P2 (A3-286), found by independent review of the A3-280 fix: the fix closes a callee that loads the caller's words itself, not one that hands the address of those words to a callee that reads them.
+
+### What was tried
+
+- **The A3-280/A3-281 fix.** Right (callee withheld, call keeps the word): va_arg unrolled over the spill, va_list kept in a stack slot with a counted loop, a loop counted by r4, the spill pushed in the reverse order, the SHC `add #-16,r15 ; mov.l rN,@(k,r15)` spill, only r7 spilled, an r0 index from the current r15, r14 as frame pointer with a fixed read, a loop and an r0 index, a read after a call, a read on one path, a literal r0 index, a fixed struct copy and a counted copy loop from the entry r15, a thunk and a tail call (jmp, bra, PR restored first) to a reader of the stack word, a forwarded stack word, an indirect call through r3 or a loaded pointer. Wrong: the address of the incoming words handed on (A3-286; shapes: `my_printf` to a `vprintf`-like walker, `&param5`, `&param5` with param6 read, a struct block-copied by a callee, a chain of two hand-ons).
+- **A3-284's cost on ordinary code.** A `v[4]={a,b,c,d}` array loop from a spill (withheld, as the ledger says), a -O0 function with fixed spills and a variable-index slot write, `g(&a)` on a spilled parameter, a local `int v[8]` filled and summed by loops: the callers print exactly the arguments passed (`(5,6,7,8)`, `(5)`), never the caller's local at r15+0 (`d10_*`; the lent ones stay lent). The precision loss does not reach common compiled code.
+- **Other compiled shapes, no finding:** r4-r7 with a jsr delay slot setting r7 and a bsr delay slot; a C++ this-adjusting thunk (`jmp @r1 ; add #8,r4`) lent three parameters; a conditional tail call returning from either path; a hidden struct pointer in r2 through a thunk (withheld "reads r2 on entry"); MACH/MACL saved and restored by the callee around a caller's product (no caution); GBR set, read and restored (no finding) and set and not restored (the caller's text shows `extraout_gbr`); a leaf reading param6 only (both words printed, the callee withheld); a callee-saved r14 frame pointer. A 64-bit return on one path and r0 on another prints the caller's `int` return as `xunknown8` (`CONCAT44(...)`): A2-17's class (r1 left live), accepted, not refiled.
+- **Instrument limits met while authoring:** a callee that loops on r4 from an uninitialised count draws `n:generator:no-return` (the oracle runs random r4; a fixture artefact, `d1_va_countloop`); a caller that changes MACL needs the clobber mask (`d12_ret64_onepath`, `d9_mac_saved`).
+
+### Checks
+
+Build in the worktree's own dir (`ulimit -v 4500000`); `ctest --test-dir SaturnExplorer/build -j2` on the unmodified tree: `100% tests passed, 0 tests failed out of 117`. `SE_GENERATED_SEEDS=2000`: `failing seeds=0; findings=0`, canary 240 programs 0 failing, `spill-walk: 60 programs, 0 failing, stack-argument checks 54`. `selftest.sh` ok.
+
+### New rows
+
+A3-286 (P2, open).
+
+### Not done
+
+No sweep beyond 2,000 seeds and no deep-caution grammar-2 run; no corpus run (no save states here); no Hitachi SHC output compared against real compiler listings (the shapes are written by hand from the compilers' known idioms); the candidate fix is not tried; no perturbation oracle for stack words built (A3-285 stays open); 64-bit arguments on the stack, `long long` pairs split across r7 and the stack, and structs passed in r4-r7 and spilled were not shaped.

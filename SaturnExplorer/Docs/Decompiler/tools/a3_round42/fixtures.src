@@ -1,0 +1,1815 @@
+# x1: the smallest module: selftest.sh runs it against a substituted generator binary
+name x1
+ret 1
+env SE_GENERATED_CLOBBERS=0
+F0:
+mov r4,r0
+rts
+add r5,r0
+# d1_unroll: va_arg unrolled, ap in r2 post-incremented four times: r5, r6, r7, then the stack word
+name d1_unroll
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r7,@-r15
+mov.l r6,@-r15
+mov.l r5,@-r15
+mov r15,r2
+mov.l @r2+,r0
+mov.l @r2+,r3
+add r3,r0
+mov.l @r2+,r3
+add r3,r0
+mov.l @r2+,r3
+add r3,r0
+add #12,r15
+rts
+nop
+# d1_loop_memap: va_list kept in a stack slot (-O0): reload, read, advance, store, four times in a counted loop
+name d1_loop_memap
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r7,@-r15
+mov.l r6,@-r15
+mov.l r5,@-r15
+add #-4,r15
+mov r15,r1
+add #4,r1
+mov.l r1,@(0,r15)
+mov #4,r1
+mov #0,r0
+F1_L:
+mov.l @(0,r15),r2
+mov.l @r2+,r3
+mov.l r2,@(0,r15)
+add r3,r0
+dt r1
+bf F1_L
+add #16,r15
+rts
+nop
+# d1_unroll_memap: va_list in a stack slot, four unrolled advances
+name d1_unroll_memap
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r7,@-r15
+mov.l r6,@-r15
+mov.l r5,@-r15
+add #-4,r15
+mov r15,r1
+add #4,r1
+mov.l r1,@(0,r15)
+mov #0,r0
+mov.l @(0,r15),r2
+mov.l @r2,r3
+add #4,r2
+mov.l r2,@(0,r15)
+add r3,r0
+mov.l @(0,r15),r2
+mov.l @r2,r3
+add #4,r2
+mov.l r2,@(0,r15)
+add r3,r0
+mov.l @(0,r15),r2
+mov.l @r2,r3
+add #4,r2
+mov.l r2,@(0,r15)
+add r3,r0
+mov.l @(0,r15),r2
+mov.l @r2,r3
+add #4,r2
+mov.l r2,@(0,r15)
+add r3,r0
+add #16,r15
+rts
+nop
+# d1_vprintf_wrapper: my_printf(fmt, ...) { vprintf(fmt, ap) }: the address of the spill goes to a callee that walks it past the spill into the stack word
+name d1_vprintf_wrapper
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+mov.l r7,@-r15
+mov.l r6,@-r15
+mov.l r5,@-r15
+mov r15,r5
+mov.l =@F2,r1
+jsr @r1
+nop
+add #12,r15
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov r5,r1
+mov #4,r2
+mov #0,r0
+F2_L:
+mov.l @r1+,r3
+add r3,r0
+dt r2
+bf F2_L
+rts
+nop
+# d1_va_countloop: va_arg loop counted by r4 (n values), n = 5 here: words r5-r7 then the stack word
+name d1_va_countloop
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r7,@-r15
+mov.l r6,@-r15
+mov.l r5,@-r15
+mov r15,r2
+mov r4,r1
+mov #0,r0
+F1_L:
+mov.l @r2+,r3
+add r3,r0
+dt r1
+bf F1_L
+add #12,r15
+rts
+nop
+# d2_r14_fixed: frame pointer r14 = r15 after pushing r14 and r4-r7; the fifth argument read at @(20,r14)
+name d2_r14_fixed
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r14,@-r15
+mov.l r7,@-r15
+mov.l r6,@-r15
+mov.l r5,@-r15
+mov.l r4,@-r15
+mov r15,r14
+mov.l @(20,r14),r0
+mov.l @(0,r14),r1
+add r1,r0
+mov r14,r15
+add #16,r15
+rts
+mov.l @r15+,r14
+# d2_r14_loop: the same with a loop through r14 over the five words
+name d2_r14_loop
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r14,@-r15
+mov.l r7,@-r15
+mov.l r6,@-r15
+mov.l r5,@-r15
+mov.l r4,@-r15
+mov r15,r14
+mov r14,r2
+mov #5,r1
+mov #0,r0
+F1_L:
+mov.l @r2+,r3
+add r3,r0
+dt r1
+bf F1_L
+mov r14,r15
+add #16,r15
+rts
+mov.l @r15+,r14
+# d2_r14_index: index through r0 from r14: @(r0,r14) with r0 = 20
+name d2_r14_index
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r14,@-r15
+mov.l r7,@-r15
+mov.l r6,@-r15
+mov.l r5,@-r15
+mov.l r4,@-r15
+mov r15,r14
+mov #20,r0
+mov.l @(r0,r14),r0
+mov r14,r15
+add #16,r15
+rts
+mov.l @r15+,r14
+# d3_addr_param5: &param5 handed to a leaf that reads it (F1 itself never reads the word)
+name d3_addr_param5
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r8,@-r15
+.word 0x4F22
+mov r4,r8
+mov r15,r4
+add #8,r4
+mov.l =@F2,r1
+jsr @r1
+nop
+add r8,r0
+.word 0x4F26
+rts
+mov.l @r15+,r8
+fn
+F2:
+mov.l @r4,r0
+rts
+nop
+# d3_addr_param6: &param5 handed to a leaf that reads param5 and the word after it (param6)
+name d3_addr_param6
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222,0x3333
+F0:
+.word 0x4F22
+add #-8,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov.l =0x3333,r1
+mov.l r1,@(4,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r8,@-r15
+.word 0x4F22
+mov r4,r8
+mov r15,r4
+add #8,r4
+mov.l =@F2,r1
+jsr @r1
+nop
+add r8,r0
+.word 0x4F26
+rts
+mov.l @r15+,r8
+fn
+F2:
+mov.l @r4,r0
+mov.l @(4,r4),r1
+rts
+add r1,r0
+# d3_param5_rmw: param5 modified in place (its slot is the variable): read, add, write back, return it
+name d3_param5_rmw
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l @(0,r15),r0
+add r4,r0
+mov.l r0,@(0,r15)
+rts
+nop
+# d3_param5_ptr_store: param5 address stored into a global, read back through the global in the same function
+name d3_param5_ptr_store
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l =0x06020000,r2
+mov r15,r1
+mov.l r1,@r2
+mov.l @r2,r3
+mov.l @r3,r0
+rts
+nop
+# d4_struct_fixed: a 3-word struct passed on the stack, the callee copies it to a local by fixed offsets
+name d4_struct_fixed
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222,0x3333,0x4444
+F0:
+.word 0x4F22
+add #-12,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov.l =0x3333,r1
+mov.l r1,@(4,r15)
+mov.l =0x4444,r1
+mov.l r1,@(8,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #12,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+add #-12,r15
+mov.l @(12,r15),r1
+mov.l r1,@(0,r15)
+mov.l @(16,r15),r1
+mov.l r1,@(4,r15)
+mov.l @(20,r15),r1
+mov.l r1,@(8,r15)
+mov.l @(0,r15),r0
+mov.l @(8,r15),r2
+add r2,r0
+add #12,r15
+rts
+nop
+# d4_struct_loop: the same copy by a counted loop through a pointer into the incoming words
+name d4_struct_loop
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222,0x3333,0x4444
+F0:
+.word 0x4F22
+add #-12,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov.l =0x3333,r1
+mov.l r1,@(4,r15)
+mov.l =0x4444,r1
+mov.l r1,@(8,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #12,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+add #-12,r15
+mov r15,r2
+add #12,r2
+mov r15,r3
+mov #3,r1
+F1_L:
+mov.l @r2+,r5
+mov.l r5,@r3
+add #4,r3
+dt r1
+bf F1_L
+mov.l @(0,r15),r0
+mov.l @(8,r15),r2
+add r2,r0
+add #12,r15
+rts
+nop
+# d4_struct_memcpy: the incoming struct handed to a memcpy-like callee by address (r5 = entry r15), the copy read afterwards
+name d4_struct_memcpy
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222,0x3333,0x4444
+F0:
+.word 0x4F22
+add #-12,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov.l =0x3333,r1
+mov.l r1,@(4,r15)
+mov.l =0x4444,r1
+mov.l r1,@(8,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #12,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+add #-12,r15
+mov r15,r4
+mov r15,r5
+add #16,r5
+mov #12,r6
+mov.l =@F2,r1
+jsr @r1
+nop
+mov.l @(0,r15),r0
+mov.l @(8,r15),r2
+add r2,r0
+add #12,r15
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov #3,r1
+F2_L:
+mov.l @r5+,r2
+mov.l r2,@r4
+add #4,r4
+dt r1
+bf F2_L
+rts
+nop
+# d5_ind_reg3: the caller reaches the callee through r3 (mov.l =F1,r3 ; jsr @r3), a pointer it knows; stack word read
+name d5_ind_reg3
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r3
+jsr @r3
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l @(0,r15),r0
+add r4,r0
+rts
+nop
+# d5_ind_loaded: the caller loads the target from a global (not resolvable); the callee reads the stack word
+name d5_ind_loaded
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =0x06020000,r2
+mov.l @r2,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l @(0,r15),r0
+add r4,r0
+rts
+nop
+# d5_ind_inside: F1 calls F2 through a pointer in r3 with a stack word of its own; F2 reads it
+name d5_ind_inside
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+mov.l @(4,r15),r1
+add #-4,r15
+mov.l r1,@(0,r15)
+mov.l =@F2,r3
+jsr @r3
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov.l @(0,r15),r0
+add r4,r0
+rts
+nop
+# d6_leaf_param6only: a leaf that reads the sixth argument only (@(4,r15)); the fifth is not read
+name d6_leaf_param6only
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x3333
+F0:
+.word 0x4F22
+add #-8,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov.l =0x3333,r1
+mov.l r1,@(4,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l @(4,r15),r0
+rts
+nop
+# d6_cond_read: the stack word read on one path only (tst r4 ; bt)
+name d6_cond_read
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bt F1_Z
+mov.l @(0,r15),r0
+rts
+nop
+F1_Z:
+mov #0,r0
+rts
+nop
+# d6_read_after_call: the non-leaf reads param5 after a call (PR saved: the word is at r15+4)
+name d6_read_after_call
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+mov.l =@F2,r1
+jsr @r1
+nop
+mov.l @(4,r15),r1
+add r1,r0
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov r4,r0
+rts
+nop
+# d6_const_index: param5 read through a literal index: mov.l =20,r0 ; mov.l @(r0,r15),r0 under a 16 byte frame
+name d6_const_index
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+add #-16,r15
+mov.l =20,r0
+mov.l @(r0,r15),r0
+add #16,r15
+rts
+nop
+# d6_far_word: param 17: word 12 above the entry r15 (offset 48) read through an added pointer; the caller passes one word, the callee reads past it (undefined), text must show the word as an argument only if 12 are passed: here 1 word
+name d6_far_word
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r15,r1
+add #0,r1
+mov.l @r1,r0
+rts
+nop
+# d6_two_regs_one_stack: a leaf reading stack word 1 and r7 but not r4-r6
+name d6_two_regs_one_stack
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-8,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov.l =0x3333,r1
+mov.l r1,@(4,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l @(0,r15),r0
+add r7,r0
+rts
+nop
+# d7_thunk_stack: a thunk (mov.l =F2,r1 ; jmp @r1 ; nop) to a callee that reads the stack word passed through
+name d7_thunk_stack
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l =@F2,r1
+jmp @r1
+nop
+fn
+F2:
+mov.l @(0,r15),r0
+add r4,r0
+rts
+nop
+# d7_tail_after_pop: adjusts r4, restores PR, then jumps (SHC tail call with the PR restored before the jump): the stack word passes through
+name d7_tail_after_pop
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+add #1,r4
+.word 0x4F26
+mov.l =@F2,r1
+jmp @r1
+nop
+fn
+F2:
+mov.l @(0,r15),r0
+add r4,r0
+rts
+nop
+# d7_tail_bra: a tail call by bra with the stack word read by the target
+name d7_tail_bra
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+add #1,r4
+bra F2
+nop
+fn
+F2:
+mov.l @(0,r15),r0
+add r4,r0
+rts
+nop
+# d8_forward_stack: F1 forwards its own stack argument to F2 (re-pushed in the outgoing area); only F2 reads it
+name d8_forward_stack
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+add #-4,r15
+mov.l @(8,r15),r1
+mov.l r1,@(0,r15)
+mov.l =@F2,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov.l @(0,r15),r0
+add r4,r0
+rts
+nop
+# d8_pass_reg_chain: F1 passes r4-r7 through to F2, which reads r7 and a stack word; F1 never touches the stack argument
+name d8_pass_reg_chain
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+mov.l =@F2,r1
+jsr @r1
+nop
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov.l @(0,r15),r0
+add r7,r0
+rts
+nop
+# d9_mac_saved: the callee saves MACH and MACL, multiplies, restores them; the caller keeps a product in MACL across the call and reads it after
+name d9_mac_saved
+ret 1,1
+env SE_GENERATED_CLOBBERS=100000,0
+F0:
+.word 0x4F22
+mul.l r4,r5
+mov #5,r4
+mov #6,r5
+mov.l =@F1,r1
+jsr @r1
+nop
+sts macl,r1
+add r1,r0
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F12
+.word 0x4F02
+dmulu.l r4,r5
+sts macl,r0
+.word 0x4F06
+rts
+.word 0x4F16
+# d9_gbr_saved: the callee sets GBR from r4, reads @(4,gbr), restores GBR; the caller reads @(8,gbr) after the call
+name d9_gbr_saved
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+F0:
+.word 0x4F22
+mov.l =@F1,r1
+mov #5,r4
+jsr @r1
+nop
+mov r0,r2
+mov.l @(8,gbr),r0
+add r2,r0
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F13
+ldc r4,gbr
+mov.l @(4,gbr),r0
+.word 0x4F17
+rts
+nop
+# d9_gbr_unsaved: the callee sets GBR and does not restore it (a context-switch helper); the caller reads @(8,gbr) after: a caution is expected
+name d9_gbr_unsaved
+ret 1,1
+env SE_GENERATED_CLOBBERS=0x20000,0x20000
+F0:
+.word 0x4F22
+mov.l =@F1,r1
+mov #5,r4
+jsr @r1
+nop
+mov r0,r2
+mov.l @(8,gbr),r0
+add r2,r0
+.word 0x4F26
+rts
+nop
+fn
+F1:
+ldc r4,gbr
+mov.l @(4,gbr),r0
+rts
+nop
+# d10_array_sum4: int v[4]={a,b,c,d}; sum by a counted pointer loop (-O0): r4-r7 into a local array, a loop over it; the caller has a local at its r15+0 and passes four register arguments
+name d10_array_sum4
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+absent 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+mov.l @(0,r15),r1
+add r1,r0
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r7,@-r15
+mov.l r6,@-r15
+mov.l r5,@-r15
+mov.l r4,@-r15
+mov r15,r2
+mov #4,r1
+mov #0,r0
+F1_L:
+mov.l @r2+,r3
+add r3,r0
+dt r1
+bf F1_L
+add #16,r15
+rts
+nop
+# d10_spill_fixed: non-varargs -O0: r4-r7 stored to the frame, read back at fixed offsets, an array slot written by a variable index; the caller has a local at r15+0
+name d10_spill_fixed
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+absent 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+mov.l @(0,r15),r1
+add r1,r0
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+add #-32,r15
+mov.l r4,@(16,r15)
+mov.l r5,@(20,r15)
+mov.l r6,@(24,r15)
+mov.l r7,@(28,r15)
+mov.l @(16,r15),r1
+mov r5,r0
+shll2 r0
+mov.l r1,@(r0,r15)
+mov.l @(20,r15),r0
+add #32,r15
+rts
+nop
+# d10_addr_param_local: int f(int a) { g(&a); return a; }: r4 spilled, its address handed to a callee that writes it; the caller has a local at r15+0
+name d10_addr_param_local
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+absent 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+mov.l @(0,r15),r1
+add r1,r0
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+.word 0x4F22
+mov.l r4,@-r15
+mov r15,r4
+mov.l =@F2,r1
+jsr @r1
+nop
+mov.l @r15+,r0
+.word 0x4F26
+rts
+nop
+fn
+F2:
+mov.l @r4,r1
+add #1,r1
+mov.l r1,@r4
+rts
+nop
+# d10_loop_local_array: a local int v[8] filled and summed by pointer loops (not from a spill), r4 spilled above it; the caller has a local at r15+0
+name d10_loop_local_array
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+absent 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+mov.l @(0,r15),r1
+add r1,r0
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+add #-36,r15
+mov.l r4,@(32,r15)
+mov r15,r2
+mov #8,r1
+F1_L:
+mov.l r1,@r2
+add #4,r2
+dt r1
+bf F1_L
+mov r15,r2
+mov #8,r1
+mov #0,r0
+F1_M:
+mov.l @r2+,r3
+add r3,r0
+dt r1
+bf F1_M
+mov.l @(32,r15),r1
+add r1,r0
+add #36,r15
+rts
+nop
+# d11_spill_reverse: r4-r7 pushed in the other order (r4 first, so r7 is the lowest word); a counted loop from r15 over five words ends on the stack word
+name d11_spill_reverse
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r4,@-r15
+mov.l r5,@-r15
+mov.l r6,@-r15
+mov.l r7,@-r15
+mov r15,r2
+mov #5,r1
+mov #0,r0
+F1_L:
+mov.l @r2+,r3
+add r3,r0
+dt r1
+bf F1_L
+add #16,r15
+rts
+nop
+# d11_spill_stores: SHC style: add #-16,r15 then mov.l r4,@r15 ... r7,@(12,r15); a loop from r15 reads five words (the fifth is the stack argument)
+name d11_spill_stores
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+add #-16,r15
+mov.l r4,@r15
+mov.l r5,@(4,r15)
+mov.l r6,@(8,r15)
+mov.l r7,@(12,r15)
+mov r15,r2
+mov #5,r1
+mov #0,r0
+F1_L:
+mov.l @r2+,r3
+add r3,r0
+dt r1
+bf F1_L
+add #16,r15
+rts
+nop
+# d11_spill_r7only: f(a, b, c, ...): only r7 is a varargs word and is pushed; the walk reads r7 and then the stack word (two words)
+name d11_spill_r7only
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r7,@-r15
+mov r15,r2
+mov #2,r1
+mov #0,r0
+F1_L:
+mov.l @r2+,r3
+add r3,r0
+dt r1
+bf F1_L
+add #4,r15
+rts
+nop
+# d11_index_spill: the index through r0 from the current r15 with the spill at r15+0: r0 = 16 reaches the stack word
+name d11_index_spill
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r7,@-r15
+mov.l r6,@-r15
+mov.l r5,@-r15
+mov.l r4,@-r15
+mov #12,r0
+shll2 r0
+shlr2 r0
+add #4,r0
+mov.l @(r0,r15),r0
+add #16,r15
+rts
+nop
+# d11_pointer_in_arg: the spill pointer handed in a callee-saved register across a loop with a call: r8 = r15 after the spill, F2 called, then the read through r8+16
+name d11_pointer_in_arg
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r8,@-r15
+.word 0x4F22
+mov.l r7,@-r15
+mov.l r6,@-r15
+mov.l r5,@-r15
+mov.l r4,@-r15
+mov r15,r8
+mov.l =@F2,r1
+jsr @r1
+nop
+mov.l @(24,r8),r1
+add r1,r0
+add #16,r15
+.word 0x4F26
+rts
+mov.l @r15+,r8
+fn
+F2:
+mov r4,r0
+rts
+nop
+# d12_ret64_onepath: returns r0 only on one path and r0:r1 (a 64-bit product) on the other; the caller uses r0 and r1
+name d12_ret64_onepath
+ret 1,1
+env SE_GENERATED_CLOBBERS=180000,180000
+F0:
+.word 0x4F22
+mov #5,r4
+mov #6,r5
+mov.l =@F1,r1
+jsr @r1
+nop
+add r1,r0
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bt F1_Z
+dmulu.l r4,r5
+sts macl,r1
+rts
+sts mach,r0
+F1_Z:
+mov #0,r0
+rts
+mov #0,r1
+# d12_sret_thunk: a struct return: the caller passes the hidden pointer in r2 (a local), the callee is a thunk to F2 which writes through r2; the caller reads the local
+name d12_sret_thunk
+ret 1,0
+env SE_GENERATED_CLOBBERS=0,0
+F0:
+.word 0x4F22
+add #-8,r15
+mov r15,r2
+mov #5,r4
+mov #6,r5
+mov.l =@F1,r1
+jsr @r1
+nop
+mov.l @(0,r15),r0
+mov.l @(4,r15),r1
+add r1,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l =@F2,r1
+jmp @r1
+nop
+fn
+F2:
+mov.l r4,@r2
+mov.l r5,@(4,r2)
+rts
+nop
+# d12_cond_tail_ret: one path returns 0 itself, the other tail-calls F2 which returns r0: the call yields a value the caller returns
+name d12_cond_tail_ret
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+F0:
+.word 0x4F22
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+.word 0x4F26
+rts
+nop
+fn
+F1:
+tst r4,r4
+bt F1_Z
+mov.l =@F2,r1
+jmp @r1
+nop
+F1_Z:
+rts
+mov #0,r0
+fn
+F2:
+mov r4,r0
+rts
+add r5,r0
+# d13_jsr_slot_args: the caller sets r7 and r5 in the delay slots of the argument setup: jsr @r1 with `mov #8,r7` as the delay slot; the callee reads r4-r7
+name d13_jsr_slot_args
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+F0:
+.word 0x4F22
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov.l =@F1,r1
+jsr @r1
+mov #8,r7
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r4,r0
+add r5,r0
+add r6,r0
+rts
+add r7,r0
+# d13_jmp_slot_thunk: a C++ this-adjusting thunk: jmp @r1 with `add #8,r4` in the delay slot; the target reads r4, r5 and r6
+name d13_jmp_slot_thunk
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+F0:
+.word 0x4F22
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov.l =@F1,r1
+jsr @r1
+nop
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l =@F2,r1
+jmp @r1
+add #8,r4
+fn
+F2:
+mov r4,r0
+add r5,r0
+rts
+add r6,r0
+# d13_bsr_slot_arg: bsr with the fourth argument set in the delay slot
+name d13_bsr_slot_arg
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+F0:
+.word 0x4F22
+mov #5,r4
+mov #6,r5
+mov #7,r6
+bsr F1
+mov #8,r7
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov r4,r0
+add r5,r0
+add r6,r0
+rts
+add r7,r0
+# d14_addr_param5_indirect: &param5 handed to a callee reached through a pointer the engine cannot resolve (the target is loaded from a global)
+name d14_addr_param5_indirect
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r8,@-r15
+.word 0x4F22
+mov r4,r8
+mov r15,r4
+add #8,r4
+mov.l =0x06020000,r1
+mov.l @r1,r1
+jsr @r1
+nop
+add r8,r0
+.word 0x4F26
+rts
+mov.l @r15+,r8
+# d14_addr_param5_write: &param5 handed to a callee that writes through it (an out parameter in the fifth slot); the caller reads its outgoing word back after the call
+name d14_addr_param5_write
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r8,@-r15
+.word 0x4F22
+mov r4,r8
+mov r15,r4
+add #8,r4
+mov.l =@F2,r1
+jsr @r1
+nop
+add r8,r0
+.word 0x4F26
+rts
+mov.l @r15+,r8
+fn
+F2:
+mov.l @r4,r0
+add #1,r0
+rts
+mov.l r0,@r4
+# d14_addr_param5_chain: &param5 passed down two calls (F1 -> F2 -> F3 reads it)
+name d14_addr_param5_chain
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+mov.l r8,@-r15
+.word 0x4F22
+mov r4,r8
+mov r15,r4
+add #8,r4
+mov.l =@F2,r1
+jsr @r1
+nop
+add r8,r0
+.word 0x4F26
+rts
+mov.l @r15+,r8
+fn
+F2:
+.word 0x4F22
+mov.l =@F3,r1
+jsr @r1
+nop
+.word 0x4F26
+rts
+nop
+fn
+F3:
+mov.l @r4,r0
+rts
+nop
+# d14_addr_stored_local: the address of param5 stored to a local pointer variable (-O0 `int *p = &e;`), reloaded and read: no loop, no call
+name d14_addr_stored_local
+ret 1,1
+env SE_GENERATED_CLOBBERS=0,0
+expect 0x2222
+F0:
+.word 0x4F22
+add #-4,r15
+mov.l =0x2222,r1
+mov.l r1,@(0,r15)
+mov #5,r4
+mov #6,r5
+mov #7,r6
+mov #8,r7
+mov.l =@F1,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+fn
+F1:
+add #-4,r15
+mov r15,r1
+add #8,r1
+mov.l r1,@(0,r15)
+mov.l @(0,r15),r2
+mov.l @r2,r0
+add #4,r15
+rts
+nop
