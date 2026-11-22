@@ -20,7 +20,7 @@
 
 #include "Theme.h"
 
-#if !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
+#ifdef __linux__
 #include "SaturnExplorerIcon.h"   // Linux window icon (Windows: .rc, macOS: the bundle's .icns)
 #endif
 
@@ -28,7 +28,6 @@
 #include <curl/curl.h>   // native desktop HttpsGet (update check)
 #ifdef SE_CURL_DLOPEN
 #include <dlfcn.h>       // Linux: libcurl is loaded at run time, see LoadCurl
-#include <type_traits>
 #endif
 #endif
 
@@ -109,7 +108,7 @@ bool WebPlatform::Initialize(const PlatformConfig& config)
     {
         return false;
     }
-#if !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
+#ifdef __linux__
     // X11 shows this in the title bar and task switcher; Wayland ignores it and asks the desktop file instead.
     if (SDL_Surface* icon = SDL_CreateRGBSurfaceWithFormatFrom(
             const_cast<unsigned char*>(kSaturnExplorerIconRgba), kSaturnExplorerIconSize, kSaturnExplorerIconSize,
@@ -559,12 +558,11 @@ bool WebPlatform::StopEmulator(std::string* error)
 // Native desktop HTTPS via libcurl (macOS ships it; Linux with libcurl-dev). The browser
 // build and any native build without libcurl inherit IPlatform's "unsupported" default.
 #if defined(SE_HAVE_CURL) && !defined(__EMSCRIPTEN__)
-#ifdef SE_CURL_DLOPEN
-// Linux loads the user's own libcurl instead of linking (and so shipping) one: distributions build it
-// against different TLS libraries and CA-store paths, and Debian versions its symbols (CURL_OPENSSL_4),
-// so a copy from the build machine fails elsewhere. Only the headers are needed to compile.
 namespace
 {
+// The curl calls HttpsGet makes. Linux loads the user's own libcurl instead of linking (and so shipping) one:
+// distributions build it against different TLS libraries and CA-store paths, and Debian versions its symbols
+// (CURL_OPENSSL_4), so a copy from the build machine fails elsewhere. Only the headers are needed to compile.
 struct CurlApi
 {
     decltype(&curl_easy_init) easy_init;
@@ -577,36 +575,45 @@ struct CurlApi
     decltype(&curl_slist_free_all) slist_free_all;
 };
 
-const CurlApi* LoadCurl()
+#define SE_CURL_FUNCTIONS(X) X(easy_init) X(easy_setopt) X(easy_perform) X(easy_getinfo) \
+                             X(easy_strerror) X(easy_cleanup) X(slist_append) X(slist_free_all)
+
+#ifdef SE_CURL_DLOPEN
+CurlApi LoadCurlFrom(void* lib)
 {
-    static const CurlApi* api = []() -> const CurlApi* {
-        void* lib = nullptr;
-        for (const char* name : {"libcurl.so.4", "libcurl-gnutls.so.4", "libcurl.so"})
-            if ((lib = dlopen(name, RTLD_NOW | RTLD_LOCAL)) != nullptr) break;
-        if (!lib) return nullptr;
-        static CurlApi a;
-        bool ok = true;
-        auto sym = [&](auto& fn, const char* name) {
-            fn = reinterpret_cast<typename std::remove_reference<decltype(fn)>::type>(dlsym(lib, name));
-            ok = ok && fn != nullptr;
-        };
-        sym(a.easy_init, "curl_easy_init");
-        sym(a.easy_setopt, "curl_easy_setopt");
-        sym(a.easy_perform, "curl_easy_perform");
-        sym(a.easy_getinfo, "curl_easy_getinfo");
-        sym(a.easy_strerror, "curl_easy_strerror");
-        sym(a.easy_cleanup, "curl_easy_cleanup");
-        sym(a.slist_append, "curl_slist_append");
-        sym(a.slist_free_all, "curl_slist_free_all");
-        return ok ? &a : nullptr;
-    }();
+    CurlApi api{};
+    if (lib)
+    {
+#define SE_CURL_RESOLVE(fn) api.fn = reinterpret_cast<decltype(api.fn)>(dlsym(lib, "curl_" #fn));
+        SE_CURL_FUNCTIONS(SE_CURL_RESOLVE)
+#undef SE_CURL_RESOLVE
+    }
     return api;
 }
-}  // namespace
-#define SE_CURL(fn) curl->fn
-#else
-#define SE_CURL(fn) curl_##fn
+
+void* OpenCurl()
+{
+    for (const char* name : {"libcurl.so.4", "libcurl-gnutls.so.4", "libcurl.so"})
+        if (void* lib = dlopen(name, RTLD_NOW | RTLD_LOCAL)) return lib;
+    return nullptr;
+}
 #endif
+
+// The API, or nullptr when libcurl is not installed (Linux) or lacks a function.
+const CurlApi* LoadCurl()
+{
+#ifdef SE_CURL_DLOPEN
+    static const CurlApi api = LoadCurlFrom(OpenCurl());
+#else
+#define SE_CURL_DIRECT(fn) &curl_##fn,
+    static const CurlApi api{SE_CURL_FUNCTIONS(SE_CURL_DIRECT)};
+#undef SE_CURL_DIRECT
+#endif
+#define SE_CURL_PRESENT(fn) &&api.fn
+    return (true SE_CURL_FUNCTIONS(SE_CURL_PRESENT)) ? &api : nullptr;
+#undef SE_CURL_PRESENT
+}
+}  // namespace
 
 static size_t SeCurlWrite(char* ptr, size_t size, size_t nmemb, void* userdata)
 {
@@ -618,7 +625,6 @@ static size_t SeCurlWrite(char* ptr, size_t size, size_t nmemb, void* userdata)
 bool WebPlatform::HttpsGet(const std::string& url, const std::string& userAgent,
                            HttpResponse& out)
 {
-#ifdef SE_CURL_DLOPEN
     const CurlApi* curl = LoadCurl();
     if (!curl)
     {
@@ -627,39 +633,38 @@ bool WebPlatform::HttpsGet(const std::string& url, const std::string& userAgent,
         out.error = "Online update check is not available: libcurl (libcurl.so.4) is not installed.";
         return false;
     }
-#endif
-    CURL* handle = SE_CURL(easy_init)();
+    CURL* handle = curl->easy_init();
     if (!handle)
     {
         out.ok = false;
         out.error = "Could not initialize libcurl.";
         return false;
     }
-    SE_CURL(easy_setopt)(handle, CURLOPT_URL, url.c_str());
-    SE_CURL(easy_setopt)(handle, CURLOPT_USERAGENT, userAgent.c_str());
-    SE_CURL(easy_setopt)(handle, CURLOPT_FOLLOWLOCATION, 1L);
-    SE_CURL(easy_setopt)(handle, CURLOPT_TIMEOUT, 15L);
-    SE_CURL(easy_setopt)(handle, CURLOPT_WRITEFUNCTION, SeCurlWrite);
-    SE_CURL(easy_setopt)(handle, CURLOPT_WRITEDATA, &out.body);
+    curl->easy_setopt(handle, CURLOPT_URL, url.c_str());
+    curl->easy_setopt(handle, CURLOPT_USERAGENT, userAgent.c_str());
+    curl->easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1L);
+    curl->easy_setopt(handle, CURLOPT_TIMEOUT, 15L);
+    curl->easy_setopt(handle, CURLOPT_WRITEFUNCTION, SeCurlWrite);
+    curl->easy_setopt(handle, CURLOPT_WRITEDATA, &out.body);
     // Accept: GitHub honors a version header; the default JSON is fine either way.
-    struct curl_slist* headers = SE_CURL(slist_append)(nullptr, "Accept: application/vnd.github+json");
-    if (headers) SE_CURL(easy_setopt)(handle, CURLOPT_HTTPHEADER, headers);
+    struct curl_slist* headers = curl->slist_append(nullptr, "Accept: application/vnd.github+json");
+    if (headers) curl->easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
 
-    const CURLcode rc = SE_CURL(easy_perform)(handle);
+    const CURLcode rc = curl->easy_perform(handle);
     if (rc == CURLE_OK)
     {
         long code = 0;
-        SE_CURL(easy_getinfo)(handle, CURLINFO_RESPONSE_CODE, &code);
+        curl->easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &code);
         out.status = code;
         out.ok = true;
     }
     else
     {
         out.ok = false;
-        out.error = SE_CURL(easy_strerror)(rc);
+        out.error = curl->easy_strerror(rc);
     }
-    if (headers) SE_CURL(slist_free_all)(headers);
-    SE_CURL(easy_cleanup)(handle);
+    if (headers) curl->slist_free_all(headers);
+    curl->easy_cleanup(handle);
     return out.ok;
 }
 #endif  // SE_HAVE_CURL && !__EMSCRIPTEN__

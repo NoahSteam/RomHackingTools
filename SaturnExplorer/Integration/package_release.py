@@ -18,7 +18,7 @@ FrontEnd/src/Launcher.cpp expects to find them:
     source, macOS)
 
   Linux: as Windows, with SaturnExplorerFrontEnd + lib/*.so beside it and mednafen-se/mednafen + lib/*.so,
-  each runpath set to its lib/ (patchelf). Libraries every distribution provides (LINUX_SYSTEM_LIB) stay out.
+  each runpath set to its lib/ (patchelf). Libraries every distribution provides (is_linux_system) stay out.
 
 Before anything is copied it checks that the Mednafen binary really is what the source offer will describe
 (pinned commit, patch current, Saturn-only build, clean Integration/, installed library versions); see
@@ -60,6 +60,7 @@ IS_WIN = os.name == "nt"
 IS_LINUX = sys.platform.startswith("linux")
 
 FIRMWARE_FILES = ("sega_101.bin", "mpr-17933.bin")
+MEDNAFEN_EXE = "mednafen.exe" if IS_WIN else "mednafen"
 SHIPPED_PROGRAMS = ("SaturnExplorerFrontEnd.exe", "SaturnExplorerFrontEnd")   # the build folder's other programs are tests and tools
 
 
@@ -116,6 +117,17 @@ def resolve_dep(dep, owners, exe):
     raise SystemExit(f"cannot resolve {dep} needed by {owners[0]}")
 
 
+def copy_lib(real, name, libdir, copied):
+    """Copy one library into libdir as `name`, recording it in `copied` (original real path -> name)."""
+    if name in copied.values():
+        raise SystemExit(f"two different libraries are both called {name}")
+    dest = os.path.join(libdir, name)
+    shutil.copy2(real, dest)
+    os.chmod(dest, 0o755)
+    copied[real] = name
+    return dest
+
+
 def bundle_dylibs(exe, exe_origin, libdir, sign):
     """Copy every non-system dylib `exe` needs (transitively) into libdir, point the load commands at
     the copies, drop the build machine's rpaths, and re-sign: install_name_tool breaks the signature and
@@ -127,12 +139,7 @@ def bundle_dylibs(exe, exe_origin, libdir, sign):
     items, queue = [exe], [exe]
 
     def add(real, name, loader):
-        if name in copied.values():
-            raise SystemExit(f"two different libraries are both called {name}")
-        dest = os.path.join(libdir, name)
-        shutil.copy2(real, dest)
-        os.chmod(dest, 0o755)
-        copied[real] = name
+        dest = copy_lib(real, name, libdir, copied)
         owners[dest] = [real] + owners[loader]
         queue.append(dest)
         items.append(dest)
@@ -188,17 +195,18 @@ def codesign(path, identity):
 # the C library and the compiler runtime (the build runs on the oldest supported distribution, so its versions
 # are the baseline), the GPU driver stack, the display and audio servers' client libraries, which must match
 # the running servers, and a few that every desktop has. Everything else a program needs is copied.
-LINUX_SYSTEM_LIB = re.compile(
-    r"(ld-linux[^/]*|linux-vdso\.so\..*"
-    r"|lib(c|m|mvec|dl|pthread|rt|resolv|util|anl|nsl|BrokenLocale)\.so\..*|libstdc\+\+\.so\..*|libgcc_s\.so\..*"
-    r"|lib(GL|GLX|EGL|GLESv2|GLdispatch|OpenGL|glapi|drm|gbm)\.so\..*"
-    r"|libX[A-Za-z0-9_-]*\.so\..*|libxcb[A-Za-z0-9_-]*\.so\..*|libxkbcommon\.so\..*|libwayland-[a-z]+\.so\..*"
-    r"|lib(asound|pulse|pulse-simple|jack|pipewire-[0-9.]+)\.so\..*"
-    r"|lib(dbus-1|systemd|udev|fontconfig|freetype|z|expat|uuid)\.so\..*)")
+LINUX_SYSTEM_STEMS = frozenset((
+    "libc", "libm", "libmvec", "libdl", "libpthread", "librt", "libresolv", "libutil", "libanl", "libnsl",
+    "libBrokenLocale", "libstdc++", "libgcc_s", "linux-vdso",
+    "libGL", "libGLX", "libEGL", "libGLESv2", "libGLdispatch", "libOpenGL", "libglapi", "libdrm", "libgbm",
+    "libxkbcommon", "libasound", "libpulse", "libpulse-simple", "libjack",
+    "libdbus-1", "libsystemd", "libudev", "libfontconfig", "libfreetype", "libz", "libexpat", "libuuid"))
+LINUX_SYSTEM_PREFIXES = ("ld-linux", "libX", "libxcb", "libwayland-", "libpipewire-")
 
 
 def is_linux_system(name):
-    return bool(LINUX_SYSTEM_LIB.fullmatch(os.path.basename(name)))
+    stem = os.path.basename(name).partition(".so")[0]
+    return stem in LINUX_SYSTEM_STEMS or stem.startswith(LINUX_SYSTEM_PREFIXES)
 
 
 def elf_needed(path):
@@ -236,15 +244,8 @@ def bundle_elf_libs(exe, exe_origin, libdir):
             if not real:
                 raise SystemExit(f"cannot resolve {name} needed by {origin}")
             real = os.path.realpath(real)
-            if real in copied:
-                continue
-            if name in copied.values():
-                raise SystemExit(f"two different libraries are both called {name}")
-            dest = os.path.join(libdir, name)   # by soname: the name the loader asks for
-            shutil.copy2(real, dest)
-            os.chmod(dest, 0o755)
-            copied[real] = name
-            queue.append((dest, real))
+            if real not in copied:   # copied by soname: the name the loader asks for
+                queue.append((copy_lib(real, name, libdir, copied), real))
     run(["patchelf", "--set-rpath", "$ORIGIN/" + os.path.relpath(libdir, os.path.dirname(exe)), exe])
     for name in copied.values():
         run(["patchelf", "--set-rpath", "$ORIGIN", os.path.join(libdir, name)])
@@ -358,7 +359,7 @@ compare its SHA-256 (certutil -hashfile <zip> SHA256) with SHA256SUMS-windows.tx
 """
 
 
-# What a Linux system must provide: the package carries every other library (package_release.LINUX_SYSTEM_LIB).
+# What a Linux system must provide: the package carries every other library (LINUX_SYSTEM_STEMS / LINUX_SYSTEM_PREFIXES).
 LINUX_NOTE = """
 Linux: the download carries its own libraries except the ones every desktop provides (the C library,
 OpenGL, X11/Wayland, ALSA/PulseAudio). Built on Ubuntu 22.04 for x86_64, so it needs glibc 2.35 or newer.
@@ -368,11 +369,19 @@ sha256sum <archive> with SHA256SUMS-linux.txt on the release page.
 """
 
 
+# Per platform: where to keep the files, and the note at the end of the README.
+README_PLATFORM = {
+    "macos": ("Keep SaturnExplorer.app and the mednafen-se folder side by side (for example both in\nApplications).", ""),
+    "windows": ("Keep SaturnExplorerFrontEnd.exe and the mednafen-se folder side by side, in a folder whose path\n"
+                "uses only characters your Windows code page can represent (plain English letters are always safe).",
+                UNSIGNED_NOTE),
+    "linux": ("Keep SaturnExplorerFrontEnd, lib/ and the mednafen-se folder together; run ./SaturnExplorerFrontEnd.",
+              LINUX_NOTE),
+}
+
+
 def readme_top(ref, plat):
-    where = {"macos": "Keep SaturnExplorer.app and the mednafen-se folder side by side (for example both in\nApplications).",
-             "windows": "Keep SaturnExplorerFrontEnd.exe and the mednafen-se folder side by side, in a folder whose path\n"
-                        "uses only characters your Windows code page can represent (plain English letters are always safe).",
-             "linux": "Keep SaturnExplorerFrontEnd, lib/ and the mednafen-se folder together; run ./SaturnExplorerFrontEnd."}[plat]
+    where, note = README_PLATFORM[plat]
     return f"""Saturn Explorer {ref}
 {'=' * (17 + len(ref))}
 
@@ -382,7 +391,7 @@ def readme_top(ref, plat):
 
 mednafen-se is a modified Mednafen build, not an official release. Its source and the licences of
 everything in this download are in SOURCE.txt, mednafen-se-source.tar.xz and Licenses/.
-{ {"windows": UNSIGNED_NOTE, "linux": LINUX_NOTE}.get(plat, "")}"""
+{note}"""
 
 
 # --------------------------------------------------------------------------- assembly
@@ -418,7 +427,11 @@ SOURCE_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".inc", ".s
 SKIP_DIRS = {".git", ".deps", ".libs", "autom4te.cache"}
 
 
-def sha256_file(path, algo="sha256"):
+def sha256_file(path):
+    return file_digest(path, "sha256")
+
+
+def file_digest(path, algo):
     h = hashlib.new(algo)
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -545,7 +558,7 @@ def verify_provenance(up, mednafen, mso, allow):
         problems.append(f"{root} is not a git checkout of the Mednafen fork")
     if not problems:
         problems += compare_to_patched_tree(up, root, binary if os.path.isfile(binary) else
-                                           os.path.join(binary, "mednafen.exe" if IS_WIN else "mednafen"), mso)
+                                           os.path.join(binary, MEDNAFEN_EXE), mso)
     stamp = os.path.join(root, mso.install.MEDNAFEN_STAMP)
     try:
         with open(stamp, encoding="utf-8") as f:
@@ -689,26 +702,29 @@ def fetch_sources(entries, dest, allow_missing=False):
             print("warning (overridden):", msg)
             e["source"] = e["source"] or "unknown"
             continue
-        if not e.get("sha256") and not e.get("record_hash") and not e.get("source_files"):
+        # A Debian source package is several files (.dsc, upstream tarball, packaging), each with its checksum;
+        # a Homebrew or MSYS2 entry is one file, checked against its recorded hash or, without one, recorded.
+        files = e.get("source_files") or ([(e["source"], "sha256", e.get("sha256"))]
+                                          if e.get("sha256") or e.get("record_hash") else [])
+        if not files:
             continue
         if "exception" in e["license"].lower():
             # GPL with a runtime-library exception (libgcc, libstdc++): the source is named and offered, but a
             # multi-hundred-megabyte compiler tarball is not put in every download.
             e["note"] = (e.get("note") or "") + "; source offered, not bundled"
             continue
-        # A Debian source package is several files (.dsc, upstream tarball, packaging), each with its checksum.
         included = []
-        for url, algo, want in e.get("source_files") or [(e["source"], "sha256", e.get("sha256"))]:
+        for url, algo, want in files:
             name = urllib.parse.unquote(os.path.basename(url.split("?")[0]))
             path = os.path.join(dest, name)
             with urllib.request.urlopen(url, timeout=300) as r, open(path, "wb") as f:
                 shutil.copyfileobj(r, f)
-            got = sha256_file(path, algo)
+            got = file_digest(path, algo)
             if want and got != want:
                 raise SystemExit(f"{name}: checksum {got} does not match the recorded {want}")
-            if not e.get("source_files"):
-                e["sha256"] = got
             included.append("third-party-source/" + name)
+        if "source_files" not in e:
+            e["sha256"] = got
         e["included"] = ", ".join(included)
 
 
@@ -744,6 +760,17 @@ def copy_msvc_runtime(dest, override):
         if override:
             raise SystemExit(f"{override} lacks {', '.join(required)}")
     raise SystemExit("the Microsoft Visual C++ runtime DLLs were not found; install the VS C++ workload or pass --crt-dir")
+
+
+def copy_se_build(build_dir, stage):
+    """Windows/Linux: only the program, its DLLs and licenses/. The build folder also holds every test executable
+    and the developer tools (se-render, se-sleighc), which the macOS bundle does not ship either."""
+    for f in os.listdir(build_dir):
+        src = os.path.join(build_dir, f)
+        if f in SHIPPED_PROGRAMS or f.lower().endswith(".dll") or f == "licenses":
+            (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(stage, f))
+    if not any(os.path.isfile(os.path.join(stage, p)) for p in SHIPPED_PROGRAMS):
+        raise SystemExit(f"no {' or '.join(SHIPPED_PROGRAMS)} in {build_dir}")
 
 
 def main():
@@ -784,30 +811,22 @@ def main():
         copied = bundle_dylibs(exe, os.path.abspath(args.mednafen), os.path.join(emu, "lib"), args.sign_identity)
         libs = brew_manifest(copied, args.allow_mismatch)
     else:
-        # Only the program: the build folder also holds every test executable and the developer tools
-        # (se-render, se-sleighc), which the macOS bundle does not ship either.
-        for f in os.listdir(args.se_app):
-            src = os.path.join(args.se_app, f)
-            if f in SHIPPED_PROGRAMS or f.lower().endswith(".dll") or f == "licenses":
-                (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(stage, f))
-        crt = copy_msvc_runtime(stage, args.crt_dir) if IS_WIN else []
-        exe_name = "mednafen.exe" if IS_WIN else "mednafen"
-        dlls = [f for f in os.listdir(args.mednafen) if f.lower().endswith(".dll")]
-        for f in os.listdir(args.mednafen):
-            if f == exe_name or f in dlls:
-                shutil.copy2(os.path.join(args.mednafen, f), emu)
-        exe = os.path.join(emu, exe_name)
-        if not os.path.isfile(exe):
-            raise SystemExit(f"{exe_name} not found in {args.mednafen}")
-        libs = msys2_manifest(dlls, args.mednafen) if IS_WIN else []
+        copy_se_build(args.se_app, stage)
+        exe = os.path.join(emu, MEDNAFEN_EXE)
+        if not os.path.isfile(os.path.join(args.mednafen, MEDNAFEN_EXE)):
+            raise SystemExit(f"{MEDNAFEN_EXE} not found in {args.mednafen}")
         if IS_LINUX:
-            se_exe = os.path.join(stage, "SaturnExplorerFrontEnd")
-            if not os.path.isfile(se_exe):
-                raise SystemExit(f"SaturnExplorerFrontEnd not found in {args.se_app}")
-            copied = bundle_elf_libs(se_exe, os.path.join(args.se_app, "SaturnExplorerFrontEnd"), os.path.join(stage, "lib"))
-            copied.update(bundle_elf_libs(exe, os.path.join(args.mednafen, exe_name), os.path.join(emu, "lib")))
+            shutil.copy2(os.path.join(args.mednafen, MEDNAFEN_EXE), exe)
+            copied = bundle_elf_libs(os.path.join(stage, "SaturnExplorerFrontEnd"),
+                                     os.path.join(args.se_app, "SaturnExplorerFrontEnd"), os.path.join(stage, "lib"))
+            copied.update(bundle_elf_libs(exe, os.path.join(args.mednafen, MEDNAFEN_EXE), os.path.join(emu, "lib")))
             libs = dpkg_manifest(copied, os.path.join(stage, "licenses", "bundled-libraries"), args.allow_mismatch)
-        if crt:
+        else:
+            crt = copy_msvc_runtime(stage, args.crt_dir)
+            dlls = [f for f in os.listdir(args.mednafen) if f.lower().endswith(".dll")]
+            for f in [MEDNAFEN_EXE] + dlls:
+                shutil.copy2(os.path.join(args.mednafen, f), emu)
+            libs = msys2_manifest(dlls, args.mednafen)
             libs.append({"name": "Microsoft Visual C++ runtime", "version": "as shipped with the Visual Studio that built SE",
                          "license": "Microsoft redistributable terms (app-local)", "files": sorted(crt),
                          "source": "n/a", "sha256": None, "note": "not open source; redistributed under the Visual Studio licence"})
@@ -834,19 +853,17 @@ def main():
     if args.no_archive:
         print(f"staged: {stage}")
         return
-    # A tarball on Linux: a zip loses the executable bits (and the libraries' symlinks, were there any).
-    archive = os.path.join(os.path.abspath(args.out), name + {"macos": ".dmg", "linux": ".tar.gz"}.get(plat, ".zip"))
-    if os.path.exists(archive):
-        os.remove(archive)
     if IS_MAC:
+        archive = stage + ".dmg"
+        if os.path.exists(archive):
+            os.remove(archive)
         run(["hdiutil", "create", "-quiet", "-volname", "Saturn Explorer", "-srcfolder", stage,
              "-format", "UDZO", archive])
         if args.sign_identity != "-":
             codesign(archive, args.sign_identity)      # the image itself is signed too, then notarised as a whole
-    elif IS_LINUX:
-        shutil.make_archive(archive[:-len(".tar.gz")], "gztar", os.path.dirname(stage), name)
     else:
-        shutil.make_archive(archive[:-4], "zip", os.path.dirname(stage), name)
+        # A tarball on Linux: a zip loses the executable bits. make_archive overwrites an existing archive.
+        archive = shutil.make_archive(stage, "gztar" if IS_LINUX else "zip", os.path.dirname(stage), name)
     print(f"wrote {archive}")
 
 
@@ -873,10 +890,14 @@ def smoke_test_linux(stage, emu, env):
                     raise SystemExit(f"{item} needs the system library {name}, which this machine lacks")
             elif not path or not os.path.realpath(path).startswith(root):
                 raise SystemExit(f"{item} depends on {name}, which is not inside the package (resolved: {path})")
-    r = subprocess.run([os.path.join(stage, "SaturnExplorerFrontEnd"), "--selftest"],
-                       capture_output=True, text=True, timeout=60, env={**env, "SDL_VIDEODRIVER": "dummy"})
+    run_selftest(os.path.join(stage, "SaturnExplorerFrontEnd"), {**env, "SDL_VIDEODRIVER": "dummy"})
+
+
+def run_selftest(program, env):
+    """The app loads its libraries and starts SDL without a window (WebMain.cpp, --selftest)."""
+    r = subprocess.run([program, "--selftest"], capture_output=True, text=True, timeout=60, env=env)
     if "selftest ok" not in r.stdout:
-        raise SystemExit("SaturnExplorerFrontEnd --selftest failed:\n" + r.stdout + r.stderr)
+        raise SystemExit(f"{os.path.basename(program)} --selftest failed:\n" + r.stdout + r.stderr)
 
 
 def smoke_test(stage, mednafen):
@@ -902,10 +923,7 @@ def smoke_test(stage, mednafen):
                               if dep.startswith(("@loader_path", "@executable_path")) else None)
                     if target is None or not os.path.exists(target):
                         raise SystemExit(f"{item} depends on {dep}, which is not inside the package")
-            r = subprocess.run([os.path.join(stage, "SaturnExplorer.app", "Contents", "MacOS", "SaturnExplorer"),
-                                "--selftest"], capture_output=True, text=True, timeout=60, env=env)
-            if "selftest ok" not in r.stdout:
-                raise SystemExit("SaturnExplorer --selftest failed:\n" + r.stdout + r.stderr)
+            run_selftest(os.path.join(stage, "SaturnExplorer.app", "Contents", "MacOS", "SaturnExplorer"), env)
             # sdl2-compat loads SDL3 on first use and, when it cannot, shows a blocking dialog and never
             # returns: so a timeout here is the failure signal.
             probe = ("import ctypes,sys\nl=ctypes.CDLL(sys.argv[1])\nsys.exit(0 if l.SDL_Init(0)==0 else 3)\n")

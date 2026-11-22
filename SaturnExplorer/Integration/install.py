@@ -52,6 +52,7 @@ SE_ROOT = os.path.dirname(HERE)                            # .../SaturnExplorer
 # clone_and_patch, settings.ini recording, summary) is platform-agnostic.
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
+IS_LINUX = sys.platform.startswith("linux")
 
 # ---------------------------------------------------------------------------
 # Emulator registry.
@@ -378,33 +379,28 @@ def check_prereqs_macos(rn, do_mednafen, args):
 LINUX_TOOLS = ("cc", "c++", "make", "git", "cmake", "pkg-config", "autoreconf", "libtoolize")
 LINUX_PC_SE = ("sdl2", "gl", "libcurl")
 LINUX_PC_MEDNAFEN = ("sdl2", "flac", "alsa")
-# Each manager: its install command, then one package list covering every tool and library above
-# (plus gettext, whose m4 macros Mednafen's autoreconf needs).
-LINUX_PACKAGE_MANAGERS = (
-    ("apt-get", ["apt-get", "install", "-y"],
-     "build-essential git cmake pkg-config autoconf automake libtool gettext "
-     "libsdl2-dev libgl-dev libcurl4-openssl-dev libflac-dev libasound2-dev zlib1g-dev"),
-    ("dnf", ["dnf", "install", "-y"],
-     "gcc gcc-c++ make git cmake pkgconf-pkg-config autoconf automake libtool gettext-devel "
-     "SDL2-devel mesa-libGL-devel libcurl-devel flac-devel alsa-lib-devel zlib-devel"),
-    ("pacman", ["pacman", "-S", "--needed", "--noconfirm"],
-     "base-devel git cmake pkgconf gettext sdl2 mesa curl flac alsa-lib zlib"),
-    ("zypper", ["zypper", "--non-interactive", "install"],
-     "gcc gcc-c++ make git cmake pkg-config autoconf automake libtool gettext-tools "
-     "libSDL2-devel Mesa-libGL-devel libcurl-devel flac-devel alsa-devel zlib-devel"),
-)
+# The install command of each manager (the first one found is used), covering every tool and library above
+# plus gettext, whose m4 macros Mednafen's autoreconf needs. The release workflow relies on the apt-get one.
+LINUX_PACKAGE_MANAGERS = {
+    "apt-get": "apt-get install -y build-essential git cmake pkg-config autoconf automake libtool gettext "
+               "libsdl2-dev libgl-dev libcurl4-openssl-dev libflac-dev libasound2-dev zlib1g-dev",
+    "dnf": "dnf install -y gcc gcc-c++ make git cmake pkgconf-pkg-config autoconf automake libtool gettext-devel "
+           "SDL2-devel mesa-libGL-devel libcurl-devel flac-devel alsa-lib-devel zlib-devel",
+    "pacman": "pacman -S --needed --noconfirm base-devel git cmake pkgconf gettext sdl2 mesa curl flac alsa-lib zlib",
+    "zypper": "zypper --non-interactive install gcc gcc-c++ make git cmake pkg-config autoconf automake libtool "
+              "gettext-tools libSDL2-devel Mesa-libGL-devel libcurl-devel flac-devel alsa-devel zlib-devel",
+}
+
+
+def linux_needed(do_mednafen):
+    return list(LINUX_TOOLS) + list(dict.fromkeys(LINUX_PC_SE + (LINUX_PC_MEDNAFEN if do_mednafen else ())))
 
 
 def linux_missing(do_mednafen):
-    """What the build would lack: tool names and pkg-config modules."""
-    missing = [t for t in LINUX_TOOLS if not which(t)]
-    modules = LINUX_PC_SE + (LINUX_PC_MEDNAFEN if do_mednafen else ())
-    if which("pkg-config"):
-        missing += [m for m in dict.fromkeys(modules)
-                    if subprocess.call(["pkg-config", "--exists", m]) != 0]
-    else:
-        missing += list(dict.fromkeys(modules))
-    return missing
+    """What the build would lack: tool names and pkg-config modules (all modules, without pkg-config)."""
+    have_pc = which("pkg-config")
+    return [n for n in linux_needed(do_mednafen)
+            if not (which(n) if n in LINUX_TOOLS else have_pc and subprocess.call(["pkg-config", "--exists", n]) == 0)]
 
 
 def check_prereqs_linux(rn, do_mednafen, args):
@@ -414,25 +410,17 @@ def check_prereqs_linux(rn, do_mednafen, args):
     print("Prerequisites:" + (" (incremental — skipping package installs)" if args.incremental else ""))
     missing = linux_missing(do_mednafen)
     if missing and not args.incremental:
-        print(f"  [missing] {', '.join(missing)}")
-        manager = next((m for m in LINUX_PACKAGE_MANAGERS if which(m[0])), None)
+        manager = next((m for m in LINUX_PACKAGE_MANAGERS if which(m)), None)
         if manager is None:
-            print("            No supported package manager (apt-get, dnf, pacman, zypper) was found;")
-            print("            install the tools and development packages above, then re-run.")
-        else:
-            cmd = manager[1] + manager[2].split()
-            if os.geteuid() != 0:
-                cmd = ["sudo"] + cmd
-            if rn.confirm(f"            install the build packages with {manager[0]} (uses sudo)?"):
-                rn.run(cmd, description=f"Install build packages ({manager[0]})")
-                missing = linux_missing(do_mednafen)
-    for m in missing:
-        print(f"  [missing] {m}")
-    if not missing:
-        print("  [ok]      compiler, git, CMake, autotools, SDL2" + (", FLAC, ALSA" if do_mednafen else ""))
-    p = shutil.which("cmake")
-    if p:
-        CMAKE = p
+            print("  No supported package manager (apt-get, dnf, pacman, zypper) was found; install the")
+            print("  tools and development packages listed below, then re-run.")
+        elif rn.confirm(f"  Missing: {', '.join(missing)}. Install the build packages with {manager} (uses sudo)?"):
+            cmd = LINUX_PACKAGE_MANAGERS[manager].split()
+            rn.run(cmd if os.geteuid() == 0 else ["sudo"] + cmd, description=f"Install build packages ({manager})")
+            missing = linux_missing(do_mednafen)
+    for n in linux_needed(do_mednafen):
+        print(f"  [{'missing' if n in missing else 'ok'}]{' ' * (3 if n in missing else 6)}{n}")
+    CMAKE = cmake_path() or CMAKE
     # A dry run reports what is missing but goes on to show the plan.
     return not missing or args.dry_run
 
@@ -973,7 +961,7 @@ def main():
     args = ap.parse_args()
     FORK_OWNER = args.fork_owner
 
-    if not IS_WIN and not IS_MAC and not sys.platform.startswith("linux") and not args.dry_run:
+    if not (IS_WIN or IS_MAC or IS_LINUX) and not args.dry_run:
         print("This installer supports Windows, macOS and Linux. Use --dry-run to preview the plan elsewhere.")
         return 2
 
@@ -981,7 +969,7 @@ def main():
     do_mednafen = not args.no_mednafen and not args.se_only
     do_yabause = args.with_yabause and not args.se_only
 
-    host = "Windows" if IS_WIN else ("macOS" if IS_MAC else "Linux")
+    host = "Windows" if IS_WIN else "macOS" if IS_MAC else "Linux" if IS_LINUX else "this platform"
     print(f"Saturn Explorer installer ({host})\n" + "=" * 36)
     if args.dry_run:
         print("(dry-run: nothing will be installed, cloned, or built)\n")
@@ -1021,9 +1009,11 @@ def main():
     elif IS_MAC:
         # Homebrew + clang + native autotools.
         ok = check_prereqs_macos(rn, do_mednafen, args)
-    else:
+    elif IS_LINUX:
         # The distribution's package manager + gcc/clang + native autotools.
         ok = check_prereqs_linux(rn, do_mednafen, args)
+    else:
+        ok = True   # only reachable as a dry run: there is no prerequisite step for this platform
 
     if not ok and not args.dry_run:
         print("\nSome prerequisites are missing. Install them (above) and re-run.")

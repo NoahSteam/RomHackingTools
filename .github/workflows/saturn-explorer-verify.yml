@@ -66,14 +66,17 @@ jobs:
         run: cmake --build build --config Debug --parallel 4
 
       # A silent drop of registered tests (a CMake condition that stops holding, a missing Python) must not leave the job green
-      # on fewer tests (A12-37). The floors are below the counts of 2026-11-19 (Windows 95, macOS 110).
+      # on fewer tests (A12-37). The floors are below the counts of 2026-11-19 (Windows 95, macOS 110) and, for Linux,
+      # 2026-11-22 (117, an Ubuntu 24.04 Debug build).
       - name: Check the registered test count
         shell: bash
-        run: bash ../.github/scripts/check-test-count.sh build ${{ runner.os == 'Windows' && '90' || '105' }} -- -C Debug
+        run: bash ../.github/scripts/check-test-count.sh build ${{ runner.os == 'Windows' && '90' || runner.os == 'Linux' && '112' || '105' }} -- -C Debug
 
       # The two -R steps below end green on a partial selection (--no-tests=error fails only when nothing matches), so each
       # selection is counted first: SE_DECOMPILER_TESTS names 11 tests, the Windows Release step 3 (A12-56).
+      # Linux: saturn-explorer-decompiler.yml already runs the decompiler suites, under ASan + UBSan + LSan.
       - name: Check the decompiler suites are all registered
+        if: runner.os != 'Linux'
         shell: bash
         run: |
           bash ../.github/scripts/check-selected-count.sh build "${{ env.SE_DECOMPILER_TESTS }}" 11 -- -C Debug
@@ -92,7 +95,7 @@ jobs:
       # step above as well before A12-36: seventy minutes twice on Windows Debug. This step also runs
       # after a failure of the one above, so a run reports both.
       - name: Decompiler tests, with their output
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && runner.os != 'Linux' }}
         run: ctest --test-dir build -C Debug -V --no-tests=error -R "${{ env.SE_DECOMPILER_TESTS }}"
 
       # The Debug runner test above uses a tenth of each cancellation fixture on Windows (the Debug

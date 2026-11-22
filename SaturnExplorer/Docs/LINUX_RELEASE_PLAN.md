@@ -24,7 +24,7 @@ licences and the GPL source offer included, release tag baked in, Demo menu off,
 | 6 | `.zip` archive loses the executable bit on extraction | same |
 | 7 | README text has only macOS and Windows variants | same |
 | 8 | The release workflow has no Linux job, the draft release no Linux asset | `.github/workflows/saturn-explorer-release.yml` |
-| 9 | The verification matrix has no Linux runner, so the Linux-only tests run in no workflow | `.github/workflows/saturn-explorer-verify.yml` |
+| 9 | The verification matrix has no Linux runner: the Linux frontend, `se-render` and the non-decompiler suites are not built or run on Linux (the decompiler workflow covers only the decompiler suites, under sanitizers, and the Area 9 store tests) | `.github/workflows/saturn-explorer-verify.yml` |
 | 10 | Bundling libcurl is not portable: distributions build it against different TLS libraries and CA paths, and Debian's symbols are versioned (`CURL_OPENSSL_4`) | `CMakeLists.txt`, `WebPlatform.cpp` |
 | 11 | No window icon on Linux (Windows uses `.rc`, macOS `.icns`) | frontend |
 | 12 | Build, install and distribution docs say nothing about a Linux release | `Docs/`, `Integration/` |
@@ -66,7 +66,8 @@ licences and the GPL source offer included, release tag baked in, Demo menu off,
    after the original is gone.
 6. Release workflow: a `linux` job (deps, Mednafen, SE Release with `SE_DEMO_MENU=OFF`, the Demo-menu and
    tag checks, package, `SHA256SUMS-linux.txt`); the draft release waits for it and attaches it.
-7. Verification workflow: add `ubuntu-latest` to the matrix with its dependency step.
+7. Verification workflow: add `ubuntu-latest` to the matrix with its dependency step, a test-count floor, and a
+   check that the frontend starts and does not link libcurl. The decompiler suites stay in the sanitizer workflow.
 8. Docs: `Docs/BUILD.md`, `Integration/INSTALL.md`, `Integration/DISTRIBUTION.md`, `install.sh` header,
    `package_release.py` docstring, the Codebase map (`DEPENDENCIES.md`, `Systems/Frontend.md`,
    `KNOWN_LIMITATIONS.md`).

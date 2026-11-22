@@ -164,7 +164,7 @@ On Linux the archive is `SaturnExplorer-<ref>-linux.tar.gz` (a tarball keeps the
 `ubuntu-22.04` for x86_64, so it needs glibc 2.35 or newer. It holds `SaturnExplorerFrontEnd` with `lib/` beside it,
 `mednafen-se/mednafen` with its own `lib/`, and `licenses/`. Each program's runpath points at its `lib/`
 (`patchelf`). The libraries every desktop has are not copied, because they must match the user's system:
-glibc, the C++ runtime, OpenGL, X11/Wayland, ALSA/PulseAudio (`LINUX_SYSTEM_LIB` in `package_release.py`).
+glibc, the C++ runtime, OpenGL, X11/Wayland, ALSA/PulseAudio (`is_linux_system` in `package_release.py`).
 The smoke test fails if any other library resolves outside the package. Each bundled library's Debian package
 gives its licence (its `copyright` file goes into `licenses/bundled-libraries/<package>/`) and its source package.
 `apt-get source --print-uris` names that source's files and checksums, and the copyleft ones (libFLAC's package

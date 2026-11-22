@@ -89,7 +89,7 @@ Linux has no bundle step in CMake; `Integration/package_release.py` does it when
 release archive. It copies every shared library the program and Mednafen load into a `lib/` beside
 each (SDL2, FLAC, libogg, libdecor, libsamplerate on Ubuntu) and sets their runpaths with `patchelf`.
 It leaves out the libraries every desktop has (glibc, the C++ runtime, OpenGL, X11/Wayland, ALSA/PulseAudio;
-`LINUX_SYSTEM_LIB` in that script). libcurl is never linked on Linux: the update check loads the user's
+`is_linux_system` in that script). libcurl is never linked on Linux: the update check loads the user's
 `libcurl.so.4` at run time and reports "not available" without it, so the build only needs the
 `libcurl4-openssl-dev` headers. On Debian/Ubuntu:
 ```

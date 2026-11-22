@@ -197,12 +197,12 @@ jobs:
           fetch-depth: 0
 
       # deb-src: package_release.py names (and downloads, for copyleft ones) the Debian source of every bundled library.
-      - name: Install build dependencies
+      # The build packages themselves come from install.py's apt-get list in the Mednafen step, the list users get.
+      - name: Install packaging tools
         run: |
           sudo sed -i 's/^# *deb-src /deb-src /' /etc/apt/sources.list
           sudo apt-get update
-          sudo apt-get install -y ninja-build patchelf pkg-config autoconf automake libtool gettext \
-            libsdl2-dev libgl-dev libcurl4-openssl-dev libflac-dev libasound2-dev zlib1g-dev
+          sudo apt-get install -y ninja-build patchelf
 
       # The label comes from a typed input or a tag name, so it reaches the shell only through the
       # environment and only after it matches a filename-safe pattern.
