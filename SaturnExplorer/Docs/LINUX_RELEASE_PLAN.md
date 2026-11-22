@@ -80,6 +80,32 @@ bundling SDL2, libdecor, libsamplerate (both programs), FLAC and libogg (Mednafe
 FLAC's Debian source lands in `third-party-source/`; `check_package_release.py` passes; the window icon is set on X11.
 Not yet tried: the workflows on GitHub, and the tarball on another distribution (Fedora, Arch, an older Ubuntu).
 
+### After the external review
+
+The review's findings changed:
+- Licences come from a reviewed table (`LINUX_BUNDLED_SOURCES`), not from Debian's copyright file.
+- Debian source is checked as a complete package against its `.dsc`.
+- `ldd` output with spaces parses. Libraries resolve in the original executable's loader context (an inherited
+  `DT_RPATH`), and a second name for one library is kept as a link.
+- The self-tests must exit 0. `--selftest-window` opens the real window on X11/Wayland. The smoke test runs on the
+  unpacked tarball from an unrelated folder.
+- The workflows' libcurl checks are strict, and `SE_REQUIRE_CURL` makes a missing libcurl fail the release build.
+- `install.py` runs the Mednafen build with `cwd`, not a `cd` in shell text. Its checks follow the selected builds
+  (zlib and gettext's m4 for Mednafen), it stops when the package manager fails, and a dry run no longer writes the
+  build stamp.
+- Source file names are decoded, then validated, and downloads move into place only once verified.
+- Windows and Linux each require their own exact frontend file name.
+- The READMEs name the licence folder the archive really has.
+- The release job builds in an `ubuntu:22.04` container (the runner image retires in 2027), checks deb-src before
+  building, and takes its packages from `install.py`.
+- `SYSTEM-REQUIREMENTS.txt` lists the system libraries and symbol versions the archive needs.
+
+Still open:
+- Running the tarball on stock Jammy, Debian 12, Fedora, Arch and openSUSE, and on native Wayland (no headless
+  compositor test).
+- libdecor's plugin.
+- A functional HTTPS check of the packaged program.
+
 ## Done when
 
 - `python3 Integration/package_release.py --se-app build-release/bin --mednafen _emu/mednafen/src/mednafen

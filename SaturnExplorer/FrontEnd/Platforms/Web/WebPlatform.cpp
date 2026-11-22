@@ -645,7 +645,7 @@ bool WebPlatform::HttpsGet(const std::string& url, const std::string& userAgent,
     curl->easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1L);
     curl->easy_setopt(handle, CURLOPT_TIMEOUT, 15L);
     curl->easy_setopt(handle, CURLOPT_WRITEFUNCTION, SeCurlWrite);
-    curl->easy_setopt(handle, CURLOPT_WRITEDATA, &out.body);
+    curl->easy_setopt(handle, CURLOPT_WRITEDATA, static_cast<void*>(&out.body));
     // Accept: GitHub honors a version header; the default JSON is fine either way.
     struct curl_slist* headers = curl->slist_append(nullptr, "Accept: application/vnd.github+json");
     if (headers) curl->easy_setopt(handle, CURLOPT_HTTPHEADER, headers);

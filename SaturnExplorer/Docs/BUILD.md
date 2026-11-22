@@ -96,14 +96,16 @@ It leaves out the libraries every desktop has (glibc, the C++ runtime, OpenGL, X
 sudo apt install ninja-build patchelf libsdl2-dev libgl-dev libcurl4-openssl-dev \
                  libflac-dev libasound2-dev autoconf automake libtool gettext pkg-config
 python3 Integration/install.py --yes --no-se --mednafen-saturn-only
-cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DSE_DEMO_MENU=OFF
+cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DSE_DEMO_MENU=OFF -DSE_REQUIRE_CURL=ON
 cmake --build build-release --target SaturnExplorerFrontEnd
-python3 Integration/package_release.py --se-app build-release/bin --mednafen _emu/mednafen/src \
-        --ref local --out dist --allow-mismatch     # --allow-mismatch: a local trial only
+xvfb-run -a python3 Integration/package_release.py --se-app build-release/bin --mednafen _emu/mednafen/src \
+        --ref local --out dist --allow-mismatch --require-window   # --allow-mismatch: a local trial only
 ```
-The libraries' Debian source is looked up through apt, so enable `deb-src` entries first or the
-copyleft ones are reported as having no source. The release workflow builds on Ubuntu 22.04, which
-sets the archive's minimum glibc (2.35). The window icon is generated from the Windows `.ico` by
+The libraries' Debian source is looked up through apt, so enable `deb-src` entries first. A library whose
+source package has no reviewed licence in `LINUX_BUNDLED_SOURCES` stops the packaging. The release workflow
+builds in an `ubuntu:22.04` container, which sets the archive's minimum glibc (2.35).
+`SaturnExplorerFrontEnd --selftest-window` opens the real window and GL context once and exits; it prints the
+SDL video driver, which must be `x11` or `wayland` (SDL falls back to `offscreen` without a display). The window icon is generated from the Windows `.ico` by
 `FrontEnd/Platforms/Linux/make_icon_header.py`. X11 shows it; Wayland ignores it.
 
 ### Web (browser) — Emscripten + WebGL2

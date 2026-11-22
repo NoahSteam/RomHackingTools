@@ -50,12 +50,12 @@ jobs:
       # patchelf: check_package_release.py relinks a library the way a Linux release does.
       - name: Install Linux frontend dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libgl-dev libcurl4-openssl-dev patchelf
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libgl-dev libcurl4-openssl-dev patchelf xvfb
 
       # SE_FAIL_ON_SKIP: a test that exits 77 (the game save states missing, no C compiler) is a failure here, not a "Skipped"
       # that ctest still counts as passed (A12-52).
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DSE_FAIL_ON_SKIP=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DSE_FAIL_ON_SKIP=ON ${{ runner.os == 'Linux' && '-DSE_REQUIRE_CURL=ON' || '' }}
 
       # Built on its own first only so its build time is visible in the log (A7 "Timing").
       - name: Build decompiler engine (timed)
@@ -126,8 +126,11 @@ jobs:
           test -x build/bin/se-render
           test -x build/bin/SaturnExplorerFrontEnd
           test -d build/bin/licenses
-          ! readelf -d build/bin/SaturnExplorerFrontEnd | grep -q libcurl
+          readelf -d build/bin/SaturnExplorerFrontEnd > dynamic.txt
+          if grep -q 'NEEDED.*libcurl' dynamic.txt; then echo "libcurl is linked; it must be loaded at run time"; exit 1; fi
           SDL_VIDEODRIVER=dummy build/bin/SaturnExplorerFrontEnd --selftest
+          xvfb-run -a build/bin/SaturnExplorerFrontEnd --selftest-window | tee window.txt
+          grep -q 'selftest-window ok: x11' window.txt
 
   # build-release.bat: the documented CMake + VS 2022 Release build.
   windows-release-batch:

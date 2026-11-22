@@ -5,8 +5,9 @@
   * that a shipped copyleft library whose source cannot be found stops the packaging;
   * that a credential in the git remote never reaches SOURCE.txt;
   * (macOS) that a dylib reached through @rpath is copied in, relinked and still runs after the original is gone;
-  * the Linux rules: which libraries the system provides, apt's source listing and Debian copyright parsing, and
-    (Linux) that a library is copied in, found through the new runpath and still loads after the original is gone.
+  * the Linux rules: which libraries the system provides, the reviewed licences, ldd and apt output, a Debian source
+    package's completeness, safe source file names, and (Linux) that a library chain is copied in, found through the
+    new runpaths and still loads after the originals are gone.
 Usage: check_package_release.py"""
 import os
 import shutil
@@ -335,6 +336,8 @@ check("not code-signed" in win_readme and "SmartScreen" in win_readme and "SHA25
 check("SmartScreen" not in mac_readme and win_readme.startswith("Saturn Explorer v1.0"), "the macOS README does not carry the Windows note")
 check("SHA256SUMS-linux.txt" in linux_readme and "zenity" in linux_readme and "SmartScreen" not in linux_readme,
       "the Linux README names its checksum file and the dialog helpers")
+check("and licenses/." in pr.readme_top("v1.0", "linux", "licenses") and "the licenses folder" in pr.readme_fork("1.32", "v1.0", "licenses"),
+      "the READMEs name the licence folder the archive has")
 
 # --- Linux: what the system provides stays out of the package, everything else goes in
 for name in ("libc.so.6", "ld-linux-x86-64.so.2", "libstdc++.so.6", "libGL.so.1", "libGLX.so.0", "libEGL.so.1", "libX11.so.6",
@@ -349,11 +352,69 @@ uris = pr.parse_print_uris("Need to get 790 kB of source archives.\n"
                            "'http://archive.ubuntu.com/ubuntu/pool/main/f/flac/flac_1.4.3%2bds.orig.tar.xz' flac_1.4.3+ds.orig.tar.xz 7694 SHA256:" + "cd" * 32 + "\n")
 check(uris == [("http://archive.ubuntu.com/ubuntu/pool/main/f/flac/flac_1.4.3%2bds-2.dsc", "sha512", "ab" * 64),
                ("http://archive.ubuntu.com/ubuntu/pool/main/f/flac/flac_1.4.3%2bds.orig.tar.xz", "sha256", "cd" * 32)], "apt-get --print-uris is parsed", uris)
-dep5 = ("Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n\n"
-        "Files: debian/*\nCopyright: someone\nLicense: GPL-2+\n\n"
-        "Files: *\nCopyright: 2000 Xiph\nLicense: BSD-3-clause\n\nLicense: BSD-3-clause\n text\n")
-check(pr.parse_dep5_license(dep5) == "BSD-3-clause", "the 'Files: *' stanza's licence is the package's", pr.parse_dep5_license(dep5))
-check(pr.parse_dep5_license("License: LGPL-2.1\n") == "LGPL-2.1", "a copyright file without a 'Files: *' stanza falls back to its first licence")
+for bad in ("'http://x/flac_1.dsc' flac_1.dsc 2502 MD5Sum:" + "ab" * 16 + "\n", "'http://x/a b.dsc' a 1 SHA256:" + "ab" * 32 + "\n"):
+    try:
+        pr.parse_print_uris(bad)
+        check(False, "an apt file line in another form must be an error, not dropped", bad)
+    except SystemExit:
+        pass
+check(pr.parse_print_uris("Reading package lists...\nNeed to get 1 kB\n") == [], "apt's other output is not a file line")
+
+# --- Linux: every library a bundled Debian source package names is reviewed, from the version that licence holds
+check(set(pr.LINUX_BUNDLED_SOURCES) >= {"libsdl2", "flac", "libogg", "libsamplerate", "libdecor-0"}, "the libraries the archive carries have decisions")
+check(all(d.get("license") and d.get("since") for d in pr.LINUX_BUNDLED_SOURCES.values()), "each decision names a licence and a version")
+
+# --- Linux: ldd output, including a path with a space in it
+lddout = ("\tlinux-vdso.so.1 (0x00007ffd)\n"
+          "\tlibext.so.1 => /tmp/Saturn Explorer/lib/libext.so.1 (0x00007f1234)\n"
+          "\tlibmissing.so.2 => not found\n"
+          "\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f5678)\n")
+check(pr.parse_ldd(lddout) == {"libext.so.1": "/tmp/Saturn Explorer/lib/libext.so.1", "libmissing.so.2": None,
+                               "libc.so.6": "/lib/x86_64-linux-gnu/libc.so.6"}, "ldd lines parse, spaces and 'not found' included", pr.parse_ldd(lddout))
+
+# --- Debian source: the .dsc lists every file; a missing or altered one stops the packaging
+dsc = ("Format: 3.0 (quilt)\nSource: flac\nChecksums-Sha256:\n"
+       " " + "0" * 64 + " 5 flac_1.orig.tar.xz\n"
+       " " + "1" * 64 + " 3 flac_1-1.debian.tar.xz\nFiles:\n abc 5 flac_1.orig.tar.xz\n")
+check(pr.parse_dsc_members(dsc) == {"flac_1.orig.tar.xz": (5, "0" * 64), "flac_1-1.debian.tar.xz": (3, "1" * 64)},
+      "the .dsc's Checksums-Sha256 members are read", pr.parse_dsc_members(dsc))
+scratch = tempfile.mkdtemp(prefix="se_dsc_")
+try:
+    import hashlib
+    files = {"flac_1.orig.tar.xz": b"orig!", "flac_1-1.debian.tar.xz": b"deb"}
+    for n, b in files.items():
+        with open(os.path.join(scratch, n), "wb") as f:
+            f.write(b)
+    good = "Checksums-Sha256:\n" + "".join(f" {hashlib.sha256(b).hexdigest()} {len(b)} {n}\n" for n, b in files.items())
+    with open(os.path.join(scratch, "flac_1-1.dsc"), "w") as f:
+        f.write(good)
+    pr.check_dsc_complete(scratch, ["flac_1-1.dsc"] + list(files))
+    check(True, "a complete source package passes")
+    for names, what in ((["flac_1-1.dsc", "flac_1.orig.tar.xz"], "a member apt did not name"),
+                        (["flac_1.orig.tar.xz"], "no .dsc")):
+        try:
+            pr.check_dsc_complete(scratch, names)
+            check(False, f"{what} must be an error")
+        except SystemExit:
+            pass
+    with open(os.path.join(scratch, "flac_1-1.debian.tar.xz"), "wb") as f:
+        f.write(b"DEB")
+    try:
+        pr.check_dsc_complete(scratch, ["flac_1-1.dsc"] + list(files))
+        check(False, "a member whose digest differs from the .dsc must be an error")
+    except SystemExit:
+        pass
+finally:
+    shutil.rmtree(scratch, ignore_errors=True)
+
+# --- a source URL's file name is decoded first, then refused if it could leave the folder
+check(pr.safe_source_name("http://archive/pool/f/flac/flac_1.4.3%2bds.orig.tar.xz") == "flac_1.4.3+ds.orig.tar.xz", "a %-encoded name is decoded")
+for url in ("http://x/a%2f..%2f..%2fevil", "http://x/%2e%2e", "http://x/", "http://x/a%5cb", "http://x/c%3a"):
+    try:
+        pr.safe_source_name(url)
+        check(False, f"{url} must be refused")
+    except SystemExit:
+        pass
 
 # --- the library section names what was copied
 text = mso.libraries_text([{"name": "gettext", "version": "1.0", "license": "LGPL-2.1-or-later", "files": ["libintl.8.dylib"],
@@ -435,33 +496,43 @@ if sys.platform == "darwin" and shutil.which("clang"):
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
-# --- Linux: a library is copied in by its soname, found through the new runpath, and the build machine's is not needed
+# --- Linux: libraries are copied in by soname and found through the new runpaths, under a path with a space in it.
+# The chain exe -> libmid -> libleaf resolves libleaf only through the DT_RPATH the executable passes down, and
+# libmid is also asked for under a second name, which the package keeps as a link.
 if sys.platform.startswith("linux") and shutil.which("cc") and shutil.which("patchelf"):
-    work = tempfile.mkdtemp(prefix="se_elf_")
+    work = tempfile.mkdtemp(prefix="se elf ")
     try:
-        for sub in ("ext", "app", "pkg"):
-            os.makedirs(os.path.join(work, sub))
-        with open(os.path.join(work, "ext", "ext.c"), "w") as f:
-            f.write("int ext_fn(void){return 7;}\n")
-        with open(os.path.join(work, "app", "main.c"), "w") as f:
-            f.write("int ext_fn(void); int main(void){return ext_fn()==7?0:1;}\n")
-        subprocess.run(["cc", "-shared", "-fPIC", "-Wl,-soname,libext.so.1", os.path.join(work, "ext", "ext.c"),
-                        "-o", os.path.join(work, "ext", "libext.so.1.0")], check=True)
-        os.symlink("libext.so.1.0", os.path.join(work, "ext", "libext.so.1"))
-        os.symlink("libext.so.1.0", os.path.join(work, "ext", "libext.so"))
-        subprocess.run(["cc", os.path.join(work, "app", "main.c"), "-L" + os.path.join(work, "ext"), "-lext",
-                        "-Wl,-rpath," + os.path.join(work, "ext"), "-o", os.path.join(work, "app", "main")], check=True)
+        ext = os.path.join(work, "ext dir")
+        for sub in (ext, os.path.join(work, "app"), os.path.join(work, "pkg")):
+            os.makedirs(sub)
+        def w(name, text):
+            with open(os.path.join(work, name), "w") as f:
+                f.write(text)
+        def cc(*a):
+            subprocess.run(["cc", *a], check=True)
+        w("leaf.c", "int leaf_fn(void){return 3;}\n")
+        w("mid.c", "int leaf_fn(void); int mid_fn(void){return leaf_fn()+4;}\n")
+        w("main.c", "int mid_fn(void); int main(void){return mid_fn()==7?0:1;}\n")
+        cc("-shared", "-fPIC", "-Wl,-soname,libleaf.so.1", os.path.join(work, "leaf.c"), "-o", os.path.join(ext, "libleaf.so.1"))
+        cc("-shared", "-fPIC", "-Wl,-soname,libmid.so.1", os.path.join(work, "mid.c"), "-L" + ext, "-l:libleaf.so.1",
+           "-o", os.path.join(ext, "libmid.so.1"))                     # no runpath of its own for libleaf
+        os.symlink("libmid.so.1", os.path.join(ext, "libmidalias.so.1"))
+        # DT_RPATH (--disable-new-dtags), which the loader also applies to the executable's libraries
+        cc(os.path.join(work, "main.c"), "-L" + ext, "-l:libmid.so.1", "-Wl,--disable-new-dtags",
+           "-Wl,-rpath," + ext, "-o", os.path.join(work, "app", "main"))
+        subprocess.run(["patchelf", "--add-needed", "libmidalias.so.1", os.path.join(work, "app", "main")], check=True)
         exe = os.path.join(work, "pkg", "main")
         shutil.copy2(os.path.join(work, "app", "main"), exe)
         copied = pr.bundle_elf_libs(exe, os.path.join(work, "app", "main"), os.path.join(work, "pkg", "lib"))
-        check(list(copied.values()) == ["libext.so.1"], "the library was copied under its soname", copied)
+        check(sorted(copied.values()) == ["libleaf.so.1", "libmid.so.1"], "the chain was copied under its sonames", copied)
+        check(os.path.islink(os.path.join(work, "pkg", "lib", "libmidalias.so.1")), "the second name is kept as a link")
         check("libc.so.6" not in copied.values(), "the C library stays out")
-        shutil.rmtree(os.path.join(work, "ext"))
-        check(subprocess.run([exe]).returncode == 0, "the packaged program runs with the original library gone")
-        check(pr.ldd_map(exe).get("libext.so.1", "").startswith(os.path.join(work, "pkg", "lib")), "...loading the packaged copy")
+        shutil.rmtree(ext)
+        check(subprocess.run([exe]).returncode == 0, "the packaged program runs with the originals gone")
+        check(pr.ldd_map(exe).get("libleaf.so.1", "").startswith(os.path.join(work, "pkg", "lib")), "...loading the packaged copies")
         try:
             bad = os.path.join(work, "bad")
-            shutil.copy2(os.path.join(work, "app", "main"), bad)     # its library no longer exists
+            shutil.copy2(os.path.join(work, "app", "main"), bad)     # its libraries no longer exist
             pr.bundle_elf_libs(bad, bad, os.path.join(work, "badlib"))
             check(False, "an unresolvable dependency must be an error")
         except SystemExit:

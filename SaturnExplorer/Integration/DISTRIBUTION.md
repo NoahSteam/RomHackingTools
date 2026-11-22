@@ -160,17 +160,31 @@ fixed); an accented Latin-1 name is found but its path is drawn garbled. Windows
 `windows-latest` runner (workflow_dispatch, label only, no tag). The macOS job was not re-run after its
 Mednafen bootstrap was changed (`Docs/MacReleaseSteps.md`).
 
-On Linux the archive is `SaturnExplorer-<ref>-linux.tar.gz` (a tarball keeps the executable bits), built on
-`ubuntu-22.04` for x86_64, so it needs glibc 2.35 or newer. It holds `SaturnExplorerFrontEnd` with `lib/` beside it,
-`mednafen-se/mednafen` with its own `lib/`, and `licenses/`. Each program's runpath points at its `lib/`
-(`patchelf`). The libraries every desktop has are not copied, because they must match the user's system:
-glibc, the C++ runtime, OpenGL, X11/Wayland, ALSA/PulseAudio (`is_linux_system` in `package_release.py`).
-The smoke test fails if any other library resolves outside the package. Each bundled library's Debian package
-gives its licence (its `copyright` file goes into `licenses/bundled-libraries/<package>/`) and its source package.
-`apt-get source --print-uris` names that source's files and checksums, and the copyleft ones (libFLAC's package
-says GPL/LGPL) are downloaded into `third-party-source/`. libcurl is not shipped: the update check loads the user's own copy.
-File dialogs use zenity or kdialog, which the user must have. The Linux archive is not signed and has not yet been tried
-on a distribution other than the Ubuntu that built it.
+On Linux the archive is `SaturnExplorer-<ref>-linux.tar.gz` (a tarball keeps the executable bits), built in an
+`ubuntu:22.04` container for x86_64. It holds `SaturnExplorerFrontEnd` with `lib/` beside it,
+`mednafen-se/mednafen` with its own `lib/`, `licenses/`, and `SYSTEM-REQUIREMENTS.txt`. That file lists the system
+libraries the programs load and the newest glibc/libstdc++ symbol versions they need, generated from the binaries.
+Each program's runpath points at its `lib/` (`patchelf`). The libraries every desktop has are not copied, because
+they must match the user's system: glibc, the C++ runtime, OpenGL, X11/Wayland, ALSA/PulseAudio
+(`LINUX_SYSTEM_STEMS` in `package_release.py`, named one by one).
+
+Licences: `LINUX_BUNDLED_SOURCES` in `package_release.py` records a reviewed licence for each Debian source
+package whose library is shipped, and from which upstream version it holds. A library from any other source
+package stops the packaging until someone reviews it. Debian's copyright file (and any `common-licenses` text it
+points to) goes into `licenses/bundled-libraries/<package>/` as evidence, but is not parsed for the licence: its
+`Files: *` stanza describes the whole source package (FLAC's says GPL/LGPL, for the tools; libFLAC is BSD).
+`apt-get source --print-uris` must name the exact source version, every file line must parse, and a copyleft
+source is downloaded into `third-party-source/` only when it matches its `.dsc` member for member.
+
+The smoke test runs on the finished tarball, unpacked elsewhere. Every library must resolve inside the package or
+be a system one. `--selftest` must exit 0. With `--require-window` (the release job runs under `xvfb-run`),
+`--selftest-window` must open the real window with its OpenGL context on X11 or Wayland. libcurl is not shipped:
+the update check loads the user's own copy (`SE_REQUIRE_CURL=ON` makes the release build fail without the headers).
+File dialogs use zenity or kdialog, which the user must have.
+
+Not yet verified: the archive on Fedora, Arch, openSUSE, Debian 12 or stock Jammy, and on a native Wayland session.
+libdecor's decoration plugin is not bundled (it sits outside the `DT_NEEDED` walk), so Wayland title bars come from
+the host's plugin, or are missing where its path differs from Debian's. The archive is not signed.
 
 The in-app **Check for Updates** compares the build's release tag with GitHub's latest published release
 (`releases/latest`) and offers the release page. The tag is baked in at build time

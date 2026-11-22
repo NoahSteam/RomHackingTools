@@ -61,7 +61,10 @@ IS_LINUX = sys.platform.startswith("linux")
 
 FIRMWARE_FILES = ("sega_101.bin", "mpr-17933.bin")
 MEDNAFEN_EXE = "mednafen.exe" if IS_WIN else "mednafen"
-SHIPPED_PROGRAMS = ("SaturnExplorerFrontEnd.exe", "SaturnExplorerFrontEnd")   # the build folder's other programs are tests and tools
+# Where the licence texts are: macOS keeps the app's own sealed in the bundle and puts these beside it; elsewhere
+# they share the build's licenses/ folder (merge_licenses).
+LICENSES_DIR = "Licenses" if IS_MAC else "licenses"
+SE_PROGRAM = "SaturnExplorerFrontEnd.exe" if IS_WIN else "SaturnExplorerFrontEnd"   # Windows/Linux build folder
 
 
 def run(cmd, **kw):
@@ -194,14 +197,31 @@ def codesign(path, identity):
 # Libraries the user's system provides and the package must NOT carry, modelled on AppImage's excludelist:
 # the C library and the compiler runtime (the build runs on the oldest supported distribution, so its versions
 # are the baseline), the GPU driver stack, the display and audio servers' client libraries, which must match
-# the running servers, and a few that every desktop has. Everything else a program needs is copied.
+# the running servers, and a few that every desktop has. Named one by one, so a new dependency is bundled and
+# then stops at LINUX_BUNDLED_SOURCES until someone decides about it; only the xcb, Wayland and PipeWire
+# families, whose members always come with the server, are matched by prefix.
 LINUX_SYSTEM_STEMS = frozenset((
     "libc", "libm", "libmvec", "libdl", "libpthread", "librt", "libresolv", "libutil", "libanl", "libnsl",
     "libBrokenLocale", "libstdc++", "libgcc_s", "linux-vdso",
     "libGL", "libGLX", "libEGL", "libGLESv2", "libGLdispatch", "libOpenGL", "libglapi", "libdrm", "libgbm",
-    "libxkbcommon", "libasound", "libpulse", "libpulse-simple", "libjack",
+    "libX11", "libX11-xcb", "libXau", "libXdmcp", "libXext", "libXcursor", "libXi", "libXfixes", "libXrandr",
+    "libXrender", "libXss", "libXinerama", "libXxf86vm", "libxkbcommon",
+    "libasound", "libpulse", "libpulse-simple", "libjack",
     "libdbus-1", "libsystemd", "libudev", "libfontconfig", "libfreetype", "libz", "libexpat", "libuuid"))
-LINUX_SYSTEM_PREFIXES = ("ld-linux", "libX", "libxcb", "libwayland-", "libpipewire-")
+LINUX_SYSTEM_PREFIXES = ("ld-linux", "libxcb", "libwayland-", "libpipewire-")
+
+# The reviewed licence of each Debian SOURCE package whose libraries the archive carries, and from which upstream
+# version that holds. Debian's copyright file is kept as evidence (licenses/bundled-libraries/) but not parsed for
+# the licence: its "Files: *" stanza describes the whole source package (FLAC's says GPL/LGPL, for its tools),
+# not the one library shipped. A source package missing here stops the packaging.
+LINUX_BUNDLED_SOURCES = {
+    "libsdl2": {"license": "Zlib", "since": "2.0"},
+    "flac": {"license": "BSD-3-Clause", "since": "1.2",
+             "note": "only libFLAC is shipped, which Xiph licenses under BSD-3-Clause; the GPL parts are the tools"},
+    "libogg": {"license": "BSD-3-Clause", "since": "1.0"},
+    "libsamplerate": {"license": "BSD-2-Clause", "since": "0.1.9", "note": "GPL before 0.1.9"},
+    "libdecor-0": {"license": "MIT", "since": "0.1"},
+}
 
 
 def is_linux_system(name):
@@ -209,43 +229,76 @@ def is_linux_system(name):
     return stem in LINUX_SYSTEM_STEMS or stem.startswith(LINUX_SYSTEM_PREFIXES)
 
 
+def tool_env(env=None):
+    """The environment for readelf/ldd/dpkg/apt: no LD_* variable can redirect the loader, and messages are in English."""
+    return {**{k: v for k, v in (os.environ if env is None else env).items() if not k.startswith("LD_")}, "LC_ALL": "C"}
+
+
+def elf_dynamic(path):
+    r = subprocess.run(["readelf", "-d", path], capture_output=True, text=True, env=tool_env())
+    if r.returncode != 0:
+        raise SystemExit(f"readelf failed on {path}: {r.stderr.strip()}")
+    return r.stdout
+
+
 def elf_needed(path):
     """The DT_NEEDED names of an ELF file, in order."""
-    return re.findall(r"\(NEEDED\)\s+Shared library: \[(.+?)\]", out(["readelf", "-d", path]))
+    return re.findall(r"\(NEEDED\)\s+Shared library: \[(.+?)\]", elf_dynamic(path))
+
+
+def elf_soname(path):
+    m = re.search(r"\(SONAME\)\s+Library soname: \[(.+?)\]", elf_dynamic(path))
+    return m.group(1) if m else None
+
+
+def parse_ldd(text):
+    """name -> resolved path (None for 'not found'). Paths may contain spaces; the loader address ends the line."""
+    found = {}
+    for line in text.splitlines():
+        m = re.match(r"\s*(\S+) => (?:not found|(.+) \(0x[0-9a-f]+\))\s*$", line)
+        if m:
+            found[m.group(1)] = m.group(2)
+    return found
 
 
 def ldd_map(path, env=None):
-    """name -> resolved path (None for 'not found') as the dynamic loader resolves `path`'s libraries."""
-    r = subprocess.run(["ldd", path], capture_output=True, text=True, env=env)
-    found = {}
-    for line in r.stdout.splitlines():
-        m = re.match(r"\s*(\S+) => (not found|(\S+) \(0x[0-9a-f]+\))", line)
-        if m:
-            found[m.group(1)] = m.group(3)
+    """parse_ldd of `ldd path`: how the loader resolves every library `path` loads, transitively. Only ever run on
+    programs this build produced (ldd may execute the program's interpreter)."""
+    r = subprocess.run(["ldd", path], capture_output=True, text=True, env=tool_env(env))
+    if r.returncode != 0:
+        raise SystemExit(f"ldd failed on {path}: {r.stderr.strip() or r.stdout.strip()}")
+    found = parse_ldd(r.stdout)
+    # A library already loaded satisfies any later request for its SONAME, which ldd then does not list again.
+    for lib in [p for p in found.values() if p]:
+        soname = elf_soname(lib)
+        if soname:
+            found.setdefault(soname, lib)
     return found
 
 
 def bundle_elf_libs(exe, exe_origin, libdir):
     """Copy every non-system shared library `exe` needs (transitively, through the libraries that are copied)
     into libdir and point the runpaths at the copies: $ORIGIN/<libdir> on the executable, $ORIGIN on each
-    library (DT_RUNPATH is not inherited, so every copied library needs its own). A dependency of a system
-    library is the system's business and is not followed. `exe_origin` is where the executable was built.
-    Returns {original real path: file name in libdir}."""
+    library (DT_RUNPATH is not inherited, so every copied library needs its own). Names resolve as they do when
+    the ORIGINAL executable runs (`exe_origin`), which also covers a DT_RPATH it passes down to its libraries.
+    A dependency of a system library is the system's business and is not followed. A library asked for by a
+    second name is linked under that name too. Returns {original real path: file name in libdir}."""
     os.makedirs(libdir, exist_ok=True)
+    resolved = ldd_map(exe_origin)
     copied = {}                               # original real path -> file name in libdir
-    queue = [(exe, exe_origin)]               # (file in the package, its original)
+    queue = [exe]
     while queue:
-        item, origin = queue.pop()
-        resolved = ldd_map(origin)
-        for name in elf_needed(item):
+        for name in elf_needed(queue.pop()):
             if is_linux_system(name):
                 continue
             real = resolved.get(name)
             if not real:
-                raise SystemExit(f"cannot resolve {name} needed by {origin}")
+                raise SystemExit(f"cannot resolve {name}, which {exe_origin} loads")
             real = os.path.realpath(real)
-            if real not in copied:   # copied by soname: the name the loader asks for
-                queue.append((copy_lib(real, name, libdir, copied), real))
+            if real not in copied:            # copied under its SONAME, which every loader request can reach
+                queue.append(copy_lib(real, elf_soname(real) or name, libdir, copied))
+            if name != copied[real] and not os.path.lexists(os.path.join(libdir, name)):
+                os.symlink(copied[real], os.path.join(libdir, name))
     run(["patchelf", "--set-rpath", "$ORIGIN/" + os.path.relpath(libdir, os.path.dirname(exe)), exe])
     for name in copied.values():
         run(["patchelf", "--set-rpath", "$ORIGIN", os.path.join(libdir, name)])
@@ -260,36 +313,53 @@ def dpkg_owner(path):
     elif path.startswith("/lib/"):
         variants.append("/usr" + path)
     for p in variants:
-        r = subprocess.run(["dpkg", "-S", p], capture_output=True, text=True)
+        r = subprocess.run(["dpkg", "-S", p], capture_output=True, text=True, env=tool_env())
         if r.returncode == 0:
             return r.stdout.split(":", 1)[0].strip()
     return None
 
 
-def parse_dep5_license(text):
-    """The licence of the 'Files: *' stanza of a machine-readable Debian copyright file, else the first one named."""
-    stanzas = re.split(r"\n\s*\n", text)
-    for s in stanzas:
-        if re.search(r"^Files:\s*\*\s*$", s, re.M):
-            m = re.search(r"^License:\s*(.+?)\s*$", s, re.M)
-            if m:
-                return m.group(1)
-    m = re.search(r"^License:\s*(.+?)\s*$", text, re.M)
-    return m.group(1) if m else None
-
-
 def parse_print_uris(text):
     """[(url, algorithm, digest)] from `apt-get source --print-uris` lines ('URL' file size SHA512:hash);
-    apt names the strongest hash it has, SHA256 or SHA512 depending on its version."""
-    return [(m.group(1), m.group(2).lower(), m.group(3))
-            for m in re.finditer(r"^'(\S+)' \S+ \d+ (SHA256|SHA512):([0-9a-f]+)$", text, re.M)]
+    apt names the strongest hash it has, SHA256 or SHA512 depending on its version. A file line in any other
+    form is an error: dropping it would leave the source incomplete without anyone noticing."""
+    found = []
+    for line in text.splitlines():
+        if not line.startswith("'"):
+            continue
+        m = re.fullmatch(r"'(\S+)' \S+ \d+ (SHA256|SHA512):([0-9a-f]+)", line.strip())
+        if not m:
+            raise SystemExit(f"unrecognised line from apt-get source --print-uris: {line}")
+        found.append((m.group(1), m.group(2).lower(), m.group(3)))
+    return found
+
+
+def parse_dsc_members(text):
+    """{file name: (size, sha256)} from a Debian .dsc's Checksums-Sha256 field: every file of the source package."""
+    m = re.search(r"^Checksums-Sha256:[ \t]*\n((?:[ \t]+\S.*\n?)+)", text, re.M)
+    if not m:
+        raise SystemExit("the .dsc has no Checksums-Sha256 field")
+    members = {}
+    for line in m.group(1).splitlines():
+        digest, size, name = line.split()
+        members[name] = (int(size), digest)
+    return members
+
+
+def version_at_least(version, minimum):
+    return subprocess.run(["dpkg", "--compare-versions", version, "ge", minimum], env=tool_env()).returncode == 0
 
 
 def dpkg_manifest(copied, licenses_dir, allow_mismatch=False):
     """One entry per Debian package behind a copied library (`copied`: original path -> name in the package):
-    version, the licence its copyright file names, and its source package's files with their checksums (from
-    apt's deb-src index). The package's copyright file goes into licenses_dir/<package>/ beside the other
-    licence texts."""
+    version, the reviewed licence of its source package (LINUX_BUNDLED_SOURCES), and the source package's files
+    with their checksums from apt's deb-src index. The package's copyright file, and any common licence text it
+    refers to, go into licenses_dir/<package>/ beside the other licence texts."""
+    def problem(msg):
+        if not allow_mismatch:
+            raise SystemExit(msg)
+        print("warning (overridden):", msg)
+
     by_pkg = {}
     for real, name in sorted(copied.items()):
         pkg = dpkg_owner(real)
@@ -299,31 +369,36 @@ def dpkg_manifest(copied, licenses_dir, allow_mismatch=False):
     entries = []
     for pkg, files in sorted(by_pkg.items()):
         ver, src, src_ver = out(["dpkg-query", "-W", "-f=${Version}\t${source:Package}\t${source:Version}", pkg]).split("\t")
+        upstream = re.sub(r"^\d+:", "", src_ver).split("-")[0]
+        decision = LINUX_BUNDLED_SOURCES.get(src)
+        if decision is None or not version_at_least(upstream, decision["since"]):
+            problem(f"no reviewed licence for {pkg} (source package {src} {src_ver}); read /usr/share/doc/{pkg}/copyright "
+                    "and add it to LINUX_BUNDLED_SOURCES in package_release.py")
+            decision = {"license": "unknown (not reviewed)"}
+        dest = os.path.join(licenses_dir, pkg)
+        os.makedirs(dest, exist_ok=True)
         copyright_file = f"/usr/share/doc/{pkg}/copyright"
-        try:
-            with open(copyright_file, encoding="utf-8", errors="replace") as f:
-                lic = parse_dep5_license(f.read())
-            os.makedirs(os.path.join(licenses_dir, pkg), exist_ok=True)
-            shutil.copy2(copyright_file, os.path.join(licenses_dir, pkg, "copyright"))
-        except OSError:
-            lic = None
-        if not lic:
-            msg = f"no licence found for {pkg} ({copyright_file})"
-            if not allow_mismatch:
-                raise SystemExit(msg + "; list it by hand")
-            print("warning (overridden):", msg)
-            lic = "unknown"
-        r = subprocess.run(["apt-get", "source", "--print-uris", f"{src}={src_ver}"], capture_output=True, text=True)
-        uris = parse_print_uris(r.stdout)
-        entries.append({"name": pkg, "version": ver, "license": lic, "files": sorted(files),
-                        "source": next((u for u, _a, _h in uris if u.endswith(".dsc")), None),
-                        "source_files": uris,
-                        "note": f"Debian/Ubuntu package {pkg}, built from source package {src} {src_ver}"})
+        with open(copyright_file, encoding="utf-8", errors="replace") as f:
+            text = f.read()
+        shutil.copy2(copyright_file, os.path.join(dest, "copyright"))
+        for common in sorted(set(re.findall(r"/usr/share/common-licenses/([A-Za-z0-9.+_-]+)", text))):
+            if os.path.isfile("/usr/share/common-licenses/" + common):
+                shutil.copy2("/usr/share/common-licenses/" + common, os.path.join(dest, common))
+        r = subprocess.run(["apt-get", "source", "--print-uris", f"{src}={src_ver}"], capture_output=True, text=True,
+                           env=tool_env())
+        uris = parse_print_uris(r.stdout) if r.returncode == 0 else []
+        dsc = next((u for u, _a, _h in uris if u.endswith(".dsc")), None)
+        if not dsc:
+            problem(f"apt has no source for {src} {src_ver} (enable deb-src and apt-get update): {r.stderr.strip()}")
+        entries.append({"name": pkg, "version": ver, "license": decision["license"], "files": sorted(files),
+                        "source": dsc, "source_files": uris,
+                        "note": f"Debian/Ubuntu package {pkg}, built from source package {src} {src_ver}" +
+                                (f"; {decision['note']}" if decision.get("note") else "")})
     return entries
 
 
 # --------------------------------------------------------------------------- text files
-def readme_fork(version, ref):
+def readme_fork(version, ref, licenses_dir=LICENSES_DIR):
     return f"""Mednafen {version} - Saturn Explorer build ({ref})
 {'=' * 60}
 
@@ -332,7 +407,7 @@ Explorer read and control the emulator (a local debugging endpoint, breakpoints,
 Do not report problems with it to the Mednafen project; report them to Saturn Explorer.
 
 Source: see SOURCE.txt (and mednafen-se-source.tar.xz) in the folder above this one.
-Licences: see the Licenses folder in the folder above this one.
+Licences: see the {licenses_dir} folder in the folder above this one.
 
 Saturn BIOS
 -----------
@@ -359,10 +434,9 @@ compare its SHA-256 (certutil -hashfile <zip> SHA256) with SHA256SUMS-windows.tx
 """
 
 
-# What a Linux system must provide: the package carries every other library (LINUX_SYSTEM_STEMS / LINUX_SYSTEM_PREFIXES).
 LINUX_NOTE = """
-Linux: the download carries its own libraries except the ones every desktop provides (the C library,
-OpenGL, X11/Wayland, ALSA/PulseAudio). Built on Ubuntu 22.04 for x86_64, so it needs glibc 2.35 or newer.
+Linux: the download carries its own libraries except the ones a desktop provides; SYSTEM-REQUIREMENTS.txt
+lists those and the newest glibc/libstdc++ symbol versions it needs (built on Ubuntu 22.04, x86_64).
 File dialogs use zenity or kdialog; install one if Open/Save does nothing. The update check uses your
 system's libcurl (libcurl.so.4) and reports itself unavailable without it. To check the archive, compare
 sha256sum <archive> with SHA256SUMS-linux.txt on the release page.
@@ -380,7 +454,7 @@ README_PLATFORM = {
 }
 
 
-def readme_top(ref, plat):
+def readme_top(ref, plat, licenses_dir=LICENSES_DIR):
     where, note = README_PLATFORM[plat]
     return f"""Saturn Explorer {ref}
 {'=' * (17 + len(ref))}
@@ -390,7 +464,7 @@ def readme_top(ref, plat):
 3. Open Saturn Explorer, pick a game and use Launch.
 
 mednafen-se is a modified Mednafen build, not an official release. Its source and the licences of
-everything in this download are in SOURCE.txt, mednafen-se-source.tar.xz and Licenses/.
+everything in this download are in SOURCE.txt, mednafen-se-source.tar.xz and {licenses_dir}/.
 {note}"""
 
 
@@ -713,19 +787,57 @@ def fetch_sources(entries, dest, allow_missing=False):
             # multi-hundred-megabyte compiler tarball is not put in every download.
             e["note"] = (e.get("note") or "") + "; source offered, not bundled"
             continue
-        included = []
+        names = []
         for url, algo, want in files:
-            name = urllib.parse.unquote(os.path.basename(url.split("?")[0]))
-            path = os.path.join(dest, name)
-            with urllib.request.urlopen(url, timeout=300) as r, open(path, "wb") as f:
-                shutil.copyfileobj(r, f)
-            got = file_digest(path, algo)
-            if want and got != want:
-                raise SystemExit(f"{name}: checksum {got} does not match the recorded {want}")
-            included.append("third-party-source/" + name)
-        if "source_files" not in e:
+            name = safe_source_name(url)
+            if os.path.lexists(os.path.join(dest, name)):
+                raise SystemExit(f"two source files are both called {name}")
+            got = download_verified(url, os.path.join(dest, name), algo, want)
+            names.append(name)
+        if "source_files" in e:
+            check_dsc_complete(dest, names)
+        else:
             e["sha256"] = got
-        e["included"] = ", ".join(included)
+        e["included"] = ", ".join("third-party-source/" + n for n in names)
+
+
+def safe_source_name(url):
+    """The file name a source URL is saved under: decoded first, then refused if it could leave the folder."""
+    name = urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1])
+    if name in ("", ".", "..") or any(c in name for c in "/\\:\0"):
+        raise SystemExit(f"refusing the file name {name!r} from {url}")
+    return name
+
+
+def download_verified(url, path, algo, want):
+    """Download to a temporary file and move it to `path` only once its digest matches `want` (when known)."""
+    tmp = path + ".partial"
+    try:
+        with urllib.request.urlopen(url, timeout=300) as r, open(tmp, "wb") as f:
+            shutil.copyfileobj(r, f)
+        got = file_digest(tmp, algo)
+        if want and got != want:
+            raise SystemExit(f"{os.path.basename(path)}: checksum {got} does not match the recorded {want}")
+        os.replace(tmp, path)
+        return got
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def check_dsc_complete(dest, names):
+    """A Debian source package is complete when every file its .dsc lists was downloaded, with that size and SHA-256."""
+    dsc = [n for n in names if n.endswith(".dsc")]
+    if len(dsc) != 1:
+        raise SystemExit(f"expected one .dsc among {names}")
+    with open(os.path.join(dest, dsc[0]), encoding="utf-8", errors="replace") as f:
+        members = parse_dsc_members(f.read())
+    for name, (size, digest) in sorted(members.items()):
+        path = os.path.join(dest, name)
+        if name not in names or not os.path.isfile(path):
+            raise SystemExit(f"{dsc[0]} lists {name}, which apt did not name for download")
+        if os.path.getsize(path) != size or file_digest(path, "sha256") != digest:
+            raise SystemExit(f"{name} does not match the size and SHA-256 {dsc[0]} gives it")
 
 
 # --------------------------------------------------------------------------- Windows runtime
@@ -763,14 +875,14 @@ def copy_msvc_runtime(dest, override):
 
 
 def copy_se_build(build_dir, stage):
-    """Windows/Linux: only the program, its DLLs and licenses/. The build folder also holds every test executable
-    and the developer tools (se-render, se-sleighc), which the macOS bundle does not ship either."""
+    """Windows/Linux: only the program, licenses/ and (Windows) its DLLs. The build folder also holds every test
+    executable and the developer tools (se-render, se-sleighc), which the macOS bundle does not ship either."""
+    if not os.path.isfile(os.path.join(build_dir, SE_PROGRAM)):
+        raise SystemExit(f"{SE_PROGRAM} not found in {build_dir}")
     for f in os.listdir(build_dir):
         src = os.path.join(build_dir, f)
-        if f in SHIPPED_PROGRAMS or f.lower().endswith(".dll") or f == "licenses":
+        if f in (SE_PROGRAM, "licenses") or (IS_WIN and f.lower().endswith(".dll")):
             (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(stage, f))
-    if not any(os.path.isfile(os.path.join(stage, p)) for p in SHIPPED_PROGRAMS):
-        raise SystemExit(f"no {' or '.join(SHIPPED_PROGRAMS)} in {build_dir}")
 
 
 def main():
@@ -785,6 +897,8 @@ def main():
     ap.add_argument("--no-third-party-source", action="store_true", help="do not download the copyleft libraries' source into the archive")
     ap.add_argument("--allow-mismatch", action="store_true", help="package although the binary may not match the source offer (local trials only)")
     ap.add_argument("--no-archive", action="store_true", help="leave the staged folder, make no .dmg/.zip/.tar.gz")
+    ap.add_argument("--require-window", action="store_true",
+                    help="Linux: fail unless the program opens its window on X11 or Wayland (needs a display, e.g. xvfb-run)")
     args = ap.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9._-]+", args.ref):
         raise SystemExit("--ref may only contain letters, digits, '.', '_' and '-'")
@@ -817,10 +931,12 @@ def main():
             raise SystemExit(f"{MEDNAFEN_EXE} not found in {args.mednafen}")
         if IS_LINUX:
             shutil.copy2(os.path.join(args.mednafen, MEDNAFEN_EXE), exe)
-            copied = bundle_elf_libs(os.path.join(stage, "SaturnExplorerFrontEnd"),
-                                     os.path.join(args.se_app, "SaturnExplorerFrontEnd"), os.path.join(stage, "lib"))
+            copied = bundle_elf_libs(os.path.join(stage, SE_PROGRAM),
+                                     os.path.join(args.se_app, SE_PROGRAM), os.path.join(stage, "lib"))
             copied.update(bundle_elf_libs(exe, os.path.join(args.mednafen, MEDNAFEN_EXE), os.path.join(emu, "lib")))
             libs = dpkg_manifest(copied, os.path.join(stage, "licenses", "bundled-libraries"), args.allow_mismatch)
+            with open(os.path.join(stage, "SYSTEM-REQUIREMENTS.txt"), "w", encoding="utf-8", newline="\n") as f:
+                f.write(linux_requirements_text(stage, emu))
         else:
             crt = copy_msvc_runtime(stage, args.crt_dir)
             dlls = [f for f in os.listdir(args.mednafen) if f.lower().endswith(".dll")]
@@ -841,18 +957,21 @@ def main():
 
     if not args.no_third_party_source:
         fetch_sources(libs, os.path.join(stage, "third-party-source"), args.allow_mismatch)
+        if not os.listdir(os.path.join(stage, "third-party-source")):
+            os.rmdir(os.path.join(stage, "third-party-source"))    # no copyleft library is shipped
     se_commit = mso.git_out(["rev-parse", "HEAD"], SE_ROOT)
     tar_name = None if args.no_tarball else "mednafen-se-source.tar.xz"
     if tar_name:
         mso.build_tarball(up, os.path.join(SE_ROOT, "_emu", "mednafen"), os.path.join(stage, tar_name), args.ref)
     with open(os.path.join(stage, "SOURCE.txt"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(mso.source_text(up, args.ref, se_commit, tar_name, libs))
-
-    smoke_test(stage, exe)
+        f.write(mso.source_text(up, args.ref, se_commit, tar_name, libs, LICENSES_DIR))
 
     if args.no_archive:
+        smoke_test(stage, exe, args.require_window)
         print(f"staged: {stage}")
         return
+    if not IS_LINUX:
+        smoke_test(stage, exe)
     if IS_MAC:
         archive = stage + ".dmg"
         if os.path.exists(archive):
@@ -864,6 +983,15 @@ def main():
     else:
         # A tarball on Linux: a zip loses the executable bits. make_archive overwrites an existing archive.
         archive = shutil.make_archive(stage, "gztar" if IS_LINUX else "zip", os.path.dirname(stage), name)
+    if IS_LINUX:
+        # Test what users download: the finished tarball, unpacked somewhere else.
+        unpacked = tempfile.mkdtemp(prefix="se_unpacked_")
+        try:
+            shutil.unpack_archive(archive, unpacked)
+            smoke_test(os.path.join(unpacked, name), os.path.join(unpacked, name, "mednafen-se", MEDNAFEN_EXE),
+                       args.require_window)
+        finally:
+            shutil.rmtree(unpacked, ignore_errors=True)
     print(f"wrote {archive}")
 
 
@@ -872,14 +1000,40 @@ def package_macho_files(emu):
 
 
 def package_elf_files(stage, emu):
-    return [os.path.join(stage, "SaturnExplorerFrontEnd"), os.path.join(emu, "mednafen")] + \
+    return [os.path.join(stage, SE_PROGRAM), os.path.join(emu, "mednafen")] + \
         [os.path.join(d, f) for d in (os.path.join(stage, "lib"), os.path.join(emu, "lib")) if os.path.isdir(d)
          for f in sorted(os.listdir(d))]
 
 
-def smoke_test_linux(stage, emu, env):
-    """Every library a packaged ELF file loads resolves inside the package or is one the system provides, and
-    the program starts SDL (--selftest) with nothing from the build machine's library path."""
+def linux_requirements(stage, emu):
+    """What the user's system must provide: the system libraries the packaged files load by name, and the newest
+    glibc / libstdc++ symbol versions any of them needs."""
+    sonames, newest = set(), {}
+    for item in package_elf_files(stage, emu):
+        sonames.update(n for n in elf_needed(item) if is_linux_system(n))
+        text = subprocess.run(["readelf", "-V", "--wide", item], capture_output=True, text=True, env=tool_env()).stdout
+        needs = text.partition("Version needs section")[2]
+        for lib, ver in re.findall(r"Name: (GLIBC|GLIBCXX|CXXABI)_([0-9.]+)", needs):
+            key = tuple(int(x) for x in ver.split("."))
+            if key > newest.get(lib, ()):
+                newest[lib] = key
+    return sorted(sonames), {lib: ".".join(map(str, v)) for lib, v in sorted(newest.items())}
+
+
+def linux_requirements_text(stage, emu):
+    sonames, newest = linux_requirements(stage, emu)
+    return ("What this download needs from your Linux system\n" + "=" * 47 + "\n\n" +
+            "Symbol versions (newest needed): " + ", ".join(f"{k}_{v}" for k, v in newest.items()) + "\n\n" +
+            "Libraries, by the name the programs load (install your distribution's packages that provide them):\n" +
+            "".join(f"  {n}\n" for n in sonames) +
+            "\nEverything else is in the lib/ folders. Saturn Explorer also uses zenity or kdialog for file dialogs\n"
+            "and libcurl.so.4, if present, for the update check.\n")
+
+
+def smoke_test_linux(stage, emu, env, require_window):
+    """Every library a packaged ELF file loads resolves inside the package or is one the system provides, the
+    program starts SDL (--selftest) with nothing from the build machine's library path and, given a display,
+    opens its window with an OpenGL context on X11 or Wayland (--selftest-window)."""
     root = os.path.realpath(stage) + os.sep
     for item in package_elf_files(stage, emu):
         resolved = ldd_map(item, env)
@@ -890,17 +1044,29 @@ def smoke_test_linux(stage, emu, env):
                     raise SystemExit(f"{item} needs the system library {name}, which this machine lacks")
             elif not path or not os.path.realpath(path).startswith(root):
                 raise SystemExit(f"{item} depends on {name}, which is not inside the package (resolved: {path})")
-    run_selftest(os.path.join(stage, "SaturnExplorerFrontEnd"), {**env, "SDL_VIDEODRIVER": "dummy"})
+    program = os.path.join(stage, SE_PROGRAM)
+    run_selftest(program, {**env, "SDL_VIDEODRIVER": "dummy"})
+    display = {k: os.environ[k] for k in ("DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY") if k in os.environ}
+    if not display.keys() & {"DISPLAY", "WAYLAND_DISPLAY"}:
+        if require_window:
+            raise SystemExit("--require-window: no DISPLAY or WAYLAND_DISPLAY to open the window on (run under xvfb-run)")
+        print("window check skipped: no display")
+        return
+    # Without a usable display SDL falls back to its offscreen driver and succeeds, so the driver is checked.
+    text = run_selftest(program, {**env, **display}, "--selftest-window", "selftest-window ok: ")
+    if not re.search(r"selftest-window ok: (x11|wayland)\b", text):
+        raise SystemExit("the window opened on no real display:\n" + text)
 
 
-def run_selftest(program, env):
-    """The app loads its libraries and starts SDL without a window (WebMain.cpp, --selftest)."""
-    r = subprocess.run([program, "--selftest"], capture_output=True, text=True, timeout=60, env=env)
-    if "selftest ok" not in r.stdout:
-        raise SystemExit(f"{os.path.basename(program)} --selftest failed:\n" + r.stdout + r.stderr)
+def run_selftest(program, env, flag="--selftest", marker="selftest ok"):
+    """Run one of the program's self-tests (WebMain.cpp) from an unrelated folder; it must exit 0 and say so."""
+    r = subprocess.run([program, flag], capture_output=True, text=True, timeout=60, env=env, cwd=env.get("HOME"))
+    if r.returncode != 0 or marker not in r.stdout:
+        raise SystemExit(f"{os.path.basename(program)} {flag} failed (exit {r.returncode}):\n" + r.stdout + r.stderr)
+    return r.stdout
 
 
-def smoke_test(stage, mednafen):
+def smoke_test(stage, mednafen, require_window=False):
     """Check the layout from where it sits: every load command resolves inside the package, the app and the
     emulator start, and SDL (which loads SDL3 at run time) initialises. Fails the packaging run rather than
     shipping a download that cannot start."""
@@ -935,10 +1101,10 @@ def smoke_test(stage, mednafen):
             if r.returncode != 0:
                 raise SystemExit("the bundled SDL did not initialise:\n" + r.stdout + r.stderr)
         if IS_LINUX:
-            smoke_test_linux(stage, emu, env)
+            smoke_test_linux(stage, emu, env, require_window)
         # -help prints the banner, the library versions and the usage text, then exits non-zero in this
         # Mednafen. A banner alone also appears before a startup failure, so require the closing usage text.
-        r = subprocess.run([mednafen, "-help"], capture_output=True, text=True, timeout=60, env=env)
+        r = subprocess.run([mednafen, "-help"], capture_output=True, text=True, timeout=60, env=env, cwd=scratch)
         text = r.stdout + r.stderr
         if "Starting Mednafen" not in text or "do not need to be passed to future invocations" not in text:
             raise SystemExit("mednafen did not run from the package:\n" + text[-800:])

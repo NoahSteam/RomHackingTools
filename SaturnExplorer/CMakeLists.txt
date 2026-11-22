@@ -2100,7 +2100,14 @@ else()
         )
         # Native desktop (Linux/macOS) HttpsGet uses libcurl when available (macOS ships
         # it). Without it the update check degrades to "unsupported" — no hard dependency.
-        find_package(CURL QUIET)
+        # A release sets SE_REQUIRE_CURL so a missing libcurl fails the build instead of shipping a
+        # program whose update check always reports "not available".
+        option(SE_REQUIRE_CURL "Fail configuration when libcurl (headers) is not found" OFF)
+        if(SE_REQUIRE_CURL)
+            find_package(CURL REQUIRED)
+        else()
+            find_package(CURL QUIET)
+        endif()
         if(CURL_FOUND AND NOT APPLE)
             # Linux: compile against the headers, load the user's libcurl.so.4 at run time (see
             # LoadCurl in WebPlatform.cpp), so a release never ships the build machine's libcurl.

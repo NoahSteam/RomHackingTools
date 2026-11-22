@@ -376,9 +376,12 @@ def check_prereqs_macos(rn, do_mednafen, args):
 # for SE, flac and alsa for Mednafen, libcurl for SE's update check, which the Linux build
 # loads at run time and so only needs the headers to compile).
 # ---------------------------------------------------------------------------
-LINUX_TOOLS = ("cc", "c++", "make", "git", "cmake", "pkg-config", "autoreconf", "libtoolize")
+LINUX_TOOLS_SE = ("cc", "c++", "make", "git", "cmake", "pkg-config")
+LINUX_TOOLS_MEDNAFEN = ("cc", "c++", "make", "git", "pkg-config", "autoreconf", "libtoolize")
 LINUX_PC_SE = ("sdl2", "gl", "libcurl")
-LINUX_PC_MEDNAFEN = ("sdl2", "flac", "alsa")
+LINUX_PC_MEDNAFEN = ("sdl2", "flac", "alsa", "zlib")
+# Mednafen's configure.ac calls AM_GNU_GETTEXT, so autoreconf needs gettext's m4 macros.
+LINUX_M4_MEDNAFEN = ("gettext.m4",)
 # The install command of each manager (the first one found is used), covering every tool and library above
 # plus gettext, whose m4 macros Mednafen's autoreconf needs. The release workflow relies on the apt-get one.
 LINUX_PACKAGE_MANAGERS = {
@@ -392,23 +395,40 @@ LINUX_PACKAGE_MANAGERS = {
 }
 
 
-def linux_needed(do_mednafen):
-    return list(LINUX_TOOLS) + list(dict.fromkeys(LINUX_PC_SE + (LINUX_PC_MEDNAFEN if do_mednafen else ())))
+def linux_needed(do_se, do_mednafen):
+    """(kind, name) of everything the selected builds need: a tool, a pkg-config module or an aclocal macro file."""
+    tools = (LINUX_TOOLS_SE if do_se else ()) + (LINUX_TOOLS_MEDNAFEN if do_mednafen else ())
+    modules = (LINUX_PC_SE if do_se else ()) + (LINUX_PC_MEDNAFEN if do_mednafen else ())
+    m4 = LINUX_M4_MEDNAFEN if do_mednafen else ()
+    return list(dict.fromkeys([("tool", t) for t in tools] + [("pc", m) for m in modules] + [("m4", m) for m in m4]))
 
 
-def linux_missing(do_mednafen):
-    """What the build would lack: tool names and pkg-config modules (all modules, without pkg-config)."""
-    have_pc = which("pkg-config")
-    return [n for n in linux_needed(do_mednafen)
-            if not (which(n) if n in LINUX_TOOLS else have_pc and subprocess.call(["pkg-config", "--exists", n]) == 0)]
+def aclocal_dirs():
+    dirs = ["/usr/share/aclocal", "/usr/local/share/aclocal"]
+    if which("aclocal"):
+        r = subprocess.run(["aclocal", "--print-ac-dir"], capture_output=True, text=True)
+        dirs.insert(0, r.stdout.strip())
+    return dirs
 
 
-def check_prereqs_linux(rn, do_mednafen, args):
+def linux_has(kind, name):
+    if kind == "tool":
+        return bool(which(name))
+    if kind == "pc":
+        return bool(which("pkg-config")) and subprocess.call(["pkg-config", "--exists", name]) == 0
+    return any(os.path.isfile(os.path.join(d, name)) for d in aclocal_dirs())
+
+
+def linux_missing(do_se, do_mednafen):
+    return [name for kind, name in linux_needed(do_se, do_mednafen) if not linux_has(kind, name)]
+
+
+def check_prereqs_linux(rn, do_se, do_mednafen, args):
     """Linux prerequisite check + assisted install through apt/dnf/pacman/zypper (parity with the
     winget/MSYS2 and Homebrew blocks). Resolves CMake into the CMAKE global. Returns ok."""
     global CMAKE
     print("Prerequisites:" + (" (incremental — skipping package installs)" if args.incremental else ""))
-    missing = linux_missing(do_mednafen)
+    missing = linux_missing(do_se, do_mednafen)
     if missing and not args.incremental:
         manager = next((m for m in LINUX_PACKAGE_MANAGERS if which(m)), None)
         if manager is None:
@@ -416,9 +436,11 @@ def check_prereqs_linux(rn, do_mednafen, args):
             print("  tools and development packages listed below, then re-run.")
         elif rn.confirm(f"  Missing: {', '.join(missing)}. Install the build packages with {manager} (uses sudo)?"):
             cmd = LINUX_PACKAGE_MANAGERS[manager].split()
-            rn.run(cmd if os.geteuid() == 0 else ["sudo"] + cmd, description=f"Install build packages ({manager})")
-            missing = linux_missing(do_mednafen)
-    for n in linux_needed(do_mednafen):
+            if rn.run(cmd if os.geteuid() == 0 else ["sudo"] + cmd, description=f"Install build packages ({manager})") != 0:
+                print(f"  {manager} failed; see its output above.")
+                return False
+            missing = linux_missing(do_se, do_mednafen)
+    for _kind, n in linux_needed(do_se, do_mednafen):
         print(f"  [{'missing' if n in missing else 'ok'}]{' ' * (3 if n in missing else 6)}{n}")
     CMAKE = cmake_path() or CMAKE
     # A dry run reports what is missing but goes on to show the plan.
@@ -797,7 +819,7 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     env = {**os.environ, "MSYSTEM": "MINGW64", "CHERE_INVOKING": "1"}
     rc = rn.run([bash, "-lc", f"export PATH=/mingw64/bin:$PATH && {script}"], env=env,
                 description="Compile and package Mednafen")
-    if rc == 0:
+    if rc == 0 and not rn.dry_run:   # a dry run built nothing, so it must not record a build
         mednafen_stamp_write(dest, signature)
     exe = os.path.join(dest, "mednafen.exe")
     return rc == 0, exe
@@ -849,10 +871,10 @@ def build_mednafen_unix(rn, dest, configure_flags="", reconfigure=True):
         # Incremental: configure only when the tree isn't configured yet; else straight to
         # make, so only the objects whose sources apply.py touched get recompiled.
         cfg = f"([ -f config.status ] || {{ {bootstrap} && {configure}; }}) && "
-    script = f"cd '{dest}' && {cfg}make -j{ncpu}"
-    rc = rn.run(["/bin/sh", "-c", script], env=env,
+    # cwd, not a `cd` in the script: the prefix is the user's path and must not become shell text.
+    rc = rn.run(["/bin/sh", "-c", f"{cfg}make -j{ncpu}"], cwd=dest, env=env,
                 description="Configure and build Mednafen")
-    if rc == 0:
+    if rc == 0 and not rn.dry_run:   # a dry run built nothing, so it must not record a build
         mednafen_stamp_write(dest, signature)
     exe = os.path.join(dest, "src", "mednafen")
     return rc == 0, exe
@@ -1011,7 +1033,7 @@ def main():
         ok = check_prereqs_macos(rn, do_mednafen, args)
     elif IS_LINUX:
         # The distribution's package manager + gcc/clang + native autotools.
-        ok = check_prereqs_linux(rn, do_mednafen, args)
+        ok = check_prereqs_linux(rn, not args.no_se, do_mednafen, args)
     else:
         ok = True   # only reachable as a dry run: there is no prerequisite step for this platform
 
