@@ -252,7 +252,7 @@ continue to work on those lines.
     not show the locking, so nothing in it says that no other access can fall between the read and the write.
   None of this changes what a correct program computes. Where the code depends on one of these (an exception handler, a
   lock, a wake-up from `sleep`), read the assembly beside the pseudocode.
-- Function boundaries are found heuristically, from a known entry or backwards to the previous `rts` plus slot. The scan skips literal pools and `mova` jump tables, and steps past a function that ends in a tail jump. A known entry keeps an address after an `rts` when flow from the entry reaches it (an early return). What the finder cannot settle is shown as an amber line. Expect to correct some entries with **Set Function Start Here**.
+- Function boundaries are found heuristically, from a known entry or backwards to the previous `rts` plus slot. The scan skips literal pools and `mova` jump tables, steps past a function that ends in a tail jump, and, when data (text) follows the previous `rts`, takes the first function prologue after it whose code reaches the address (so a function after one that ends in an endless loop is found; the amber line says the entry rests on a prologue). A known entry keeps an address after an `rts` when flow from the entry reaches it (an early return). What the finder cannot settle is shown as an amber line. Expect to correct some entries with **Set Function Start Here**.
 - Indirect calls stay indirect unless you are halted on them (see above).
 - Only one level of pointer type is recovered for signatures. Structures are not inferred.
 

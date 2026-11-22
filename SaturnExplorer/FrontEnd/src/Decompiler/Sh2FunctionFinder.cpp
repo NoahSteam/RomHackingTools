@@ -293,6 +293,27 @@ bool DecodesAsCode(const MemorySnapshot& snap, uint32_t c)
     return true;
 }
 
+// The first function prologue in [from, a] whose code provably reaches 'a': mov.l rN,@-r15 or sts.l pr,@-r15
+// (what a compiler opens a function with), three instructions that decode, and flow to the address. Used when what
+// follows the scan's rts is not code (strings, a table) or never reaches 'a': the function before the address may then
+// end in a loop or a call that does not return, so no rts or tail jump marks where it stops, and the prologue is the
+// entry. A prologue in the middle of a function does not reach 'a' unless the function does.
+bool PrologueReaching(const MemorySnapshot& snap, uint32_t from, uint32_t a, uint32_t& found)
+{
+    for (uint32_t q = from; q <= a; q += 2)
+    {
+        uint16_t w = 0;
+        if (!snap.ReadU16(q, w)) break;
+        const bool prologue = (w & 0xFF0Fu) == 0x2F06u || w == 0x4F22u;
+        if (prologue && DecodesAsCode(snap, q) && Reaches(snap, q, a) == Reach::Yes)
+        {
+            found = q;
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry, std::string* why, std::string* doubt)
@@ -345,6 +366,15 @@ bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry,
     }
     if (!DecodesAsCode(snap, c))
     {
+        uint32_t pe = 0;
+        if (PrologueReaching(snap, p + 4, a, pe))
+        {
+            entry = pe;
+            if (doubt)
+                *doubt = "what follows the rts at " + Hex8(p) + " is data; the entry is the first function prologue from there whose code reaches " +
+                         Hex8(a);
+            return true;
+        }
         if (why) *why = "what follows the rts at " + Hex8(p) + " does not decode as code";
         return false;
     }
@@ -369,6 +399,14 @@ bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry,
             if (Reaches(snap, c2, a) != Reach::Yes) continue;
             d = "the code after the rts at " + Hex8(p) + " never reaches " + Hex8(a) + "; the entry is after the jump at " + Hex8(q);
             c = c2;
+            moved = true;
+        }
+        uint32_t pe = 0;
+        if (!moved && PrologueReaching(snap, c, a, pe))
+        {
+            d = "the code after the rts at " + Hex8(p) + " never reaches " + Hex8(a) +
+                "; the entry is the first function prologue after it whose code does";
+            c = pe;
             moved = true;
         }
         if (!moved) d = "the code from " + Hex8(c) + " (after the rts at " + Hex8(p) + ") never reaches " + Hex8(a);
