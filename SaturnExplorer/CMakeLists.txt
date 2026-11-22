@@ -2015,8 +2015,14 @@ else()
     # Non-Windows desktop: build the web backend natively against system SDL2 +
     # OpenGL when available (a browser-free way to run/validate the frontend).
     find_package(SDL2 QUIET)
+    # Link libGL.so.1, not GLVND's libOpenGL.so.0: newer CMake prefers the latter, which lives in its own
+    # package (libopengl0 on Debian/Ubuntu) that many desktops do not install, so a release built that way does
+    # not start there. Every Linux GL stack provides libGL.so.1.
+    if(NOT APPLE AND NOT DEFINED OpenGL_GL_PREFERENCE)
+        set(OpenGL_GL_PREFERENCE LEGACY)
+    endif()
     find_package(OpenGL QUIET)
-    if(SDL2_FOUND AND OpenGL_OpenGL_FOUND)
+    if(SDL2_FOUND AND OPENGL_FOUND)
         add_executable(SaturnExplorerFrontEnd
             FrontEnd/src/App.cpp
             FrontEnd/src/Theme.cpp

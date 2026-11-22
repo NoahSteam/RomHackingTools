@@ -260,12 +260,15 @@ jobs:
             echo "build-release/generated/BuildInfo.h does not carry $GITHUB_REF_NAME:"; grep kBuildVersion build-release/generated/BuildInfo.h; exit 1
           }
 
-      # libcurl is loaded at run time, never shipped (see LoadCurl in WebPlatform.cpp).
-      - name: Check libcurl is not linked
+      # libcurl is loaded at run time, never shipped (see LoadCurl in WebPlatform.cpp). GL comes from libGL.so.1,
+      # which every Linux GL stack has, not GLVND's libOpenGL.so.0, which many desktops do not install.
+      - name: Check the program's direct libraries
         shell: bash
         run: |
           readelf -d build-release/bin/SaturnExplorerFrontEnd > dynamic.txt
           if grep -q 'NEEDED.*libcurl' dynamic.txt; then echo "libcurl is linked; it must be loaded at run time"; exit 1; fi
+          if grep -q 'NEEDED.*libOpenGL\.so' dynamic.txt; then echo "linked to libOpenGL.so.0; it must use libGL.so.1"; exit 1; fi
+          grep -q 'NEEDED.*\[libGL\.so\.1\]' dynamic.txt || { echo "not linked to libGL.so.1"; cat dynamic.txt; exit 1; }
 
       - name: Package
         env:
