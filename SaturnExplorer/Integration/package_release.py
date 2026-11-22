@@ -1182,7 +1182,10 @@ def smoke_test(stage, mednafen, require_window=False):
             smoke_test_linux(stage, emu, env, require_window)
         # -help prints the banner, the library versions and the usage text, then exits non-zero in this
         # Mednafen. A banner alone also appears before a startup failure, so require the closing usage text.
-        r = subprocess.run([mednafen, "-help"], capture_output=True, text=True, timeout=60, env=env, cwd=scratch)
+        # Mednafen initialises SDL video even for -help. The bare environment has no display, and SDL 2.0.20
+        # (Ubuntu 22.04, the release baseline) has no offscreen fallback, so Linux names SDL's dummy driver.
+        mednafen_env = {**env, "SDL_VIDEODRIVER": "dummy"} if IS_LINUX else env
+        r = subprocess.run([mednafen, "-help"], capture_output=True, text=True, timeout=60, env=mednafen_env, cwd=scratch)
         text = r.stdout + r.stderr
         if "Starting Mednafen" not in text or "do not need to be passed to future invocations" not in text:
             raise SystemExit("mednafen did not run from the package:\n" + text[-800:])
