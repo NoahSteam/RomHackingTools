@@ -29,7 +29,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # Linux pinned to 24.04 (GCC 13): ubuntu-latest became 26.04 with GCC 15, whose libstdc++ allocates differently
+        # inside the Ghidra engine, which moves the allocation numbers the decompiler fault test's pins name ("stale
+        # pin"). Re-recording those pins for GCC 15 is decompiler review-program work; the release builds with GCC 11.
+        os: [windows-latest, macos-latest, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     # Explicit (A12-37): the default is 360 minutes. Windows Debug took 157 minutes with the decompiler tests run twice (A12-36).
     timeout-minutes: 240
