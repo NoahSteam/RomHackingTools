@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Link model step 1: add up the census reports of several runs and judge them against LINK_MODEL.md section 4's thresholds.
 
-    census_merge.py [--title T] [--samples N] REPORT...
+    census_merge.py [--title T] [--samples N] [--subtract BASE] REPORT...
 
 A REPORT is what a test binary wrote for SE_LINK_CENSUS=<file> (tests/LinkCensus.h): `CENSUS key value`, `CLASS key count`
 and `SAMPLE class | where | text` lines. The chunks of a long run (each a range of generator seeds, SE_GENERATED_FIRST and
 SE_GENERATED_SEEDS) are added; the table is printed with each measure's threshold and the go / no-go it gives.
+--subtract BASE takes a report away first: a game image's run counts the test binary's fixtures too, so the game's own figures are the
+image's report less the fixtures-only one (the binary run with no image).
 """
 import collections
 import sys
@@ -38,7 +40,7 @@ def pct(a, b):
 
 
 def main(argv):
-    title, nsamples, paths = "", 5, []
+    title, nsamples, paths, base = "", 5, [], None
     i = 1
     while i < len(argv):
         if argv[i] == "--title":
@@ -47,10 +49,20 @@ def main(argv):
         elif argv[i] == "--samples":
             nsamples = int(argv[i + 1])
             i += 2
+        elif argv[i] == "--subtract":
+            base = argv[i + 1]
+            i += 2
         else:
             paths.append(argv[i])
             i += 1
     c, classes, samples = load(paths)
+    if base:
+        bc, bclasses, _ = load([base])
+        for k, v in bc.items():
+            c[k] -= v
+        for k, v in bclasses.items():
+            classes[k] -= v
+        classes = collections.Counter({k: v for k, v in classes.items() if v > 0})
     if not c["functions"]:
         print("no functions in", paths)
         return 2
@@ -81,6 +93,13 @@ def main(argv):
     rows.append(("Lines that name a store today left with no proven store (candidates or nothing) / lines that name a store",
                  "%d of %d = %s" % (lost, named, pct(lost, named)), "go at 2% or less; 2 to 10% requires step 2b; above 10% stop",
                  "go" if ratio <= 2 else "needs 2b" if ratio <= 10 else "NO-GO"))
+    if c["lostNoProven"] or any(c["originRecords." + k] for k in ("forwarded", "merged", "twin", "replaced")):   # (step 2 and later reports)
+        rows.append(("...of those, the ones with no proven Effect at all", "%d of %d = %s" % (c["lostNoProven"], named, pct(c["lostNoProven"], named)),
+                     "report (the row above also counts a store found with another missing)", "-"))
+        rows.append(("Lines left with no proven Effect, by the printed op's class", ", ".join("%s %d" % (k, c["lostByRoot." + k]) for k in OPS if c["lostByRoot." + k]) or "none", "report", "-"))
+        rows.append(("Patch 0100/0101 records: clone / inline / forwarded / merged / twin / replaced", " / ".join(str(c["originRecords." + k]) for k in ("clone", "inline", "forwarded", "merged", "twin", "replaced")),
+                     "report", "-"))
+        rows.append(("Proven stores the walk found: by identity / forwarded / merged / replaced", " / ".join(str(c["walkVia." + k]) for k in ("identity", "forwarded", "merged", "replaced")), "report", "-"))
     rows.append(("Flow store, branch, call and return statements with exactly one proven Effect", "%d of %d" % (c["effectGiven"], c["effectDue"]),
                  "every one", "go" if c["effectGiven"] == c["effectDue"] else "NO-GO"))
     rows.append(("Clone-made effect ops", str(c["cloneEffects"]), "non-zero confirms the Clone record", "confirms" if c["cloneEffects"] else "none seen"))

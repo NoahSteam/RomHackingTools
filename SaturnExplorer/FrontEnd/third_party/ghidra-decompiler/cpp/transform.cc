@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
  */
 #include "transform.hh"
 #include "funcdata.hh"
@@ -236,6 +237,7 @@ void TransformOp::createReplacement(Funcdata *fd)
   }
   else {
     replacement = fd->newOp(input.size(),op->getAddr());
+    fd->noteOrigin(replacement,op,5);	// SaturnExplorer (0101): the op this one replaces
     fd->opSetOpcode(replacement, opc);
     if (output != (TransformVar *)0)
       output->createReplacement(fd);

@@ -252,6 +252,10 @@ struct LinkCensus
     uint32_t storeFlow = 0, storeEngine = 0;       // Store statements made by a flow op (a STORE, a hardware write, a folded COPY) or by the engine
     uint32_t walkProven = 0, walkCandidate = 0, walkNone = 0, walkBound = 0;   // engine-made store statements: what the bounded walk finds
     uint32_t namedStoreLines = 0, lostStoreLines = 0;   // lines of a store statement whose firstAddr is a store, and those the model leaves without a proven store
+    uint32_t lostNoProven = 0;          // (step 2) ...of those, the ones with no proven Effect at all (lostStoreLines also counts a store found with another missing)
+    uint32_t lostByRoot[8] = {};        // (step 2) ...by the op class of the statement's printed op (STORE, CALL, BRANCH, RETURN, COPY, LOAD, hardware, other)
+    uint32_t originRecords[6] = {};     // (step 2b) patch 0100 and 0101's records by kind: clone, inline, forwarded, merged, twin, replaced
+    uint32_t walkVia[6] = {};           // (step 2b) proven stores the walk of an engine-made store statement found by identity (0) or through a record of that kind
     uint32_t effectDue = 0, effectGiven = 0;      // flow store, branch, call and return statements, and those with exactly one proven Effect
     uint32_t cloneEffects = 0;          // clone-made ops that carry an effect
     uint32_t multiStatementLines = 0;

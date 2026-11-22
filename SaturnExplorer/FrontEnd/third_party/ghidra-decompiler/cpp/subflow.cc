@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: an input replaced by a temporary that an operation still reads is read extended from the logical input (patches/0033-engine-printed-value-fixes.patch).
  * Modified for SaturnExplorer: a sign-extended sub-variable is not shifted by an amount its constant cannot hold (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
  * Modified for SaturnExplorer: a COPY folded into the frame that is split into pieces is no write gone unread (patches/0072-engine-frame-chains-and-save-slots.patch).
+ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
  */
 #include "subflow.hh"
 #include "funcdata.hh"
@@ -1465,6 +1466,7 @@ void SubvariableFlow::doReplacement(void)
   // Define all the outputs first
   for(iter=oplist.begin();iter!=oplist.end();++iter) {
     PcodeOp *newop = fd->newOp((*iter).numparams,(*iter).op->getAddr());
+    fd->noteOrigin(newop,(*iter).op,5);	// SaturnExplorer (0101): the op this one replaces
     (*iter).replacement = newop;
     fd->opSetOpcode(newop,(*iter).opc);
     ReplaceVarnode *rout = (*iter).output;
