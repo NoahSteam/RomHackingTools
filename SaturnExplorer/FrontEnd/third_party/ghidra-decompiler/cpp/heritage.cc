@@ -26,6 +26,7 @@
  * Modified for SaturnExplorer: a read of a piece of a global the range holds wider is read into a temporary, not written to the piece (patches/0088-engine-global-piece-read-and-join-copy.patch).
  * Modified for SaturnExplorer: a hardware access is a barrier to the writes and reads of a global (patches/0090-engine-hardware-access-orders-globals.patch).
  * Modified for SaturnExplorer: the guard a STORE through a pointer puts on a global is kept, as a call's is (patches/0093-engine-pointer-store-guard-kept.patch).
+ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -414,6 +415,7 @@ Varnode *Heritage::normalizeReadSize(Varnode *vn,PcodeOp *op,const Address &addr
 
   newop = fd->newOp(2,op->getAddr());
   markSlotPiece(newop,op);	// SaturnExplorer (0079)
+  fd->noteOrigin(newop,op,5);	// SaturnExplorer (0101): the read of a piece is made for \b op, which is the store it shows when \b op is one
   fd->opSetOpcode(newop,CPUI_SUBPIECE);
   vn1 = fd->newVarnode(size,addr);
   overlap = vn->overlap(addr,size);
@@ -508,6 +510,7 @@ Varnode *Heritage::normalizeWriteSize(Varnode *vn,const Address &addr,int4 size)
   if (overlap !=0 ) {
     newop = fd->newOp(2,op->getAddr());
     markSlotPiece(newop,op);	// SaturnExplorer (0079)
+    fd->noteOrigin(newop,op,5);	// SaturnExplorer (0101): the PIECEs that make a small write a big one stand for the write
     if (addr.isBigEndian())
       midvn = fd->newVarnodeOut(overlap+vn->getSize(),vn->getAddr(),newop);
     else
@@ -522,6 +525,7 @@ Varnode *Heritage::normalizeWriteSize(Varnode *vn,const Address &addr,int4 size)
   if (mostsigsize != 0) {
     newop = fd->newOp(2,op->getAddr());
     markSlotPiece(newop,op);	// SaturnExplorer (0079)
+    fd->noteOrigin(newop,op,5);	// SaturnExplorer (0101)
     bigout = fd->newVarnodeOut(size,addr,newop);
     fd->opSetOpcode(newop,CPUI_PIECE);
     fd->opSetInput(newop,mostvn,0);

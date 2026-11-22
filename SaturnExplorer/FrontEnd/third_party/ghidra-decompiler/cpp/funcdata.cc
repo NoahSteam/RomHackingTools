@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: an access folded into the stack frame is flagged, and recorded again if a write goes with its value unread or the access with an unreachable block; a PIECE or SUBPIECE whose sizes do not add up is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: the frame call records of a call can be dropped whole (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: each op made by cloning another is recorded with the op it copies (patches/0100-engine-op-clone-origins.patch).
+ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
  */
 #include "funcdata.hh"
 
@@ -243,6 +244,7 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
   Address addr;
   if (!isMemoryAccess(op,store,size,addr)) return;
   recordAccessFate(op,store,size,vn->getAddr(),fate_folded_ordinary);
+  if (store && op->getTime() < flowOps) op->setFoldedStore();	// SaturnExplorer (0101)
   // (0068) A flow LOAD or STORE of the stack frame lives on as a variable read or write. Its fold is no
   // conservation unless the value reaches what reads it: the op is flagged, a reader that stays and is given
   // another value in its place forwards it (noteFrameFoldForwarded), and opDestroy records the op again

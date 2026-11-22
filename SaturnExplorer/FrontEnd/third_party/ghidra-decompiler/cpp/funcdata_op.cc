@@ -25,6 +25,7 @@
  * Modified for SaturnExplorer: the host is called when a flow has been followed (patches/0096-engine-flow-done-hook.patch).
  * Modified for SaturnExplorer: the guard a STORE put on a global stays when the STORE folds into a write of a hardware register (patches/0099-engine-register-store-guard-kept.patch).
  * Modified for SaturnExplorer: each op made by cloning another is recorded with the op it copies (patches/0100-engine-op-clone-origins.patch).
+ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -471,8 +472,11 @@ void Funcdata::opSetOutput(PcodeOp *op,Varnode *vn)
     opUnsetOutput(op);
   }
 
-  if (vn->getDef() != (PcodeOp *)0)	// If this varnode is already an output
+  if (vn->getDef() != (PcodeOp *)0) {	// If this varnode is already an output
+    if (standsForStore(vn->getDef()))	// SaturnExplorer (0101): the op takes the folded STORE's place as the writer of this storage
+      noteOrigin(op,vn->getDef(),5);
     opUnsetOutput(vn->getDef());
+  }
   vn = vbank.setDef(vn,op);
   setVarnodeProperties(vn);
   op->setOutput(vn);
@@ -498,6 +502,10 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
 
 {
   if (vn == op->getIn(slot)) return; // Already set to this vn
+  // SaturnExplorer (0101): a reader of a folded STORE's value is given another (RulePropagateCopy forwards the COPY's input, totalReplace a merged
+  // or substituted value, a collapse of a MULTIEQUAL's inputs), so the store goes as dead and the reader stands for it: nothing else says which
+  // store it shows
+  noteStoreForwarded(op,op->getIn(slot));
   if (vn->isConstant()) {	// Constants should have only one descendant
     if (!vn->hasNoDescend())
       if (!vn->isSpacebase()) {	// Unless they are a spacebase
@@ -687,6 +695,7 @@ void Funcdata::opSetAllInput(PcodeOp *op,const vector<Varnode *> &vvec)
 #endif
   for(i=0;i<op->numInput();++i)
     if (op->getIn(i) != (Varnode *)0) {
+      noteStoreForwarded(op,op->getIn(i));	// SaturnExplorer (0101)
       noteFrameFoldForwarded(!isMarkerOrUnbuilt(op),op->getIn(i));	// SaturnExplorer (0068)
       opUnsetInput(op,i);
     }
@@ -709,8 +718,10 @@ void Funcdata::opRemoveInput(PcodeOp *op,int4 slot)
   if (opactdbg_active)
     debugModCheck(op);
 #endif
-  if (op->getIn(slot) != (Varnode *)0)	// SaturnExplorer (0068): the op stays, simplified without it
+  if (op->getIn(slot) != (Varnode *)0) {	// SaturnExplorer (0068): the op stays, simplified without it
+    noteStoreForwarded(op,op->getIn(slot));	// SaturnExplorer (0101)
     noteFrameFoldForwarded(!isMarkerOrUnbuilt(op),op->getIn(slot));
+  }
   opUnsetInput(op,slot);
   op->removeInput(slot);
   opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
@@ -1772,6 +1783,7 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
     Varnode *vn2 = op->getOut();
     int4 res = vn1->characterizeOverlap(*vn2);
     if (res > 0) { // Copy has an effect of some sort
+      noteOrigin(op,copyOp,5);	// SaturnExplorer (0101): the guard of the STORE becomes a piece of what the COPY writes
       if (res != 2 && vn1->contains(*vn2) == 0) {	// INDIRECT output is properly contained in COPY output
 	// Convert INDIRECT to a SUBPIECE
 	uintb trunc;
@@ -2143,10 +2155,12 @@ PcodeOp *Funcdata::cseElimination(PcodeOp *op1,PcodeOp *op2)
     }
   }
   if (replace != op1) {
+    noteOrigin(replace,op1,4);	// SaturnExplorer (0101)
     totalReplace(op1->getOut(),replace->getOut());
     opDestroy(op1);
   }
   if (replace != op2) {
+    noteOrigin(replace,op2,4);	// SaturnExplorer (0101)
     totalReplace(op2->getOut(),replace->getOut());
     opDestroy(op2);
   }

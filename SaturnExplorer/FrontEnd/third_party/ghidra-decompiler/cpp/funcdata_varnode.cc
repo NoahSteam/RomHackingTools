@@ -21,6 +21,7 @@
  * Modified for SaturnExplorer: a new output keeps the cached masks around its op a superset of the truth; totalReplace leaves that to opSetInput (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: a Varnode replaced everywhere by an equal value forwards the frame folds it was made from (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: the guards a STORE kept when it folded into a write of a register follow the volatile write's user op (patches/0099-engine-register-store-guard-kept.patch).
+ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
  */
 #include "funcdata.hh"
 
@@ -1624,6 +1625,7 @@ void Funcdata::totalReplaceConstant(Varnode *vn,uintb val)
       if (copyop == (PcodeOp *)0) {
 	if (vn->isWritten()) {
 	  copyop = newOp(1,vn->getDef()->getAddr());
+	  noteOrigin(copyop,vn->getDef(),5);	// SaturnExplorer (0101): the constant's COPY stands for the op that made the value
 	  opSetOpcode(copyop,CPUI_COPY);
 	  newrep = newUniqueOut(vn->getSize(),copyop);
 	  opSetInput(copyop,newConstant(vn->getSize(),val),0);

@@ -1,0 +1,307 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/double.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/double.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/double.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/double.cc
+@@ -12,6 +12,7 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
+  */
+ #include "double.hh"
+ 
+@@ -3537,6 +3538,8 @@ int4 RuleDoubleStore::applyOp(PcodeOp *op,Funcdata &data)
+ 	  addrvn = data.newConstant(addrvn->getSize(),addrvn->getOffset());
+ 	data.opSetInput(newstore,addrvn,1);
+ 	data.opSetInput(newstore,whole,2);
++	data.noteOrigin(newstore,storelo,3);	// SaturnExplorer (0101): the new STORE stands for both
++	data.noteOrigin(newstore,storehi,3);
+ 	// We need to guarantee that -newstore- reads -addrvn- after
+ 	// it has been defined. So insert it after the latest.
+ 	data.opInsertAfter(newstore,latest);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+@@ -20,6 +20,7 @@
+  * Modified for SaturnExplorer: an access folded into the stack frame is flagged, and recorded again if a write goes with its value unread or the access with an unreachable block; a PIECE or SUBPIECE whose sizes do not add up is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
+  * Modified for SaturnExplorer: the frame call records of a call can be dropped whole (patches/0072-engine-frame-chains-and-save-slots.patch).
+  * Modified for SaturnExplorer: each op made by cloning another is recorded with the op it copies (patches/0100-engine-op-clone-origins.patch).
++ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
+  */
+ #include "funcdata.hh"
+ 
+@@ -243,6 +244,7 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
+   Address addr;
+   if (!isMemoryAccess(op,store,size,addr)) return;
+   recordAccessFate(op,store,size,vn->getAddr(),fate_folded_ordinary);
++  if (store && op->getTime() < flowOps) op->setFoldedStore();	// SaturnExplorer (0101)
+   // (0068) A flow LOAD or STORE of the stack frame lives on as a variable read or write. Its fold is no
+   // conservation unless the value reaches what reads it: the op is flagged, a reader that stays and is given
+   // another value in its place forwards it (noteFrameFoldForwarded), and opDestroy records the op again
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+@@ -21,6 +21,7 @@
+  * Modified for SaturnExplorer: whether a STORE is guarded as pending, for the save slots (patches/0072-engine-frame-chains-and-save-slots.patch).
+  * Modified for SaturnExplorer: a function the host calls back when a flow has been followed, to record the flow a restart follows (patches/0096-engine-flow-done-hook.patch).
+  * Modified for SaturnExplorer: each op made by cloning another is recorded with the op it copies (patches/0100-engine-op-clone-origins.patch).
++ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
+  */
+ #ifndef __FUNCDATA_HH__
+ #define __FUNCDATA_HH__
+@@ -74,17 +75,27 @@ struct AccessRecord {
+   bool slot = false;		///< SaturnExplorer (0075): the op was built by the instruction in a delay slot; \b pc is its branch's
+ };
+ 
+-/// \brief An op made as a copy of another op (SaturnExplorer, 0100)
++/// \brief An op made as a copy of another op, or made from others (SaturnExplorer, 0100 and 0101)
+ ///
+ /// A clone gets a new time at the address of its original, so by time alone it reads as an op the engine made, and the host
+ /// would walk a cloned STORE or folded-store COPY back to a different store of the flow (a block split by ActionReturnSplit
+-/// copies a shared epilogue). The record says which op it copies.
++/// copies a shared epilogue). The record says which op it copies. 0101 adds the three ways an op comes to stand for the instructions
++/// of others: a value forwarded into it, a store made from two, a duplicate it replaced, an op it was made in place of.
+ struct OriginRecord {
+   uintm survivor;		///< PcodeOp::getTime() of the clone
+   uintm origin;			///< ...and of the op it copies (itself a clone, perhaps)
+   Address pc;			///< The address of the copied op's instruction
+   bool slot;			///< The copied op was built by the instruction in a delay slot; \b pc is its branch's
+-  uint4 kind;			///< 0: a block was split (CloneBlockOps::buildOpClone); 1: a flow inlined a function (Funcdata::cloneOp)
++  uint4 kind;			///< 0: a block was split (CloneBlockOps::buildOpClone); 1: a flow inlined a function (Funcdata::cloneOp);
++				///< 2 (0101): \b origin was a folded STORE (a COPY) whose value a reader of it gave up (Funcdata::opSetInput: RulePropagateCopy, totalReplace);
++				///< 3 (0101): \b survivor is the STORE RuleDoubleStore made from \b origin and another;
++				///< 4 (0101): \b survivor replaced \b origin as the same computation (Funcdata::cseElimination);
++				///< 5 (0101): \b survivor was made in place of \b origin (TransformOp::createReplacement, SubvariableFlow::doReplacement,
++				///< totalReplaceConstant's COPY, Heritage::normalizeReadSize's SUBPIECE for the reading \b origin), or took over the storage a
++				///< folded STORE wrote (Funcdata::opSetOutput)
++  OpCode code;			///< (0101) What \b origin was when recorded (a STORE no rule has folded yet, a COPY, ...)
++  Address addr;			///< (0101) The storage \b origin wrote (invalid when it wrote none)
++  int4 size;			///< (0101) ...and how many bytes (0 when none)
+ };
+ 
+ /// \brief A call of the flow that heritage guarded a stack local at: it may read it (SaturnExplorer, 0068)
+@@ -274,6 +285,10 @@ public:
+   static bool isMarkerOrUnbuilt(const PcodeOp *op) { return op->getOpcode() == (TypeOp *)0 || op->code() == CPUI_MULTIEQUAL || op->code() == CPUI_INDIRECT; }
+   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
+   void setFlowDone(const std::function<void(Funcdata &)> &f) { flowDone = f; }	///< SaturnExplorer (0096): the host's call after each flow
++  bool standsForStore(const PcodeOp *op) const { return (op->code() == CPUI_COPY && op->isFoldedStore()) || op->isStoreOrigin(); }	///< SaturnExplorer (0101): \b op is a flow STORE folded into a COPY (whatever it now writes), or stands for one
++  void noteStoreForwarded(PcodeOp *op,const Varnode *old) {	///< SaturnExplorer (0101): \b op stops reading \b old, the value of a folded STORE: it stands for the store from now on
++    if (old != (const Varnode *)0 && old->isWritten() && standsForStore(old->getDef())) noteOrigin(op,old->getDef(),2);
++  }
+   const vector<OriginRecord> &getOriginRecords(void) const { return originRecords; }	///< Every op made by cloning another (SaturnExplorer, 0100)
+   uintm getFlowOps(void) const { return flowOps; }	///< SaturnExplorer (0100): ops with a lower time were made by the flow, the rest by rules and actions
+   void noteOrigin(const PcodeOp *survivor,const PcodeOp *origin,uint4 kind) {	///< SaturnExplorer (0100): \b survivor is a clone of \b origin
+@@ -283,6 +298,13 @@ public:
+     rec.pc = origin->getAddr();
+     rec.slot = origin->isFromDelaySlot();
+     rec.kind = kind;
++    rec.size = 0;
++    rec.code = origin->code();
++    if (standsForStore(origin) || origin->code() == CPUI_STORE) survivor->setStoreOrigin();	// (a chain of ops that stand for a store is followed by what each is given)
++    if (origin->getOut() != (Varnode *)0) {	// (0101)
++      rec.addr = origin->getOut()->getAddr();
++      rec.size = origin->getOut()->getSize();
++    }
+     originRecords.push_back(rec);
+   }
+   const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+@@ -25,6 +25,7 @@
+  * Modified for SaturnExplorer: the host is called when a flow has been followed (patches/0096-engine-flow-done-hook.patch).
+  * Modified for SaturnExplorer: the guard a STORE put on a global stays when the STORE folds into a write of a hardware register (patches/0099-engine-register-store-guard-kept.patch).
+  * Modified for SaturnExplorer: each op made by cloning another is recorded with the op it copies (patches/0100-engine-op-clone-origins.patch).
++ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -471,8 +472,11 @@ void Funcdata::opSetOutput(PcodeOp *op,Varnode *vn)
+     opUnsetOutput(op);
+   }
+ 
+-  if (vn->getDef() != (PcodeOp *)0)	// If this varnode is already an output
++  if (vn->getDef() != (PcodeOp *)0) {	// If this varnode is already an output
++    if (standsForStore(vn->getDef()))	// SaturnExplorer (0101): the op takes the folded STORE's place as the writer of this storage
++      noteOrigin(op,vn->getDef(),5);
+     opUnsetOutput(vn->getDef());
++  }
+   vn = vbank.setDef(vn,op);
+   setVarnodeProperties(vn);
+   op->setOutput(vn);
+@@ -498,6 +502,10 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
+ 
+ {
+   if (vn == op->getIn(slot)) return; // Already set to this vn
++  // SaturnExplorer (0101): a reader of a folded STORE's value is given another (RulePropagateCopy forwards the COPY's input, totalReplace a merged
++  // or substituted value, a collapse of a MULTIEQUAL's inputs), so the store goes as dead and the reader stands for it: nothing else says which
++  // store it shows
++  noteStoreForwarded(op,op->getIn(slot));
+   if (vn->isConstant()) {	// Constants should have only one descendant
+     if (!vn->hasNoDescend())
+       if (!vn->isSpacebase()) {	// Unless they are a spacebase
+@@ -687,6 +695,7 @@ void Funcdata::opSetAllInput(PcodeOp *op,const vector<Varnode *> &vvec)
+ #endif
+   for(i=0;i<op->numInput();++i)
+     if (op->getIn(i) != (Varnode *)0) {
++      noteStoreForwarded(op,op->getIn(i));	// SaturnExplorer (0101)
+       noteFrameFoldForwarded(!isMarkerOrUnbuilt(op),op->getIn(i));	// SaturnExplorer (0068)
+       opUnsetInput(op,i);
+     }
+@@ -709,8 +718,10 @@ void Funcdata::opRemoveInput(PcodeOp *op,int4 slot)
+   if (opactdbg_active)
+     debugModCheck(op);
+ #endif
+-  if (op->getIn(slot) != (Varnode *)0)	// SaturnExplorer (0068): the op stays, simplified without it
++  if (op->getIn(slot) != (Varnode *)0) {	// SaturnExplorer (0068): the op stays, simplified without it
++    noteStoreForwarded(op,op->getIn(slot));	// SaturnExplorer (0101)
+     noteFrameFoldForwarded(!isMarkerOrUnbuilt(op),op->getIn(slot));
++  }
+   opUnsetInput(op,slot);
+   op->removeInput(slot);
+   opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
+@@ -1772,6 +1783,7 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
+     Varnode *vn2 = op->getOut();
+     int4 res = vn1->characterizeOverlap(*vn2);
+     if (res > 0) { // Copy has an effect of some sort
++      noteOrigin(op,copyOp,5);	// SaturnExplorer (0101): the guard of the STORE becomes a piece of what the COPY writes
+       if (res != 2 && vn1->contains(*vn2) == 0) {	// INDIRECT output is properly contained in COPY output
+ 	// Convert INDIRECT to a SUBPIECE
+ 	uintb trunc;
+@@ -2143,10 +2155,12 @@ PcodeOp *Funcdata::cseElimination(PcodeOp *op1,PcodeOp *op2)
+     }
+   }
+   if (replace != op1) {
++    noteOrigin(replace,op1,4);	// SaturnExplorer (0101)
+     totalReplace(op1->getOut(),replace->getOut());
+     opDestroy(op1);
+   }
+   if (replace != op2) {
++    noteOrigin(replace,op2,4);	// SaturnExplorer (0101)
+     totalReplace(op2->getOut(),replace->getOut());
+     opDestroy(op2);
+   }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+@@ -21,6 +21,7 @@
+  * Modified for SaturnExplorer: a new output keeps the cached masks around its op a superset of the truth; totalReplace leaves that to opSetInput (patches/0054-engine-cached-masks-never-narrower.patch).
+  * Modified for SaturnExplorer: a Varnode replaced everywhere by an equal value forwards the frame folds it was made from (patches/0068-engine-deadcode-late-stack-reads.patch).
+  * Modified for SaturnExplorer: the guards a STORE kept when it folded into a write of a register follow the volatile write's user op (patches/0099-engine-register-store-guard-kept.patch).
++ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
+  */
+ #include "funcdata.hh"
+ 
+@@ -1624,6 +1625,7 @@ void Funcdata::totalReplaceConstant(Varnode *vn,uintb val)
+       if (copyop == (PcodeOp *)0) {
+ 	if (vn->isWritten()) {
+ 	  copyop = newOp(1,vn->getDef()->getAddr());
++	  noteOrigin(copyop,vn->getDef(),5);	// SaturnExplorer (0101): the constant's COPY stands for the op that made the value
+ 	  opSetOpcode(copyop,CPUI_COPY);
+ 	  newrep = newUniqueOut(vn->getSize(),copyop);
+ 	  opSetInput(copyop,newConstant(vn->getSize(),val),0);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+@@ -26,6 +26,7 @@
+  * Modified for SaturnExplorer: a read of a piece of a global the range holds wider is read into a temporary, not written to the piece (patches/0088-engine-global-piece-read-and-join-copy.patch).
+  * Modified for SaturnExplorer: a hardware access is a barrier to the writes and reads of a global (patches/0090-engine-hardware-access-orders-globals.patch).
+  * Modified for SaturnExplorer: the guard a STORE through a pointer puts on a global is kept, as a call's is (patches/0093-engine-pointer-store-guard-kept.patch).
++ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
+  */
+ #include "heritage.hh"
+ #include "funcdata.hh"
+@@ -414,6 +415,7 @@ Varnode *Heritage::normalizeReadSize(Varnode *vn,PcodeOp *op,const Address &addr
+ 
+   newop = fd->newOp(2,op->getAddr());
+   markSlotPiece(newop,op);	// SaturnExplorer (0079)
++  fd->noteOrigin(newop,op,5);	// SaturnExplorer (0101): the read of a piece is made for \b op, which is the store it shows when \b op is one
+   fd->opSetOpcode(newop,CPUI_SUBPIECE);
+   vn1 = fd->newVarnode(size,addr);
+   overlap = vn->overlap(addr,size);
+@@ -508,6 +510,7 @@ Varnode *Heritage::normalizeWriteSize(Varnode *vn,const Address &addr,int4 size)
+   if (overlap !=0 ) {
+     newop = fd->newOp(2,op->getAddr());
+     markSlotPiece(newop,op);	// SaturnExplorer (0079)
++    fd->noteOrigin(newop,op,5);	// SaturnExplorer (0101): the PIECEs that make a small write a big one stand for the write
+     if (addr.isBigEndian())
+       midvn = fd->newVarnodeOut(overlap+vn->getSize(),vn->getAddr(),newop);
+     else
+@@ -522,6 +525,7 @@ Varnode *Heritage::normalizeWriteSize(Varnode *vn,const Address &addr,int4 size)
+   if (mostsigsize != 0) {
+     newop = fd->newOp(2,op->getAddr());
+     markSlotPiece(newop,op);	// SaturnExplorer (0079)
++    fd->noteOrigin(newop,op,5);	// SaturnExplorer (0101)
+     bigout = fd->newVarnodeOut(size,addr,newop);
+     fd->opSetOpcode(newop,CPUI_PIECE);
+     fd->opSetInput(newop,mostvn,0);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
+@@ -17,6 +17,7 @@
+  * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
+  * Modified for SaturnExplorer: the multiply of a division term that is wider than its width is flagged (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
+  * Modified for SaturnExplorer: a LOAD or STORE folded into the stack frame is flagged, and so is its value being read (patches/0068-engine-deadcode-late-stack-reads.patch).
++ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
+  */
+ /// \file op.hh
+ /// \brief The PcodeOp and PcodeOpBank classes
+@@ -128,7 +129,9 @@ public:
+     jumptable_lookup = 0x2000,	///< SaturnExplorer: the LOAD that read a recovered switch's table (the switch now stands for it)
+     div_product_wide = 0x4000,	///< SaturnExplorer: the INT_MULT of a division term (RuleDivTermAdd, RuleDivTermAdd2) whose exact product is wider than the multiply
+     frame_fold = 0x8000,	///< SaturnExplorer (0068): a flow LOAD or STORE that RuleLoadVarnode or RuleStoreVarnode made a COPY of a stack Varnode
+-    frame_fold_read = 0x10000	///< SaturnExplorer (0068): ...whose value an op that stays was given in another form (Funcdata::noteFrameFoldForwarded)
++    frame_fold_read = 0x10000,	///< SaturnExplorer (0068): ...whose value an op that stays was given in another form (Funcdata::noteFrameFoldForwarded)
++    folded_store = 0x20000,	///< SaturnExplorer (0101): a flow STORE that RuleStoreVarnode made a COPY of a Varnode, whatever that now writes
++    store_origin = 0x40000	///< SaturnExplorer (0101): an op that stands for a folded STORE, or for an op that does (Funcdata::noteOrigin)
+   };
+ private:
+   TypeOp *opcode;		///< Pointer to class providing behavioral details of the operation
+@@ -214,6 +217,10 @@ public:
+   bool isIndirectSource(void) const { return ((flags&PcodeOp::indirect_source)!=0); } ///< Return \b true if this causes an INDIRECT
+   bool isJumptableLookup(void) const { return ((addlflags&PcodeOp::jumptable_lookup)!=0); }	///< SaturnExplorer: did this LOAD read a recovered switch's table
+   void setJumptableLookup(void) { addlflags |= PcodeOp::jumptable_lookup; }	///< SaturnExplorer: mark the LOAD that read a recovered switch's table
++  bool isFoldedStore(void) const { return ((addlflags&PcodeOp::folded_store)!=0); }	///< SaturnExplorer (0101): is this a flow STORE folded into a COPY
++  void setFoldedStore(void) const { addlflags |= PcodeOp::folded_store; }	///< SaturnExplorer (0101): mark a flow STORE folded into a COPY
++  bool isStoreOrigin(void) const { return ((addlflags&PcodeOp::store_origin)!=0); }	///< SaturnExplorer (0101): does this op stand for a folded STORE
++  void setStoreOrigin(void) const { addlflags |= PcodeOp::store_origin; }	///< SaturnExplorer (0101): mark an op that stands for a folded STORE
+   bool isFrameFold(void) const { return ((addlflags&PcodeOp::frame_fold)!=0); }	///< SaturnExplorer (0068): is this a flow LOAD or STORE folded into the stack frame
+   void setFrameFold(void) const { addlflags |= PcodeOp::frame_fold; }	///< SaturnExplorer (0068): mark a flow LOAD or STORE folded into the stack frame
+   bool isFrameFoldRead(void) const { return ((addlflags&PcodeOp::frame_fold_read)!=0); }	///< SaturnExplorer (0068): has the value it stored or loaded been read
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/subflow.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/subflow.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/subflow.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/subflow.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: an input replaced by a temporary that an operation still reads is read extended from the logical input (patches/0033-engine-printed-value-fixes.patch).
+  * Modified for SaturnExplorer: a sign-extended sub-variable is not shifted by an amount its constant cannot hold (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
+  * Modified for SaturnExplorer: a COPY folded into the frame that is split into pieces is no write gone unread (patches/0072-engine-frame-chains-and-save-slots.patch).
++ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
+  */
+ #include "subflow.hh"
+ #include "funcdata.hh"
+@@ -1465,6 +1466,7 @@ void SubvariableFlow::doReplacement(void)
+   // Define all the outputs first
+   for(iter=oplist.begin();iter!=oplist.end();++iter) {
+     PcodeOp *newop = fd->newOp((*iter).numparams,(*iter).op->getAddr());
++    fd->noteOrigin(newop,(*iter).op,5);	// SaturnExplorer (0101): the op this one replaces
+     (*iter).replacement = newop;
+     fd->opSetOpcode(newop,(*iter).opc);
+     ReplaceVarnode *rout = (*iter).output;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/transform.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/transform.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/transform.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/transform.cc
+@@ -12,6 +12,7 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
+  */
+ #include "transform.hh"
+ #include "funcdata.hh"
+@@ -236,6 +237,7 @@ void TransformOp::createReplacement(Funcdata *fd)
+   }
+   else {
+     replacement = fd->newOp(input.size(),op->getAddr());
++    fd->noteOrigin(replacement,op,5);	// SaturnExplorer (0101): the op this one replaces
+     fd->opSetOpcode(replacement, opc);
+     if (output != (TransformVar *)0)
+       output->createReplacement(fd);

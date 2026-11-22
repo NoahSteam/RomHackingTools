@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
  * Modified for SaturnExplorer: the multiply of a division term that is wider than its width is flagged (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
  * Modified for SaturnExplorer: a LOAD or STORE folded into the stack frame is flagged, and so is its value being read (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
  */
 /// \file op.hh
 /// \brief The PcodeOp and PcodeOpBank classes
@@ -128,7 +129,9 @@ public:
     jumptable_lookup = 0x2000,	///< SaturnExplorer: the LOAD that read a recovered switch's table (the switch now stands for it)
     div_product_wide = 0x4000,	///< SaturnExplorer: the INT_MULT of a division term (RuleDivTermAdd, RuleDivTermAdd2) whose exact product is wider than the multiply
     frame_fold = 0x8000,	///< SaturnExplorer (0068): a flow LOAD or STORE that RuleLoadVarnode or RuleStoreVarnode made a COPY of a stack Varnode
-    frame_fold_read = 0x10000	///< SaturnExplorer (0068): ...whose value an op that stays was given in another form (Funcdata::noteFrameFoldForwarded)
+    frame_fold_read = 0x10000,	///< SaturnExplorer (0068): ...whose value an op that stays was given in another form (Funcdata::noteFrameFoldForwarded)
+    folded_store = 0x20000,	///< SaturnExplorer (0101): a flow STORE that RuleStoreVarnode made a COPY of a Varnode, whatever that now writes
+    store_origin = 0x40000	///< SaturnExplorer (0101): an op that stands for a folded STORE, or for an op that does (Funcdata::noteOrigin)
   };
 private:
   TypeOp *opcode;		///< Pointer to class providing behavioral details of the operation
@@ -214,6 +217,10 @@ public:
   bool isIndirectSource(void) const { return ((flags&PcodeOp::indirect_source)!=0); } ///< Return \b true if this causes an INDIRECT
   bool isJumptableLookup(void) const { return ((addlflags&PcodeOp::jumptable_lookup)!=0); }	///< SaturnExplorer: did this LOAD read a recovered switch's table
   void setJumptableLookup(void) { addlflags |= PcodeOp::jumptable_lookup; }	///< SaturnExplorer: mark the LOAD that read a recovered switch's table
+  bool isFoldedStore(void) const { return ((addlflags&PcodeOp::folded_store)!=0); }	///< SaturnExplorer (0101): is this a flow STORE folded into a COPY
+  void setFoldedStore(void) const { addlflags |= PcodeOp::folded_store; }	///< SaturnExplorer (0101): mark a flow STORE folded into a COPY
+  bool isStoreOrigin(void) const { return ((addlflags&PcodeOp::store_origin)!=0); }	///< SaturnExplorer (0101): does this op stand for a folded STORE
+  void setStoreOrigin(void) const { addlflags |= PcodeOp::store_origin; }	///< SaturnExplorer (0101): mark an op that stands for a folded STORE
   bool isFrameFold(void) const { return ((addlflags&PcodeOp::frame_fold)!=0); }	///< SaturnExplorer (0068): is this a flow LOAD or STORE folded into the stack frame
   void setFrameFold(void) const { addlflags |= PcodeOp::frame_fold; }	///< SaturnExplorer (0068): mark a flow LOAD or STORE folded into the stack frame
   bool isFrameFoldRead(void) const { return ((addlflags&PcodeOp::frame_fold_read)!=0); }	///< SaturnExplorer (0068): has the value it stored or loaded been read
