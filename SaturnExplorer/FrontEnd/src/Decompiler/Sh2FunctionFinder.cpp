@@ -297,15 +297,17 @@ bool DecodesAsCode(const MemorySnapshot& snap, uint32_t c)
 // (what a compiler opens a function with), three instructions that decode, and flow to the address. Used when what
 // follows the scan's rts is not code (strings, a table) or never reaches 'a': the function before the address may then
 // end in a loop or a call that does not return, so no rts or tail jump marks where it stops, and the prologue is the
-// entry. A prologue in the middle of a function does not reach 'a' unless the function does.
-bool PrologueReaching(const MemorySnapshot& snap, uint32_t from, uint32_t a, uint32_t& found)
+// entry. A prologue in the middle of a function does not reach 'a' unless the function does. A word some PC-relative load
+// reads is a literal, not a prologue, however it decodes: a constant such as 0x2F866EF3 reads as a push and can flow on
+// into the real function after the pool, which would put the entry inside the pool.
+bool PrologueReaching(const MemorySnapshot& snap, uint32_t from, uint32_t a, uint32_t floor, uint32_t& found)
 {
     for (uint32_t q = from; q <= a; q += 2)
     {
         uint16_t w = 0;
         if (!snap.ReadU16(q, w)) break;
         const bool prologue = (w & 0xFF0Fu) == 0x2F06u || w == 0x4F22u;
-        if (prologue && DecodesAsCode(snap, q) && Reaches(snap, q, a) == Reach::Yes)
+        if (prologue && !LiteralWord(snap, q, floor) && DecodesAsCode(snap, q) && Reaches(snap, q, a) == Reach::Yes)
         {
             found = q;
             return true;
@@ -367,7 +369,7 @@ bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry,
     if (!DecodesAsCode(snap, c))
     {
         uint32_t pe = 0;
-        if (PrologueReaching(snap, p + 4, a, pe))
+        if (PrologueReaching(snap, p + 4, a, floor, pe))
         {
             entry = pe;
             if (doubt)
@@ -402,7 +404,7 @@ bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry,
             moved = true;
         }
         uint32_t pe = 0;
-        if (!moved && PrologueReaching(snap, c, a, pe))
+        if (!moved && PrologueReaching(snap, c, a, floor, pe))
         {
             d = "the code after the rts at " + Hex8(p) + " never reaches " + Hex8(a) +
                 "; the entry is the first function prologue after it whose code does";

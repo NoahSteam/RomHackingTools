@@ -338,6 +338,30 @@ void TestAfterEndlessLoop()
     CHECK(!FindFunctionContaining(*s, text + 0x12, none).ok);
 }
 
+// A8-58 review: a literal that reads as a push is not a prologue. mov.l @(4,PC),r1 loads 0x2F866EF3 at 0x06008008,
+// which decodes as push r8 ; mov r15,r14 ; add #1,r4 and flows on into the real function at 0x06008010. Before the
+// fix the prologue rung took the literal as the entry; the base finder refused both queries.
+void TestPrologueNotLiteral()
+{
+    std::vector<uint8_t> hw(0x9000, 0);
+    size_t off = 0x8000;
+    for (uint16_t w : { 0xD101, 0x000B, 0x0009, 0xFFFF, 0x2F86, 0x6EF3, 0x7401, 0x0009, 0x2FE6, 0x6EF3, 0x7401, 0x000B, 0x6EF6 })
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    auto s = dts::MakeSnapshot(hw);
+    FinderHints none;
+    const uint32_t literal = 0x06008008u, next = 0x06008010u;
+    EntryGuess g = FindFunctionContaining(*s, 0x06008014u, none);
+    std::printf("  06008014 -> %s %08X %s%s\n", g.ok ? "entry" : "fail", g.entry, g.why.c_str(), g.doubt.c_str());
+    CHECK(!g.ok || g.entry == next);
+    CHECK(g.entry != literal);
+    EntryGuess l = FindFunctionContaining(*s, literal, none);
+    std::printf("  06008008 -> %s %08X %s\n", l.ok ? "entry" : "fail", l.entry, l.why.c_str());
+    CHECK(!l.ok || l.entry != literal);
+}
+
 void TestScanFloor()
 {
     std::vector<uint8_t> hw;
@@ -405,6 +429,7 @@ int main(int argc, char** argv)
     RUN(TestScanFloor());
     RUN(TestBoundaries());
     RUN(TestAfterEndlessLoop());
+    RUN(TestPrologueNotLiteral());
     RUN(TestBoundsPersistence(scratch));
     dts::RemoveTree(scratch);
     return dts::Finish("Sh2FunctionFinderTests", start);
