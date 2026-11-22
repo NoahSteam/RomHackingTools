@@ -59,6 +59,14 @@ public:
         mCount["walkBound"] += c.walkBound;
         mCount["namedStoreLines"] += c.namedStoreLines;
         mCount["lostStoreLines"] += c.lostStoreLines;
+        mCount["lostNoProven"] += c.lostNoProven;
+        for (int k = 0; k < 8; ++k) mCount[std::string("lostByRoot.") + kOpClass[k]] += c.lostByRoot[k];
+        static const char* kRecord[6] = { "clone", "inline", "forwarded", "merged", "twin", "replaced" };
+        for (int k = 0; k < 6; ++k)
+        {
+            mCount[std::string("originRecords.") + kRecord[k]] += c.originRecords[k];
+            mCount[std::string("walkVia.") + (k == 0 ? "identity" : kRecord[k])] += c.walkVia[k];
+        }
         mCount["effectDue"] += c.effectDue;
         mCount["effectGiven"] += c.effectGiven;
         mCount["cloneEffects"] += c.cloneEffects;
@@ -72,6 +80,42 @@ public:
         mCount["statements"] += r.statements.size();
         mCount["lines"] += r.lines.size();
         if (c.cloneEffects) Sample("clone-effect", where, "a function with a clone-made effect op");
+
+        // (step 2) Store statements the model leaves with no proven Effect: what is left for the owner of step 2b to classify.
+        for (const Statement& st : r.statements)
+        {
+            if (st.kind != StatementKind::Store || st.firstLine >= r.lines.size()) continue;
+            bool proven = false;
+            for (uint32_t k = st.linkBegin; k < st.linkBegin + st.linkCount && k < r.links.size(); ++k)
+                proven = proven || (r.links[k].role == LinkRole::Effect && !(r.links[k].flags & kLinkCandidate));
+            if (!proven) Class("stmt.store-no-effect", where, r.lines[st.firstLine], st.firstLine, 0);
+        }
+
+        // (step 2) The store pins: for each line of a store statement, today's click target against the whole set of proven Effects. The new set
+        // holds the old target, or the difference is the old defect (the lowest address is a value or placement instruction, an address a pass
+        // added, no address) or the model's gap (no proven Effect: a store no record leads to).
+        for (size_t li = 0; li < r.lines.size(); ++li)
+        {
+            const Line& l = r.lines[li];
+            if (l.statement < 0 || static_cast<size_t>(l.statement) >= r.statements.size() || l.firstAddr == 0) continue;
+            const Statement& st = r.statements[static_cast<size_t>(l.statement)];
+            if (st.kind != StatementKind::Store || st.firstLine != li) continue;
+            std::set<uint32_t> effects;
+            std::string rel = "old-not-linked";
+            for (uint32_t k = st.linkBegin; k < st.linkBegin + st.linkCount && k < r.links.size(); ++k)
+            {
+                const InsnLink& link = r.links[k];
+                if (link.role == LinkRole::Effect && !(link.flags & kLinkCandidate)) effects.insert(link.addr);
+                if (link.addr == l.firstAddr)
+                    rel = link.role == LinkRole::Placement ? "old-is-placement" : link.role == LinkRole::Effect ? "old-is-candidate-effect"
+                        : (link.flags & kLinkCandidate) ? "old-is-candidate-value" : "old-is-value";
+            }
+            ++mCount["storeline.total"];
+            if (effects.count(l.firstAddr)) { ++mCount["storeline.old-in-effect-set"]; continue; }
+            if (effects.empty()) { ++mCount["storeline.no-effect"]; Class("store.no-effect", where, l, li, 0); continue; }
+            ++mCount["storeline.old-not-in-effect-set"];
+            Class(std::string("store.old-not-in-set/") + rel, where, l, li, *effects.begin());
+        }
 
         // The line: the first proven Effect of the statements that start on it against the lowest address of its tokens.
         for (size_t li = 0; li < r.lines.size(); ++li)

@@ -4621,6 +4621,10 @@ uint32_t InstructionOf(const ghidra::AccessRecord& rec)
 {
     return static_cast<uint32_t>(rec.pc.getOffset()) + (rec.slot ? 2u : 0u);
 }
+uint32_t InstructionOf(const ghidra::OriginRecord& rec)
+{
+    return static_cast<uint32_t>(rec.pc.getOffset()) + (rec.slot ? 2u : 0u);
+}
 // An address through any mirror as the canonical one (CanonicalAddress), or itself
 uint32_t CanonicalOf(uint32_t a)
 {
@@ -11866,11 +11870,23 @@ void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperat
     size_t flowTotal = 0;
     for (const auto& ops : flow.blockOps) flowTotal += ops.size();
     if (flowTotal > 20000) ++census.overCap;
+    // Patch 0100's clones (kinds 0 and 1) say which op an op copies; patch 0101's records (kinds 2 to 5) say which ops an op stands for:
+    // a store's value it was given in place of the store's (2), the stores it was merged from (3), the duplicate it replaced (4), the op it was made in place of (5).
     std::map<uintm, const OriginRecord*> cloneOf;
+    std::map<uintm, std::vector<const OriginRecord*>> standsFor;
     for (const OriginRecord& rec : fd.getOriginRecords())
     {
-        cloneOf[rec.survivor] = &rec;
+        if (rec.kind >= 2)
+        {
+            // (a rule that runs again on the same ops records the same pair again: once is what the host reads)
+            std::vector<const OriginRecord*>& v = standsFor[rec.survivor];
+            bool known = false;
+            for (const OriginRecord* o : v) known = known || (o->origin == rec.origin && o->kind == rec.kind);
+            if (!known) v.push_back(&rec);
+        }
+        else cloneOf[rec.survivor] = &rec;
         if (rec.kind == 1) ++census.inlineClones;
+        if (rec.kind < 6) ++census.originRecords[rec.kind];
     }
     // The flow STOREs the engine folded to a COPY that survives say so by their time (AccessRecord, patch 0017).
     std::set<uintm> foldedStores;
@@ -11878,8 +11894,7 @@ void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperat
         if (rec.store && rec.fate == fate_folded_ordinary) foldedStores.insert(rec.time);
 
     struct Id { int origin; uintm root; };
-    const auto identify = [&](const PcodeOp* op) {
-        uintm t = op->getTime();
+    const auto identifyTime = [&](uintm t) {
         bool cloned = false;
         for (int hop = 0; hop < 256; ++hop)
         {
@@ -11893,6 +11908,7 @@ void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperat
         id.origin = t >= flowOps ? kOpEngine : cloned ? kOpClone : kOpFlow;
         return id;
     };
+    const auto identify = [&](const PcodeOp* op) { return identifyTime(op->getTime()); };
     // An effect by op-code: whatever the op's time, it is the instruction's own.
     const auto carrier = [&](const PcodeOp* o) {
         switch (o->code())
@@ -11911,30 +11927,128 @@ void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperat
     for (const auto& kv : printed)
         ++census.ops[identify(kv.first).origin][OpClassOf(fd, kv.first)];
 
-    // The bounded walk the census asks about (section 3, "Stores"): from an engine-made copy of a memory variable, backwards to the folded
-    // stores whose value it shows again and, failing that, forwards to the store that follows it. Step 2 builds links from it; here it only
-    // counts what it finds. At most 64 ops and 8 stores.
-    struct Walk { int proven = 0, candidate = 0, ops = 0; bool bound = false, miss = false; std::set<const Varnode*> seen; };
-    const std::function<void(const Varnode*, Walk&)> back = [&](const Varnode* vn, Walk& w) {
-        if (w.bound || !w.seen.insert(vn).second) return;   // (a loop's join feeds itself)
-        if (++w.ops > 64) { w.bound = true; return; }
-        if (!vn->isWritten()) { w.miss = true; return; }
-        const PcodeOp* d = vn->getDef();
-        if (d->code() == CPUI_COPY && foldedStores.count(identify(d).root))
+    // The bounded walk of section 3, "Stores" (step 2 builds links from it): from an engine-made op that writes memory, backwards through the
+    // edges that keep the displayed bytes (a COPY of the same storage, an INDIRECT's pass-through, a SUBPIECE, a PIECE, a MULTIEQUAL) to the
+    // stores whose value it shows again; and, failing that, forwards to the store that follows it. A store is found four ways: an op on the path
+    // is itself the folded COPY (its time is a flow op's, or a clone's); a record of patch 0101 says that COPY's value was forwarded into an
+    // op on the path (2), the op was made from two stores (3) or in place of the store or of an op that stood for it (5), the records chaining
+    // through the ops between; a record names an op of an instruction the flow made, and that instruction's one store into these bytes is the
+    // one shown; or (forwards) a folded COPY reads the value. Every edge a proven link crosses keeps the bytes; arithmetic, a conversion or a
+    // load ends the path, and a value read again through it is a candidate. At most 64 ops, 64 records and 8 stores.
+    struct Found { uint32_t insn; bool partial, candidate, ahead; uint32_t via; };
+    struct Walk
+    {
+        std::vector<Found> found;
+        int ops = 0, records = 0, matched = 0;   // (matched: the stores records led to, a store already found again included)
+        bool bound = false, miss = false;
+        std::set<const void*> seen;
+        std::set<uintm> expanded;   // the ops whose records were read (a record can lead back to an op already read)
+        uint32_t bytes = 0;   // what the statement shows
+        const AddrSpace* space = nullptr;
+        uintb offset = 0;     // ...and where
+    };
+    std::map<uintm, const AccessRecord*> foldedAt;
+    for (const AccessRecord& rec : fd.getAccessFates())
+        if (rec.store && rec.fate == fate_folded_ordinary) foldedAt[rec.time] = &rec;
+    // The stores each instruction makes, by the storage they write (an access whose address is known: a variable, a frame word).
+    std::map<uint32_t, std::vector<const AccessRecord*>> storesAt;
+    for (const AccessRecord& rec : fd.getAccessFates())
+        if (rec.store && rec.size > 0) storesAt[InstructionOf(rec)].push_back(&rec);
+    const auto addFound = [&](Walk& w, uint32_t insn, uint32_t size, bool candidate, bool ahead, uint32_t via) {
+        const uint32_t canonical = CanonicalOf(insn);
+        ++w.matched;
+        for (Found& f : w.found)
+            if (f.insn == canonical)
+            {
+                f.candidate = f.candidate && candidate;
+                return;
+            }
+        if (w.found.size() >= 8) { w.bound = true; return; }
+        Found f = { canonical, size < w.bytes, candidate, ahead, via };
+        w.found.push_back(f);
+    };
+    // The stores a record on this op (patch 0101) stands for: a folded COPY whose value was forwarded into it, the STORE a merge took, or
+    // another op a record stands for in turn.
+    const std::function<void(uintm, int, Walk&, bool)> originStores = [&](uintm t, int depth, Walk& w, bool ok) {
+        const auto rs = standsFor.find(t);
+        if (rs == standsFor.end() || depth > 8 || !w.expanded.insert(t).second) return;
+        for (const OriginRecord* rec : rs->second)
         {
-            if (++w.proven > 8) w.bound = true;
+            if (++w.records > 64) { w.bound = true; return; }
+            if (rec->kind == 4) continue;   // (a twin is a computation, not a store)
+            const Id oid = identifyTime(rec->origin);
+            if (oid.origin != kOpEngine && (rec->kind == 3 || rec->code == CPUI_STORE || foldedStores.count(oid.root)))   // (a flow STORE that no rule has folded is a store too)
+                addFound(w, InstructionOf(*rec), rec->kind == 3 ? 0u : static_cast<uint32_t>(rec->size), !ok, false, rec->kind);
+            else if (oid.origin != kOpEngine)
+            {
+                // (the op was made for another op of an instruction the flow made, the read of the register a store stores, say: the store that
+                // instruction makes into these bytes is the one the statement shows)
+                const auto st = storesAt.find(InstructionOf(*rec));
+                if (st != storesAt.end() && rec->kind != 4)
+                {
+                    // (a store whose address the flow knew must overlap the bytes shown; one it did not -- through a pointer, a frame address not
+                    // yet resolved -- is the instruction's only store, which an instruction has at most one of)
+                    std::set<uintm> times;
+                    for (const AccessRecord* a : st->second) times.insert(a->time);
+                    for (const AccessRecord* a : st->second)
+                    {
+                        const bool known = !a->addr.isInvalid();
+                        if (known ? !(w.space && a->addr.getSpace() == w.space && a->addr.getOffset() < w.offset + w.bytes && w.offset < a->addr.getOffset() + a->size)
+                                  : times.size() != 1)
+                            continue;
+                        addFound(w, InstructionOf(*a), static_cast<uint32_t>(a->size), !ok, false, rec->kind);
+                    }
+                }
+            }
+            else
+                originStores(rec->origin, depth + 1, w, ok);
+        }
+    };
+    const std::function<void(const PcodeOp*, Walk&, bool)> visit = [&](const PcodeOp* d, Walk& w, bool ok) {
+        if (w.bound || !w.seen.insert(d).second) return;   // (a loop's join feeds itself)
+        if (++w.ops > 64) { w.bound = true; return; }
+        const auto fa = foldedAt.find(identify(d).root);
+        if (d->code() == CPUI_COPY && fa != foldedAt.end())
+        {
+            addFound(w, InstructionOf(*fa->second), static_cast<uint32_t>(fa->second->size), !ok, false, 0);
             return;
         }
+        const size_t before = w.found.size();
+        const int matchedBefore = w.matched;
+        originStores(d->getTime(), 0, w, ok);
+        const Id did = identify(d);
+        if (did.origin == kOpClone && did.root != d->getTime()) originStores(did.root, 0, w, ok);   // (a clone stands for what its original stood for)
+        const size_t covered = static_cast<size_t>(w.matched - matchedBefore);   // (the inputs a record accounts for are no miss: the value it forwarded has no definition any more)
+        // (an input nothing wrote that is memory is its value at the function's entry, which no store of the function made: the other bytes of a
+        // word one byte of which is stored; a register or a number it is given, which a record must account for)
+        const AddrSpace* data = fd.getArch()->getDefaultDataSpace();
+        size_t bare = 0;
+        for (int4 i = 0; i < d->numInput(); ++i)
+        {
+            const Varnode* in = d->getIn(i);
+            if (!in->isWritten() && !(in->getSpace() == data || in->getSpace()->getType() == IPTR_SPACEBASE)) ++bare;
+        }
+        const Varnode* out = d->getOut();
         switch (d->code())
         {
         case CPUI_COPY: case CPUI_INDIRECT:
-            if (d->getIn(0)->getAddr() == vn->getAddr() && d->getIn(0)->getSize() == vn->getSize()) back(d->getIn(0), w); else w.miss = true;
+            if (d->getIn(0)->isWritten() && d->getIn(0)->getAddr() == out->getAddr() && d->getIn(0)->getSize() == out->getSize()) visit(d->getIn(0)->getDef(), w, ok);
+            else if (covered == 0 && w.matched == 0) w.miss = true;
             break;
         case CPUI_MULTIEQUAL: case CPUI_PIECE:
-            for (int4 i = 0; i < d->numInput() && !w.bound; ++i) back(d->getIn(i), w);
+            for (int4 i = 0; i < d->numInput() && !w.bound; ++i)
+                if (d->getIn(i)->isWritten()) visit(d->getIn(i)->getDef(), w, ok);
+            if (bare > covered) w.miss = true;
             break;
-        case CPUI_SUBPIECE: back(d->getIn(0), w); break;
-        default: w.miss = true; break;
+        case CPUI_SUBPIECE:
+            if (d->getIn(0)->isWritten()) visit(d->getIn(0)->getDef(), w, ok);
+            else if (covered == 0 && w.matched == 0) w.miss = true;
+            break;
+        default:   // (arithmetic, a conversion or a load made the value: what the records found are what it was made from)
+            for (size_t k = before; k < w.found.size(); ++k)
+                if (w.found[k].via == 2) w.found[k].candidate = true;   // (a value read again, through a computation; a merged store or a replaced op is the op's own)
+            if (covered == 0 && w.matched == 0) w.miss = true;   // (a computation under a statement that already names its store is the value stored: its leaves are registers and loads)
+            break;
         }
     };
     const std::function<void(const Varnode*, Walk&, bool)> forward = [&](const Varnode* vn, Walk& w, bool crossed) {
@@ -11944,9 +12058,10 @@ void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperat
             if (++w.ops > 64) { w.bound = true; return; }
             const PcodeOp* use = *u;
             const Varnode* out = use->getOut();
-            if (use->code() == CPUI_COPY && foldedStores.count(identify(use).root))
+            const auto fa = foldedAt.find(identify(use).root);
+            if (use->code() == CPUI_COPY && fa != foldedAt.end())
             {
-                ++(crossed ? w.candidate : w.proven);   // (a store after a join may write another arm's value: a candidate)
+                addFound(w, InstructionOf(*fa->second), static_cast<uint32_t>(fa->second->size), crossed, true, 0);   // (a store after a join may write another arm's value: a candidate)
                 continue;
             }
             if (!out) continue;
@@ -11956,13 +12071,22 @@ void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperat
                 forward(out, w, crossed);
         }
     };
-    // 0 nothing, 1 candidates, 2 a proven store
-    const auto storeWalk = [&](const PcodeOp* root) {
-        Walk w;
-        if (root->code() == CPUI_COPY || root->code() == CPUI_INDIRECT) back(root->getIn(0), w);
-        if (w.proven == 0 && w.candidate == 0 && root->getOut() && !w.bound) forward(root->getOut(), w, false);
+    // 0 nothing, 1 candidates or some of the stores, 2 every store of the statement, proven
+    const auto storeWalk = [&](const PcodeOp* root, Walk& w) {
+        w.bytes = root->getOut() ? static_cast<uint32_t>(root->getOut()->getSize()) : 0;
+        if (root->getOut())
+        {
+            w.space = root->getOut()->getSpace();
+            w.offset = root->getOut()->getOffset();
+        }
+        visit(root, w, true);
+        bool anyProven = false;
+        for (const Found& f : w.found) anyProven = anyProven || !f.candidate;
+        if (!anyProven && root->getOut() && !w.bound) forward(root->getOut(), w, false);
         if (w.bound) ++census.walkBound;
-        const int found = w.bound ? (w.proven ? 1 : 0) : (w.proven && !w.miss) ? 2 : (w.proven || w.candidate) ? 1 : 0;
+        bool proven = false, candidate = false;
+        for (const Found& f : w.found) (f.candidate ? candidate : proven) = true;
+        const int found = w.bound ? (proven ? 1 : 0) : (proven && !w.miss) ? 2 : (proven || candidate) ? 1 : 0;
         ++(found == 2 ? census.walkProven : found == 1 ? census.walkCandidate : census.walkNone);
         return found;
     };
@@ -12029,6 +12153,7 @@ void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperat
     });
 
     std::vector<int> walkResult;   // by statement: 2 a proven store (a flow op's own, or the walk's), 1 candidates, 0 none
+    std::vector<uint8_t> walkAnyProven, walkRootClass;   // by statement: some proven store, and the printed root's op class
     for (const size_t gi : order)
     {
         const Group& g = groups[gi];
@@ -12085,6 +12210,36 @@ void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperat
             else
                 add(InstructionOf(root), LinkRole::Placement, 0, 0xFFFF);   // an op the engine made: where it put it, no more
         }
+        // (step 2) An engine-made statement that writes memory: the stores it shows again, from the walk. Each is an Effect at the store's
+        // instruction, behind the statement (a value shown again) or ahead of it (the store that follows), partial when it writes some of
+        // the displayed bytes, a candidate when the walk crossed an edge that may not keep them.
+        int walked = effect ? 2 : 0;
+        bool anyProven = effect;
+        if (st.kind == StatementKind::Store)
+        {
+            if (effect) ++census.storeFlow;
+            else if (root)
+            {
+                ++census.storeEngine;
+                Walk w;
+                walked = storeWalk(root, w);
+                for (const Found& f : w.found)
+                {
+                    add(f.insn, LinkRole::Effect,
+                        static_cast<uint8_t>((f.ahead ? kLinkAhead : kLinkBehind) | (f.partial ? kLinkPartial : 0) | (f.candidate ? kLinkCandidate : 0)), 0xFFFF);
+                    anyProven = anyProven || !f.candidate;
+                    if (!f.candidate && f.via < 6) ++census.walkVia[f.via];
+                }
+            }
+        }
+        // (a duplicate the engine replaced stood for the same computation at its instruction: a value link, by identity)
+        const auto twins = [&](const PcodeOp* o, size_t span) {
+            const auto rs = standsFor.find(o->getTime());
+            if (rs == standsFor.end()) return;
+            for (const OriginRecord* rec : rs->second)
+                if (rec->kind == 4 && identifyTime(rec->origin).origin != kOpEngine) add(InstructionOf(*rec), LinkRole::Value, 0, span);
+        };
+        if (root) twins(root, 0xFFFF);
         for (const auto& lt : g.tokens)
         {
             const PcodeOp* o = opOf(lt.first, lt.second);
@@ -12093,19 +12248,10 @@ void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperat
             const bool condition = st.kind == StatementKind::Branch && id.origin != kOpEngine && !carrier(o);
             add(InstructionOf(o), condition ? LinkRole::Condition : LinkRole::Value, id.origin == kOpEngine ? kLinkCandidate : 0,
                 lt.first == g.line ? lt.second : 0xFFFF);
+            twins(o, lt.first == g.line ? lt.second : 0xFFFF);
         }
         st.linkCount = static_cast<uint32_t>(r.links.size() - st.linkBegin);
         ++census.statements[static_cast<size_t>(st.kind)];
-        int walked = effect ? 2 : 0;
-        if (st.kind == StatementKind::Store)
-        {
-            if (effect) ++census.storeFlow;
-            else if (root)
-            {
-                ++census.storeEngine;
-                walked = storeWalk(root);
-            }
-        }
         if ((st.kind == StatementKind::Store || st.kind == StatementKind::Branch || st.kind == StatementKind::Call || st.kind == StatementKind::Return) &&
             root && (carrier(root) || rootId.origin != kOpEngine))
         {
@@ -12116,6 +12262,8 @@ void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperat
             if (proven == 1) ++census.effectGiven;
         }
         walkResult.push_back(walked);
+        walkAnyProven.push_back(anyProven ? 1 : 0);
+        walkRootClass.push_back(root ? static_cast<uint8_t>(OpClassOf(fd, root)) : 7);
         r.statements.push_back(st);
     }
     // The lines: each takes the first statement that starts on it (or runs onto it). Those that name a store today (the line's lowest address is
@@ -12132,6 +12280,11 @@ void BuildLinks(DecompileResult& r, const MarkupOps& markup, const PrintedOperat
         if (stores == flow.accessesByInsn.end() || stores->second.empty()) continue;
         ++census.namedStoreLines;
         if (walkResult[si] != 2) ++census.lostStoreLines;
+        if (!walkAnyProven[si])
+        {
+            ++census.lostNoProven;
+            ++census.lostByRoot[walkRootClass[si]];
+        }
     }
     for (size_t l = 0; l < r.lines.size(); ++l)
     {

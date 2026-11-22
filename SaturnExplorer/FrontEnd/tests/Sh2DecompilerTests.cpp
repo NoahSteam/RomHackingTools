@@ -20775,6 +20775,72 @@ void TestLinkModelStep1()
     }
 }
 
+// ---- Link model, step 2 (LINK_MODEL.md section 4): the bounded store walk and patch 0101's records ----
+// An engine-made statement that writes memory names the stores it shows through the records of what it stands for (a store's value forwarded
+// into it, the stores merged into it, an op made in place of one), never through its value. Each fixture is a statement step 1 left with no
+// proven store; the walk's links are an Effect at the store's instruction, partial when the store writes some of the displayed bytes.
+namespace
+{
+std::vector<uint32_t> StoreEffects(const DecompileResult& r, const char* lineText, uint8_t flags, bool* anyCandidate = nullptr)
+{
+    std::vector<uint32_t> at;
+    for (size_t li = 0; li < r.lines.size(); ++li)
+    {
+        if (r.lines[li].text.find(lineText) == std::string::npos || r.lines[li].statement < 0) continue;
+        const Statement& st = r.statements[static_cast<size_t>(r.lines[li].statement)];
+        if (st.kind != StatementKind::Store) continue;
+        for (uint32_t k = st.linkBegin; k < st.linkBegin + st.linkCount; ++k)
+        {
+            const InsnLink& l = r.links[k];
+            if (l.role != LinkRole::Effect) continue;
+            if (l.flags & kLinkCandidate)
+            {
+                if (anyCandidate) *anyCandidate = true;
+                continue;
+            }
+            if ((l.flags & flags) == flags) at.push_back(l.addr);
+        }
+    }
+    std::sort(at.begin(), at.end());
+    return at;
+}
+}  // namespace
+
+void TestLinkModelStep2()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 890000;
+    const auto run = [&](const CallFixture& f) {
+        auto snap = CallSnapshot(f, ++serial);
+        DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CheckLinkModel(r, snap, "step 2");
+        return r;
+    };
+    // A byte store and a word store into one mailbox word, `mov.w r0,@r7 ; ... ; mov.b r0,@r7`, which the engine folds into one constant:
+    // `xRam06001030 = 0x202;`, an op no instruction made. Its COPY of a constant took the value of both stores' COPYs.
+    {
+        const CallFixture f = { "link model 2: two stores into one constant", 0x06009000u,
+                                { 0xD608, 0xD709, 0xE304, 0x5051, 0x4008, 0x4310, 0x8BFB, 0xD707, 0xE002, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x4101, 0x2700, 0xC608,
+                                  0x000B, 0x0009, 0x0600, 0x1030, 0x1100, 0x00B4, 0x0600, 0x1030 } };
+        const DecompileResult r = run(f);
+        // (the byte store is found and is partial, one byte of the two shown; the word store at 0x06009012, which the line is addressed to
+        // and is the other byte, is not: step 2's walk finds the stores a record leads to, and no record leads to this one. A partial answer
+        // is not a proven one for the census, which counts this statement as left with a store missing)
+        const std::vector<uint32_t> at = StoreEffects(r, "xRam06001030 = 0x202;", kLinkPartial);
+        CHECK((at == std::vector<uint32_t>{ 0x0600901Cu }));
+        CHECK(r.linkCensus.originRecords[2] >= 1 || r.linkCensus.originRecords[5] >= 1);
+    }
+    // A test-and-set, a read-modify-write the engine widens (SubvariableFlow replaces the op): the store the line shows is the `tas.b`.
+    {
+        const CallFixture f = { "link model 2: a widened read-modify-write", 0x06053700u,
+                                { 0xD604, 0x461B, 0x0229, 0x6340, 0x6361, 0x461B, 0x0129, 0x000B, 0x0009, 0x0009, 0x0600, 0x220C } };
+        const DecompileResult r = run(f);
+        const std::vector<uint32_t> at = StoreEffects(r, "uRam0600220c = uRam0600220c | 0x8000;", 0);
+        CHECK((at == std::vector<uint32_t>{ 0x06053702u }));   // (the first `|=` line; the `tas.b` at 0x06053702 is the instruction that writes the byte)
+    }
+}
+
 int main(int argc, char** argv)
 {
     if (argc == 5 && std::string(argv[1]) == "--engine-oom")
@@ -20846,6 +20912,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Review24());
         RUN(TestArea7Round25());
         RUN(TestLinkModelStep1());
+        RUN(TestLinkModelStep2());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());
