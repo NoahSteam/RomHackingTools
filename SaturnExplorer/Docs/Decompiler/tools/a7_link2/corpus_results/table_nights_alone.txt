@@ -1,0 +1,71 @@
+## nights alone: 1550 functions, 88738 lines, 55356 statements, 102280 links
+
+Printed ops by origin and class (report only):
+| origin | STORE | CALL | BRANCH | RETURN | COPY | LOAD | HARDWARE | OTHER |
+|---|---|---|---|---|---|---|---|---|
+| flow | 10845 | 7719 | 7867 | 2871 | 5161 | 14012 | 0 | 42675 |
+| clone | 0 | 0 | 0 | 273 | 9 | 0 | 0 | 0 |
+| engine | 0 | 0 | 0 | 0 | 3503 | 0 | 813 | 14370 |
+
+Statements: None 405, Store 13083, Assign 20006, Branch 10597, Call 7699, Return 2909, Halt 235, Label 422
+Halt statements by type: baddata 235, halt 0, unimplemented 0, missing 0
+
+| Measure | Result | Threshold | Verdict |
+|---|---|---|---|
+| Store statements with a surviving flow op or folded COPY | 12975 of 13083 = 99.175% | go at 95% or more; 85 to 95% needs a per-class account and step 2b; below 85% rework section 3 | go |
+| Engine-made store statements: the bounded walk finds a store / candidates / nothing | 95 / 4 / 9 of 108 | report (feeds the next row) | - |
+| Lines that name a store today left with no proven store (candidates or nothing) / lines that name a store | 11 of 9137 = 0.120% | go at 2% or less; 2 to 10% requires step 2b; above 10% stop | go |
+| ...of those, the ones with no proven Effect at all | 7 of 9137 = 0.077% | report (the row above also counts a store found with another missing) | - |
+| Lines left with no proven Effect, by the printed op's class | COPY 7 | report | - |
+| Patch 0100/0101 records: clone / inline / forwarded / merged / twin / replaced | 1718 / 0 / 23614 / 0 / 366 / 44088 | report | - |
+| Proven stores the walk found: by identity / forwarded / merged / replaced | 4 / 81 / 0 / 143 | report | - |
+| Flow store, branch, call and return statements with exactly one proven Effect | 34180 of 34180 | every one | go |
+| Clone-made effect ops | 266 | non-zero confirms the Clone record | confirms |
+| Lines with more than one statement | 2130 | report | - |
+| Lines with an op token and no statement | 0 | report | - |
+| Walk bound hits (64 ops, 8 links) | 0 of 108 walks = 0.000% | under 0.1% | go |
+| Functions over the flow record's cap (20,000 ops) | 0 | report | - |
+| Assertions: opsEnd past flowOps / inlined clones | 0 / 0 | both zero | go |
+| Time building the links against the decompilation | 81.1 ms of 85755.8 ms = 0.095% | within 5% of today | go |
+
+Lines against today's click target (firstAddr): 46646 lines have a proven Effect, 29923 agree, 16723 disagree (35.851%)
+Address sets (the line's token addresses against its links): equal 49720, old has more 573, new has more 1482, different 254
+The way back: 73029 instructions with an exact answer today; 694 unlinked in the model, 69052 agree on the first line, 3283 disagree
+
+Disagreements by class:
+- line.disagree/Branch/old-is-value/below: 7156
+- line.no-effect/Assign: 4962
+- line.disagree/Store/old-is-value/below: 3254
+- store.old-not-in-set/old-is-value: 3254
+- line.disagree/Assign/old-is-value/below: 1888
+- insn.disagree/new-effect/old-first-linked: 1553
+- line.disagree/Assign/old-is-candidate-value/below: 1055
+- insn.disagree/new-value/old-first-unlinked: 992
+- line.disagree/Store/old-is-candidate-value/below: 663
+- store.old-not-in-set/old-is-candidate-value: 662
+- line.disagree/Call/old-is-value/below: 575
+- line.disagree/Branch/old-is-candidate-value/below: 560
+- line.disagree/Return/old-is-value/below: 451
+- line.disagree/Call/old-is-candidate-value/below: 392
+- line.disagree/Branch/old-not-linked/below: 358
+- insn.disagree/new-value/old-first-linked: 249
+- insn.disagree/new-effect/old-first-unlinked: 247
+- line.no-effect/Halt: 235
+- insn.disagree/new-condition/old-first-linked: 123
+- insn.disagree/new-condition/old-first-unlinked: 111
+- line.disagree/Return/old-is-candidate-value/below: 102
+- line.disagree/Branch/old-is-other-effect/below: 73
+- line.disagree/Store/old-is-other-effect/below: 64
+- line.disagree/Store/old-not-linked/below: 38
+- line.disagree/Branch/old-is-placement/below: 33
+- line.disagree/Assign/old-not-linked/below: 28
+- line.disagree/Return/old-not-linked/below: 27
+- line.no-effect/None: 21
+- line.no-effect/Store: 9
+- stmt.store-no-effect: 9
+- store.no-effect: 9
+- insn.disagree/new-placement/old-first-linked: 8
+- store.old-not-in-set/old-not-linked: 5
+- line.disagree/Call/old-not-linked/below: 4
+- line.disagree/Assign/old-not-linked/above: 1
+- line.disagree/Store/old-is-candidate-value/above: 1

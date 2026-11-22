@@ -1,0 +1,21 @@
+Area 7 link model step 2 census on the game corpus: run log.
+Commit b32a2a23 (backup/master-latest). Build: Release, MSVC (Visual Studio 17 2022), SaturnExplorerSh2DecompilerTests.exe, Windows 11, Git Bash.
+corpus_census_selftest.sh: two ok lines.
+Images: 1 MiB high work RAM (WorkRAMH, swapped to big-endian) from Mednafen savestates made in Saturn Explorer:
+  sakura2 = Sakura Taisen 2 (Japan), disc 1; nights = Christmas NiGHTS into Dreams (USA).
+Tables are census_merge.py --subtract output (the game's own figures, fixtures removed); census_base is the fixtures alone.
+$T = SaturnExplorer/Docs/Decompiler/tools, $B = the test binary, $OUT = a local scratch dir. SE_GAME_LEND left unset.
+
+run | command | wall time | rc
+base (fixtures) | corpus_census.sh's first step | 332 s | 0
+sakura2 alone | bash $T/a7_link2/corpus_census.sh $B <sakura2 image> $OUT sakura2 | 863 s | 0
+sakura2 lent | (same run) | 1152 s | 124 (default 1150 s timeout)
+sakura2 lent, retry | SE_CORPUS_TIMEOUT=14400 bash $T/a7_link1/corpus.sh $B <sakura2 image> $OUT/lent sakura2_lend lend (corpus_census.sh's lent step) | 2804 s | 0
+nights alone | SE_CORPUS_TIMEOUT=14400 bash $T/a7_link2/corpus_census.sh $B <nights image> $OUT nights | 3950 s | 1
+nights lent | (same run) | 14402 s | 124 (timeout)
+
+nights alone rc 1: two CHECKs in TestGameCode, as in step 1's run of this image: mapping.Violations() == 0 (A7-11: 4 of 176 lines
+that assign a frame local at a load or a call name none of the folded stores) and dropped == 0 (20 accesses dropped against the
+reference run, 23 missing and said). Its census was written and is here.
+nights lent: the alone pass completed (1550 functions), then TestGameLending ran until the timeout with no output and no lent dump.
+No census, so no files for it.
