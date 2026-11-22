@@ -76,7 +76,9 @@ live endpoint (see "What you are shipping, security-wise") since users did not c
 **Windows:** [`install.bat`](../install.bat) (→ [`install.py`](install.py)) does all of the
 below automatically — builds Saturn Explorer, downloads a pinned emulator, patches it, and
 builds it, installing any missing toolchain (git, CMake, MSVC, MSYS2) via `winget` with your
-consent. `install.bat --dry-run` previews the plan. See [`INSTALL.md`](INSTALL.md).
+consent. `install.bat --dry-run` previews the plan. On macOS and Linux, [`install.sh`](../install.sh)
+does the same with Homebrew or the distribution's package manager (apt-get, dnf, pacman, zypper).
+See [`INSTALL.md`](INSTALL.md).
 
 The manual steps it wraps:
 
@@ -104,7 +106,7 @@ Each licence asks that its notice travel with the binary, so the build puts ever
 
 | Build | Where the texts land |
 |---|---|
-| CMake, Windows / Linux | `licenses/<component>/` beside the executable |
+| CMake, Windows / Linux | `licenses/<component>/` beside the executable (the Linux release adds `licenses/bundled-libraries/<package>/copyright` for each shared library it carries) |
 | `build-release-msbuild.bat` | `x64\Release\licenses\<component>\` |
 | macOS `.app` / DMG | `SaturnExplorer.app/Contents/Resources/licenses/<component>/` (sealed by the signature) |
 
@@ -139,8 +141,8 @@ Saturn core only) beside it, the licences, and the GPL source offer.
 |---|---|
 | `Integration/Mednafen/UPSTREAM.json` | The Mednafen base: upstream version and tarball hash, and the fork commit `install.py` pins. Edit it with any fork bump. |
 | `Integration/make_source_offer.py` | Writes `SOURCE.txt` and `mednafen-se-source.tar.xz` (the fork base with `apply.py` already run on it), from `UPSTREAM.json` and the same patch arguments and defines `install.py` builds with. |
-| `Integration/package_release.py` | Lays out the archive from the two existing builds, relinks Mednafen's dylibs into `mednafen-se/lib` (macOS), merges the licences, smoke-tests the result, then makes the `.dmg` / `.zip`. |
-| `.github/workflows/saturn-explorer-release.yml` | Runs the above on both platforms for a `v*` tag and leaves a DRAFT GitHub release. |
+| `Integration/package_release.py` | Lays out the archive from the two existing builds, relinks Mednafen's dylibs into `mednafen-se/lib` (macOS) or both programs' shared libraries into `lib/` folders (Linux), merges the licences, smoke-tests the result, then makes the `.dmg` / `.zip` / `.tar.gz`. |
+| `.github/workflows/saturn-explorer-release.yml` | Runs the above on macOS, Windows and Linux for a `v*` tag and leaves a DRAFT GitHub release. |
 | `make-release.bat` | Windows, on your own machine: `install.py --yes --mednafen-saturn-only`, then `package_release.py`, giving `dist\SaturnExplorer-<label>-windows.zip` (label = the argument, else the short commit hash). For trying a build; a release for others should come from the workflow, whose clean runner cannot carry over a stale DLL or setting from a developer's machine. |
 
 `mednafen-se/` sits beside the app (beside the `.app` on macOS) because a signed bundle cannot be
@@ -157,6 +159,18 @@ that page (for example Japanese on a Western-European Windows) hides the bundled
 fixed); an accented Latin-1 name is found but its path is drawn garbled. Windows packaging was checked on a real machine and on a
 `windows-latest` runner (workflow_dispatch, label only, no tag). The macOS job was not re-run after its
 Mednafen bootstrap was changed (`Docs/MacReleaseSteps.md`).
+
+On Linux the archive is `SaturnExplorer-<ref>-linux.tar.gz` (a tarball keeps the executable bits), built on
+`ubuntu-22.04` for x86_64, so it needs glibc 2.35 or newer. It holds `SaturnExplorerFrontEnd` with `lib/` beside it,
+`mednafen-se/mednafen` with its own `lib/`, and `licenses/`. Each program's runpath points at its `lib/`
+(`patchelf`). The libraries every desktop has are not copied, because they must match the user's system:
+glibc, the C++ runtime, OpenGL, X11/Wayland, ALSA/PulseAudio (`LINUX_SYSTEM_LIB` in `package_release.py`).
+The smoke test fails if any other library resolves outside the package. Each bundled library's Debian package
+gives its licence (its `copyright` file goes into `licenses/bundled-libraries/<package>/`) and its source package.
+`apt-get source --print-uris` names that source's files and checksums, and the copyleft ones (libFLAC's package
+says GPL/LGPL) are downloaded into `third-party-source/`. libcurl is not shipped: the update check loads the user's own copy.
+File dialogs use zenity or kdialog, which the user must have. The Linux archive is not signed and has not yet been tried
+on a distribution other than the Ubuntu that built it.
 
 The in-app **Check for Updates** compares the build's release tag with GitHub's latest published release
 (`releases/latest`) and offers the release page. The tag is baked in at build time

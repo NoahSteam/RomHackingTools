@@ -2081,6 +2081,7 @@ else()
         target_include_directories(SaturnExplorerFrontEnd PRIVATE
             FrontEnd/src
             FrontEnd/Platforms/Web
+            FrontEnd/Platforms/Linux   # SaturnExplorerIcon.h (the include is skipped on macOS)
             ${SE_IMGUI_DIR}
             ${SE_IMGUI_DIR}/backends
             ${SDL2_INCLUDE_DIRS}
@@ -2100,7 +2101,13 @@ else()
         # Native desktop (Linux/macOS) HttpsGet uses libcurl when available (macOS ships
         # it). Without it the update check degrades to "unsupported" — no hard dependency.
         find_package(CURL QUIET)
-        if(CURL_FOUND)
+        if(CURL_FOUND AND NOT APPLE)
+            # Linux: compile against the headers, load the user's libcurl.so.4 at run time (see
+            # LoadCurl in WebPlatform.cpp), so a release never ships the build machine's libcurl.
+            target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_HAVE_CURL SE_CURL_DLOPEN)
+            target_include_directories(SaturnExplorerFrontEnd PRIVATE ${CURL_INCLUDE_DIRS})
+            target_link_libraries(SaturnExplorerFrontEnd PRIVATE ${CMAKE_DL_LIBS})
+        elseif(CURL_FOUND)
             target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_HAVE_CURL)
             target_link_libraries(SaturnExplorerFrontEnd PRIVATE CURL::libcurl)
         else()

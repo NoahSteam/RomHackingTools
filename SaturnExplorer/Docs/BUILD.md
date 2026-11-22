@@ -44,7 +44,7 @@ cmake --build build
 CMake picks a default generator (Ninja or Makefiles). On non-Windows platforms the
 **Core** and **savestate driver** libraries always build; the **FrontEnd** app builds too
 when SDL2 and OpenGL development packages are present (e.g. `apt install libsdl2-dev
-libgl1-mesa-dev`), otherwise it is skipped with a message. This native SDL2 build runs the
+libgl-dev`, plus `libcurl4-openssl-dev` for the update check), otherwise it is skipped with a message. This native SDL2 build runs the
 same code as the web app, so it's a convenient way to try the frontend without a browser.
 It also accepts a savestate path on the command line: `./build/bin/SaturnExplorerFrontEnd
 state.yss`.
@@ -83,6 +83,28 @@ xcrun notarytool submit dist/SaturnExplorer-macos.dmg \
       --apple-id you@example.com --team-id TEAMID --password <app-specific-pw> --wait
 xcrun stapler staple dist/SaturnExplorer-macos.dmg
 ```
+
+### Linux packaging — a self-contained .tar.gz
+Linux has no bundle step in CMake; `Integration/package_release.py` does it when it assembles the
+release archive. It copies every shared library the program and Mednafen load into a `lib/` beside
+each (SDL2, FLAC, libogg, libdecor, libsamplerate on Ubuntu) and sets their runpaths with `patchelf`.
+It leaves out the libraries every desktop has (glibc, the C++ runtime, OpenGL, X11/Wayland, ALSA/PulseAudio;
+`LINUX_SYSTEM_LIB` in that script). libcurl is never linked on Linux: the update check loads the user's
+`libcurl.so.4` at run time and reports "not available" without it, so the build only needs the
+`libcurl4-openssl-dev` headers. On Debian/Ubuntu:
+```
+sudo apt install ninja-build patchelf libsdl2-dev libgl-dev libcurl4-openssl-dev \
+                 libflac-dev libasound2-dev autoconf automake libtool gettext pkg-config
+python3 Integration/install.py --yes --no-se --mednafen-saturn-only
+cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DSE_DEMO_MENU=OFF
+cmake --build build-release --target SaturnExplorerFrontEnd
+python3 Integration/package_release.py --se-app build-release/bin --mednafen _emu/mednafen/src \
+        --ref local --out dist --allow-mismatch     # --allow-mismatch: a local trial only
+```
+The libraries' Debian source is looked up through apt, so enable `deb-src` entries first or the
+copyleft ones are reported as having no source. The release workflow builds on Ubuntu 22.04, which
+sets the archive's minimum glibc (2.35). The window icon is generated from the Windows `.ico` by
+`FrontEnd/Platforms/Linux/make_icon_header.py`. X11 shows it; Wayland ignores it.
 
 ### Web (browser) — Emscripten + WebGL2
 Install the [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html),

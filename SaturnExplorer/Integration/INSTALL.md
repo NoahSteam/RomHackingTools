@@ -1,4 +1,4 @@
-# One-command installer (Windows)
+# One-command installer (Windows, macOS, Linux)
 
 `install.bat` (→ `Integration/install.py`) sets up Saturn Explorer **and** a patched
 Saturn emulator in one go: it builds Saturn Explorer, downloads a *pristine* upstream
@@ -68,6 +68,13 @@ The script checks for these and offers to `winget install` any that are missing:
 
 If `winget` isn't available, the script names each missing tool and stops so you can
 install it and re-run.
+
+**macOS and Linux:** run `./install.sh` (same flags). macOS installs what is missing with Homebrew
+(`cmake`, `autoconf`, `automake`, `libtool`, `pkg-config`, `sdl2`, `flac`; Xcode's command-line tools must
+already be there). Linux checks the compiler, git, CMake, pkg-config and autotools by name and SDL2, OpenGL,
+libcurl, FLAC and ALSA through `pkg-config`, then offers to install the missing ones with `sudo` and the first
+of `apt-get`, `dnf`, `pacman` or `zypper` it finds (package lists: `LINUX_PACKAGE_MANAGERS` in `install.py`).
+On Linux, Saturn Explorer is built as `build/bin/SaturnExplorerFrontEnd` and Mednafen as `_emu/mednafen/src/mednafen`.
 
 ## Two things no installer can do for you
 - **Saturn BIOS + disc images.** A Saturn emulator needs a copyrighted BIOS. It is

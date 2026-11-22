@@ -4,7 +4,9 @@
     canned `pacman` output, since no MSYS2 is available on the machines the suite runs on;
   * that a shipped copyleft library whose source cannot be found stops the packaging;
   * that a credential in the git remote never reaches SOURCE.txt;
-  * (macOS) that a dylib reached through @rpath is copied in, relinked and still runs after the original is gone.
+  * (macOS) that a dylib reached through @rpath is copied in, relinked and still runs after the original is gone;
+  * the Linux rules: which libraries the system provides, apt's source listing and Debian copyright parsing, and
+    (Linux) that a library is copied in, found through the new runpath and still loads after the original is gone.
 Usage: check_package_release.py"""
 import os
 import shutil
@@ -327,10 +329,31 @@ for remote, want in (("http://user:FAKE_TOKEN@server.example/org/repo.git", "htt
     check(got == want and "FAKE_TOKEN" not in got and "token" not in got, f"remote {remote!r} -> {got!r}")
 
 # --- the Windows archive's README says it is unsigned and how to check it; the macOS one does not say that
-win_readme, mac_readme = pr.readme_top("v1.0", False), pr.readme_top("v1.0", True)
+win_readme, mac_readme, linux_readme = (pr.readme_top("v1.0", p) for p in ("windows", "macos", "linux"))
 check("not code-signed" in win_readme and "SmartScreen" in win_readme and "SHA256SUMS-windows.txt" in win_readme,
       "the Windows README warns that the build is unsigned and names the checksum file")
 check("SmartScreen" not in mac_readme and win_readme.startswith("Saturn Explorer v1.0"), "the macOS README does not carry the Windows note")
+check("SHA256SUMS-linux.txt" in linux_readme and "zenity" in linux_readme and "SmartScreen" not in linux_readme,
+      "the Linux README names its checksum file and the dialog helpers")
+
+# --- Linux: what the system provides stays out of the package, everything else goes in
+for name in ("libc.so.6", "ld-linux-x86-64.so.2", "libstdc++.so.6", "libGL.so.1", "libGLX.so.0", "libEGL.so.1", "libX11.so.6",
+             "libXss.so.1", "libxcb-shm.so.0", "libwayland-client.so.0", "libasound.so.2", "libpulse.so.0", "libz.so.1", "libdrm.so.2"):
+    check(pr.is_linux_system(name), f"{name} is a system library")
+for name in ("libSDL2-2.0.so.0", "libFLAC.so.12", "libogg.so.0", "libdecor-0.so.0", "libsamplerate.so.0", "libzstd.so.1", "libGLEW.so.2.2"):
+    check(not pr.is_linux_system(name), f"{name} is bundled")
+
+# --- Linux: apt's source listing (either hash it names) and the licence of a Debian copyright file
+uris = pr.parse_print_uris("Need to get 790 kB of source archives.\n"
+                           "'http://archive.ubuntu.com/ubuntu/pool/main/f/flac/flac_1.4.3%2bds-2.dsc' flac_1.4.3+ds-2.dsc 2502 SHA512:" + "ab" * 64 + "\n"
+                           "'http://archive.ubuntu.com/ubuntu/pool/main/f/flac/flac_1.4.3%2bds.orig.tar.xz' flac_1.4.3+ds.orig.tar.xz 7694 SHA256:" + "cd" * 32 + "\n")
+check(uris == [("http://archive.ubuntu.com/ubuntu/pool/main/f/flac/flac_1.4.3%2bds-2.dsc", "sha512", "ab" * 64),
+               ("http://archive.ubuntu.com/ubuntu/pool/main/f/flac/flac_1.4.3%2bds.orig.tar.xz", "sha256", "cd" * 32)], "apt-get --print-uris is parsed", uris)
+dep5 = ("Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n\n"
+        "Files: debian/*\nCopyright: someone\nLicense: GPL-2+\n\n"
+        "Files: *\nCopyright: 2000 Xiph\nLicense: BSD-3-clause\n\nLicense: BSD-3-clause\n text\n")
+check(pr.parse_dep5_license(dep5) == "BSD-3-clause", "the 'Files: *' stanza's licence is the package's", pr.parse_dep5_license(dep5))
+check(pr.parse_dep5_license("License: LGPL-2.1\n") == "LGPL-2.1", "a copyright file without a 'Files: *' stanza falls back to its first licence")
 
 # --- the library section names what was copied
 text = mso.libraries_text([{"name": "gettext", "version": "1.0", "license": "LGPL-2.1-or-later", "files": ["libintl.8.dylib"],
@@ -409,6 +432,40 @@ if sys.platform == "darwin" and shutil.which("clang"):
         cc("-dynamiclib", "-install_name", "/nonexistent/old/libd.dylib", os.path.join(work, "d/d.c"), "-o", os.path.join(work, "d/libd.dylib"))
         check("/nonexistent/old/libd.dylib" not in pr.macho_deps(os.path.join(work, "d/libd.dylib")), "the install id is not reported as a dependency")
         check(pr.macho_id(os.path.join(work, "d/libd.dylib")) == "/nonexistent/old/libd.dylib", "...and is still readable as the id")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+# --- Linux: a library is copied in by its soname, found through the new runpath, and the build machine's is not needed
+if sys.platform.startswith("linux") and shutil.which("cc") and shutil.which("patchelf"):
+    work = tempfile.mkdtemp(prefix="se_elf_")
+    try:
+        for sub in ("ext", "app", "pkg"):
+            os.makedirs(os.path.join(work, sub))
+        with open(os.path.join(work, "ext", "ext.c"), "w") as f:
+            f.write("int ext_fn(void){return 7;}\n")
+        with open(os.path.join(work, "app", "main.c"), "w") as f:
+            f.write("int ext_fn(void); int main(void){return ext_fn()==7?0:1;}\n")
+        subprocess.run(["cc", "-shared", "-fPIC", "-Wl,-soname,libext.so.1", os.path.join(work, "ext", "ext.c"),
+                        "-o", os.path.join(work, "ext", "libext.so.1.0")], check=True)
+        os.symlink("libext.so.1.0", os.path.join(work, "ext", "libext.so.1"))
+        os.symlink("libext.so.1.0", os.path.join(work, "ext", "libext.so"))
+        subprocess.run(["cc", os.path.join(work, "app", "main.c"), "-L" + os.path.join(work, "ext"), "-lext",
+                        "-Wl,-rpath," + os.path.join(work, "ext"), "-o", os.path.join(work, "app", "main")], check=True)
+        exe = os.path.join(work, "pkg", "main")
+        shutil.copy2(os.path.join(work, "app", "main"), exe)
+        copied = pr.bundle_elf_libs(exe, os.path.join(work, "app", "main"), os.path.join(work, "pkg", "lib"))
+        check(list(copied.values()) == ["libext.so.1"], "the library was copied under its soname", copied)
+        check("libc.so.6" not in copied.values(), "the C library stays out")
+        shutil.rmtree(os.path.join(work, "ext"))
+        check(subprocess.run([exe]).returncode == 0, "the packaged program runs with the original library gone")
+        check(pr.ldd_map(exe).get("libext.so.1", "").startswith(os.path.join(work, "pkg", "lib")), "...loading the packaged copy")
+        try:
+            bad = os.path.join(work, "bad")
+            shutil.copy2(os.path.join(work, "app", "main"), bad)     # its library no longer exists
+            pr.bundle_elf_libs(bad, bad, os.path.join(work, "badlib"))
+            check(False, "an unresolvable dependency must be an error")
+        except SystemExit:
+            pass
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

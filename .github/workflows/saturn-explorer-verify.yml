@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     # Explicit (A12-37): the default is 360 minutes. Windows Debug took 157 minutes with the decompiler tests run twice (A12-36).
     timeout-minutes: 240
@@ -46,6 +46,11 @@ jobs:
       - name: Install macOS frontend dependencies
         if: runner.os == 'macOS'
         run: brew install sdl2
+
+      # patchelf: check_package_release.py relinks a library the way a Linux release does.
+      - name: Install Linux frontend dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libgl-dev libcurl4-openssl-dev patchelf
 
       # SE_FAIL_ON_SKIP: a test that exits 77 (the game save states missing, no C compiler) is a failure here, not a "Skipped"
       # that ctest still counts as passed (A12-52).
@@ -108,6 +113,18 @@ jobs:
           # The frontend target's OUTPUT_NAME, not its CMake target name.
           test -d build/bin/SaturnExplorer.app
           test -x build/bin/SaturnExplorer.app/Contents/MacOS/SaturnExplorer
+
+      # The Linux frontend, its licence texts, and that libcurl is loaded at run time rather than linked
+      # (a release must not carry the build machine's libcurl; see LoadCurl in WebPlatform.cpp).
+      - name: Verify Linux headless renderer and frontend exist
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          test -x build/bin/se-render
+          test -x build/bin/SaturnExplorerFrontEnd
+          test -d build/bin/licenses
+          ! readelf -d build/bin/SaturnExplorerFrontEnd | grep -q libcurl
+          SDL_VIDEODRIVER=dummy build/bin/SaturnExplorerFrontEnd --selftest
 
   # build-release.bat: the documented CMake + VS 2022 Release build.
   windows-release-batch:

@@ -17,16 +17,22 @@ FrontEnd/src/Launcher.cpp expects to find them:
     third-party-source/ (copyleft libraries'   (+ the MSVC runtime DLLs beside the exe)
     source, macOS)
 
+  Linux: as Windows, with SaturnExplorerFrontEnd + lib/*.so beside it and mednafen-se/mednafen + lib/*.so,
+  each runpath set to its lib/ (patchelf). Libraries every distribution provides (LINUX_SYSTEM_LIB) stay out.
+
 Before anything is copied it checks that the Mednafen binary really is what the source offer will describe
 (pinned commit, patch current, Saturn-only build, clean Integration/, installed library versions); see
 verify_provenance. The Mednafen folder sits BESIDE the app, not inside it: a macOS bundle is sealed by its signature
 and the user has to be able to add the firmware/ folder. It is then smoke-tested from where it
 sits (no dependency on Homebrew or MSYS2 left, the app's --selftest, Mednafen starts) and archived
-(.dmg on macOS, .zip elsewhere).
+(.dmg on macOS, .tar.gz on Linux, .zip on Windows).
 
   # macOS: an app built with -DSE_MACOS_BUNDLE_LIBS=ON and installed (see BUILD.md), and the Mednafen build
   python3 Integration/package_release.py --se-app stage/SaturnExplorer.app \\
           --mednafen _emu/mednafen/src/mednafen --ref v1.0 --out dist
+
+  # Linux: build-release/bin (the program and its licenses/) and the folder holding the mednafen binary
+  python3 Integration/package_release.py --se-app build-release/bin --mednafen _emu/mednafen/src --ref v1.0 --out dist
 
   # Windows: build\\bin\\Release (the exe and its licenses\\ folder) and the Mednafen checkout root
   python Integration\\package_release.py --se-app build\\bin\\Release --mednafen _emu\\mednafen --ref v1.0 --out dist
@@ -44,15 +50,17 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SE_ROOT = os.path.dirname(HERE)
 IS_MAC = sys.platform == "darwin"
 IS_WIN = os.name == "nt"
+IS_LINUX = sys.platform.startswith("linux")
 
 FIRMWARE_FILES = ("sega_101.bin", "mpr-17933.bin")
-SHIPPED_PROGRAMS = ("SaturnExplorerFrontEnd.exe",)      # the Windows/Linux build folder's other programs are tests and tools
+SHIPPED_PROGRAMS = ("SaturnExplorerFrontEnd.exe", "SaturnExplorerFrontEnd")   # the build folder's other programs are tests and tools
 
 
 def run(cmd, **kw):
@@ -175,6 +183,144 @@ def codesign(path, identity):
     run(cmd + [path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+# --------------------------------------------------------------------------- Linux: bundle shared libraries
+# Libraries the user's system provides and the package must NOT carry, modelled on AppImage's excludelist:
+# the C library and the compiler runtime (the build runs on the oldest supported distribution, so its versions
+# are the baseline), the GPU driver stack, the display and audio servers' client libraries, which must match
+# the running servers, and a few that every desktop has. Everything else a program needs is copied.
+LINUX_SYSTEM_LIB = re.compile(
+    r"(ld-linux[^/]*|linux-vdso\.so\..*"
+    r"|lib(c|m|mvec|dl|pthread|rt|resolv|util|anl|nsl|BrokenLocale)\.so\..*|libstdc\+\+\.so\..*|libgcc_s\.so\..*"
+    r"|lib(GL|GLX|EGL|GLESv2|GLdispatch|OpenGL|glapi|drm|gbm)\.so\..*"
+    r"|libX[A-Za-z0-9_-]*\.so\..*|libxcb[A-Za-z0-9_-]*\.so\..*|libxkbcommon\.so\..*|libwayland-[a-z]+\.so\..*"
+    r"|lib(asound|pulse|pulse-simple|jack|pipewire-[0-9.]+)\.so\..*"
+    r"|lib(dbus-1|systemd|udev|fontconfig|freetype|z|expat|uuid)\.so\..*)")
+
+
+def is_linux_system(name):
+    return bool(LINUX_SYSTEM_LIB.fullmatch(os.path.basename(name)))
+
+
+def elf_needed(path):
+    """The DT_NEEDED names of an ELF file, in order."""
+    return re.findall(r"\(NEEDED\)\s+Shared library: \[(.+?)\]", out(["readelf", "-d", path]))
+
+
+def ldd_map(path, env=None):
+    """name -> resolved path (None for 'not found') as the dynamic loader resolves `path`'s libraries."""
+    r = subprocess.run(["ldd", path], capture_output=True, text=True, env=env)
+    found = {}
+    for line in r.stdout.splitlines():
+        m = re.match(r"\s*(\S+) => (not found|(\S+) \(0x[0-9a-f]+\))", line)
+        if m:
+            found[m.group(1)] = m.group(3)
+    return found
+
+
+def bundle_elf_libs(exe, exe_origin, libdir):
+    """Copy every non-system shared library `exe` needs (transitively, through the libraries that are copied)
+    into libdir and point the runpaths at the copies: $ORIGIN/<libdir> on the executable, $ORIGIN on each
+    library (DT_RUNPATH is not inherited, so every copied library needs its own). A dependency of a system
+    library is the system's business and is not followed. `exe_origin` is where the executable was built.
+    Returns {original real path: file name in libdir}."""
+    os.makedirs(libdir, exist_ok=True)
+    copied = {}                               # original real path -> file name in libdir
+    queue = [(exe, exe_origin)]               # (file in the package, its original)
+    while queue:
+        item, origin = queue.pop()
+        resolved = ldd_map(origin)
+        for name in elf_needed(item):
+            if is_linux_system(name):
+                continue
+            real = resolved.get(name)
+            if not real:
+                raise SystemExit(f"cannot resolve {name} needed by {origin}")
+            real = os.path.realpath(real)
+            if real in copied:
+                continue
+            if name in copied.values():
+                raise SystemExit(f"two different libraries are both called {name}")
+            dest = os.path.join(libdir, name)   # by soname: the name the loader asks for
+            shutil.copy2(real, dest)
+            os.chmod(dest, 0o755)
+            copied[real] = name
+            queue.append((dest, real))
+    run(["patchelf", "--set-rpath", "$ORIGIN/" + os.path.relpath(libdir, os.path.dirname(exe)), exe])
+    for name in copied.values():
+        run(["patchelf", "--set-rpath", "$ORIGIN", os.path.join(libdir, name)])
+    return copied
+
+
+def dpkg_owner(path):
+    """The Debian package that installed `path`, trying the /lib <-> /usr/lib spelling a merged /usr hides."""
+    variants = [path]
+    if path.startswith("/usr/lib/"):
+        variants.append(path[len("/usr"):])
+    elif path.startswith("/lib/"):
+        variants.append("/usr" + path)
+    for p in variants:
+        r = subprocess.run(["dpkg", "-S", p], capture_output=True, text=True)
+        if r.returncode == 0:
+            return r.stdout.split(":", 1)[0].strip()
+    return None
+
+
+def parse_dep5_license(text):
+    """The licence of the 'Files: *' stanza of a machine-readable Debian copyright file, else the first one named."""
+    stanzas = re.split(r"\n\s*\n", text)
+    for s in stanzas:
+        if re.search(r"^Files:\s*\*\s*$", s, re.M):
+            m = re.search(r"^License:\s*(.+?)\s*$", s, re.M)
+            if m:
+                return m.group(1)
+    m = re.search(r"^License:\s*(.+?)\s*$", text, re.M)
+    return m.group(1) if m else None
+
+
+def parse_print_uris(text):
+    """[(url, algorithm, digest)] from `apt-get source --print-uris` lines ('URL' file size SHA512:hash);
+    apt names the strongest hash it has, SHA256 or SHA512 depending on its version."""
+    return [(m.group(1), m.group(2).lower(), m.group(3))
+            for m in re.finditer(r"^'(\S+)' \S+ \d+ (SHA256|SHA512):([0-9a-f]+)$", text, re.M)]
+
+
+def dpkg_manifest(copied, licenses_dir, allow_mismatch=False):
+    """One entry per Debian package behind a copied library (`copied`: original path -> name in the package):
+    version, the licence its copyright file names, and its source package's files with their checksums (from
+    apt's deb-src index). The package's copyright file goes into licenses_dir/<package>/ beside the other
+    licence texts."""
+    by_pkg = {}
+    for real, name in sorted(copied.items()):
+        pkg = dpkg_owner(real)
+        if not pkg:
+            raise SystemExit(f"{real} is not from a Debian package; list its licence and source by hand")
+        by_pkg.setdefault(pkg, set()).add(name)
+    entries = []
+    for pkg, files in sorted(by_pkg.items()):
+        ver, src, src_ver = out(["dpkg-query", "-W", "-f=${Version}\t${source:Package}\t${source:Version}", pkg]).split("\t")
+        copyright_file = f"/usr/share/doc/{pkg}/copyright"
+        try:
+            with open(copyright_file, encoding="utf-8", errors="replace") as f:
+                lic = parse_dep5_license(f.read())
+            os.makedirs(os.path.join(licenses_dir, pkg), exist_ok=True)
+            shutil.copy2(copyright_file, os.path.join(licenses_dir, pkg, "copyright"))
+        except OSError:
+            lic = None
+        if not lic:
+            msg = f"no licence found for {pkg} ({copyright_file})"
+            if not allow_mismatch:
+                raise SystemExit(msg + "; list it by hand")
+            print("warning (overridden):", msg)
+            lic = "unknown"
+        r = subprocess.run(["apt-get", "source", "--print-uris", f"{src}={src_ver}"], capture_output=True, text=True)
+        uris = parse_print_uris(r.stdout)
+        entries.append({"name": pkg, "version": ver, "license": lic, "files": sorted(files),
+                        "source": next((u for u, _a, _h in uris if u.endswith(".dsc")), None),
+                        "source_files": uris,
+                        "note": f"Debian/Ubuntu package {pkg}, built from source package {src} {src_ver}"})
+    return entries
+
+
 # --------------------------------------------------------------------------- text files
 def readme_fork(version, ref):
     return f"""Mednafen {version} - Saturn Explorer build ({ref})
@@ -212,10 +358,21 @@ compare its SHA-256 (certutil -hashfile <zip> SHA256) with SHA256SUMS-windows.tx
 """
 
 
-def readme_top(ref, mac):
-    where = "Keep SaturnExplorer.app and the mednafen-se folder side by side (for example both in\nApplications)." if mac else \
-            ("Keep SaturnExplorerFrontEnd.exe and the mednafen-se folder side by side, in a folder whose path\n"
-             "uses only characters your Windows code page can represent (plain English letters are always safe).")
+# What a Linux system must provide: the package carries every other library (package_release.LINUX_SYSTEM_LIB).
+LINUX_NOTE = """
+Linux: the download carries its own libraries except the ones every desktop provides (the C library,
+OpenGL, X11/Wayland, ALSA/PulseAudio). Built on Ubuntu 22.04 for x86_64, so it needs glibc 2.35 or newer.
+File dialogs use zenity or kdialog; install one if Open/Save does nothing. The update check uses your
+system's libcurl (libcurl.so.4) and reports itself unavailable without it. To check the archive, compare
+sha256sum <archive> with SHA256SUMS-linux.txt on the release page.
+"""
+
+
+def readme_top(ref, plat):
+    where = {"macos": "Keep SaturnExplorer.app and the mednafen-se folder side by side (for example both in\nApplications).",
+             "windows": "Keep SaturnExplorerFrontEnd.exe and the mednafen-se folder side by side, in a folder whose path\n"
+                        "uses only characters your Windows code page can represent (plain English letters are always safe).",
+             "linux": "Keep SaturnExplorerFrontEnd, lib/ and the mednafen-se folder together; run ./SaturnExplorerFrontEnd."}[plat]
     return f"""Saturn Explorer {ref}
 {'=' * (17 + len(ref))}
 
@@ -225,7 +382,7 @@ def readme_top(ref, mac):
 
 mednafen-se is a modified Mednafen build, not an official release. Its source and the licences of
 everything in this download are in SOURCE.txt, mednafen-se-source.tar.xz and Licenses/.
-{UNSIGNED_NOTE if not mac else ''}"""
+{ {"windows": UNSIGNED_NOTE, "linux": LINUX_NOTE}.get(plat, "")}"""
 
 
 # --------------------------------------------------------------------------- assembly
@@ -261,8 +418,8 @@ SOURCE_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".inc", ".s
 SKIP_DIRS = {".git", ".deps", ".libs", "autom4te.cache"}
 
 
-def sha256_file(path):
-    h = hashlib.sha256()
+def sha256_file(path, algo="sha256"):
+    h = hashlib.new(algo)
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
@@ -387,7 +544,8 @@ def verify_provenance(up, mednafen, mso, allow):
     except (subprocess.CalledProcessError, OSError):
         problems.append(f"{root} is not a git checkout of the Mednafen fork")
     if not problems:
-        problems += compare_to_patched_tree(up, root, binary if os.path.isfile(binary) else os.path.join(binary, "mednafen.exe"), mso)
+        problems += compare_to_patched_tree(up, root, binary if os.path.isfile(binary) else
+                                           os.path.join(binary, "mednafen.exe" if IS_WIN else "mednafen"), mso)
     stamp = os.path.join(root, mso.install.MEDNAFEN_STAMP)
     try:
         with open(stamp, encoding="utf-8") as f:
@@ -531,22 +689,27 @@ def fetch_sources(entries, dest, allow_missing=False):
             print("warning (overridden):", msg)
             e["source"] = e["source"] or "unknown"
             continue
-        if not e.get("sha256") and not e.get("record_hash"):
+        if not e.get("sha256") and not e.get("record_hash") and not e.get("source_files"):
             continue
         if "exception" in e["license"].lower():
             # GPL with a runtime-library exception (libgcc, libstdc++): the source is named and offered, but a
             # multi-hundred-megabyte compiler tarball is not put in every download.
             e["note"] = (e.get("note") or "") + "; source offered, not bundled"
             continue
-        name = os.path.basename(e["source"].split("?")[0])
-        path = os.path.join(dest, name)
-        with urllib.request.urlopen(e["source"], timeout=300) as r, open(path, "wb") as f:
-            shutil.copyfileobj(r, f)
-        got = sha256_file(path)
-        if e.get("sha256") and got != e["sha256"]:
-            raise SystemExit(f"{name}: checksum {got} does not match the recorded {e['sha256']}")
-        e["sha256"] = got
-        e["included"] = "third-party-source/" + name
+        # A Debian source package is several files (.dsc, upstream tarball, packaging), each with its checksum.
+        included = []
+        for url, algo, want in e.get("source_files") or [(e["source"], "sha256", e.get("sha256"))]:
+            name = urllib.parse.unquote(os.path.basename(url.split("?")[0]))
+            path = os.path.join(dest, name)
+            with urllib.request.urlopen(url, timeout=300) as r, open(path, "wb") as f:
+                shutil.copyfileobj(r, f)
+            got = sha256_file(path, algo)
+            if want and got != want:
+                raise SystemExit(f"{name}: checksum {got} does not match the recorded {want}")
+            if not e.get("source_files"):
+                e["sha256"] = got
+            included.append("third-party-source/" + name)
+        e["included"] = ", ".join(included)
 
 
 # --------------------------------------------------------------------------- Windows runtime
@@ -586,7 +749,7 @@ def copy_msvc_runtime(dest, override):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--se-app", required=True, help="macOS: the finished SaturnExplorer.app; else: the folder holding the exe")
-    ap.add_argument("--mednafen", required=True, help="macOS: the mednafen binary; else: the checkout folder holding mednafen.exe")
+    ap.add_argument("--mednafen", required=True, help="macOS: the mednafen binary; Linux: the folder holding it (_emu/mednafen/src); Windows: the checkout folder holding mednafen.exe")
     ap.add_argument("--ref", required=True, help="release label, e.g. v1.0 (letters, digits, . _ -)")
     ap.add_argument("--out", required=True, help="output folder (created)")
     ap.add_argument("--sign-identity", default="-", help="macOS codesign identity for mednafen (default: ad hoc)")
@@ -594,7 +757,7 @@ def main():
     ap.add_argument("--no-tarball", action="store_true", help="skip the patched-source tarball (SOURCE.txt only)")
     ap.add_argument("--no-third-party-source", action="store_true", help="do not download the copyleft libraries' source into the archive")
     ap.add_argument("--allow-mismatch", action="store_true", help="package although the binary may not match the source offer (local trials only)")
-    ap.add_argument("--no-archive", action="store_true", help="leave the staged folder, make no .dmg/.zip")
+    ap.add_argument("--no-archive", action="store_true", help="leave the staged folder, make no .dmg/.zip/.tar.gz")
     args = ap.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9._-]+", args.ref):
         raise SystemExit("--ref may only contain letters, digits, '.', '_' and '-'")
@@ -637,6 +800,13 @@ def main():
         if not os.path.isfile(exe):
             raise SystemExit(f"{exe_name} not found in {args.mednafen}")
         libs = msys2_manifest(dlls, args.mednafen) if IS_WIN else []
+        if IS_LINUX:
+            se_exe = os.path.join(stage, "SaturnExplorerFrontEnd")
+            if not os.path.isfile(se_exe):
+                raise SystemExit(f"SaturnExplorerFrontEnd not found in {args.se_app}")
+            copied = bundle_elf_libs(se_exe, os.path.join(args.se_app, "SaturnExplorerFrontEnd"), os.path.join(stage, "lib"))
+            copied.update(bundle_elf_libs(exe, os.path.join(args.mednafen, exe_name), os.path.join(emu, "lib")))
+            libs = dpkg_manifest(copied, os.path.join(stage, "licenses", "bundled-libraries"), args.allow_mismatch)
         if crt:
             libs.append({"name": "Microsoft Visual C++ runtime", "version": "as shipped with the Visual Studio that built SE",
                          "license": "Microsoft redistributable terms (app-local)", "files": sorted(crt),
@@ -648,7 +818,7 @@ def main():
         f.write("Place " + " and ".join(FIRMWARE_FILES) + " here. They are not distributed with Saturn Explorer.\n")
     merge_licenses(stage, IS_MAC)
     with open(os.path.join(stage, "README.txt"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(readme_top(args.ref, IS_MAC))
+        f.write(readme_top(args.ref, plat))
 
     if not args.no_third_party_source:
         fetch_sources(libs, os.path.join(stage, "third-party-source"), args.allow_mismatch)
@@ -664,7 +834,8 @@ def main():
     if args.no_archive:
         print(f"staged: {stage}")
         return
-    archive = os.path.join(os.path.abspath(args.out), name + (".dmg" if IS_MAC else ".zip"))
+    # A tarball on Linux: a zip loses the executable bits (and the libraries' symlinks, were there any).
+    archive = os.path.join(os.path.abspath(args.out), name + {"macos": ".dmg", "linux": ".tar.gz"}.get(plat, ".zip"))
     if os.path.exists(archive):
         os.remove(archive)
     if IS_MAC:
@@ -672,6 +843,8 @@ def main():
              "-format", "UDZO", archive])
         if args.sign_identity != "-":
             codesign(archive, args.sign_identity)      # the image itself is signed too, then notarised as a whole
+    elif IS_LINUX:
+        shutil.make_archive(archive[:-len(".tar.gz")], "gztar", os.path.dirname(stage), name)
     else:
         shutil.make_archive(archive[:-4], "zip", os.path.dirname(stage), name)
     print(f"wrote {archive}")
@@ -679,6 +852,31 @@ def main():
 
 def package_macho_files(emu):
     return [os.path.join(emu, "mednafen")] + [os.path.join(emu, "lib", f) for f in sorted(os.listdir(os.path.join(emu, "lib")))]
+
+
+def package_elf_files(stage, emu):
+    return [os.path.join(stage, "SaturnExplorerFrontEnd"), os.path.join(emu, "mednafen")] + \
+        [os.path.join(d, f) for d in (os.path.join(stage, "lib"), os.path.join(emu, "lib")) if os.path.isdir(d)
+         for f in sorted(os.listdir(d))]
+
+
+def smoke_test_linux(stage, emu, env):
+    """Every library a packaged ELF file loads resolves inside the package or is one the system provides, and
+    the program starts SDL (--selftest) with nothing from the build machine's library path."""
+    root = os.path.realpath(stage) + os.sep
+    for item in package_elf_files(stage, emu):
+        resolved = ldd_map(item, env)
+        for name in elf_needed(item):
+            path = resolved.get(name)
+            if is_linux_system(name):
+                if not path:
+                    raise SystemExit(f"{item} needs the system library {name}, which this machine lacks")
+            elif not path or not os.path.realpath(path).startswith(root):
+                raise SystemExit(f"{item} depends on {name}, which is not inside the package (resolved: {path})")
+    r = subprocess.run([os.path.join(stage, "SaturnExplorerFrontEnd"), "--selftest"],
+                       capture_output=True, text=True, timeout=60, env={**env, "SDL_VIDEODRIVER": "dummy"})
+    if "selftest ok" not in r.stdout:
+        raise SystemExit("SaturnExplorerFrontEnd --selftest failed:\n" + r.stdout + r.stderr)
 
 
 def smoke_test(stage, mednafen):
@@ -718,6 +916,8 @@ def smoke_test(stage, mednafen):
                 raise SystemExit("the bundled SDL did not initialise (is libSDL3.dylib beside libSDL2?)")
             if r.returncode != 0:
                 raise SystemExit("the bundled SDL did not initialise:\n" + r.stdout + r.stderr)
+        if IS_LINUX:
+            smoke_test_linux(stage, emu, env)
         # -help prints the banner, the library versions and the usage text, then exits non-zero in this
         # Mednafen. A banner alone also appears before a startup failure, so require the closing usage text.
         r = subprocess.run([mednafen, "-help"], capture_output=True, text=True, timeout=60, env=env)
