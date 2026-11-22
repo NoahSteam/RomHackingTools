@@ -7,5 +7,6 @@ BIN=$1; IMG=$2; D=$3; TAG=$4
 mkdir -p "$D/dump" "$D/run$TAG"
 ulimit -v 3500000
 if [ "$5" = lend ]; then export SE_GAME_LEND=1; fi
-SE_GAME_HWRAM=$IMG SE_GAME_TOKEN_DUMP=$D/dump/$TAG timeout 1150 "$BIN" "$D/run$TAG" > "$D/corpus$TAG.log" 2>&1
+# SE_CORPUS_TIMEOUT (seconds, default 1150): a large image (NiGHTS) needs well over 50 minutes on a desktop.
+SE_GAME_HWRAM=$IMG SE_GAME_TOKEN_DUMP=$D/dump/$TAG timeout "${SE_CORPUS_TIMEOUT:-1150}" "$BIN" "$D/run$TAG" > "$D/corpus$TAG.log" 2>&1
 echo "done $?" >> "$D/corpus$TAG.log"

@@ -23,7 +23,9 @@
 //
 // The rts scan passes over words that only read as rts (a literal), the previous function's
 // literal pool and mova-addressed jump table, and -- when the code after the rts never reaches the
-// address -- a function that ends in a tail jump rather than rts. Whatever it cannot settle is
+// address -- a function that ends in a tail jump rather than rts. When what follows the rts is data (text, a
+// table) or never reaches the address, the entry is the first function prologue (mov.l rN,@-r15, sts.l pr,@-r15)
+// after it whose code does reach the address: a function that ends in an endless loop has no rts to find. Whatever it cannot settle is
 // said in EntryGuess::doubt.
 //
 // Pure functions over a MemorySnapshot: no engine, no ImGui, testable with byte vectors.

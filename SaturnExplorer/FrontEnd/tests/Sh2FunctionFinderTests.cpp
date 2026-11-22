@@ -294,6 +294,74 @@ void TestBoundaries()
 
 // The returns at the bottom of the scan window are candidates too: at the region's base, and at
 // a span-limited floor.
+// A function that ends in an endless loop (no rts), its literal pool, and text data after the previous
+// function's rts: the entry of the function after them is its prologue, not the rts before the text (A8-58).
+void TestAfterEndlessLoop()
+{
+    std::vector<uint8_t> hw(0x31000, 0);
+    auto put = [&](uint32_t a, std::initializer_list<uint16_t> words) {
+        size_t off = a - 0x06000000u;
+        for (uint16_t w : words) { dts::Put16(hw, off, w); off += 2; }
+    };
+    const uint32_t prev = 0x06030800u, text = prev + 6, loop = 0x06030820u, target = 0x06030834u;
+    put(prev, { 0x7001, 0x000B, 0x0009 });
+    const char* str = "ABCD DATA ONE\0\0\0(C)SAMPLE 2000\0\0\0\0";
+    for (size_t i = 0; i < 30; ++i) hw.at(text - 0x06000000u + i) = uint8_t(str[i]);
+    put(text + 0x14, { 0x0009, 0x0009 });
+    // loop: push r8, push r9, sts.l pr ; add #1,r4 ; bra loop+2 ; nop ; nop ; pool
+    put(loop, { 0x2F86, 0x2F96, 0x4F22, 0x7401, 0xAFFC, 0x0009, 0x0009 });
+    dts::Put32(hw, loop + 0x10 - 0x06000000u, 0x06031234u);
+    dts::Put32(hw, loop + 0x14 - 0x06000000u, 0x0608B468u);
+    put(loop + 0x18, { 0x0009, 0x0009 });
+    // target: push r14 ; mov r15,r14 ; add #1,r4 ; rts ; mov.l @r15+,r14 ; (pool) ; next function
+    put(target, { 0x2FE6, 0x6EF3, 0x7401, 0x000B, 0x6EF6, 0x0009, 0x0009 });
+    put(target + 0x14, { 0x2FE6, 0x4F22, 0x7401, 0x4F26, 0x000B, 0x6EF6 });
+    auto s = dts::MakeSnapshot(hw);
+    FinderHints none;
+    for (uint32_t q : { target, target + 2, target + 4, target + 6, target + 8 })
+    {
+        uint32_t e = 0;
+        std::string why, doubt;
+        const bool ok = RtsScanEntry(*s, q, e, &why, &doubt);
+        std::printf("  %08X -> %s %08X %s%s\n", q, ok ? "entry" : "fail", e, why.c_str(), doubt.c_str());
+        CHECK(ok && e == target);
+        CHECK(!doubt.empty());
+        EntryGuess g = FindFunctionContaining(*s, q, none);
+        CHECK(g.ok && g.entry == target && g.source == EntrySource::RtsScan && !g.doubt.empty());
+    }
+    // Controls: an address in the text, with no code before it, still fails with its reason.
+    uint32_t e = 0;
+    std::string why;
+    CHECK(!RtsScanEntry(*s, text + 8, e, &why));
+    std::printf("  text -> %s\n", why.c_str());
+    CHECK(!why.empty());
+    CHECK(!FindFunctionContaining(*s, text + 0x12, none).ok);
+}
+
+// A8-58 review: a literal that reads as a push is not a prologue. mov.l @(4,PC),r1 loads 0x2F866EF3 at 0x06008008,
+// which decodes as push r8 ; mov r15,r14 ; add #1,r4 and flows on into the real function at 0x06008010. Before the
+// fix the prologue rung took the literal as the entry; the base finder refused both queries.
+void TestPrologueNotLiteral()
+{
+    std::vector<uint8_t> hw(0x9000, 0);
+    size_t off = 0x8000;
+    for (uint16_t w : { 0xD101, 0x000B, 0x0009, 0xFFFF, 0x2F86, 0x6EF3, 0x7401, 0x0009, 0x2FE6, 0x6EF3, 0x7401, 0x000B, 0x6EF6 })
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    auto s = dts::MakeSnapshot(hw);
+    FinderHints none;
+    const uint32_t literal = 0x06008008u, next = 0x06008010u;
+    EntryGuess g = FindFunctionContaining(*s, 0x06008014u, none);
+    std::printf("  06008014 -> %s %08X %s%s\n", g.ok ? "entry" : "fail", g.entry, g.why.c_str(), g.doubt.c_str());
+    CHECK(!g.ok || g.entry == next);
+    CHECK(g.entry != literal);
+    EntryGuess l = FindFunctionContaining(*s, literal, none);
+    std::printf("  06008008 -> %s %08X %s\n", l.ok ? "entry" : "fail", l.entry, l.why.c_str());
+    CHECK(!l.ok || l.entry != literal);
+}
+
 void TestScanFloor()
 {
     std::vector<uint8_t> hw;
@@ -360,6 +428,8 @@ int main(int argc, char** argv)
     RUN(TestCallTargets());
     RUN(TestScanFloor());
     RUN(TestBoundaries());
+    RUN(TestAfterEndlessLoop());
+    RUN(TestPrologueNotLiteral());
     RUN(TestBoundsPersistence(scratch));
     dts::RemoveTree(scratch);
     return dts::Finish("Sh2FunctionFinderTests", start);

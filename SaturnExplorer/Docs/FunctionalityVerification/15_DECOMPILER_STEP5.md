@@ -25093,3 +25093,36 @@ The pins and 2,000 seeds of both grammars together (8,258 functions) give 96.79%
 **What could not run.** The game corpus images are not in this container, so the census rows "per corpus image, alone and lent" (store survival, engine-made statements, lines lost, bound hits, the P2 rows on the four dumps, build time on the images) have not been made; `a7_link1/corpus.sh` makes them where `SE_GAME_HWRAM` names an image. Memory on the largest functions (area 6's stress inputs) was not measured. `halt_unimplemented()` cannot arise from SH-2 code (the spec has no unimplemented instruction) and `halt_missing()` did not occur in 40,000 seeds; flow into uncaptured memory is `halt_baddata()`, so the `unimplemented` and `missing` branches of `BuildLinks` are exercised by no fixture.
 
 **Verdict.** On the generator, per grammar over 20,000 seeds, every go threshold is met: store survival 98.4% and 99.7%, lines lost 1.69% and 0.34%, every flow store, branch, call and return statement has one proven `Effect`, bound hits 0, build time 0.3%. The clone record is confirmed (11 clone-made `return` ops in grammar 2 and 64 in the fixtures; grammar 1 has none). Go for the generator rows. The numbers alone do not start step 2: the fixtures and pins, which are the ledger rows' own shapes, are in the 2 to 10% band (pins and seeds 3.38%) and above it (fixtures 19.65%), and the corpus rows, where such copies are more frequent, are unmeasured. Plan step 2b (A7-344) as likely, and run the corpus census before step 2.
+
+## Area 8 fixer (finder: function after an endless loop and data, A8-58)
+
+Report: in a real game, the panel said "No function found containing 0x060051EE: what follows the rts at 0x06005114 does not decode as code". The function containing the address follows a function that ends in an endless loop (no rts), whose literal pool follows it; before that come text strings after an earlier function's rts. The rts scan walks back to that earlier rts, finds data after it and refuses.
+
+Fix (`Sh2FunctionFinder.cpp`, `PrologueReaching`): when what follows the scan's rts does not decode, or decodes but provably never reaches the address and no tail jump explains it, the entry is the first function prologue (`mov.l rN,@-r15`, `sts.l pr,@-r15`) after the rts whose next three words decode and whose flow reaches the address. The endless-loop function's own prologue does not reach the address, so it is passed over. The entry says in `doubt` that it rests on a prologue match. Where no such prologue exists the old refusal and its reason stay.
+
+Pins: `TestAfterEndlessLoop` (synthetic bytes and ASCII, not the game's): queries at the target's first instruction, a middle one, the rts and the delay slot all return its entry, by `RtsScanEntry` and `FindFunctionContaining`; controls: an address in the text still fails with its reason. 15 checks fail on the unfixed finder, all pass with the fix.
+
+Left open: text whose first three words happen to decode as code and flow Unknown still yields the entry just after the rts, with no doubt beyond the generic one (unchanged behaviour).
+
+## Area 7, link model step 1: census on the game corpus
+
+Run on the repository owner's machine (Windows 11, MSVC RelWithDebInfo, master `9fc942dc`), counts only, in
+`Docs/Decompiler/tools/a7_link1/corpus_results/`. The image is Sakura Taisen 2 (Japan) disc 1: 1 MiB of high work RAM
+from a savestate. It is not one of the earlier `hwram007`/`hwram008` images. Every run also counts the test binary's
+fixtures; the game-only figures below are the image's run less the fixtures-only run (`census_base`).
+
+| Game code only | Alone (1,564 functions) | Lent (4,570 functions, both passes) | Threshold |
+|---|---|---|---|
+| Store statements with a surviving flow op or folded COPY | 11,440 of 11,786 = 97.1% | 29,640 of 30,477 = 97.3% | go at 95% or more |
+| Lines that name a store today with no proven store | 296 of 5,902 = 5.0% | 717 of 15,976 = 4.5% | 2 to 10%: step 2b required |
+| Walk bound hits | 0 | 0 | under 0.1% |
+| Link build time | under 0.04% | under 0.04% | within 5% |
+| Clone-made effect ops | 831 | 1,998 | any confirms the Clone record |
+| Flow statements with exactly one Effect | all | all | all |
+
+**Verdict: go to step 2, with step 2b (the Twin, Merged and Forwarded records, A7-344) scheduled and not
+optional.** No rework of section 3 is called for: store survival is above 95%, and the lost lines fall within the
+step 2b band.
+
+**Not run:** Christmas NiGHTS into Dreams (USA) took more than 50 minutes for each pass and hit the timeout twice.
+`corpus.sh` now takes `SE_CORPUS_TIMEOUT`, and that image is being rerun.

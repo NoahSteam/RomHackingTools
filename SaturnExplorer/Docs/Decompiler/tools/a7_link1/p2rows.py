@@ -15,7 +15,7 @@ import sys
 
 def p2_ids(ledger):
     ids = set()
-    for line in open(ledger):
+    for line in open(ledger, encoding="utf-8"):
         cells = [c.strip() for c in line.split("|")]
         if len(cells) > 4 and re.fullmatch(r"A7-\d+", cells[1]) and cells[3] == "P2":
             ids.add(int(cells[1][3:]))
@@ -26,7 +26,7 @@ def main(argv):
     p2 = p2_ids(argv[1])
     rows = collections.defaultdict(lambda: collections.defaultdict(list))
     other = collections.Counter()
-    for raw in open(argv[2]):
+    for raw in open(argv[2], encoding="utf-8"):
         if not raw.startswith("LABELLED "):
             continue
         cls, label, where, text = [x.strip() for x in raw[9:].rstrip("\n").split(" | ", 3)]
