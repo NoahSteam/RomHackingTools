@@ -1,0 +1,63 @@
+A7-10
+  store.old-not-in-set/old-not-linked: 1
+      a7_10 mutated | line 3 firstAddr 06070104 new 06070106 | SINIT = 0xffff;
+A7-11
+  store.old-not-in-set/old-is-placement: 1
+      a7_11 mutated | line 12 firstAddr 0607102C new 06071006 | xStack_18._3_1_ = (xunknown1)param_1;
+A7-20
+  store.old-not-in-set/old-is-candidate-value: 1
+      a7_20 | line 12 firstAddr 06021C2E new 06021C30 | piStack_8 = aiStack_10;
+  store.old-not-in-set/old-is-value: 1
+      a7_20 | line 31 firstAddr 06021C96 new 06021C9A | iStack_14 = iStack_14 + 1;
+A7-26
+  store.no-effect: 2
+      a7_26 frame | line 135 firstAddr 06021858 new 00000000 | xRam060a5e1e = 0;
+      a7_26 frame as it was | line 135 firstAddr 06021858 new 00000000 | xRam060a5e1e = 0;
+  store.old-not-in-set/old-is-candidate-value: 6
+      a7_26 frame | line 88 firstAddr 0602178C new 06021798 | *(int2 *)(param_1 + 5) = (int2)*(char *)(param_1 + 4);
+      a7_26 frame | line 89 firstAddr 06021796 new 060217A0 | *(char *)((int4)param_1 + 0x11) = *(char *)((int4)param_1 + 0x11) + '\x01';
+      a7_26 frame | line 140 firstAddr 06021846 new 0602184E | *(char *)((int4)param_1 + 0x11) = *(char *)((int4)param_1 + 0x11) + '\x01';
+A7-28
+  store.no-effect: 2
+      a7_28 after the stores | line 135 firstAddr 06021858 new 00000000 | xRam060a5e1e = 0;
+      a7_28 control | line 135 firstAddr 06021858 new 00000000 | xRam060a5e1e = 0;
+  store.old-not-in-set/old-is-candidate-value: 6
+      a7_28 after the stores | line 88 firstAddr 0602178C new 06021798 | *(int2 *)(param_1 + 5) = (int2)*(char *)(param_1 + 4);
+      a7_28 after the stores | line 89 firstAddr 06021796 new 060217A0 | *(char *)((int4)param_1 + 0x11) = *(char *)((int4)param_1 + 0x11) + '\x01';
+      a7_28 after the stores | line 140 firstAddr 06021846 new 0602184E | *(char *)((int4)param_1 + 0x11) = *(char *)((int4)param_1 + 0x11) + '\x01';
+A7-37
+  store.old-not-in-set/old-is-value: 1
+      a7_37 | line 9 firstAddr 06009002 new 0600900A | *(uint4 *)(param_2 + 0x30) = in_r3 | in_r1;
+A7-57
+  store.old-not-in-set/old-is-candidate-value: 1
+      a7_57 gbr | line 7 firstAddr 0600900A new 0600900C | *(uint2 *)(unaff_gbr + 0xc) = uRam06001034 << 2;
+  store.old-not-in-set/old-is-value: 3
+      a7_57 extension | line 4 firstAddr 06009012 new 06009016 | uRam2600219c = (uint4)param_2;
+      a7_57 extension | line 5 firstAddr 06009012 new 06009018 | uRam26002188 = (uint4)param_2;
+      a7_57 movt | line 10 firstAddr 06009008 new 0600900E | uRam06001030 = (uint4)bVar1;
+A7-58
+  store.old-not-in-set/old-is-candidate-value: 2
+      a7_58 tst | line 13 firstAddr 06009012 new 06009014 | *param_4 = -(uint4)uVar2 - param_2;
+      a7_58 tst other | line 13 firstAddr 06009012 new 06009014 | *param_4 = -(uint4)uVar2 - param_2;
+A7-59
+  store.old-not-in-set/old-is-candidate-value: 1
+      a7_59 call output | line 20 firstAddr 06009024 new 06009032 | *param_1 = (int2)((unkuint6)Var4 >> 0x20);
+A7-78
+  store.old-not-in-set/old-is-candidate-value: 1
+      a7_78_3804173 | line 14 firstAddr 06009000 new 06009018 | xRam26002188 = (int2)in_r3;
+  store.old-not-in-set/old-is-value: 2
+      a7_78_902 | line 10 firstAddr 0600900A new 06009010 | *param_2 = in_r3 & (uint2)uRam26001034;
+      a7_78_3620180 | line 16 firstAddr 06009028 new 0600902A | *param_4 = iVar1 + 0x6c;
+A7-158
+  store.old-not-in-set/old-is-value: 1
+      a7_158_7701445 | line 19 firstAddr 0600900A new 0600902A | *(uint4 *)(param_3 | 0xffffffc0) = uVar2;
+A7-175
+  store.old-not-in-set/old-is-value: 9
+      a7_175 | line 24 firstAddr 06009004 new 0600901A | Ram26001008 = in_r2 - cVar2;
+      a7_175 | line 30 firstAddr 06009004 new 0600901A | Ram26001008 = in_r2 - cVar2;
+      a7_175 damaged | line 24 firstAddr 06009004 new 0600901A | Ram26001008 = in_r2 - cVar2;
+  store.old-not-in-set/old-not-linked: 2
+      a7_175 loop | line 30 firstAddr 06009006 new 0600901C | Ram26001008 = (char)in_r2;
+      a7_175 loop | line 36 firstAddr 06009006 new 0600901C | Ram26001008 = (char)in_r2;
+
+P2-pinned rows, all classes: store.no-effect 4, store.old-not-in-set/old-is-candidate-value 18, store.old-not-in-set/old-is-placement 1, store.old-not-in-set/old-is-value 17, store.old-not-in-set/old-not-linked 3
