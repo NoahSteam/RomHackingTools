@@ -152,6 +152,19 @@ try:
     check(a.get("included") == b.get("included") == "third-party-source/common.tar.gz", "a shared source is listed for both entries")
     check(sorted(os.listdir(out_dir)) == ["common.tar.gz"] and sorted(os.listdir(scratch)) == ["out", "srv"],
           "...downloaded once, and the staging folder is gone", os.listdir(scratch))
+    member_url, member_sha = serve("pkg_1.orig.tar.gz", b"member")
+    dsc_text = f"Checksums-Sha256:\n {member_sha} 6 pkg_1.orig.tar.gz\n".encode()
+    dsc_url, _ = serve("pkg_1.dsc", dsc_text)
+    files = [(dsc_url, "sha512", hashlib.sha512(dsc_text).hexdigest()), (member_url, "sha256", member_sha)]
+    d1 = {"name": "d1", "version": "1", "license": "GPL-2.0", "source": dsc_url, "files": [], "source_files": files}
+    pr.fetch_sources([d1, dict(d1, name="d2")], os.path.join(scratch, "out5"))
+    check(True, "two entries naming one Debian source package with the same SHA-512 share it")
+    try:
+        pr.fetch_sources([d1, dict(d1, name="d3", source_files=[(dsc_url, "sha512", "0" * 128), files[1]])],
+                         os.path.join(scratch, "out6"))
+        check(False, "a shared source must match every entry's digest, SHA-512 included")
+    except SystemExit as e:
+        check("both called" in str(e), "...and the digest clash is what stops it", str(e))
     try:
         pr.fetch_sources([a, dict(a, name="c", source=base + "mirror/common.tar.gz")], os.path.join(scratch, "out2"))
         check(False, "two different source URLs under one file name must be an error")
@@ -411,10 +424,13 @@ check(all(d.get("license") and len(d.get("versions", ())) == 2 and d.get("soname
           for d in pr.LINUX_BUNDLED_SOURCES.values()), "each decision names a licence, a version range, its SONAMEs and a source decision")
 
 # --- the common licence texts a Debian copyright file points to, read past prose punctuation
-avail = {"Apache-2.0", "GPL-3", "GPL", "LGPL-2.1"}
+avail = {"Apache-2.0", "GPL-2", "GPL-3", "GPL", "LGPL-2.1"}
 refs = pr.common_license_refs("see /usr/share/common-licenses/Apache-2.0.\nand /usr/share/common-licenses/GPL-3.\n"
-                              "(/usr/share/common-licenses/LGPL-2.1), /usr/share/common-licenses/GPL-3, /usr/share/common-licenses/Nope.", avail)
-check(refs == ["Apache-2.0", "GPL-3", "LGPL-2.1", "Nope"], "references resolve past punctuation; an unknown one is kept to be reported", refs)
+                              "(/usr/share/common-licenses/LGPL-2.1), /usr/share/common-licenses/GPL-3.0, "
+                              "/usr/share/common-licenses/GPL-2.99. /usr/share/common-licenses/../../../etc/passwd "
+                              "/usr/share/common-licenses/Nope.", avail)
+check(refs == (["Apache-2.0", "GPL-3", "LGPL-2.1"], ["../../../etc/passwd", "GPL-2.99", "Nope"]),
+      "exact names past punctuation and known aliases are found; a near miss or a path is reported, never guessed", refs)
 
 # --- Linux: ldd output, including a path with a space in it
 lddout = ("\tlinux-vdso.so.1 (0x00007ffd)\n"

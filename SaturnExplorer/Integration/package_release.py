@@ -366,17 +366,23 @@ def parse_dsc_members(text):
 COMMON_LICENSES = "/usr/share/common-licenses"
 
 
+# Spellings copyright files use for a text /usr/share/common-licenses holds under another name.
+COMMON_LICENSE_ALIASES = {"GPL-2.0": "GPL-2", "GPL-3.0": "GPL-3", "LGPL-2.0": "LGPL-2", "LGPL-2.1+": "LGPL-2.1",
+                          "LGPL-3.0": "LGPL-3", "GFDL-1.2+": "GFDL-1.2", "GFDL-1.3+": "GFDL-1.3"}
+
+
 def common_license_refs(text, available=None):
-    """The /usr/share/common-licenses files a copyright file refers to, read past prose punctuation ("GPL-3.")
-    by matching against the names that exist there."""
+    """(found, unknown): the /usr/share/common-licenses files a copyright file refers to, as exact installed file
+    names (after trailing prose punctuation such as "GPL-3." is stripped, and known alternative spellings mapped),
+    and every other reference, to be reported rather than guessed at."""
     if available is None:
         available = set(os.listdir(COMMON_LICENSES)) if os.path.isdir(COMMON_LICENSES) else set()
-    refs = set()
+    found, unknown = set(), set()
     for token in re.findall(re.escape(COMMON_LICENSES) + r"/(\S+)", text):
         token = token.rstrip(".,;:)'\"]")
-        refs.add(token if token in available else
-                 max((n for n in available if token.startswith(n)), key=len, default=token))
-    return sorted(refs)
+        name = COMMON_LICENSE_ALIASES.get(token, token)
+        (found if name == os.path.basename(name) and name in available else unknown).add(name)
+    return sorted(found), sorted(unknown)
 
 
 def version_at_least(version, minimum):
@@ -416,11 +422,12 @@ def dpkg_manifest(copied, licenses_dir, allow_mismatch=False):
         with open(copyright_file, encoding="utf-8", errors="replace") as f:
             text = f.read()
         shutil.copy2(copyright_file, os.path.join(dest, "copyright"))
-        for common in common_license_refs(text):
-            if not os.path.isfile(os.path.join(COMMON_LICENSES, common)):
-                problem(f"{copyright_file} refers to {COMMON_LICENSES}/{common}, which does not exist")
-                continue
+        found, unknown = common_license_refs(text)
+        for common in found:
             shutil.copy2(os.path.join(COMMON_LICENSES, common), os.path.join(dest, common))
+        if unknown:
+            problem(f"{copyright_file} refers to {', '.join(unknown)} in {COMMON_LICENSES}, which has no such file; "
+                    "add the text by hand or a spelling to COMMON_LICENSE_ALIASES")
         r = subprocess.run(["apt-get", "source", "--print-uris", f"{src}={src_ver}"], capture_output=True, text=True,
                            env=tool_env())
         uris = parse_print_uris(r.stdout) if r.returncode == 0 else []
@@ -809,7 +816,7 @@ def fetch_sources(entries, dest, allow_missing=False):
     same source file (split packages) share one download."""
     os.makedirs(dest, exist_ok=True)
     staging = tempfile.mkdtemp(prefix=".se-download-", dir=os.path.dirname(os.path.abspath(dest)))
-    fetched = {}                              # file name -> (url, its digest) of what is already in dest
+    fetched = {}                              # file name -> the URL it was downloaded from into dest
     try:
         for e in entries:
             if not e.get("ship_source", bool(SOURCE_FORMULA_LICENSE.search(e["license"]))):
@@ -835,16 +842,17 @@ def fetch_sources(entries, dest, allow_missing=False):
             names = []
             for url, algo, want in files:
                 name = safe_source_name(url)
+                path = os.path.join(dest, name)
                 if name in fetched:
-                    prev_url, prev_digest = fetched[name]
-                    if prev_url != url or (want and algo == "sha256" and want != prev_digest):
+                    # Already downloaded for another entry: it must be the same URL, and match THIS entry's digest too.
+                    got = file_digest(path, algo)
+                    if fetched[name] != url or (want and got != want):
                         raise SystemExit(f"two different source files are both called {name}")
-                    got = prev_digest
                 else:
-                    if os.path.lexists(os.path.join(dest, name)):
+                    if os.path.lexists(path):
                         raise SystemExit(f"{name} is already in {dest}")
-                    got = download_verified(url, os.path.join(dest, name), algo, want, staging)
-                    fetched[name] = (url, got if algo == "sha256" else file_digest(os.path.join(dest, name), "sha256"))
+                    got = download_verified(url, path, algo, want, staging)
+                    fetched[name] = url
                 names.append(name)
             if "source_files" in e:
                 check_dsc_complete(dest, names)
