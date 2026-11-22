@@ -122,9 +122,9 @@ def resolve_dep(dep, owners, exe):
 
 def copy_lib(real, name, libdir, copied):
     """Copy one library into libdir as `name`, recording it in `copied` (original real path -> name)."""
-    if name in copied.values():
-        raise SystemExit(f"two different libraries are both called {name}")
     dest = os.path.join(libdir, name)
+    if name in copied.values() or os.path.lexists(dest):
+        raise SystemExit(f"two different libraries are both called {name}")
     shutil.copy2(real, dest)
     os.chmod(dest, 0o755)
     copied[real] = name
@@ -210,17 +210,20 @@ LINUX_SYSTEM_STEMS = frozenset((
     "libdbus-1", "libsystemd", "libudev", "libfontconfig", "libfreetype", "libz", "libexpat", "libuuid"))
 LINUX_SYSTEM_PREFIXES = ("ld-linux", "libxcb", "libwayland-", "libpipewire-")
 
-# The reviewed licence of each Debian SOURCE package whose libraries the archive carries, and from which upstream
-# version that holds. Debian's copyright file is kept as evidence (licenses/bundled-libraries/) but not parsed for
-# the licence: its "Files: *" stanza describes the whole source package (FLAC's says GPL/LGPL, for its tools),
-# not the one library shipped. A source package missing here stops the packaging.
+# The reviewed licence of each Debian SOURCE package whose libraries the archive carries: the SONAMEs reviewed,
+# the upstream versions the decision covers ([from, below)), and whether its source must ship in the archive.
+# Debian's copyright file is kept as evidence (licenses/bundled-libraries/) but not parsed for the licence: its
+# "Files: *" stanza describes the whole source package (FLAC's says GPL/LGPL, for its tools), not the one library
+# shipped. A source package, SONAME or version outside this table stops the packaging until someone reviews it.
 LINUX_BUNDLED_SOURCES = {
-    "libsdl2": {"license": "Zlib", "since": "2.0"},
-    "flac": {"license": "BSD-3-Clause", "since": "1.2",
+    "libsdl2": {"license": "Zlib", "versions": ("2.0", "3"), "sonames": ("libSDL2-2.0.so.0",), "ship_source": False},
+    "flac": {"license": "BSD-3-Clause", "versions": ("1.2", "2"), "sonames": ("libFLAC.so.8", "libFLAC.so.12"),
+             "ship_source": False,
              "note": "only libFLAC is shipped, which Xiph licenses under BSD-3-Clause; the GPL parts are the tools"},
-    "libogg": {"license": "BSD-3-Clause", "since": "1.0"},
-    "libsamplerate": {"license": "BSD-2-Clause", "since": "0.1.9", "note": "GPL before 0.1.9"},
-    "libdecor-0": {"license": "MIT", "since": "0.1"},
+    "libogg": {"license": "BSD-3-Clause", "versions": ("1.0", "2"), "sonames": ("libogg.so.0",), "ship_source": False},
+    "libsamplerate": {"license": "BSD-2-Clause", "versions": ("0.1.9", "1"), "sonames": ("libsamplerate.so.0",),
+                      "ship_source": False, "note": "GPL before 0.1.9"},
+    "libdecor-0": {"license": "MIT", "versions": ("0.1", "1"), "sonames": ("libdecor-0.so.0",), "ship_source": False},
 }
 
 
@@ -258,6 +261,11 @@ def parse_ldd(text):
         m = re.match(r"\s*(\S+) => (?:not found|(.+) \(0x[0-9a-f]+\))\s*$", line)
         if m:
             found[m.group(1)] = m.group(2)
+        else:
+            # The program interpreter is listed by its path alone (/lib64/ld-linux-x86-64.so.2 (0x...)).
+            m = re.match(r"\s*(/.+) \(0x[0-9a-f]+\)\s*$", line)
+            if m:
+                found.setdefault(os.path.basename(m.group(1)), m.group(1))
     return found
 
 
@@ -285,7 +293,8 @@ def bundle_elf_libs(exe, exe_origin, libdir):
     second name is linked under that name too. Returns {original real path: file name in libdir}."""
     os.makedirs(libdir, exist_ok=True)
     resolved = ldd_map(exe_origin)
-    copied = {}                               # original real path -> file name in libdir
+    copied = {}                               # original real path -> file name in libdir (its SONAME)
+    owner = {}                                # every name in libdir -> the original it stands for
     queue = [exe]
     while queue:
         for name in elf_needed(queue.pop()):
@@ -295,10 +304,18 @@ def bundle_elf_libs(exe, exe_origin, libdir):
             if not real:
                 raise SystemExit(f"cannot resolve {name}, which {exe_origin} loads")
             real = os.path.realpath(real)
+            canonical = copied.get(real) or elf_soname(real) or name
+            # One folder holds every name, so each name may stand for one library only; otherwise a link made for
+            # one library would be written through when another is copied under the same name.
+            for n in {canonical, name}:
+                if n != os.path.basename(n) or n in (".", ".."):
+                    raise SystemExit(f"{real} is asked for as {n!r}, which is not a plain file name")
+                if owner.setdefault(n, real) != real:
+                    raise SystemExit(f"{n} would name both {owner[n]} and {real}")
             if real not in copied:            # copied under its SONAME, which every loader request can reach
-                queue.append(copy_lib(real, elf_soname(real) or name, libdir, copied))
-            if name != copied[real] and not os.path.lexists(os.path.join(libdir, name)):
-                os.symlink(copied[real], os.path.join(libdir, name))
+                queue.append(copy_lib(real, canonical, libdir, copied))
+            if name != canonical and not os.path.lexists(os.path.join(libdir, name)):
+                os.symlink(canonical, os.path.join(libdir, name))
     run(["patchelf", "--set-rpath", "$ORIGIN/" + os.path.relpath(libdir, os.path.dirname(exe)), exe])
     for name in copied.values():
         run(["patchelf", "--set-rpath", "$ORIGIN", os.path.join(libdir, name)])
@@ -346,6 +363,22 @@ def parse_dsc_members(text):
     return members
 
 
+COMMON_LICENSES = "/usr/share/common-licenses"
+
+
+def common_license_refs(text, available=None):
+    """The /usr/share/common-licenses files a copyright file refers to, read past prose punctuation ("GPL-3.")
+    by matching against the names that exist there."""
+    if available is None:
+        available = set(os.listdir(COMMON_LICENSES)) if os.path.isdir(COMMON_LICENSES) else set()
+    refs = set()
+    for token in re.findall(re.escape(COMMON_LICENSES) + r"/(\S+)", text):
+        token = token.rstrip(".,;:)'\"]")
+        refs.add(token if token in available else
+                 max((n for n in available if token.startswith(n)), key=len, default=token))
+    return sorted(refs)
+
+
 def version_at_least(version, minimum):
     return subprocess.run(["dpkg", "--compare-versions", version, "ge", minimum], env=tool_env()).returncode == 0
 
@@ -371,19 +404,23 @@ def dpkg_manifest(copied, licenses_dir, allow_mismatch=False):
         ver, src, src_ver = out(["dpkg-query", "-W", "-f=${Version}\t${source:Package}\t${source:Version}", pkg]).split("\t")
         upstream = re.sub(r"^\d+:", "", src_ver).split("-")[0]
         decision = LINUX_BUNDLED_SOURCES.get(src)
-        if decision is None or not version_at_least(upstream, decision["since"]):
-            problem(f"no reviewed licence for {pkg} (source package {src} {src_ver}); read /usr/share/doc/{pkg}/copyright "
-                    "and add it to LINUX_BUNDLED_SOURCES in package_release.py")
-            decision = {"license": "unknown (not reviewed)"}
+        unreviewed = sorted(files - set(decision["sonames"])) if decision else sorted(files)
+        if (decision is None or unreviewed or not version_at_least(upstream, decision["versions"][0])
+                or version_at_least(upstream, decision["versions"][1])):
+            problem(f"no reviewed licence for {', '.join(unreviewed) or pkg} from source package {src} {src_ver}; read "
+                    f"/usr/share/doc/{pkg}/copyright and update LINUX_BUNDLED_SOURCES in package_release.py")
+            decision = {"license": "unknown (not reviewed)", "ship_source": True}
         dest = os.path.join(licenses_dir, pkg)
         os.makedirs(dest, exist_ok=True)
         copyright_file = f"/usr/share/doc/{pkg}/copyright"
         with open(copyright_file, encoding="utf-8", errors="replace") as f:
             text = f.read()
         shutil.copy2(copyright_file, os.path.join(dest, "copyright"))
-        for common in sorted(set(re.findall(r"/usr/share/common-licenses/([A-Za-z0-9.+_-]+)", text))):
-            if os.path.isfile("/usr/share/common-licenses/" + common):
-                shutil.copy2("/usr/share/common-licenses/" + common, os.path.join(dest, common))
+        for common in common_license_refs(text):
+            if not os.path.isfile(os.path.join(COMMON_LICENSES, common)):
+                problem(f"{copyright_file} refers to {COMMON_LICENSES}/{common}, which does not exist")
+                continue
+            shutil.copy2(os.path.join(COMMON_LICENSES, common), os.path.join(dest, common))
         r = subprocess.run(["apt-get", "source", "--print-uris", f"{src}={src_ver}"], capture_output=True, text=True,
                            env=tool_env())
         uris = parse_print_uris(r.stdout) if r.returncode == 0 else []
@@ -391,7 +428,7 @@ def dpkg_manifest(copied, licenses_dir, allow_mismatch=False):
         if not dsc:
             problem(f"apt has no source for {src} {src_ver} (enable deb-src and apt-get update): {r.stderr.strip()}")
         entries.append({"name": pkg, "version": ver, "license": decision["license"], "files": sorted(files),
-                        "source": dsc, "source_files": uris,
+                        "source": dsc, "source_files": uris, "ship_source": decision["ship_source"],
                         "note": f"Debian/Ubuntu package {pkg}, built from source package {src} {src_ver}" +
                                 (f"; {decision['note']}" if decision.get("note") else "")})
     return entries
@@ -643,9 +680,12 @@ def verify_provenance(up, mednafen, mso, allow):
             problems.append("it was not built the way SOURCE.txt says (Saturn-only, rewind): missing " + ", ".join(missing[:4]))
     except OSError:
         problems.append(f"no build record ({mso.install.MEDNAFEN_STAMP}) in {root}; build it with install.py --mednafen-saturn-only")
-    dirty = subprocess.run(["git", "status", "--porcelain", "--", "Integration"], cwd=SE_ROOT,
-                           capture_output=True, text=True).stdout.strip()
-    if dirty:
+    status = subprocess.run(["git", "status", "--porcelain", "--", "Integration"], cwd=SE_ROOT,
+                            capture_output=True, text=True)
+    dirty = status.stdout.strip()
+    if status.returncode != 0:
+        problems.append(f"git status failed, so Integration/ cannot be shown clean: {status.stderr.strip()}")
+    elif dirty:
         problems.append("Integration/ has uncommitted changes, so the source offer would not match any commit")
     if problems and not allow:
         shown = problems[:12]
@@ -762,43 +802,57 @@ def msys2_manifest(dlls, dll_dir, run_pacman=None, source_index=None, mingw_bin=
 
 
 def fetch_sources(entries, dest, allow_missing=False):
-    """Download the source of each copyleft library into dest. Homebrew gives a checksum to verify against;
-    the MSYS2 archives have none, so their hash is recorded as a baseline instead. A copyleft library whose
-    source cannot be found stops the packaging: the offer must be able to name it."""
+    """Download the source of each library whose source must ship into dest: an entry's own decision
+    (`ship_source`, the Linux table) or, without one, a GPL-family licence. Homebrew gives a checksum to verify
+    against; the MSYS2 archives have none, so their hash is recorded as a baseline instead. A library whose source
+    must ship but cannot be found stops the packaging: the offer must be able to name it. Two entries naming the
+    same source file (split packages) share one download."""
     os.makedirs(dest, exist_ok=True)
-    for e in entries:
-        if not SOURCE_FORMULA_LICENSE.search(e["license"]):
-            continue
-        if not e["source"] or not e["source"].startswith("http"):
-            msg = f"no source found for {e['name']} {e['version']} ({e['license']}), which is shipped"
-            if not allow_missing:
-                raise SystemExit(msg + "; add it by hand or pass --allow-mismatch")
-            print("warning (overridden):", msg)
-            e["source"] = e["source"] or "unknown"
-            continue
-        # A Debian source package is several files (.dsc, upstream tarball, packaging), each with its checksum;
-        # a Homebrew or MSYS2 entry is one file, checked against its recorded hash or, without one, recorded.
-        files = e.get("source_files") or ([(e["source"], "sha256", e.get("sha256"))]
-                                          if e.get("sha256") or e.get("record_hash") else [])
-        if not files:
-            continue
-        if "exception" in e["license"].lower():
-            # GPL with a runtime-library exception (libgcc, libstdc++): the source is named and offered, but a
-            # multi-hundred-megabyte compiler tarball is not put in every download.
-            e["note"] = (e.get("note") or "") + "; source offered, not bundled"
-            continue
-        names = []
-        for url, algo, want in files:
-            name = safe_source_name(url)
-            if os.path.lexists(os.path.join(dest, name)):
-                raise SystemExit(f"two source files are both called {name}")
-            got = download_verified(url, os.path.join(dest, name), algo, want)
-            names.append(name)
-        if "source_files" in e:
-            check_dsc_complete(dest, names)
-        else:
-            e["sha256"] = got
-        e["included"] = ", ".join("third-party-source/" + n for n in names)
+    staging = tempfile.mkdtemp(prefix=".se-download-", dir=os.path.dirname(os.path.abspath(dest)))
+    fetched = {}                              # file name -> (url, its digest) of what is already in dest
+    try:
+        for e in entries:
+            if not e.get("ship_source", bool(SOURCE_FORMULA_LICENSE.search(e["license"]))):
+                continue
+            if not e["source"] or not e["source"].startswith("http"):
+                msg = f"no source found for {e['name']} {e['version']} ({e['license']}), which is shipped"
+                if not allow_missing:
+                    raise SystemExit(msg + "; add it by hand or pass --allow-mismatch")
+                print("warning (overridden):", msg)
+                e["source"] = e["source"] or "unknown"
+                continue
+            # A Debian source package is several files (.dsc, upstream tarball, packaging), each with its checksum;
+            # a Homebrew or MSYS2 entry is one file, checked against its recorded hash or, without one, recorded.
+            files = e.get("source_files") or ([(e["source"], "sha256", e.get("sha256"))]
+                                              if e.get("sha256") or e.get("record_hash") else [])
+            if not files:
+                continue
+            if "exception" in e["license"].lower():
+                # GPL with a runtime-library exception (libgcc, libstdc++): the source is named and offered, but a
+                # multi-hundred-megabyte compiler tarball is not put in every download.
+                e["note"] = (e.get("note") or "") + "; source offered, not bundled"
+                continue
+            names = []
+            for url, algo, want in files:
+                name = safe_source_name(url)
+                if name in fetched:
+                    prev_url, prev_digest = fetched[name]
+                    if prev_url != url or (want and algo == "sha256" and want != prev_digest):
+                        raise SystemExit(f"two different source files are both called {name}")
+                    got = prev_digest
+                else:
+                    if os.path.lexists(os.path.join(dest, name)):
+                        raise SystemExit(f"{name} is already in {dest}")
+                    got = download_verified(url, os.path.join(dest, name), algo, want, staging)
+                    fetched[name] = (url, got if algo == "sha256" else file_digest(os.path.join(dest, name), "sha256"))
+                names.append(name)
+            if "source_files" in e:
+                check_dsc_complete(dest, names)
+            else:
+                e["sha256"] = got
+            e["included"] = ", ".join("third-party-source/" + n for n in names)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 def safe_source_name(url):
@@ -809,11 +863,12 @@ def safe_source_name(url):
     return name
 
 
-def download_verified(url, path, algo, want):
-    """Download to a temporary file and move it to `path` only once its digest matches `want` (when known)."""
-    tmp = path + ".partial"
+def download_verified(url, path, algo, want, staging):
+    """Download into a file of its own in `staging` (on the same filesystem) and move it to `path` only once its
+    digest matches `want` (when known)."""
+    fd, tmp = tempfile.mkstemp(dir=staging)
     try:
-        with urllib.request.urlopen(url, timeout=300) as r, open(tmp, "wb") as f:
+        with urllib.request.urlopen(url, timeout=300) as r, os.fdopen(fd, "wb") as f:
             shutil.copyfileobj(r, f)
         got = file_digest(tmp, algo)
         if want and got != want:
@@ -982,17 +1037,28 @@ def main():
             codesign(archive, args.sign_identity)      # the image itself is signed too, then notarised as a whole
     else:
         # A tarball on Linux: a zip loses the executable bits. make_archive overwrites an existing archive.
-        archive = shutil.make_archive(stage, "gztar" if IS_LINUX else "zip", os.path.dirname(stage), name)
-    if IS_LINUX:
-        # Test what users download: the finished tarball, unpacked somewhere else.
-        unpacked = tempfile.mkdtemp(prefix="se_unpacked_")
-        try:
-            shutil.unpack_archive(archive, unpacked)
-            smoke_test(os.path.join(unpacked, name), os.path.join(unpacked, name, "mednafen-se", MEDNAFEN_EXE),
-                       args.require_window)
-        finally:
-            shutil.rmtree(unpacked, ignore_errors=True)
+        archive = shutil.make_archive(stage, "zip", os.path.dirname(stage), name) if not IS_LINUX else \
+            promote_tested_tarball(stage, name, args.require_window)
     print(f"wrote {archive}")
+
+
+def promote_tested_tarball(stage, name, require_window):
+    """Linux: test what users download -- the finished tarball, unpacked somewhere else -- and give it its release
+    name only once that passes, so a failed run never leaves (or replaces a good archive with) an untested one."""
+    out_dir = os.path.dirname(stage)
+    candidate = shutil.make_archive(os.path.join(out_dir, f".{name}.candidate"), "gztar", out_dir, name)
+    unpacked = tempfile.mkdtemp(prefix="se_unpacked_")
+    try:
+        shutil.unpack_archive(candidate, unpacked)
+        smoke_test(os.path.join(unpacked, name), os.path.join(unpacked, name, "mednafen-se", MEDNAFEN_EXE),
+                   require_window)
+        archive = stage + ".tar.gz"
+        os.replace(candidate, archive)
+        return archive
+    finally:
+        shutil.rmtree(unpacked, ignore_errors=True)
+        if os.path.exists(candidate):
+            os.remove(candidate)
 
 
 def package_macho_files(emu):
@@ -1011,8 +1077,10 @@ def linux_requirements(stage, emu):
     sonames, newest = set(), {}
     for item in package_elf_files(stage, emu):
         sonames.update(n for n in elf_needed(item) if is_linux_system(n))
-        text = subprocess.run(["readelf", "-V", "--wide", item], capture_output=True, text=True, env=tool_env()).stdout
-        needs = text.partition("Version needs section")[2]
+        r = subprocess.run(["readelf", "-V", "--wide", item], capture_output=True, text=True, env=tool_env())
+        if r.returncode != 0:
+            raise SystemExit(f"readelf -V failed on {item}: {r.stderr.strip()}")
+        needs = r.stdout.partition("Version needs section")[2]
         for lib, ver in re.findall(r"Name: (GLIBC|GLIBCXX|CXXABI)_([0-9.]+)", needs):
             key = tuple(int(x) for x in ver.split("."))
             if key > newest.get(lib, ()):
@@ -1023,11 +1091,13 @@ def linux_requirements(stage, emu):
 def linux_requirements_text(stage, emu):
     sonames, newest = linux_requirements(stage, emu)
     return ("What this download needs from your Linux system\n" + "=" * 47 + "\n\n" +
+            "Read from the programs' ELF headers: what the loader must find before they start.\n\n" +
             "Symbol versions (newest needed): " + ", ".join(f"{k}_{v}" for k, v in newest.items()) + "\n\n" +
             "Libraries, by the name the programs load (install your distribution's packages that provide them):\n" +
             "".join(f"  {n}\n" for n in sonames) +
-            "\nEverything else is in the lib/ folders. Saturn Explorer also uses zenity or kdialog for file dialogs\n"
-            "and libcurl.so.4, if present, for the update check.\n")
+            "\nThe other load-time libraries are in the lib/ folders. Loaded later, and only if present:\n"
+            "  zenity or kdialog (file dialogs), libcurl.so.4 (the update check), and on Wayland the\n"
+            "  libdecor decoration plugin your distribution installs with libdecor (window title bars).\n")
 
 
 def smoke_test_linux(stage, emu, env, require_window):

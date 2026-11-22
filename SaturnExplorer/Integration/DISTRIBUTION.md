@@ -168,15 +168,17 @@ Each program's runpath points at its `lib/` (`patchelf`). The libraries every de
 they must match the user's system: glibc, the C++ runtime, OpenGL, X11/Wayland, ALSA/PulseAudio
 (`LINUX_SYSTEM_STEMS` in `package_release.py`, named one by one).
 
-Licences: `LINUX_BUNDLED_SOURCES` in `package_release.py` records a reviewed licence for each Debian source
-package whose library is shipped, and from which upstream version it holds. A library from any other source
-package stops the packaging until someone reviews it. Debian's copyright file (and any `common-licenses` text it
+Licences: `LINUX_BUNDLED_SOURCES` in `package_release.py` records, for each Debian source package whose library
+is shipped, a reviewed licence, the SONAMEs reviewed, the upstream version range the decision covers, and whether
+its source must ship. Another source package, another SONAME from a known one, or a version outside the range
+stops the packaging until someone reviews it. Debian's copyright file (and any `common-licenses` text it
 points to) goes into `licenses/bundled-libraries/<package>/` as evidence, but is not parsed for the licence: its
 `Files: *` stanza describes the whole source package (FLAC's says GPL/LGPL, for the tools; libFLAC is BSD).
 `apt-get source --print-uris` must name the exact source version, every file line must parse, and a copyleft
 source is downloaded into `third-party-source/` only when it matches its `.dsc` member for member.
 
-The smoke test runs on the finished tarball, unpacked elsewhere. Every library must resolve inside the package or
+The smoke test runs on the finished tarball, unpacked elsewhere; the tarball gets its release name only after it
+passes, so a failed run leaves no untested archive behind. Every library must resolve inside the package or
 be a system one. `--selftest` must exit 0. With `--require-window` (the release job runs under `xvfb-run`),
 `--selftest-window` must open the real window with its OpenGL context on X11 or Wayland. libcurl is not shipped:
 the update check loads the user's own copy (`SE_REQUIRE_CURL=ON` makes the release build fail without the headers).

@@ -200,7 +200,8 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y git python3 ca-certificates
-          git config --global --add safe.directory '*'
+          # The workspace is mounted from the runner, owned by another user than the container's root.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - uses: actions/checkout@v4
         with:
@@ -217,7 +218,8 @@ jobs:
           DEBIAN_FRONTEND=noninteractive $PACKAGES ninja-build patchelf xvfb xauth
           # Fail now, not after both builds, if apt cannot name the exact source of what will be bundled.
           SDL_SRC="$(dpkg-query -W -f='${source:Package}=${source:Version}' libsdl2-2.0-0)"
-          apt-get source --print-uris "$SDL_SRC" | grep -q "\.dsc' " || { echo "apt has no source for $SDL_SRC"; exit 1; }
+          apt-get source --print-uris "$SDL_SRC" > sdl-source.txt || { echo "apt has no source for $SDL_SRC"; exit 1; }
+          grep -q "\.dsc' " sdl-source.txt || { echo "apt names no .dsc for $SDL_SRC"; cat sdl-source.txt; exit 1; }
 
       # The label comes from a typed input or a tag name, so it reaches the shell only through the
       # environment and only after it matches a filename-safe pattern.

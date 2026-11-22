@@ -126,6 +126,51 @@ try:
 finally:
     shutil.rmtree(scratch, ignore_errors=True)
 
+# --- one source file named by two entries (split packages) is downloaded once; a file whose name is another's
+#     temporary name is still its own; the source decision of an entry outranks its licence text
+scratch = tempfile.mkdtemp(prefix="se_fetch_")
+try:
+    import hashlib
+    import functools
+    import http.server
+    import threading
+    srv = os.path.join(scratch, "srv")
+    os.makedirs(srv)
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(
+        type("Quiet", (http.server.SimpleHTTPRequestHandler,), {"log_message": lambda *a: None}), directory=srv))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}/"
+    def serve(name, data):
+        with open(os.path.join(srv, name), "wb") as f:
+            f.write(data)
+        return base + name, hashlib.sha256(data).hexdigest()
+    url, digest = serve("common.tar.gz", b"shared source")
+    a = {"name": "a", "version": "1", "license": "GPL-2.0", "source": url, "sha256": digest, "files": ["a.dll"]}
+    b = dict(a, name="b", files=["b.dll"])
+    out_dir = os.path.join(scratch, "out")
+    pr.fetch_sources([a, b], out_dir)
+    check(a.get("included") == b.get("included") == "third-party-source/common.tar.gz", "a shared source is listed for both entries")
+    check(sorted(os.listdir(out_dir)) == ["common.tar.gz"] and sorted(os.listdir(scratch)) == ["out", "srv"],
+          "...downloaded once, and the staging folder is gone", os.listdir(scratch))
+    try:
+        pr.fetch_sources([a, dict(a, name="c", source=base + "mirror/common.tar.gz")], os.path.join(scratch, "out2"))
+        check(False, "two different source URLs under one file name must be an error")
+    except SystemExit:
+        pass
+    u1, d1 = serve("example.partial", b"one")
+    u2, d2 = serve("example", b"two")
+    out3 = os.path.join(scratch, "out3")
+    pr.fetch_sources([{"name": "p", "version": "1", "license": "GPL-2.0", "source": u1, "sha256": d1, "files": []},
+                      {"name": "q", "version": "1", "license": "GPL-2.0", "source": u2, "sha256": d2, "files": []}], out3)
+    check(sorted(os.listdir(out3)) == ["example", "example.partial"], "a file called like a temporary file survives", os.listdir(out3))
+    out4 = os.path.join(scratch, "out4")
+    pr.fetch_sources([{"name": "m", "version": "1", "license": "MPL-2.0", "source": u2, "sha256": d2, "files": [], "ship_source": True},
+                      {"name": "g", "version": "1", "license": "GPL-2.0", "source": u1, "sha256": d1, "files": [], "ship_source": False}], out4)
+    check(os.listdir(out4) == ["example"], "ship_source decides, not the licence name", os.listdir(out4))
+finally:
+    httpd.shutdown()
+    shutil.rmtree(scratch, ignore_errors=True)
+
 # --- GPL with the runtime-library exception: the source must be findable, but it is not downloaded into the archive
 scratch = tempfile.mkdtemp(prefix="se_pkgtest_")
 try:
@@ -362,13 +407,22 @@ check(pr.parse_print_uris("Reading package lists...\nNeed to get 1 kB\n") == [],
 
 # --- Linux: every library a bundled Debian source package names is reviewed, from the version that licence holds
 check(set(pr.LINUX_BUNDLED_SOURCES) >= {"libsdl2", "flac", "libogg", "libsamplerate", "libdecor-0"}, "the libraries the archive carries have decisions")
-check(all(d.get("license") and d.get("since") for d in pr.LINUX_BUNDLED_SOURCES.values()), "each decision names a licence and a version")
+check(all(d.get("license") and len(d.get("versions", ())) == 2 and d.get("sonames") and "ship_source" in d
+          for d in pr.LINUX_BUNDLED_SOURCES.values()), "each decision names a licence, a version range, its SONAMEs and a source decision")
+
+# --- the common licence texts a Debian copyright file points to, read past prose punctuation
+avail = {"Apache-2.0", "GPL-3", "GPL", "LGPL-2.1"}
+refs = pr.common_license_refs("see /usr/share/common-licenses/Apache-2.0.\nand /usr/share/common-licenses/GPL-3.\n"
+                              "(/usr/share/common-licenses/LGPL-2.1), /usr/share/common-licenses/GPL-3, /usr/share/common-licenses/Nope.", avail)
+check(refs == ["Apache-2.0", "GPL-3", "LGPL-2.1", "Nope"], "references resolve past punctuation; an unknown one is kept to be reported", refs)
 
 # --- Linux: ldd output, including a path with a space in it
 lddout = ("\tlinux-vdso.so.1 (0x00007ffd)\n"
           "\tlibext.so.1 => /tmp/Saturn Explorer/lib/libext.so.1 (0x00007f1234)\n"
           "\tlibmissing.so.2 => not found\n"
           "\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f5678)\n")
+check(pr.parse_ldd("\t/lib64/ld-linux-x86-64.so.2 (0x00007f00)\n") == {"ld-linux-x86-64.so.2": "/lib64/ld-linux-x86-64.so.2"},
+      "the program interpreter's bare-path line is indexed by its name")
 check(pr.parse_ldd(lddout) == {"libext.so.1": "/tmp/Saturn Explorer/lib/libext.so.1", "libmissing.so.2": None,
                                "libc.so.6": "/lib/x86_64-linux-gnu/libc.so.6"}, "ldd lines parse, spaces and 'not found' included", pr.parse_ldd(lddout))
 
@@ -530,6 +584,28 @@ if sys.platform.startswith("linux") and shutil.which("cc") and shutil.which("pat
         shutil.rmtree(ext)
         check(subprocess.run([exe]).returncode == 0, "the packaged program runs with the originals gone")
         check(pr.ldd_map(exe).get("libleaf.so.1", "").startswith(os.path.join(work, "pkg", "lib")), "...loading the packaged copies")
+        # Two libraries whose names cross: one asked for as alias.so (SONAME canonical.so), the other as second.so
+        # (SONAME alias.so). A link for the first under alias.so must not be overwritten by the second's copy.
+        cross = os.path.join(work, "cross")
+        os.makedirs(cross)
+        w("one.c", "int one_fn(void){return 3;}\n")
+        w("two.c", "int two_fn(void){return 4;}\n")
+        w("main2.c", "int one_fn(void); int two_fn(void); int main(void){return one_fn()+two_fn()==7?0:1;}\n")
+        cc("-shared", "-fPIC", "-Wl,-soname,canonical.so", os.path.join(work, "one.c"), "-o", os.path.join(cross, "canonical.so"))
+        os.symlink("canonical.so", os.path.join(cross, "alias.so"))
+        cc("-shared", "-fPIC", "-Wl,-soname,alias.so", os.path.join(work, "two.c"), "-o", os.path.join(cross, "second.so"))
+        cc(os.path.join(work, "main2.c"), os.path.join(cross, "canonical.so"), os.path.join(cross, "second.so"),
+           "-Wl,-rpath," + cross, "-o", os.path.join(work, "main2"))
+        subprocess.run(["patchelf", "--replace-needed", "canonical.so", "alias.so", "--replace-needed", "alias.so", "second.so",
+                        os.path.join(work, "main2")], check=True)
+        if subprocess.run([os.path.join(work, "main2")]).returncode == 0:
+            try:
+                pr.bundle_elf_libs(os.path.join(work, "main2"), os.path.join(work, "main2"), os.path.join(work, "crosslib"))
+                check(False, "a name standing for two different libraries must be an error")
+            except SystemExit as e:
+                check("would name both" in str(e) or "both called" in str(e), "...naming the clash", str(e))
+        else:
+            print("skip: could not build the crossed-names fixture")
         try:
             bad = os.path.join(work, "bad")
             shutil.copy2(os.path.join(work, "app", "main"), bad)     # its libraries no longer exist

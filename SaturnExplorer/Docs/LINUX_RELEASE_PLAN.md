@@ -100,6 +100,17 @@ The review's findings changed:
   building, and takes its packages from `install.py`.
 - `SYSTEM-REQUIREMENTS.txt` lists the system libraries and symbol versions the archive needs.
 
+A second review round then fixed the following:
+- Two libraries whose requested names cross can no longer overwrite each other in `lib/`: every name maps to one
+  original, or packaging stops.
+- The program interpreter's bare-path `ldd` line is parsed.
+- Common-licence references are read past punctuation, and a missing one is reported.
+- One source file shared by two entries is downloaded once, into a private staging folder.
+- Each Linux licence decision lists its SONAMEs, version range and source decision.
+- The Linux tarball is promoted to its release name only after its smoke test passes.
+- `git status` failures count as not clean, and the container trusts only `$GITHUB_WORKSPACE`.
+- The apt source preflight checks apt's exit status.
+
 Still open:
 - Running the tarball on stock Jammy, Debian 12, Fedora, Arch and openSUSE, and on native Wayland (no headless
   compositor test).
