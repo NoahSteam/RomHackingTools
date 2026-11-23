@@ -10558,7 +10558,7 @@ void DrawRegTable(const char* id, const RegInfo* regs, size_t count,
                   std::string (*decode)(uint32_t, uint16_t))
 {
     const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                                  ImGuiTableFlags_ScrollY;
+                                  ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable;
     if (ImGui::BeginTable(id, 3, flags, ImVec2(0, 0)))
     {
         ImGui::TableSetupScrollFreeze(0, 1);
@@ -10611,16 +10611,24 @@ void App::DrawSh2Registers()
     }
 
     const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                                  ImGuiTableFlags_ScrollY;
+                                  ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable;
     if (!ImGui::BeginTable("sh2regs", 3, flags, ImVec2(0, 0))) return;
 
+    // The fixed columns' starting widths come from the text they hold, not from pixels: a pixel
+    // width sized for one font clips "0x0605E108" under a larger font or a UI scale. The
+    // user can still drag them wider or narrower (Resizable); ImGui keeps that width.
+    const Sh2RegField* table = Sh2RegTable();
+    float regWidth = ImGui::CalcTextSize("Reg").x;
+    for (int i = 0; i < kSh2RegCount; ++i)
+        regWidth = std::max(regWidth, ImGui::CalcTextSize(table[i].name).x);
+    const float valueWidth = std::max(ImGui::CalcTextSize("0x00000000").x, ImGui::CalcTextSize("Value").x);
+    const float cellPad = ImGui::GetStyle().CellPadding.x * 2.0f;
     ImGui::TableSetupScrollFreeze(0, 1);
-    ImGui::TableSetupColumn("Reg", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 88.0f);
-    ImGui::TableSetupColumn("Notes");
+    ImGui::TableSetupColumn("Reg", ImGuiTableColumnFlags_WidthFixed, regWidth + cellPad);
+    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, valueWidth + cellPad);
+    ImGui::TableSetupColumn("Notes", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableHeadersRow();
 
-    const Sh2RegField* table = Sh2RegTable();
     for (int i = 0; i < kSh2RegCount; ++i)
     {
         const uint32_t value = Sh2RegValue(regs, i);
