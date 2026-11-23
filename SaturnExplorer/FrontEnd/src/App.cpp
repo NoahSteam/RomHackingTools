@@ -8866,7 +8866,7 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         break;
     case TopBarCommandType::OpenGuides:
         // Plain-English hardware guides (audio / VDP1 / VDP2), hosted on GitHub Pages.
-        platform.OpenURL("https://noahsteam.github.io/RomHackingTools/guides/");
+        platform.OpenURL("https://noahsteam.github.io/RomHackingTools/");
         break;
     case TopBarCommandType::CheckForUpdates:
         mOpenUpdate = true;

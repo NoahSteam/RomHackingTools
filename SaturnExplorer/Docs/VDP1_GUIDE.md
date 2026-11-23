@@ -4,7 +4,7 @@
 > content is maintained in one place — the self-contained HTML source below — and published
 > to GitHub Pages.
 
-- **Read it online:** https://noahsteam.github.io/RomHackingTools/guides/vdp1.html
+- **Read it online:** https://noahsteam.github.io/RomHackingTools/vdp1.html
 - **Source (single source of truth):** [`web/guides/vdp1.html`](../web/guides/vdp1.html)
 
 A plain-English tour of the Saturn's VDP1 drawing engine — the "everything is a four-cornered

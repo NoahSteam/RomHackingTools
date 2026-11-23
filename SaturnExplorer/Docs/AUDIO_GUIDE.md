@@ -4,7 +4,7 @@
 > content is maintained in one place — the self-contained HTML source below — and published
 > to GitHub Pages.
 
-- **Read it online:** https://noahsteam.github.io/RomHackingTools/guides/audio.html
+- **Read it online:** https://noahsteam.github.io/RomHackingTools/audio.html
 - **Source (single source of truth):** [`web/guides/audio.html`](../web/guides/audio.html)
 
 A plain-English tour of the Sega Saturn's audio hardware (the SCSP sound chip, sound RAM,
