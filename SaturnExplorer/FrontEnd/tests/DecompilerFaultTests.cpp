@@ -2714,16 +2714,20 @@ const Pin kPins[] = {
     { "jumptable", "followFlow", 0, 8, 227, "vector<ghidra::JumpTable*;Funcdata::recoverJumpTable#0", "A6-21 Funcdata::recoverJumpTable: the permanent table is freed when the list of tables cannot take it" },
     { "jumptable", "followFlow", 1, 64, 96, "JumpValuesRange::clone;JumpBasic::clone#0", "A6-21 the same, second pass" },
     { "jumptable", "followFlow", 1, 8, 227, "vector<ghidra::JumpTable*;Funcdata::recoverJumpTable#0", "A6-21 the same, second pass" },
-    { "dag", "actions", 0, 8, 179, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: the root BranchPoint is owned by the list before anything else can fail" },
+    // The six A6-22 pins on the BranchPoint list name the TraceDAG function, not the vector: GCC 15's libstdc++ leaves no
+    // std::vector<BranchPoint*> frame on that list's growth (its BlockTrace* vector keeps one), so "vector<...BranchPoint*"
+    // made all six STALE there with the coordinates unchanged (A6-48). The ordinal picks the same allocation on GCC 13
+    // and 15: openBranch's #0 in dag is the new branch's BlockTrace vector (BranchPoint::createTraces), its #1 the list.
+    { "dag", "actions", 0, 8, 179, "TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: the root BranchPoint is owned by the list before anything else can fail" },
     { "dag", "actions", 0, 8, 180, "vector<ghidra::TraceDAG::BlockTrace*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: a root BlockTrace is owned by its BranchPoint before the active list takes it" },
     { "dag", "actions", 0, 8, 181, "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces#0", "A6-22 BranchPoint::BranchPoint (createTraces): the first trace is freed when the list of paths cannot take it" },
     { "dag", "actions", 0, 16, 134, "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces#0", "A6-22 createTraces: the traces made so far are freed when the constructor fails" },
-    { "dag", "actions", 0, 16, 135, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::openBranch#0", "A6-22 TraceDAG::openBranch: the new BranchPoint is freed when the list cannot take it, and the parent trace is untouched" },
-    { "dag", "actions", 1, 8, 179, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 the same, second pass" },
-    { "dag", "actions", 1, 16, 135, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::openBranch#0", "A6-22 the same, second pass" },
-    { "loopbrk", "actions", 0, 8, 160, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize, in a loop with an early return" },
+    { "dag", "actions", 0, 16, 135, "TraceDAG::openBranch#1", "A6-22 TraceDAG::openBranch: the new BranchPoint is freed when the list cannot take it, and the parent trace is untouched" },
+    { "dag", "actions", 1, 8, 179, "TraceDAG::initialize#0", "A6-22 the same, second pass" },
+    { "dag", "actions", 1, 16, 135, "TraceDAG::openBranch#1", "A6-22 the same, second pass" },
+    { "loopbrk", "actions", 0, 8, 160, "TraceDAG::initialize#0", "A6-22 TraceDAG::initialize, in a loop with an early return" },
     { "loopbrk", "actions", 0, 8, 161, "vector<ghidra::TraceDAG::BlockTrace*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: the root trace, in a loop with an early return" },
-    { "loopbrk", "actions", 0, 16, 121, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::openBranch#0", "A6-22 TraceDAG::openBranch, in a loop with an early return" },
+    { "loopbrk", "actions", 0, 16, 121, "TraceDAG::openBranch#0", "A6-22 TraceDAG::openBranch, in a loop with an early return" },
 };
 
 long ResolvePin(const Ctx& c, const Pin& p)
