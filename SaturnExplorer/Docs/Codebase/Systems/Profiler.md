@@ -106,7 +106,7 @@ unmapped buckets as expected; the 16-byte mode reads in batches of 4 (K not a mu
 reads = 4 x ceil(K/4), writes = K), and an address error stops the channel after the unit in flight.
 
 The increments are unconditional: each sits on a path that already does far more work.
-Every hook is an insertion (never a replacement), so `apply.py --revert` restores the files.
+Every hook is an insertion, except the `smpc.cpp` input call, which keeps the upstream line inside its fence; `apply.py --revert` restores every file byte for byte.
 
 `SeMdfnPerfEndFrame` runs from `SeMednafenEndFrameHook`, hands the array to
 `SeExportPublishPerf` when a client is attached, and zeroes it. The server numbers each
