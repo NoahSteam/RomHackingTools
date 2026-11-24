@@ -238,6 +238,8 @@ if(BUILD_TESTING AND NOT WIN32 AND NOT EMSCRIPTEN)
     target_link_libraries(SaturnExplorerExportStartStopTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerExportStartStopTests
              COMMAND SaturnExplorerExportStartStopTests)
+    # Starts and stops the exporter on the default socket path and port, like the live tests.
+    set_tests_properties(SaturnExplorerExportStartStopTests PROPERTIES RESOURCE_LOCK live_tap_socket)
 endif()
 
 # The shared normalization helpers: what they do with input that is not the shape the
