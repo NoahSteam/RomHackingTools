@@ -310,6 +310,9 @@ Needs a Saturn BIOS, discs and a toolchain, which the build environment used so 
   fixed uncached work-RAM transfer; a one-command VDP1 list; a work-RAM-to-VDP1 SCU DMA. Both
   cache modes. Each check asserts independently expected numbers, and disabling the relevant
   hook must make it fail.
+  **Implementation:** `Integration/Validation/V1/` (guest, expected values in `EXPECTED.md`, fill-in
+  `CHECKLIST.md`, BIOS-free test `SaturnExplorerV1Guest`). Written and tested without a BIOS: no profiler
+  number in it has been observed yet.
 - **V2. Commercial scenes**, integration only. Record game revision, state and input, cache mode
   and the independent trace event compared. Virtua Fighter (USA) attract fight; Thunderstrike II
   (USA) gameplay entry (instant-draw mode); a repeatable Dragon Force load or battle transition.
