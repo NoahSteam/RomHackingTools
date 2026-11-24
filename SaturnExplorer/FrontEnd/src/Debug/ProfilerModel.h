@@ -52,6 +52,9 @@ struct PerfFrame
     bool Has(uint32_t bit) const { return (valid & bit) != 0; }
     // True for a v26 server's record: counters[6] is the old elapsed VDP1 figure.
     bool LegacyVdp1() const { return wireVersion < 27; }
+    // Counter 5 means something: a v26 record's all-or-nothing figure, or a v27 record's integrated
+    // one (SE_PERF_VALID_SSH2_INT). A v27 record without the bit has no slave on-time.
+    bool SlaveOnTimeKnown() const { return LegacyVdp1() || Has(SE_PERF_VALID_SSH2_INT); }
     bool     functions = false;   // function attribution was on for this frame
     uint64_t c[SE_PERF_COUNT] = {};
     struct Fn { uint32_t key; uint32_t cycles; };
@@ -130,6 +133,99 @@ struct PerfFunction
     static uint32_t PerfFunctionAddress(uint32_t key) { return key & SE_PERF_FN_ADDR_MASK; }
 };
 
+// ---- Windowed figures ----
+// A record carries a v27-only quantity only when its 'valid' bit says so, and a window averages
+// SEVERAL records. A quantity is therefore summed over exactly the frames that carry it, against
+// the matching frame cycles of those frames -- never against the whole window, which would read
+// "no measurement" as a measured zero -- and the coverage says how many frames that was.
+struct Coverage
+{
+    size_t covered = 0;   // frames in the window that carry the quantity
+    size_t frames = 0;    // frames in the window
+    bool Any() const { return covered > 0; }
+    bool Full() const { return frames > 0 && covered == frames; }
+};
+
+// Everything the Frame and Buses tabs show for one averaging window. 'shares' holds, for every
+// gated quantity, the value over its OWN covered frames (zero when the coverage is empty: read the
+// coverage first); the ungated ones (frame length, the master SH-2, the SCU DSP, the 68000 executed
+// share, VDP1 command / draw / overrun counts) are over every frame in the window.
+struct WindowShares
+{
+    size_t frames = 0;
+    size_t v27Frames = 0;               // frames from a v27 server (the rest are v26 or hand-built)
+    PerfShares shares;
+    // v26 servers' records and v27 records with SE_PERF_VALID_SSH2_INT: shares.cpu[1]. (A v26
+    // record's figure is all-or-nothing per frame; it is still its producer's measurement.)
+    Coverage slave;
+    // The two VDP1 figures never mix: elapsed drawing exists only in v26 records, command work only
+    // in v27 records carrying SE_PERF_VALID_VDP1_WORK. shares.vdp1Draw / vdp1Work /
+    // vdp1DmaDiscarded / vdp1WorkOverFrame.
+    Coverage vdp1Draw;
+    Coverage vdp1Work;
+    size_t   vdp1OverFrameFrames = 0;   // covered frames whose own work exceeded the frame (instant draw)
+    // 68000 stopped, as a share of its own clock (SE_PERF_VALID_M68K_IDLE).
+    Coverage m68kIdle;
+    double   m68kIdleShare = 0;
+    // SE_PERF_VALID_BUS_X: dummy / unmapped request counts, SUMMED over the covered frames.
+    Coverage busX;
+    BusTotals busXTotals;
+    // SE_PERF_VALID_CACHE: the cache mode of the covered frames; cacheMixed when they disagree.
+    Coverage cache;
+    uint32_t cacheMode = 0;
+    bool     cacheMixed = false;
+    // SE_PERF_VALID_MODE: how many covered frames ran with function attribution on.
+    Coverage mode;
+    size_t   modeFunctionsOn = 0;
+    // SE_PERF_VALID_IDENTITY.
+    Coverage identity;
+};
+
+// Which SH-2 the Functions tab lists.
+enum class FnCpu { Both = 0, Master = 1, Slave = 2 };
+
+// What the Functions tab shows for one window and one CPU filter. Shares divide by Attributed():
+// the listed rows plus Other, so a row's percentage does not grow because rows were dropped.
+struct FunctionWindow
+{
+    size_t frames = 0;                  // frames in the window
+    size_t attributed = 0;              // frames of the window that ran with function attribution
+    size_t used = 0;                    // frames that contributed (attribution on; for a CPU filter,
+                                        // also carrying the per-CPU Other split)
+    size_t splitFrames = 0;             // of those, frames with SE_PERF_VALID_OTHER
+    std::vector<PerfFunction> rows;     // the retained keys of the filter, hottest first
+    uint64_t listed = 0;                // sum of rows
+    uint64_t otherNotAdmitted = 0;      // the per-frame table refused the key (3072 admitted)
+    uint64_t otherEvicted = 0;          // admitted, but below the top 64 of its frame
+    uint64_t otherUnsplit = 0;          // Both only: a frame without the split reports one remainder
+    size_t   tableFullFrames = 0;       // frames that hit SE_PERF_SAT_TABLE_FULL
+    size_t   truncatedFrames = 0;       // frames that hit SE_PERF_SAT_TRUNCATED
+    // Cycles the filter's CPUs were busy for, from the counters of the used frames (frame - sleep
+    // - stall; the slave from its on-time). Unknown when a used frame has no slave on-time.
+    bool     busyKnown = false;
+    uint64_t busy = 0;
+    uint64_t Other() const { return otherNotAdmitted + otherEvicted + otherUnsplit; }
+    uint64_t Attributed() const { return listed + Other(); }
+    // Busy time no sample accounted for (a baseline lost to a reset, the first interval after
+    // attribution began): kept apart from Other, which IS measured cycles. 0 when unknown.
+    uint64_t Unobserved() const { return busyKnown && busy > Attributed() ? busy - Attributed() : 0; }
+};
+
+// One point of a history strip: a value, or "no data". A strip never draws "no data" as 0.
+struct HistoryPoint
+{
+    bool   available = false;
+    double value = 0;
+    bool   breakBefore = false;   // records are missing just before this point
+};
+struct HistoryRun { size_t first = 0; size_t count = 0; };
+// The runs a polyline may join: consecutive available points with no break between them.
+std::vector<HistoryRun> SplitHistoryRuns(const std::vector<HistoryPoint>& points);
+
+// "Frame 1234 (timeline 2)" from a record that carries its identity (SE_PERF_VALID_IDENTITY),
+// otherwise a statement that it has none; never the snapshot number a batch was delivered with.
+std::string PerfFrameLabel(const PerfFrame& frame);
+
 // ---- History ----
 class ProfilerModel
 {
@@ -183,6 +279,15 @@ public:
     std::vector<PerfFunction> HotFunctions(size_t window, uint64_t* totalCycles,
                                            size_t* framesUsed) const;
 
+    // The figures of the newest min(window, Count()) frames, each over the frames that carry it.
+    WindowShares Shares(size_t window) const;
+    // The Functions tab's view: rows, Other and the denominators for one CPU filter (see
+    // FunctionWindow). A CPU filter uses only frames that carry the per-CPU Other split, because a
+    // v26 remainder cannot be assigned to a CPU; "Both" uses every attributed frame.
+    FunctionWindow Functions(size_t window, FnCpu cpu) const;
+    // The identity of the newest frame that has one (false if none): what the memory tab keys on.
+    bool LatestIdentity(uint32_t* timelineId, uint64_t* frameNo) const;
+
 private:
     std::vector<PerfFrame> mFrames;   // ring
     size_t mHead = 0;                 // index of the oldest
@@ -223,6 +328,14 @@ public:
 
     // Start (or restart) tracking: forget every pool and every previous sample.
     void Reset();
+    // What the samples that follow are samples OF. The tracker compares each sample with the
+    // previous one, which means something only when both came from the same place; when any of
+    // these differs from the previous call, or the displayed frame went BACKWARDS (scrubbing back),
+    // it re-primes: forgets every pool, so the first sample afterwards reports no changed blocks.
+    // sourceId: the displayed capture (a different file, savestate or scrubbed frame is another);
+    // instance: the emulator process; timelineId: the machine-state timeline (rewind, load);
+    // frame: the displayed frame number, 0 = unknown.
+    void SetSource(uint64_t sourceId, uint64_t instance, uint32_t timelineId, uint64_t frame);
     // Feed one pool's current bytes. 'index' is the caller's stable slot for the pool. The first
     // sample of a pool has nothing to compare with, so it reports no changed blocks.
     void Sample(size_t index, const char* name, uint32_t base, const uint8_t* data, uint32_t size);
@@ -241,6 +354,9 @@ private:
     };
     std::vector<Tracked> mPools;
     Tracked& Slot(size_t index);
+    bool     mHaveSource = false;
+    uint64_t mSourceId = 0, mInstance = 0, mFrame = 0;
+    uint32_t mTimeline = 0;
 };
 
 }  // namespace sfe

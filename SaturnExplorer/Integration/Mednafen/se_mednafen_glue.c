@@ -802,7 +802,12 @@ void SeMednafenTraceHook(int cpu, unsigned int pc)
 typedef struct { unsigned int key, cycles; } SeProfSlot;
 static SeProfSlot sProfTab[SE_PROF_SLOTS];
 static unsigned int sProfUsed;
-static unsigned int sProfOther;        /* cycles that found no slot */
+static unsigned int sProfOther;        /* cycles that found no slot (both CPUs; sProfNotAdmitted splits it) */
+/* F7: Other, kept PER CPU and by cause, in 64 bits so a long frame cannot wrap it. A key's CPU is its
+ * SE_PERF_FN_SLAVE bit. The sum of these four is what the frame attributed beyond the published rows. */
+static unsigned long long sProfNotAdmitted[2];   /* the table refused the key (SE_PROF_FILL reached) */
+static unsigned long long sProfEvicted[2];       /* admitted, but below the top SE_LIVE_PERF_FN_MAX */
+static unsigned int sProfSat;                    /* SE_PERF_SAT_* seen this frame */
 static int sProfOn;                    /* SE_LIVE_PROF_FUNCTIONS is in force */
 static int sProfSynced[2];             /* sProfLastTs / sProfKey hold a previous instruction */
 static int sProfLastTs[2];
@@ -824,6 +829,17 @@ static void SeMdfnProfAdd(unsigned int key, unsigned int cycles)
         }
     }
     sProfOther += cycles;
+    sProfNotAdmitted[(key & SE_PERF_FN_SLAVE) ? 1 : 0] += cycles;
+    sProfSat |= SE_PERF_SAT_TABLE_FULL;
+}
+
+/* The per-frame Other accounting starts from zero (the table itself is cleared by the caller). */
+static void SeMdfnProfOtherReset(void)
+{
+    sProfOther = 0;
+    memset(sProfNotAdmitted, 0, sizeof sProfNotAdmitted);
+    memset(sProfEvicted, 0, sizeof sProfEvicted);
+    sProfSat = 0;
 }
 
 /* The time a CPU spent asleep or held off the bus is not the function's: the counters the
@@ -948,7 +964,7 @@ void SeMednafenStateLoaded(int slaveOn)
     SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] = 0;
     sProfSynced[0] = sProfSynced[1] = 0;
     if (sProfUsed) { memset(sProfTab, 0, sizeof sProfTab); sProfUsed = 0; }
-    sProfOther = 0;
+    SeMdfnProfOtherReset();
     SeExportResetCallStack(0);
     SeExportResetCallStack(1);
 }
@@ -1020,8 +1036,16 @@ static void SeMdfnPerfEndFrame(void)
                 if (!k) continue;
                 if (n == SE_LIVE_PERF_FN_MAX)
                 {
-                    if (cyc <= cycles[n - 1]) { other += cyc; continue; }
+                    /* Whichever of the 65 loses is evicted: its cycles go to Other under ITS CPU. */
+                    if (cyc <= cycles[n - 1])
+                    {
+                        other += cyc; sProfEvicted[(k & SE_PERF_FN_SLAVE) ? 1 : 0] += cyc;
+                        sProfSat |= SE_PERF_SAT_TRUNCATED;
+                        continue;
+                    }
                     other += cycles[n - 1];
+                    sProfEvicted[(keys[n - 1] & SE_PERF_FN_SLAVE) ? 1 : 0] += cycles[n - 1];
+                    sProfSat |= SE_PERF_SAT_TRUNCATED;
                     --n;
                 }
                 for (j = n; j > 0 && cycles[j - 1] < cyc; --j) { keys[j] = keys[j - 1]; cycles[j] = cycles[j - 1]; }
@@ -1041,7 +1065,22 @@ static void SeMdfnPerfEndFrame(void)
              * at a boundary), so the frame is published under exactly the mode it ran in. */
             info.mode = sFrameMode;
             info.valid |= SE_PERF_VALID_MODE;
-            /* v27 Step 0: filled by F7  (info.otherNotAdmitted / otherEvicted / satFlags; SE_PERF_VALID_OTHER) */
+            /* F7: Other per CPU and cause. Only a frame that ran with attribution on measured it; with it
+             * off nothing was attributed, and "0 in Other" would claim a measurement that never happened. */
+            if (sFrameMode & SE_LIVE_PROF_FUNCTIONS)
+            {
+                unsigned long long sum = 0;
+                for (i = 0; i < 2; ++i)
+                {
+                    info.otherNotAdmitted[i] = sProfNotAdmitted[i];
+                    info.otherEvicted[i] = sProfEvicted[i];
+                    sum += sProfNotAdmitted[i] + sProfEvicted[i];
+                }
+                info.satFlags = sProfSat;
+                info.valid |= SE_PERF_VALID_OTHER;
+                /* SeLiveProtocol.h: fnOtherCycles is the sum of the four words, saturated at 32 bits. */
+                other = sum > 0xFFFFFFFFull ? 0xFFFFFFFFu : (unsigned int)sum;
+            }
             /* F8: the instruction-cache emulation mode, once a game has set it. */
             if (SeSsCacheMode != SE_PERF_CACHE_UNKNOWN)
             {
@@ -1060,7 +1099,7 @@ static void SeMdfnPerfEndFrame(void)
     sProfLastIdle[0] = sProfLastIdle[1] = 0;
     memset(SeSsPerfC, 0, sizeof SeSsPerfC);
     if (sProfUsed) { memset(sProfTab, 0, sizeof sProfTab); sProfUsed = 0; }
-    sProfOther = 0;
+    SeMdfnProfOtherReset();
     /* The CPUs' cycle counters were rebased just before this hook. The final interval of the frame was
      * charged, and the baselines moved to the rebased clock, by SeMednafenFrameClose (before the
      * rebase), so sampling carries on across the boundary with nothing lost and nothing doubled. */

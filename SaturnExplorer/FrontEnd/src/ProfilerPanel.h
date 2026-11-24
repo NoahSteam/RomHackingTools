@@ -46,6 +46,9 @@ public:
     void NotDrawn() { mPoolsVisible = false; }
 
     size_t WindowFrames() const;
+    // Which SH-2 the Functions tab lists: 0 both, 1 master, 2 slave.
+    int  FnCpuFilter() const { return mFnCpu; }
+    void SetFnCpuFilter(int cpu) { mFnCpu = cpu < 0 ? 0 : (cpu > 2 ? 2 : cpu); }
 
 private:
     void DrawFrameTab(const ProfilerModel& model);

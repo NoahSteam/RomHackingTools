@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "Debug/ProfilerModel.h"
@@ -321,6 +322,363 @@ void TestGaps()
     m.Clear();
     CHECK(m.PendingServerGap().Empty() && m.TotalServerLost() == 0 && m.NewestSeq() == 0);
 }
+
+// ---- Window validity (review finding P2) ----
+// A window averages several records; a v27-only quantity is summed over the records whose valid
+// bit is set, against THEIR frame cycles, and says how many that was.
+
+// A v27 frame of 400,000 cycles.
+PerfFrame V27Frame(uint64_t seq, uint32_t valid)
+{
+    PerfFrame f = Seq64(seq, 400000);
+    f.valid = valid;
+    f.c[SE_PERF_SSH2_ON_CYCLES] = 400000;
+    return f;
+}
+
+// The repro: four equal 400,000-cycle frames, three WITHOUT SE_PERF_VALID_VDP1_WORK and one with
+// 120,000 work cycles. Averaged over the whole window that is 7.5%; the only measurement is 30%.
+void CheckVdp1WorkWindow(bool validFirst)
+{
+    ProfilerModel m(16);
+    for (uint64_t i = 1; i <= 4; ++i)
+    {
+        const bool valid = validFirst ? i == 1 : i == 4;
+        PerfFrame f = V27Frame(i, valid ? SE_PERF_VALID_VDP1_WORK : 0);
+        if (valid) { f.c[SE_PERF_VDP1_WORK_CYCLES] = 120000; f.c[SE_PERF_VDP1_DMA_DISCARDED] = 40000; }
+        // Garbage in a frame that did not measure it must not leak in: not available means not read.
+        else { f.c[SE_PERF_VDP1_WORK_CYCLES] = 999999; f.c[SE_PERF_VDP1_DMA_DISCARDED] = 999999; }
+        m.Push(f);
+    }
+    const WindowShares w = m.Shares(4);
+    CHECK(w.frames == 4 && w.vdp1Work.covered == 1 && w.vdp1Work.frames == 4);
+    CHECK(w.vdp1Work.Any() && !w.vdp1Work.Full());
+    CHECK(Near(w.shares.vdp1Work, 0.30));
+    CHECK(Near(w.shares.vdp1DmaDiscarded, 0.10));
+    // A one-frame window sees only the newest frame: it is valid in one order, not in the other.
+    const WindowShares one = m.Shares(1);
+    CHECK(one.vdp1Work.Any() == !validFirst);
+    if (!validFirst) CHECK(Near(one.shares.vdp1Work, 0.30));
+    else CHECK(Near(one.shares.vdp1Work, 0.0));   // and "not available" is the coverage, not this zero
+}
+
+void TestWindowValidityVdp1()
+{
+    CheckVdp1WorkWindow(false);   // valid last (the review's repro)
+    CheckVdp1WorkWindow(true);    // valid first
+    // No sample valid: not available at all.
+    ProfilerModel none(8);
+    for (uint64_t i = 1; i <= 3; ++i) none.Push(V27Frame(i, 0));
+    CHECK(!none.Shares(3).vdp1Work.Any());
+    // All valid: full coverage.
+    ProfilerModel all(8);
+    for (uint64_t i = 1; i <= 3; ++i)
+    {
+        PerfFrame f = V27Frame(i, SE_PERF_VALID_VDP1_WORK);
+        f.c[SE_PERF_VDP1_WORK_CYCLES] = i == 3 ? 800000 : 100000;   // the last one is instant-draw: 200%
+        all.Push(f);
+    }
+    const WindowShares a = all.Shares(3);
+    CHECK(a.vdp1Work.Full() && a.vdp1OverFrameFrames == 1 && a.shares.vdp1WorkOverFrame);
+    CHECK(Near(a.shares.vdp1Work, 1000000.0 / 1200000.0));
+}
+
+// The same rule for every other valid-gated quantity, in both orders.
+void CheckOtherGated(bool validFirst)
+{
+    ProfilerModel m(16);
+    for (uint64_t i = 1; i <= 4; ++i)
+    {
+        const bool v = validFirst ? i == 1 : i == 4;
+        uint32_t valid = v ? (SE_PERF_VALID_SSH2_INT | SE_PERF_VALID_M68K_IDLE | SE_PERF_VALID_BUS_X |
+                              SE_PERF_VALID_CACHE | SE_PERF_VALID_MODE | SE_PERF_VALID_IDENTITY) : 0;
+        PerfFrame f = V27Frame(i, valid);
+        f.c[SE_PERF_SSH2_ON_CYCLES] = v ? 200000 : 400000;          // unintegrated frames claim 100% on
+        f.c[SE_PERF_SH2_SLEEP + 1] = v ? 100000 : 0;                // integrated: on half, a quarter busy
+        f.c[SE_PERF_M68K_TOTAL_CYCLES] = 1000;
+        f.c[SE_PERF_M68K_IDLE_CYCLES] = v ? 600 : 0;
+        f.c[SE_PERF_M68K_CYCLES] = v ? 400 : 1000;
+        f.c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_ABUS_DUMMY * 2] = v ? 12 : 777;
+        f.c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2 + 1] = v ? 5 : 777;
+        f.cacheMode = SE_PERF_CACHE_ON;
+        f.mode = v ? 1u : 0u;
+        f.frameNo = 100 + i; f.timelineId = 3;
+        m.Push(f);
+    }
+    const WindowShares w = m.Shares(4);
+    CHECK(w.slave.covered == 1 && w.slave.frames == 4);
+    CHECK(Near(w.shares.cpu[1].off, 0.5) && Near(w.shares.cpu[1].sleep, 0.25) && Near(w.shares.cpu[1].busy, 0.25));
+    CHECK(w.m68kIdle.covered == 1 && Near(w.m68kIdleShare, 0.6));
+    CHECK(w.busX.covered == 1 && w.busXTotals.dummyReads == 12 && w.busXTotals.unmappedWrites == 5 &&
+          w.busXTotals.dummyWrites == 0 && w.busXTotals.unmappedReads == 0);
+    CHECK(w.cache.covered == 1 && w.cacheMode == SE_PERF_CACHE_ON && !w.cacheMixed);
+    CHECK(w.mode.covered == 1 && w.modeFunctionsOn == 1);
+    CHECK(w.identity.covered == 1);
+    // None of them is "available" in a window of only the frames without the bit.
+    ProfilerModel n(8);
+    for (uint64_t i = 1; i <= 3; ++i) n.Push(V27Frame(i, 0));
+    const WindowShares z = n.Shares(3);
+    CHECK(!z.slave.Any() && !z.m68kIdle.Any() && !z.busX.Any() && !z.cache.Any() && !z.mode.Any() && !z.identity.Any());
+}
+
+void TestWindowValidityOtherQuantities()
+{
+    CheckOtherGated(false);
+    CheckOtherGated(true);
+    // Two cache modes in one window are reported as mixed, not averaged into one of them.
+    ProfilerModel m(8);
+    PerfFrame a = V27Frame(1, SE_PERF_VALID_CACHE); a.cacheMode = SE_PERF_CACHE_ON;
+    PerfFrame b = V27Frame(2, SE_PERF_VALID_CACHE); b.cacheMode = SE_PERF_CACHE_OFF;
+    m.Push(a); m.Push(b);
+    CHECK(m.Shares(2).cacheMixed && m.Shares(2).cache.covered == 2);
+    CHECK(!m.Shares(1).cacheMixed);
+}
+
+// A window mixing a v26 server's frames and a v27 server's must not blend the elapsed VDP1 figure
+// with command work, whichever came first.
+void CheckMixedWire(bool v26First)
+{
+    ProfilerModel m(16);
+    for (uint64_t i = 1; i <= 4; ++i)
+    {
+        const bool legacy = v26First ? i <= 2 : i > 2;
+        PerfFrame f;
+        if (legacy)
+        {
+            f = MakeFrame(static_cast<uint32_t>(i), 400000);
+            f.sampleSeq = i;
+            f.wireVersion = 26;
+            f.c[SE_PERF_V26_VDP1_ELAPSED] = 100000;             // 25%
+            f.c[SE_PERF_SSH2_ON_CYCLES] = 400000;
+        }
+        else
+        {
+            f = V27Frame(i, SE_PERF_VALID_VDP1_WORK | SE_PERF_VALID_SSH2_INT);
+            f.c[SE_PERF_VDP1_WORK_CYCLES] = 200000;             // 50%
+        }
+        m.Push(f);
+    }
+    const WindowShares w = m.Shares(4);
+    CHECK(w.v27Frames == 2);
+    CHECK(w.vdp1Draw.covered == 2 && Near(w.shares.vdp1Draw, 0.25));
+    CHECK(w.vdp1Work.covered == 2 && Near(w.shares.vdp1Work, 0.50));
+    CHECK(w.slave.covered == 4);
+}
+
+void TestMixedV26V27Window()
+{
+    CheckMixedWire(true);
+    CheckMixedWire(false);
+}
+
+// History: a frame that did not measure a value is a gap, never a point at 0.
+void TestHistoryRuns()
+{
+    auto P = [](bool avail, bool brk = false) { HistoryPoint p; p.available = avail; p.value = 0.0; p.breakBefore = brk; return p; };
+    // available, available, MISSING, available, available(break), available
+    const std::vector<HistoryRun> r = SplitHistoryRuns({ P(true), P(true), P(false), P(true), P(true, true), P(true) });
+    CHECK(r.size() == 3);
+    if (r.size() == 3)
+    {
+        CHECK(r[0].first == 0 && r[0].count == 2);   // the missing frame ends the first run
+        CHECK(r[1].first == 3 && r[1].count == 1);   // a break (lost records) ends the second
+        CHECK(r[2].first == 4 && r[2].count == 2);
+    }
+    // All missing: nothing to draw, in particular no run of zeros.
+    CHECK(SplitHistoryRuns({ P(false), P(false), P(false) }).empty());
+    CHECK(SplitHistoryRuns({}).empty());
+    // A zero that WAS measured is a point.
+    HistoryPoint z; z.available = true; z.value = 0.0;
+    CHECK(SplitHistoryRuns({ z, z }).size() == 1);
+}
+
+void TestFrameLabel()
+{
+    PerfFrame f = Seq64(1);
+    f.frame = 4242;   // the snapshot number the batch arrived with: never what the label says
+    CHECK(PerfFrameLabel(f).find("not available") != std::string::npos);
+    CHECK(PerfFrameLabel(f).find("4242") == std::string::npos);
+    f.valid = SE_PERF_VALID_IDENTITY; f.timelineId = 7; f.frameNo = 987654321012ull;
+    CHECK(PerfFrameLabel(f) == "Frame 987654321012 (timeline 7)");
+    PerfFrame v26 = MakeFrame(1, 1);
+    v26.wireVersion = 26; v26.valid = SE_PERF_VALID_IDENTITY;   // a v26 record has no identity whatever its bits say
+    v26.frameNo = 5;
+    CHECK(PerfFrameLabel(v26).find("not available") != std::string::npos);
+}
+
+// ---- F7: function shares and the remainder ----
+
+PerfFrame FnFrame(uint64_t seq, bool split)
+{
+    PerfFrame f = V27Frame(seq, split ? SE_PERF_VALID_OTHER | SE_PERF_VALID_SSH2_INT : SE_PERF_VALID_SSH2_INT);
+    f.functions = true;
+    return f;
+}
+const uint32_t kM1 = 0x06004000u, kM2 = 0x06005000u, kS1 = 0x06010000u | SE_PERF_FN_SLAVE;
+
+void TestFunctionShares()
+{
+    // The plan's case: one function with 30,000 of 100,000 attributed cycles, 40,000 of them in Other.
+    // (30,000 + 30,000 listed + 25,000 not admitted + 15,000 evicted.) Its share is 30%, not 50%.
+    ProfilerModel m(8);
+    PerfFrame f = FnFrame(1, true);
+    f.fns = { { kM1, 30000 }, { kM2, 30000 } };
+    f.otherNotAdmitted[0] = 25000; f.otherEvicted[0] = 15000;
+    f.fnOther = 40000;
+    m.Push(f);
+    const FunctionWindow w = m.Functions(1, FnCpu::Both);
+    CHECK(w.rows.size() == 2 && w.rows[0].cycles == 30000);
+    CHECK(w.listed == 60000 && w.Other() == 40000 && w.Attributed() == 100000);
+    CHECK(Near(static_cast<double>(w.rows[0].cycles) / static_cast<double>(w.Attributed()), 0.30));
+    CHECK(w.otherNotAdmitted == 25000 && w.otherEvicted == 15000 && w.otherUnsplit == 0);
+
+    // Separate master and slave: each filter's denominator is that CPU's own listed + Other.
+    PerfFrame g = FnFrame(2, true);
+    g.fns = { { kM1, 30000 }, { kS1, 10000 } };
+    g.otherNotAdmitted[0] = 10000; g.otherEvicted[0] = 0;       // master attributed 40,000
+    g.otherNotAdmitted[1] = 0;     g.otherEvicted[1] = 5000;    // slave attributed 15,000
+    g.fnOther = 15000;
+    ProfilerModel m2(8);
+    m2.Push(g);
+    const FunctionWindow master = m2.Functions(1, FnCpu::Master);
+    const FunctionWindow slave = m2.Functions(1, FnCpu::Slave);
+    const FunctionWindow both = m2.Functions(1, FnCpu::Both);
+    CHECK(master.rows.size() == 1 && master.Attributed() == 40000 && master.Other() == 10000);
+    CHECK(Near(static_cast<double>(master.rows[0].cycles) / static_cast<double>(master.Attributed()), 0.75));
+    CHECK(slave.rows.size() == 1 && slave.Attributed() == 15000 && slave.otherEvicted == 5000);
+    CHECK(both.Attributed() == 55000 && both.Attributed() == master.Attributed() + slave.Attributed());
+    // listed + Other == attributed, per CPU.
+    CHECK(master.listed + master.Other() == 40000 && slave.listed + slave.Other() == 15000);
+
+    // A 65th key and a late dominant 3,073rd key: what the producer folded into Other stays in the
+    // denominator and the saturation flags are reported by the frames that set them.
+    PerfFrame h = FnFrame(3, true);
+    h.fns = { { kM1, 500 } };
+    h.satFlags = SE_PERF_SAT_TRUNCATED;                       // 65th key: the smallest evicted
+    h.otherEvicted[0] = 7;
+    ProfilerModel m3(8);
+    m3.Push(h);
+    PerfFrame k = FnFrame(4, true);
+    k.fns = { { kM2, 100 } };
+    k.satFlags = SE_PERF_SAT_TABLE_FULL | SE_PERF_SAT_TRUNCATED;   // a late dominant key was not admitted
+    k.otherNotAdmitted[0] = 90000;
+    m3.Push(k);
+    const FunctionWindow s3 = m3.Functions(2, FnCpu::Both);
+    CHECK(s3.tableFullFrames == 1 && s3.truncatedFrames == 2);
+    CHECK(s3.otherNotAdmitted == 90000 && s3.otherEvicted == 7);
+    CHECK(s3.Attributed() == 500 + 100 + 90000 + 7);
+    CHECK(Near(static_cast<double>(s3.rows[0].cycles) / static_cast<double>(s3.Attributed()), 500.0 / 90607.0));
+}
+
+// Frames from an emulator without the split: Both keeps their single remainder; a CPU filter
+// cannot assign it, so it uses only the frames that carry the split -- in either order.
+void CheckSplitMix(bool splitFirst)
+{
+    ProfilerModel m(8);
+    for (uint64_t i = 1; i <= 2; ++i)
+    {
+        const bool split = splitFirst ? i == 1 : i == 2;
+        PerfFrame f = FnFrame(i, split);
+        f.fns = { { kM1, 1000 } };
+        f.fnOther = 4000;
+        if (split) f.otherNotAdmitted[0] = 4000;
+        m.Push(f);
+    }
+    const FunctionWindow both = m.Functions(2, FnCpu::Both);
+    CHECK(both.used == 2 && both.splitFrames == 1);
+    CHECK(both.otherNotAdmitted == 4000 && both.otherUnsplit == 4000 && both.Attributed() == 10000);
+    const FunctionWindow master = m.Functions(2, FnCpu::Master);
+    CHECK(master.attributed == 2 && master.used == 1);
+    CHECK(master.listed == 1000 && master.Other() == 4000 && master.Attributed() == 5000);   // only the split frame
+    // A window with no split frame has nothing for a CPU filter.
+    ProfilerModel old(8);
+    PerfFrame o = FnFrame(1, false); o.fns = { { kM1, 5 } }; o.fnOther = 9;
+    old.Push(o);
+    CHECK(old.Functions(1, FnCpu::Master).used == 0 && old.Functions(1, FnCpu::Both).used == 1);
+}
+
+void TestFunctionSplitCoverage()
+{
+    CheckSplitMix(true);
+    CheckSplitMix(false);
+}
+
+// Unobserved time is busy time nobody was charged for. It is kept apart from Other (measured cycles).
+void TestUnobserved()
+{
+    ProfilerModel m(4);
+    PerfFrame f = FnFrame(1, true);
+    f.c[SE_PERF_SH2_SLEEP] = 100000;              // master busy 300,000
+    f.c[SE_PERF_SSH2_ON_CYCLES] = 0;              // slave off: busy 0
+    f.fns = { { kM1, 200000 } };
+    f.otherEvicted[0] = 50000;
+    m.Push(f);
+    const FunctionWindow w = m.Functions(1, FnCpu::Both);
+    CHECK(w.busyKnown && w.busy == 300000 && w.Attributed() == 250000 && w.Unobserved() == 50000);
+    CHECK(w.Other() == 50000);                    // measured Other, not the same 50,000
+    // Slave time with no integrated on-time (v27 without the bit): the total is unknown, not zero.
+    ProfilerModel u(4);
+    PerfFrame g = V27Frame(1, SE_PERF_VALID_OTHER);
+    g.functions = true; g.fns = { { kM1, 1 } };
+    u.Push(g);
+    CHECK(!u.Functions(1, FnCpu::Both).busyKnown && u.Functions(1, FnCpu::Both).Unobserved() == 0);
+    CHECK(u.Functions(1, FnCpu::Master).busyKnown);
+}
+
+// ---- F10: the pool tracker only compares samples of the same capture ----
+void TestPoolRePrime()
+{
+    std::vector<uint8_t> a(4096, 0), b(4096, 0);
+    for (size_t i = 0; i < b.size(); ++i) b[i] = static_cast<uint8_t>(i * 7 + 1);   // unrelated, same size
+    MemoryPoolTracker t;
+    t.SetSource(1, 1, 1, 0);
+    t.Sample(0, "Colour RAM", 0x05F00000u, a.data(), 4096);
+    t.Sample(0, "Colour RAM", 0x05F00000u, a.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 0);
+    // A real change within one source is reported.
+    std::vector<uint8_t> a2 = a; a2[100] = 9;
+    t.SetSource(1, 1, 1, 0);
+    t.Sample(0, "Colour RAM", 0x05F00000u, a2.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 1);
+    // Another source with different bytes: the first sample after the switch changed nothing.
+    t.SetSource(2, 1, 1, 0);
+    t.Sample(0, "Colour RAM", 0x05F00000u, b.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 0 && t.Pool(0).valid);
+    t.Sample(0, "Colour RAM", 0x05F00000u, b.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 0);
+    // A new emulator instance, with the same source id, re-primes too.
+    t.SetSource(2, 2, 1, 0);
+    t.Sample(0, "Colour RAM", 0x05F00000u, a.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 0);
+    // ...and so does a new timeline (rewind, load).
+    t.SetSource(2, 2, 2, 0);
+    t.Sample(0, "Colour RAM", 0x05F00000u, b.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 0);
+    // Unchanged identity: a change is a change again.
+    t.SetSource(2, 2, 2, 0);
+    t.Sample(0, "Colour RAM", 0x05F00000u, a.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 256);
+}
+
+// Scrubbing: forward steps within one source keep comparing (frame 10 -> 11), scrubbing backward
+// is a jump (11 -> 5) and re-primes; an unknown frame (0) never counts as backward.
+void TestPoolScrubBackward()
+{
+    std::vector<uint8_t> a(4096, 0), b(4096, 0);
+    b[0] = 1;
+    MemoryPoolTracker t;
+    t.SetSource(5, 1, 1, 10);
+    t.Sample(0, "VDP2 VRAM", 0x05E00000u, a.data(), 4096);
+    t.SetSource(5, 1, 1, 11);
+    t.Sample(0, "VDP2 VRAM", 0x05E00000u, b.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 1);                   // forward, same source: a change
+    t.SetSource(5, 1, 1, 5);                               // scrubbed back
+    t.Sample(0, "VDP2 VRAM", 0x05E00000u, a.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 0);
+    t.SetSource(5, 1, 1, 0);                               // frame unknown: not backward
+    t.Sample(0, "VDP2 VRAM", 0x05E00000u, b.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 1);
+}
 }  // namespace
 
 int main()
@@ -331,6 +689,16 @@ int main()
     TestGaps();
     TestFunctions();
     TestPools();
+    TestWindowValidityVdp1();
+    TestWindowValidityOtherQuantities();
+    TestMixedV26V27Window();
+    TestHistoryRuns();
+    TestFrameLabel();
+    TestFunctionShares();
+    TestFunctionSplitCoverage();
+    TestUnobserved();
+    TestPoolRePrime();
+    TestPoolScrubBackward();
     if (gFailures) { std::printf("%d check(s) failed\n", gFailures); return 1; }
     std::printf("ProfilerModelTests passed\n");
     return 0;

@@ -7,7 +7,7 @@ has not filled yet are declared and carried but marked "not available" on the wi
 the record's `valid` word). Filled so far: frame identity and lost-record accounting (F3), the per-connection
 profiler request (F1), capability bits correct from the first reply (F14), the VDP1, 68000, bus and DMA/DSP
 hooks (F4, F5, F8, F11), the slave on-time and the latched mode (F2 + F6, one frame-lifecycle contract), and
-function ownership (F9); the rest (F7, F10) follow. Behavior below is verified from source and from the tests listed; the
+function ownership (F9), and, on the front end, the per-CPU Other, the window-validity rule, the labels and the Memory tab (F7, F10, review finding P2); the v27 plan has nothing left unfilled. Behavior below is verified from source and from the tests listed; the
 emulator-side numbers have **not** been checked against a running game (see Coverage limits).
 
 ## Purpose and responsibilities
@@ -38,7 +38,7 @@ transport (see [State sources](StateSources.md)).
 | Server | [se_export.c](../../../Integration/Common/se_export.c): `SeExportPublishPerf`, `SeExportBuildPerfSection` (a connection's reply section and its lost range), `SeExportFrameIdentity` / `SeIdReserve` / `SeExportEndFrame` (frame identity), `SeExportNotifyStateLoaded` (timeline), `SeExportPrepare` / `SeExportStart` (startup), `SeExportSetProfilerHook`, `SeExportSetPerfCapable`, `SeExportCurrentFunction`, `SePublishProfiler` |
 | Wire contract | [SeLiveProtocol.h](../../../Integration/Common/SeLiveProtocol.h): `SE_LIVE_VERB_PROFILE`, `SE_LIVE_PROF_FUNCTIONS`, `SE_LIVE_CAP_PROFILER`, `SE_LIVE_CAP_PROF_FUNCTIONS`, "Perf section" |
 | Client | [LiveDriver.cpp](../../../Drivers/Live/src/LiveDriver.cpp): `LivePerf`, the v26 and v27 parse in `ReadSnapshot`, `IngestPerf` (ordering, gaps, eviction); [LiveDriver.h](../../../Drivers/Live/src/LiveDriver.h): `se_live_perf_frame`, `se_live_drain_perf`, `se_live_perf_status_get`, `se_live_set_profiler` |
-| Model (UI-free) | [ProfilerModel.h](../../../FrontEnd/src/Debug/ProfilerModel.h): `PerfFrame`, `ComputePerfShares`, `ComputeBusTotals`, `ProfilerModel` (ordering, `LostIn`, lost totals), `MemoryPoolTracker` |
+| Model (UI-free) | [ProfilerModel.h](../../../FrontEnd/src/Debug/ProfilerModel.h): `PerfFrame`, `ComputePerfShares`, `ComputeBusTotals`, `ProfilerModel` (ordering, `LostIn`, lost totals, `Shares` / `WindowShares` / `Coverage`, `Functions` / `FunctionWindow`, `LatestIdentity`), `SplitHistoryRuns`, `PerfFrameLabel`, `MemoryPoolTracker` (`SetSource`) |
 | Panel | [ProfilerPanel.cpp](../../../FrontEnd/src/ProfilerPanel.cpp): `ProfilerPanel::Draw`, `Host` |
 | App glue | [App.cpp](../../../FrontEnd/src/App.cpp): `App::UpdateProfiler`, `App::DrawProfiler`; registered in `App::PanelList` (Windows → Debugger → Profiler, hidden by default) |
 
@@ -313,15 +313,79 @@ costs the interrupted function its naming until its own `rts` lands back on its 
   does not have (and the request path is per-connection after F1), so it is not reported.
 
 
+### Windows, validity and coverage (front end)
+
+A record carries each v27-only quantity only when its `valid` bit says so, and an averaging window holds
+several records, so `ProfilerModel::Shares(window)` sums every gated quantity over exactly the frames
+that carry it, against **those frames' own** cycles, and returns a `Coverage { covered, frames }` next
+to it. The panel shows `30% (1 of 4 frames)` when the coverage is partial and `not available` when it is
+empty; it never reads a missing measurement as 0, and frames that did not measure it never dilute the
+frames that did. The gated set (a v27 record unless noted):
+
+| Quantity | Frames that carry it |
+|---|---|
+| Slave on-time and share | v26 records (their all-or-nothing figure) or `SE_PERF_VALID_SSH2_INT` |
+| VDP1 elapsed drawing | v26 records only |
+| VDP1 command work, DMA-discarded budget, instant-draw count | `SE_PERF_VALID_VDP1_WORK` |
+| 68000 idle | `SE_PERF_VALID_M68K_IDLE` |
+| A-bus dummy / unmapped request counts | `SE_PERF_VALID_BUS_X` |
+| Cache mode (differing modes are reported as mixed) | `SE_PERF_VALID_CACHE` |
+| Latched mode (functions on in k of n) | `SE_PERF_VALID_MODE` |
+| Frame identity | `SE_PERF_VALID_IDENTITY` |
+| Per-CPU Other split | `SE_PERF_VALID_OTHER` |
+
+A window that mixes a v26 server's frames with a v27 server's shows "VDP1 drawing" and "VDP1 command
+work" as two rows, each over its own frames; they are different quantities and are never added. The
+ungated figures (frame length, master SH-2, DSP, 68000 executed share, VDP1 command / draw / overrun
+counts) are over every frame. The history strips apply the same predicate per frame: a frame that did not
+measure the value is a gap in the line plus a "no data" tick, and the line also breaks at a frame that
+has lost records (`SplitHistoryRuns`). A strip tooltip names the frame by its identity (`PerfFrameLabel`:
+`Frame <frameNo> (timeline <id>)`, or "not available" for a v26 or identity-less record), never by the
+snapshot number a batch arrived with.
+
+For a window with v27 frames the Frame tab also shows VDP1 command work above 100% with the number of
+instant-draw frames, the DMA-discarded draw budget (a budget, not time), 68000 idle versus executed, the
+functions-on count of the latched mode, and the lost-record counts (`TotalServerLost`,
+`TotalDriverEvicted`, `LostIn(window)`). The Buses tab names its unit ("bus requests"), the cache mode and
+the A-bus dummy and unmapped buckets. "Busy" is labelled as including bus waits.
+
+### Functions: rows, Other and denominators (F7)
+
+The emulator tracks up to 3,072 keys per frame and publishes the 64 hottest. Cycles of keys the table
+refused (`otherNotAdmitted`) and of keys below the top 64 (`otherEvicted`) are tracked **per CPU** by the
+glue (`SeMdfnProfAdd`, `SeMdfnPerfEndFrame`; `satFlags` says which limit was reached) and travel in the
+record with `SE_PERF_VALID_OTHER`, set only for a frame that ran with attribution on (a frame with it off
+attributed nothing, so "0 in Other" would not be a measurement). `fnOtherCycles` is the saturated sum of
+the four words. `ProfilerModel::Functions(window, cpu)` returns the retained rows, Other by cause and
+`Attributed() = listed + Other`; every row's share is of that total, per CPU filter (master, slave, both),
+so a share does not grow because rows were dropped. A CPU filter uses only frames that carry the split (a
+v26 remainder cannot be assigned to a CPU) and says how many; "Both" also adds the unsplit remainder.
+The tab states that listed rows are retained keys, flags frames where the table filled or was truncated,
+and shows a separate "Not observed" row: busy time from the frame counters (frame - sleep - stall; the
+slave from its on-time) that nothing was charged for. It is an estimate, is not part of Other, and is not
+in the percentages.
+
 ### Memory pools
 
-Not an emulator feature: `MemoryPoolTracker` reads the captured regions through
-`ContextBackend`, so it works for savestates and scrubbed frames too. Each pool is split
-into at most 1024 blocks; a block that is one byte value repeated is *empty*, anything else
-*holds data*, and a block whose hash differs from the previous sample is *rewritten* (the
-mark fades over later samples). Sampling runs only while the Memory tab is showing, every
-tenth UI frame. This is occupancy of the fixed RAMs, not a view of any game's heap
-allocator, which the hardware knows nothing about.
+Not an emulator feature: `MemoryPoolTracker` reads the captured regions through `ContextBackend`, so it
+works for savestates and scrubbed frames too. Each pool is split into at most 1024 blocks; a block that is
+one byte value repeated is *uniform*, anything else *non-uniform*, and a block whose hash differs from the
+previous sample is *changed since sample* (the mark fades over later samples). Uniform does not mean
+unused and non-uniform does not mean allocated: this classifies bytes, it is not a view of any game's heap
+allocator, which the hardware knows nothing about. Sampling runs only while the Memory tab is showing,
+every tenth UI frame.
+
+A sample only means something against the previous sample of the **same capture**, so
+`App::UpdateProfiler` calls `MemoryPoolTracker::SetSource(sourceId, emulator instance, timelineId, frame)`
+before each sample, and the tracker re-primes (forgets every pool, so the first sample afterwards reports
+zero changed blocks) when the displayed source moves (another file or savestate, or a scrubbed frame:
+`SourceId` moves on every scrub step), the emulator process changes (`AdoptNewEmulatorInstance` also
+resets it), the machine-state timeline changes (taken from the newest profiler frame that has an
+identity), or a scrubbed frame number goes **backwards**. Scrubbing back therefore shows what the older
+frame holds with nothing flagged, not a "change" the machine never made; any scrub step is a source change
+and re-primes too. VDP1 VRAM in a capture is the copy taken when VDP1 last finished drawing (the draw-end
+latch, `SsDbgVdp1Latch`), and live VRAM only until the first draw-end after boot or a state load, so a
+change there means a draw finished.
 
 ## State, ownership and invalidation
 
@@ -358,7 +422,16 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
   classification.
 - [ProfilerPanelTests.cpp](../../../FrontEnd/tests/ProfilerPanelTests.cpp): the panel drawn
   headlessly; drawn figures, tab-driven data requests, disabled attribution, row
-  double-click through a row with a hoverable bar.
+  double-click through a row with a hoverable bar; window coverage in both orders (valid first and
+  valid last: `30% (1 of 4 frames)`, never 7.5%), the slave on-time rule, a mixed v26 / v27 window, the
+  v27 detail lines and labels, the Buses tab's unit / cache mode / buckets, history-strip tooltips (real
+  frame identity, "no data" for an unmeasured frame, identity "not available" for v26), and the
+  Functions tab (Other row, 30% of 100,000, per-CPU filters, saturation notes, "Not observed").
+- [ProfilerOtherTests.c](../../../Integration/tests/ProfilerOtherTests.c) (ctest
+  `SaturnExplorerProfilerOtherTests`): F7 producer side on the real glue table and end-of-frame code, the
+  publication captured: a 65th key, an evicted key charged to its own CPU, a late dominant 3,073rd key
+  not admitted, `listed + Other == charged` per CPU, 32-bit saturation of `fnOtherCycles`, mode off =
+  Other not available, reset between frames.
 - [ProfilerLifecycleTests.c](../../../Integration/tests/ProfilerLifecycleTests.c) (ctest
   `SaturnExplorerProfilerLifecycleTests`): the real glue accounting against the real shadow stack, on
   a clock the test controls. F2: 1,000-cycle frame, slave on `[0,200)` and `[800,1000)` = 400
@@ -407,7 +480,12 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
   have not been compared with known workloads. Verify on a real title before relying on
   absolute numbers.
 - "Busy" includes time an SH-2 spends waiting on slow bus cycles; only SLEEP/standby and
-  DMA-burst/external-halt stalls are separated out.
+  DMA-burst/external-halt stalls are separated out (the panel labels it so).
+- Function rows are retained keys: a function that first appears after a frame's 3,072nd key is Other for
+  that frame (flagged). "Not observed" is an estimate from the counters.
+- The panel was only drawn headlessly (text capture through ImGuiHarness); nobody has looked at it in a
+  real window. The history strip's line and ticks are tested through the run-splitting logic and the
+  tooltip text, not as pixels.
 - Bus accesses are bus-controller requests (see "Bus classification"): cache hits and
   fast-map instruction fetches are not counted, and the number depends on the cache mode.
 - DMA bytes are the counts transfers were *started* with; an aborted transfer is counted

@@ -1,6 +1,9 @@
 #include "ProfilerModel.h"
 
+#include "SeLiveProtocol.h"
+
 #include <algorithm>
+#include <cstdio>
 #include <unordered_map>
 
 namespace sfe
@@ -313,11 +316,222 @@ std::vector<PerfFunction> ProfilerModel::HotFunctions(size_t window, uint64_t* t
     return out;
 }
 
+// ---- Windowed figures ----
+
+std::vector<HistoryRun> SplitHistoryRuns(const std::vector<HistoryPoint>& points)
+{
+    std::vector<HistoryRun> runs;
+    bool open = false;
+    for (size_t i = 0; i < points.size(); ++i)
+    {
+        const HistoryPoint& p = points[i];
+        if (!p.available) { open = false; continue; }
+        if (open && !p.breakBefore) { ++runs.back().count; continue; }
+        runs.push_back({ i, 1 });
+        open = true;
+    }
+    return runs;
+}
+
+std::string PerfFrameLabel(const PerfFrame& frame)
+{
+    char buf[96];
+    if (!frame.LegacyVdp1() && frame.Has(SE_PERF_VALID_IDENTITY))
+        std::snprintf(buf, sizeof(buf), "Frame %llu (timeline %u)",
+                      static_cast<unsigned long long>(frame.frameNo), frame.timelineId);
+    else
+        std::snprintf(buf, sizeof(buf), "Frame: not available (this emulator does not number its frames)");
+    return buf;
+}
+
+namespace
+{
+// Counters of the frames a predicate selected, and how many that was.
+struct Part
+{
+    size_t covered = 0;
+    uint64_t c[SE_PERF_COUNT] = {};
+    void Add(const PerfFrame& f)
+    {
+        ++covered;
+        for (int i = 0; i < SE_PERF_COUNT; ++i) c[i] += f.c[i];
+    }
+};
+bool V27(const PerfFrame& f) { return !f.LegacyVdp1(); }
+// A v26 record's slave on-time is its producer's all-or-nothing figure; a v27 one's is meaningful
+// only with the integration bit.
+bool SlaveKnown(const PerfFrame& f) { return f.SlaveOnTimeKnown(); }
+}  // namespace
+
+WindowShares ProfilerModel::Shares(size_t window) const
+{
+    WindowShares out;
+    const size_t n = std::min(window, mCount);
+    out.frames = n;
+    Part all, slave, draw, work, idle, busx;
+    size_t cacheOff = 0, cacheOn = 0;
+    for (size_t k = 0; k < n; ++k)
+    {
+        const PerfFrame& f = At(mCount - 1 - k);
+        all.Add(f);
+        if (V27(f)) ++out.v27Frames;
+        if (SlaveKnown(f)) slave.Add(f);
+        if (f.LegacyVdp1()) draw.Add(f);
+        if (V27(f) && f.Has(SE_PERF_VALID_VDP1_WORK))
+        {
+            work.Add(f);
+            if (f.c[SE_PERF_VDP1_WORK_CYCLES] > f.c[SE_PERF_FRAME_CYCLES]) ++out.vdp1OverFrameFrames;
+        }
+        if (V27(f) && f.Has(SE_PERF_VALID_M68K_IDLE)) idle.Add(f);
+        if (V27(f) && f.Has(SE_PERF_VALID_BUS_X)) busx.Add(f);
+        if (V27(f) && f.Has(SE_PERF_VALID_CACHE))
+        {
+            ++out.cache.covered;
+            (f.cacheMode == SE_PERF_CACHE_ON ? cacheOn : cacheOff)++;
+            out.cacheMode = f.cacheMode;
+        }
+        if (V27(f) && f.Has(SE_PERF_VALID_MODE))
+        {
+            ++out.mode.covered;
+            if (f.mode & SE_LIVE_PROF_FUNCTIONS) ++out.modeFunctionsOn;
+        }
+        if (V27(f) && f.Has(SE_PERF_VALID_IDENTITY)) ++out.identity.covered;
+    }
+    out.cacheMixed = cacheOn && cacheOff;
+    for (Coverage* c : { &out.slave, &out.vdp1Draw, &out.vdp1Work, &out.m68kIdle, &out.busX, &out.cache, &out.mode, &out.identity })
+        c->frames = n;
+    out.slave.covered = slave.covered;
+    out.vdp1Draw.covered = draw.covered;
+    out.vdp1Work.covered = work.covered;
+    out.m68kIdle.covered = idle.covered;
+    out.busX.covered = busx.covered;
+
+    out.shares = ComputePerfShares(all.c, static_cast<double>(n ? n : 1));
+    // The gated fields start from nothing and take only their own frames' figures.
+    out.shares.cpu[1] = CpuShare();
+    out.shares.vdp1Draw = out.shares.vdp1Work = out.shares.vdp1DmaDiscarded = 0.0;
+    out.shares.vdp1WorkOverFrame = false;
+    if (slave.covered) out.shares.cpu[1] = ComputePerfShares(slave.c, static_cast<double>(slave.covered)).cpu[1];
+    if (draw.covered) out.shares.vdp1Draw = ComputePerfShares(draw.c, static_cast<double>(draw.covered)).vdp1Draw;
+    if (work.covered)
+    {
+        const PerfShares w = ComputePerfShares(work.c, static_cast<double>(work.covered));
+        out.shares.vdp1Work = w.vdp1Work;
+        out.shares.vdp1DmaDiscarded = w.vdp1DmaDiscarded;
+        out.shares.vdp1WorkOverFrame = w.vdp1WorkOverFrame || out.vdp1OverFrameFrames > 0;
+    }
+    if (idle.covered && idle.c[SE_PERF_M68K_TOTAL_CYCLES] > 0)
+        out.m68kIdleShare = Clamp01(static_cast<double>(idle.c[SE_PERF_M68K_IDLE_CYCLES]) /
+                                    static_cast<double>(idle.c[SE_PERF_M68K_TOTAL_CYCLES]));
+    if (busx.covered) out.busXTotals = ComputeBusTotals(busx.c);
+    return out;
+}
+
+bool ProfilerModel::LatestIdentity(uint32_t* timelineId, uint64_t* frameNo) const
+{
+    for (size_t k = 0; k < mCount; ++k)
+    {
+        const PerfFrame& f = At(mCount - 1 - k);
+        if (V27(f) && f.Has(SE_PERF_VALID_IDENTITY))
+        {
+            if (timelineId) *timelineId = f.timelineId;
+            if (frameNo) *frameNo = f.frameNo;
+            return true;
+        }
+    }
+    return false;
+}
+
+FunctionWindow ProfilerModel::Functions(size_t window, FnCpu cpu) const
+{
+    FunctionWindow out;
+    const size_t n = std::min(window, mCount);
+    out.frames = n;
+    std::unordered_map<uint32_t, uint64_t> sum;
+    bool busyKnown = true;
+    for (size_t k = 0; k < n; ++k)
+    {
+        const PerfFrame& f = At(mCount - 1 - k);
+        if (!f.functions) continue;
+        ++out.attributed;
+        const bool split = V27(f) && f.Has(SE_PERF_VALID_OTHER);
+        if (cpu != FnCpu::Both && !split) continue;   // a v26 remainder has no CPU
+        ++out.used;
+        if (split) ++out.splitFrames;
+        if (f.satFlags & SE_PERF_SAT_TABLE_FULL && split) ++out.tableFullFrames;
+        if (f.satFlags & SE_PERF_SAT_TRUNCATED && split) ++out.truncatedFrames;
+        const bool wantMaster = cpu != FnCpu::Slave, wantSlave = cpu != FnCpu::Master;
+        for (const PerfFrame::Fn& fn : f.fns)
+        {
+            const bool slaveKey = (fn.key & SE_PERF_FN_SLAVE) != 0;
+            if (slaveKey ? !wantSlave : !wantMaster) continue;
+            sum[fn.key] += fn.cycles;
+            out.listed += fn.cycles;
+        }
+        if (split)
+        {
+            for (int c = 0; c < 2; ++c)
+            {
+                if (c ? !wantSlave : !wantMaster) continue;
+                out.otherNotAdmitted += f.otherNotAdmitted[c];
+                out.otherEvicted += f.otherEvicted[c];
+            }
+        }
+        else
+        {
+            out.otherUnsplit += f.fnOther;
+        }
+        // Busy time of the selected CPUs over this frame, from its own counters.
+        if (wantMaster)
+        {
+            const uint64_t idle = f.c[SE_PERF_SH2_SLEEP] + f.c[SE_PERF_SH2_STALL];
+            out.busy += f.c[SE_PERF_FRAME_CYCLES] > idle ? f.c[SE_PERF_FRAME_CYCLES] - idle : 0;
+        }
+        if (wantSlave)
+        {
+            if (SlaveKnown(f))
+            {
+                const uint64_t idle = f.c[SE_PERF_SH2_SLEEP + 1] + f.c[SE_PERF_SH2_STALL + 1];
+                out.busy += f.c[SE_PERF_SSH2_ON_CYCLES] > idle ? f.c[SE_PERF_SSH2_ON_CYCLES] - idle : 0;
+            }
+            else busyKnown = false;
+        }
+    }
+    out.busyKnown = busyKnown && out.used > 0;
+    out.rows.reserve(sum.size());
+    for (const auto& kv : sum)
+    {
+        PerfFunction pf;
+        pf.key = kv.first;
+        pf.cycles = kv.second;
+        out.rows.push_back(pf);
+    }
+    std::sort(out.rows.begin(), out.rows.end(), [](const PerfFunction& a, const PerfFunction& b)
+    {
+        return a.cycles != b.cycles ? a.cycles > b.cycles : a.key < b.key;
+    });
+    return out;
+}
+
 // ---- MemoryPoolTracker ----
 
 void MemoryPoolTracker::Reset()
 {
     mPools.clear();
+}
+
+void MemoryPoolTracker::SetSource(uint64_t sourceId, uint64_t instance, uint32_t timelineId, uint64_t frame)
+{
+    // Scrubbing back shows an OLDER state than the previous sample: the difference is not a change
+    // the machine made, so it re-primes like any other jump. A frame of 0 is "unknown" and never counts.
+    const bool backwards = frame != 0 && mFrame != 0 && frame < mFrame;
+    if (!mHaveSource || sourceId != mSourceId || instance != mInstance || timelineId != mTimeline || backwards)
+        Reset();
+    mHaveSource = true;
+    mSourceId = sourceId;
+    mInstance = instance;
+    mTimeline = timelineId;
+    mFrame = frame;
 }
 
 MemoryPoolTracker::Tracked& MemoryPoolTracker::Slot(size_t index)

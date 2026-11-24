@@ -1544,6 +1544,17 @@ if(BUILD_TESTING)
         PRIVATE Integration/Common Integration/Mednafen)
     target_link_libraries(SaturnExplorerProfilerLifecycleTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerProfilerLifecycleTests COMMAND SaturnExplorerProfilerLifecycleTests)
+
+    # F7: the per-frame function table's Other, per CPU and by cause (not admitted / evicted), with the
+    # real glue table and end-of-frame code and the publication replaced by a capture.
+    add_executable(SaturnExplorerProfilerOtherTests
+        Integration/tests/ProfilerOtherTests.c
+        Integration/Common/se_export.c
+    )
+    target_include_directories(SaturnExplorerProfilerOtherTests
+        PRIVATE Integration/Common Integration/Mednafen)
+    target_link_libraries(SaturnExplorerProfilerOtherTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerProfilerOtherTests COMMAND SaturnExplorerProfilerOtherTests)
     find_package(Python3 COMPONENTS Interpreter)
     if(Python3_FOUND)
         # Release packaging, offline: the MSYS2 library manifest against canned pacman output, the rule that a
