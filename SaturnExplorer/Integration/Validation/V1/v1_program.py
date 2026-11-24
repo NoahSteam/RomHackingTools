@@ -113,6 +113,10 @@ def source(p):
          "mov.l r0,@-r15", "mov.l r1,@-r15",
          "ldl r1, 0x%08X" % (STATE + 4),
          "mov.l @r1,r0", "add #1,r0", "mov.l r0,@r1",
+         # SCU_MSH2VectorFetch() re-masks every SCU interrupt on each vector fetch: re-arm VBlank-IN here.
+         # SR.I is 15 inside the handler (the CPU sets it on entry) and VBlank-IN is level 15, so nothing
+         # can re-enter before the rte restores SR.
+         "ldl r1, 0x25FE00A0", "ldl r0, 0xFFFFFFFE", "mov.l r0,@r1",
          "mov.l @r15+,r1", "mov.l @r15+,r0",
          "rte", "nop", ".pool",
          "bad_irq:", "bra bad_irq", "nop"])
@@ -126,7 +130,8 @@ def source(p):
     body += wr(2, 0x25D00002, 0)               # FBCR: automatic swap every frame
     body += wr(2, 0x25D00004, 0)               # PTMR: no drawing
     add(fn("hw_init", body, leaf=True))
-    body = wr(2, 0x25D00004, 0) + wr(4, 0x25FE0010, 0) + wr(4, 0x25FE0014, 0)   # PTMR, D0EN, D0MD
+    body = (wr(2, 0x25D00004, 0) + wr(4, 0x25FE0010, 0) + wr(4, 0x25FE0014, 0)   # PTMR, D0EN, D0MD
+            + wr(4, 0x25FE0030, 0) + wr(4, 0x25FE0050, 0))                     # D1EN, D2EN: BIOS may have left them armed
     add(fn("quiesce", body, leaf=True))
 
     # ---------------------------------------------------------------- phase dispatch

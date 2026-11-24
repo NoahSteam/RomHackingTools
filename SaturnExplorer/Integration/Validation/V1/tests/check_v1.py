@@ -179,7 +179,12 @@ PF = params["PHASE_FRAMES"]
 frames = []
 total_frames = PF * vp.N_PHASES + 2 * PF
 for f in range(total_frames):
-    m.run_frame()
+    try:
+        m.run_frame()
+    except sh2sim.SimError as ex:
+        check(False, "guest stopped in frame %d (phase %d): %s" % (f + 1, m.rd(vp.STATE, 4, log=False), ex))
+        print("\n1 check(s) failed")
+        sys.exit(1)
     frames.append((m.log, m.events, m.rd(vp.STATE, 4, log=False)))
 # frames[f] holds what the guest did between wake f-1 and sleep f. Phase p is entered during the
 # wake that is number PF*p (counting from 1), so frame index PF*p belongs to the phase's first frame.
@@ -284,7 +289,7 @@ want_dev = {  # EXPECTED.md, phase BUS table: (device name, read K, write K)
     "SE_PERF_DEV_BIOS": (10, 0), "SE_PERF_DEV_SMPC": (20, 0), "SE_PERF_DEV_BACKUP": (30, 0),
     "SE_PERF_DEV_WRAM_L": (40, 11), "SE_PERF_DEV_CS0_OTHER": (50, 0), "SE_PERF_DEV_ABUS_CS0": (60, 0),
     "SE_PERF_DEV_ABUS_CS1": (70, 0), "SE_PERF_DEV_ABUS_CD": (80, 0), "SE_PERF_DEV_SCSP": (90, 15),
-    "SE_PERF_DEV_VDP1": (100, 13), "SE_PERF_DEV_VDP2": (110, 14), "SE_PERF_DEV_SCU": (120, 0),
+    "SE_PERF_DEV_VDP1": (100, 13), "SE_PERF_DEV_VDP2": (110, 14), "SE_PERF_DEV_SCU": (120, 1),   # +1 write: the handler re-arms IMS every frame (baseline)
     "SE_PERF_DEV_WRAM_H": (130, 12), "X:SE_PERF_XDEV_ABUS_DUMMY": (140, 0), "X:SE_PERF_XDEV_UNMAPPED": (150, 0),
 }
 # the table in EXPECTED.md, parsed back out of the document so the two cannot drift apart
@@ -323,9 +328,12 @@ for name, (kr, kw) in want_dev.items():
         check((gr, gw) == (kr, kw), "BUS frame %s: simulated (reads,writes) %s != K %s" % (name, (gr, gw), (kr, kw)))
 idle = frames[first_frame(0) + 20][0]
 others = {bucket(p27) for p27, s, rw, ea in idle} - {"SE_PERF_DEV_WRAM_H"}
-check(not others, "IDLE phase touches devices other than work RAM high: %s" % others)
+check(others == {"SE_PERF_DEV_SCU"}, "IDLE phase touches %s, expected only work RAM high and the SCU (IMS re-arm)" % others)
+scu = [(rw, p27) for p27, s, rw, ea in idle if bucket(p27) == "SE_PERF_DEV_SCU"]
+check(scu == [("w", 0x05FE00A0)], "IDLE phase SCU accesses %s, expected exactly one IMS write" % scu)
 iw = sum(1 for p27, s, rw, ea in idle if rw == "w")
 ir = sum(1 for p27, s, rw, ea in idle if rw == "r")
+iw -= 1                               # the IMS write is counted under the SCU bucket, not work RAM high
 check(4 <= iw <= 16 and ir <= 8 + 12, "IDLE baseline work-RAM-high requests reads %d writes %d outside EXPECTED.md bands" % (ir, iw))
 print("BUS phase: simulated requests per device match the K table (%d cached work-RAM reads assumed to hit); IDLE baseline reads %d writes %d" % (cached_wh_reads, ir, iw))
 
@@ -412,7 +420,7 @@ with tempfile.TemporaryDirectory() as td:
               "n=%d: built disc's trampoline does not copy+jump at 0x%08X" % (n, entry))
         print("disc n=%d (%s): blocks and security block untouched, code at +0x%X (0x%08X), IP size 0x%X, +0xF4 = 0" % (n, letters, off, entry, ipsz))
         # func addresses do not depend on n: the payload runs at 0x06010000 whatever the disc layout
-        check(a.syms["func_a"] == 0x06010444 or a.syms["func_a"] >= vp.BASE, "func_a moved out of the payload")
+        check(a.syms["func_a"] >= vp.BASE, "func_a outside the payload")
 
     # a layout that is not a system ID is refused rather than overwritten
     bad = bytearray(synthetic_sysarea("U"))

@@ -81,8 +81,8 @@ Fixed per-call overhead outside the loop (literal load, return, delay slot, call
 because it contains a literal-pool load from cached work RAM; it is bounded below by the instruction
 count and above by 40 cycles (a first-touch cache line fill plus load-use wait). All "awake overhead"
 figures below use **OV = 600 cycles** as a deliberately generous bound for the per-frame handler and
-dispatcher (about 25 instructions of exception entry, handler and dispatcher with a handful of cached
-work-RAM accesses; the lower bound is 25 cycles). OV only widens ranges; it never narrows them.
+dispatcher (about 28 instructions of exception entry, handler and dispatcher with a handful of cached
+work-RAM accesses and one SCU register write; the lower bound is 30 cycles). OV only widens ranges; it never narrows them.
 
 ## Phase table
 
@@ -115,7 +115,7 @@ Unless a phase says otherwise: VDP1 commands/starts/overruns/work/discarded = 0,
 | Counter | Expected | Why |
 |---|---|---|
 | frame cycles (0) | `F`, constant | |
-| master sleep (1) | `F - OV .. F - 25` -> share **>= 99.8%** [range] | `SLEEP` op idle step adds 3 cycles per step (`sh7095_ops.inc` ~1734) for the whole interval between `sleep` and the next interrupt; awake time is only exception entry + handler + dispatcher |
+| master sleep (1) | `F - OV .. F - 30` -> share **>= 99.8%** [range] | `SLEEP` op idle step adds 3 cycles per step (`sh7095_ops.inc` ~1734) for the whole interval between `sleep` and the next interrupt; awake time is only exception entry + handler (which re-arms the SCU interrupt mask, see below) + dispatcher |
 | master stall (3) | 0 [derived] | stall is counted only by `PSEUDO_DMABURST` (SH-2 DMAC burst or `ExtHalt`, which only an SCU DMA touching the CPU bus sets) |
 | slave sleep (2), slave stall (4) | 0 | slave is off |
 | slave on-cycles (5), valid bit `SSH2_INT` set | **0** exactly [derived] | no `SetActive(true)` edge in the frame |
@@ -123,14 +123,15 @@ Unless a phase says otherwise: VDP1 commands/starts/overruns/work/discarded = 0,
 | 68000 total (12) | `T = F * ratio`; ratio `0.4205 +- 0.5%` for NTSC 320-wide, `0.3943 +- 0.5%` for NTSC 352-wide (`smpc.cpp` `SOUND_SetClockRatio` = 11,289,600 * divisor / MasterClock); PAL differs (about `0.4235` / `0.397`) | the 68000/SH-2 clock ratio; total is the 68000 time the frame advanced, quantised to 4 cycles (a halted step is `timestamp += 4`) |
 | 68000 idle (57) | **= total** exactly | held in reset by SMPC `SNDOFF`: `XPENDING_MASK_EXTHALTED`, every step is the idle fall-through |
 | 68000 executed (11) | **0** exactly | total - idle |
-| bus requests, devices other than work RAM high | all 0 | handler touches only work RAM high; instruction fetch is not a request in `data` mode |
+| bus requests, devices other than work RAM high and the SCU | all 0 | instruction fetch is not a request in `data` mode |
+| bus requests SCU (device 11) | reads 0, **writes exactly 1** (counter 51) | the VBlank-IN handler writes IMS once per frame: `SCU_MSH2VectorFetch()` sets `IMask = 0xBFFF` (everything masked) on every master vector fetch, so the handler must write `IMS = 0xFFFFFFFE` again or the second VBlank never wakes the CPU. One `mov.l` = one request |
 | bus requests work RAM high (device 12) | reads 0..8, writes **4..16** per frame [range] | exception entry pushes SR and PC, the handler pushes two registers and writes the frame counter, the dispatcher writes a few state words; all are write-through |
 
 This phase's bus figures are the **baseline** that the BUS phase is differenced against.
 
 ### Phase 1 BUSY
 
-Master busy = `F - sleep` = `159,998 + overhead`, overhead in `[25, OV]` -> **busy in [160,023, 160,598]**,
+Master busy = `F - sleep` = `159,998 + overhead`, overhead in `[30, OV]` -> **busy in [160,028, 160,598]**,
 i.e. master sleep = `F - busy` [derived, range]. Everything else as phase 0 (the loop has no memory
 operation, so the bus counters equal the baseline). In cache mode `full` the same figure is expected
 within +2% (a 2-instruction loop is resident after the first iteration; the first-frame line fill is
@@ -187,8 +188,9 @@ asserts it.)
 
 Expected per bucket in a steady frame of this phase:
 
-* every device except work RAM high: **baseline (0) + K, exactly**, reads and writes separately;
-  writes to devices with no write K stay 0. [derived]
+* every device except work RAM high and the SCU: **baseline (0) + K, exactly**, reads and writes separately;
+  writes to devices with no write K stay 0. The SCU baseline is 1 write per frame (the IMS re-arm), so
+  the SCU row is reads 120 and writes **1**, not 0. [derived]
 * work RAM high (12): reads `K + (0..8)`, writes `12 + (4..16)` [range]. Not exact because the table
   walk, the loop code and the dispatcher also touch cached work RAM high; in `full` cache mode add up
   to 64 more reads per frame (line fills of resident code), unverified.
