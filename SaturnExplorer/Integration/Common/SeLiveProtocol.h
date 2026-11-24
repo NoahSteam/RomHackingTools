@@ -504,7 +504,7 @@
 #define SE_LIVE_WRAM_LOW_LEN    0x100000u
 #define SE_LIVE_WRAM_HIGH_LEN   0x100000u
 #define SE_LIVE_VDP1_FB_LEN     0x40000u   /* VDP1 frame buffer (drawn output) */
-#define SE_LIVE_CONTROL_LEN     56u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each)
+#define SE_LIVE_CONTROL_LEN     60u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each)
                                            * + (v19) restore_done(u32) + restore_failed(u32). Every
                                            * accepted LST/ELS ends in exactly one: done counts once
                                            * the first frame of the restored timeline is in the
@@ -534,7 +534,25 @@
                                            * not apply (mailbox full, no writer wired, or a window
                                            * the emulator cannot write); caps(u32 @+52): the
                                            * SE_LIVE_CAP_* bits below. Both counters are monotonic
-                                           * per emulator run and wrap at 2^32. */
+                                           * per emulator run and wrap at 2^32.
+                                           * (v27, no version bump) snapshot_timeline(u32 @+56): the
+                                           * machine-state timeline (the perf record's timelineId, bumped
+                                           * on every replacement of machine state) of THE SNAPSHOT THIS
+                                           * REPLY CARRIES -- stamped when the slot was written, not when
+                                           * the reply was built. 0 = unknown. It is the one number that
+                                           * says which timeline the memory bytes in this very reply
+                                           * belong to: the perf records beside them are drained from a
+                                           * separate queue and can be of a newer timeline than a slot a
+                                           * lagging GET is still serving, and a native load leaves the
+                                           * pre-load slots in the ring. Compatibility: the control block's
+                                           * length is in the header and a parser reads only the fields it
+                                           * knows (a v27 parser accepts up to 64 bytes and reads 56), so a
+                                           * server that sends 60 bytes still works with a client that
+                                           * does not know the field, and a client reading a 56-byte block
+                                           * from an older server reports the timeline as unknown. No
+                                           * version bump on purpose: one would make every v27 client
+                                           * refuse the server at its version check. */
+#define SE_LIVE_CONTROL_TIMELINE_OFFSET 56
 /* Server capability bits (control block +52, v23+). */
 #define SE_LIVE_CAP_VDP_POKE    1u   /* a poke to the CRAM (0x05F00000..) or VDP1 frame buffer
                                       * (0x05C80000..) window is applied; without it the emulator's bus

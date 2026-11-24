@@ -1770,6 +1770,19 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         add_test(NAME SaturnExplorerLiveProfilerFormatTests
                  COMMAND SaturnExplorerLiveProfilerFormatTests)
 
+        # The control block's snapshot timeline (+56): stamped, unstated, absent (a 56-byte block from a
+        # server older than the field) and longer, against a scripted server on an ephemeral port.
+        add_executable(SaturnExplorerLiveCaptureTimelineCompatTests
+            FrontEnd/tests/LiveCaptureTimelineCompatTests.cpp)
+        target_include_directories(SaturnExplorerLiveCaptureTimelineCompatTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveCaptureTimelineCompatTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveCaptureTimelineCompatTests
+                 COMMAND SaturnExplorerLiveCaptureTimelineCompatTests)
+
         # The profiler's wire path (v27 record): the real exporter hands over per-frame counters, the
         # real driver must deliver each frame once and intact, and function attribution must be
         # armed on request and disarmed on disconnect. Shares the default socket.
@@ -1798,6 +1811,26 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerLiveProfilerModeTests
                  COMMAND SaturnExplorerLiveProfilerModeTests)
+
+        # F10: the Memory tab's tracker is told the timeline of the capture's own bytes (the server stamps
+        # each snapshot), not the perf stream's. Real exporter + real driver; port and socket of its own.
+        add_executable(SaturnExplorerMemoryTimelineTests
+            FrontEnd/tests/MemoryTimelineTests.cpp
+            FrontEnd/src/Debug/ProfilerModel.cpp
+            FrontEnd/src/Debug/MemoryBackend.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerMemoryTimelineTests PRIVATE
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_memory_timeline_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6956)
+        target_include_directories(SaturnExplorerMemoryTimelineTests PRIVATE
+            FrontEnd/src
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerMemoryTimelineTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerMemoryTimelineTests COMMAND SaturnExplorerMemoryTimelineTests)
+        set_tests_properties(SaturnExplorerMemoryTimelineTests PROPERTIES TIMEOUT 120 RESOURCE_LOCK live_tap_socket)
 
         # Frame identity and lost records of the profiler stream (F3) and the first reply's capability
         # bits (F14): the exporter's section builder without a socket, the driver against a scripted

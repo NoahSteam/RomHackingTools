@@ -553,7 +553,11 @@ void ProfilerPanel::DrawMemoryTab(const MemoryPoolTracker& pools, const Host& ho
 {
     if (pools.Count() == 0)
     {
-        ImGui::TextDisabled("No data loaded.");
+        if (pools.SettlingCaptures() > 0)
+            ImGui::TextDisabled("The machine state was replaced. This emulator does not say which timeline each capture is of, "
+                                "so sampling resumes after %u more captures.", pools.SettlingCaptures());
+        else
+            ImGui::TextDisabled("No data loaded.");
         return;
     }
     Swatch(ColTrack(), "Uniform");
@@ -568,7 +572,8 @@ void ProfilerPanel::DrawMemoryTab(const MemoryPoolTracker& pools, const Host& ho
                           "Changed since sample: its contents differ from the previous sample of the SAME\n"
                           "capture; the colour fades while it stays put. Sampling starts over (nothing is\n"
                           "reported changed) whenever the source, the emulator, the machine-state timeline\n"
-                          "or the displayed frame goes backwards -- scrubbing back is a jump, not a change.\n"
+                          "OF THE CAPTURE ITSELF or the displayed frame goes backwards -- scrubbing back is a\n"
+                          "jump, not a change, and so is a state load.\n"
                           "VDP1 VRAM is the copy taken when VDP1 last finished drawing (the draw-end latch);\n"
                           "until the first draw-end after boot or a state load it is the live VRAM, so a\n"
                           "change there means a draw finished, not that the game wrote at that instant.");

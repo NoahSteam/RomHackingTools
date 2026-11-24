@@ -71,6 +71,7 @@ typedef struct
     int has_cd;                /* 1 if this frame captured CD status */
     int valid;
     unsigned long long stop;   /* sStopWord when this slot was published; see the reply */
+    unsigned int timeline;     /* sTimelineId when the slot was written: the timeline its BYTES belong to */
 } SeFrame;
 
 /* Build the hardware-offset, big-endian VDP1 register image from Yabause's Vdp1
@@ -2096,6 +2097,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     if (cdStatus) { memcpy(dst->cd, cdStatus, SE_LIVE_CD_BLOCK_LEN); dst->has_cd = 1; }
     else          { memset(dst->cd, 0, SE_LIVE_CD_BLOCK_LEN);        dst->has_cd = 0; }
     dst->valid = 1;
+    dst->timeline = (unsigned int)SeAtLoad(&sTimelineId);   /* the memory above is of THIS timeline; the reply says so */
     dst->stop = SeAtLoad64(&sStopWord);
     /* A publish from inside a debugger halt (a breakpoint, a step, a DMA watchpoint: a stop latched
      * and the CPU held) shows a moment part-way through the frame now running; it is not a new
@@ -2638,6 +2640,7 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* 
         SeWr32(ctl + 32, (unsigned int)(sRingFrame[(sRingWrite + SE_RING - 1) % SE_RING] & 0xFFFFFFFFu));
         SeWr32(ctl + 36, (unsigned int)SeAtLoad(&sStepOutstanding));
         SeWr32(ctl + 40, SE_STOP_SEQ(stop));   /* the same read as the reason above */
+        SeWr32(ctl + SE_LIVE_CONTROL_TIMELINE_OFFSET, snap->timeline);   /* the served slot's own timeline, not the current one */
         SE_UNLOCK();
         SE_SLOCK();
         SeWr32(ctl + 44, sPokesApplied);

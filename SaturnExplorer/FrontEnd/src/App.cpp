@@ -4440,17 +4440,33 @@ void App::UpdateProfiler()
     // both are of the same capture. The tracker therefore re-primes (the first sample after reports
     // nothing changed) when the displayed source moves -- another file, a savestate, a scrubbed frame
     // (SourceId moves on every scrub step), or a new emulator process -- when the machine-state
-    // timeline changes (rewind, slot or native load; the profiler frames carry it), and when a
-    // scrubbed frame goes BACKWARDS. A live view has no displayed frame number of its own (the capture
-    // can trail the profiler's newest frame), so only a scrub supplies one.
+    // timeline changes (rewind, slot or native load), and when a scrubbed frame goes BACKWARDS.
+    // The timeline must be the CAPTURE's own: the bytes sampled below come from the snapshot this
+    // thread last captured, while the profiler frames (mProfiler) are a separate stream that can
+    // already be on a newer timeline than a lagging capture. A server that stamps its snapshots says
+    // which timeline they are (se_live_captured_identity); one that does not leaves the tracker to
+    // wait out the server's snapshot ring after a change seen on the stream rather than guess.
     {
-        uint32_t timeline = 0;
-        uint64_t liveFrame = 0;
-        mProfiler.LatestIdentity(&timeline, &liveFrame);
         const bool scrubbed = mScrubContext && mContext == mScrubContext;
-        mPoolTracker.SetSource(mMemBackend.SourceId(), mLiveConnGeneration, timeline,
-                               scrubbed ? mScrubShownFrame : 0);
+        uint32_t streamTimeline = 0;
+        uint64_t streamFrame = 0;
+        mProfiler.LatestIdentity(&streamTimeline, &streamFrame);
+        PoolCaptureSource src;
+#ifdef SE_ENABLE_LIVE
+        if (mbLiveSource && !scrubbed)
+            src = LivePoolSource(&mDataSource, mMemBackend.SourceId(), mLiveConnGeneration, streamTimeline);
+        else
+#endif
+        {
+            src.sourceId = mMemBackend.SourceId();
+            src.instance = mLiveConnGeneration;
+            src.streamTimeline = streamTimeline;
+        }
+        // A live view has no displayed frame number of its own, only a scrub supplies one.
+        src.frame = scrubbed ? mScrubShownFrame : 0;
+        const bool mayAccept = mPoolTracker.BeginSample(src);
         if (mPoolTracker.Count() == 0) mPoolSampleCountdown = 0;   // re-primed: sample now, don't show an empty tab
+        if (!mayAccept) return;   // waiting out a timeline change this capture cannot confirm
     }
     if (mPoolSampledSource != mMemBackend.SourceId())
     {
