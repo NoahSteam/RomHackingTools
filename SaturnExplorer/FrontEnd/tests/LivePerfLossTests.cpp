@@ -18,6 +18,11 @@
 #include <thread>
 #include <vector>
 
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/un.h>
+#include <unistd.h>
+
 extern "C" {
 #include "se_export.h"
 void SeExportTestSetPerfSeq(unsigned long long seq);   // se_export.c, SE_EXPORT_TEST_HOOKS builds only
@@ -534,45 +539,95 @@ uint32_t CapsOf(const se_data_source& ds)
     return caps;
 }
 
+// The capability word of the very first reply of a brand-new connection, read off the wire.
+// The client is a raw socket, not the driver: the driver overwrites its copy of the capabilities
+// with every later reply, so a sample of the driver's state cannot tell the first reply from the
+// second. Here the one reply read is, by construction, the first one the server ever sent on this
+// connection, and the wait for it is a blocking recv() -- it returns when the reply exists.
+// The only clocks are safety bounds (the listener appearing, the receive timeout): they turn a hang
+// into a failure and never decide a result.
+struct FirstReply { bool ok = false; uint32_t version = 0, caps = 0; };
+
+uint32_t Le32(const uint8_t* p)
+{
+    return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
+}
+
+bool RecvExact(int fd, uint8_t* d, size_t n)
+{
+    while (n)
+    {
+        const ssize_t r = ::recv(fd, d, n, 0);
+        if (r <= 0) return false;   // closed, or the safety receive timeout fired
+        d += r; n -= static_cast<size_t>(r);
+    }
+    return true;
+}
+
+// Connects the first instant the listener exists (a tight spin: the point is to be there before
+// anything else is), sends one GET and reads the reply header and control block.
+FirstReply ReadFirstReply(const std::atomic<bool>& stop)
+{
+    FirstReply fr;
+    int fd = -1;
+    const auto giveUp = std::chrono::steady_clock::now() + std::chrono::seconds(20);   // safety only
+    while (!stop.load() && std::chrono::steady_clock::now() < giveUp)
+    {
+        fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+        if (fd < 0) return fr;
+        sockaddr_un addr;
+        std::memset(&addr, 0, sizeof addr);
+        addr.sun_family = AF_UNIX;
+        std::strncpy(addr.sun_path, kSock, sizeof(addr.sun_path) - 1);
+        if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) == 0) break;
+        ::close(fd);
+        fd = -1;
+        std::this_thread::yield();
+    }
+    if (fd < 0) return fr;
+    timeval tv = {}; tv.tv_sec = 20;                                   // safety only: hang -> failure
+    ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+
+    uint8_t req[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    std::memcpy(req, SE_LIVE_VERB_GET, 4);
+    if (::send(fd, req, sizeof req, MSG_NOSIGNAL) == static_cast<ssize_t>(sizeof req))
+    {
+        uint8_t hdr[SE_LIVE_HEADER_LEN];
+        if (RecvExact(fd, hdr, sizeof hdr))
+        {
+            fr.version = Le32(hdr + 4);
+            size_t before = 0;                    // v1 v2 cram vdp2struct vdp1regs wramLow wramHigh fb
+            for (int i = 0; i < 8; ++i) before += Le32(hdr + 8 + 4 * i);
+            const uint32_t ct = Le32(hdr + 40);
+            std::vector<uint8_t> ctl(ct), sink(before);
+            if (ct >= 56 && RecvExact(fd, sink.data(), before) && RecvExact(fd, ctl.data(), ct))
+            {
+                fr.caps = Le32(ctl.data() + 52);
+                fr.ok = true;
+            }
+        }
+    }
+    ::close(fd);
+    return fr;
+}
+
 // Starts the exporter the way a glue should: prepare, register what the build has, admit
-// listeners. 'racer' asks for capabilities at the first instant a listener exists.
+// listeners. The client is already spinning on the socket, so it is the first to be served.
 uint32_t FirstReplyCaps(bool counters, bool debugger)
 {
-    // Every sample taken from the first reply on, ANDed and ORed: they must all be the same.
-    std::atomic<uint32_t> andMask{ 0xFFFFFFFFu }, orMask{ 0 };
-    std::atomic<int> samples{ 0 };
     std::atomic<bool> stop{ false };
-    std::thread racer([&] {
-        se_data_source ds = {};
-        while (!stop.load() && se_live_open(kSock, &ds) != SE_OK) std::this_thread::yield();
-        if (stop.load()) return;
-        // Bounded by time, not by a count of yields: a slow transport (TCP) can need longer than any
-        // fixed number of spins before its first reply exists, and a run with no first-reply sample
-        // would assert nothing. The first sample is still taken the instant the version is known.
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
-        while (!stop.load() && samples.load() < 100 && std::chrono::steady_clock::now() < deadline)
-        {
-            if (se_live_server_version(&ds) != 0)
-            {
-                const uint32_t c = CapsOf(ds) & (SE_LIVE_CAP_PROFILER | SE_LIVE_CAP_PROF_FUNCTIONS);
-                andMask.fetch_and(c);
-                orMask.fetch_or(c);
-                samples.fetch_add(1);
-            }
-            std::this_thread::yield();
-        }
-        ds.close(ds.user);
-    });
+    FirstReply fr;
+    std::thread racer([&] { fr = ReadFirstReply(stop); });
     CHECK(SeExportPrepare() == 0);
     if (debugger) SeExportSetProfilerHook(FakeSetProfiler);
     if (counters) SeExportSetPerfCapable(1);
     CHECK(SeExportStart() == 0);
-    for (int i = 0; i < 10000 && samples.load() < 100; ++i) SleepMs(2);   // up to 20 s, as the racer
+    racer.join();                       // returns when the first reply has been read (or failed)
     stop = true;
-    racer.join();
     SeExportDeinit();
-    CHECK(samples.load() > 0);
-    return andMask.load() == orMask.load() ? andMask.load() : 0xDEADu;
+    CHECK(fr.ok);
+    CHECK(fr.version == SE_LIVE_VERSION);
+    return fr.ok ? (fr.caps & (SE_LIVE_CAP_PROFILER | SE_LIVE_CAP_PROF_FUNCTIONS)) : 0xDEADu;
 }
 
 void TestFirstReplyCapabilities()
