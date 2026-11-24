@@ -18,13 +18,20 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <mutex>
 #include <thread>
 #include <vector>
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 extern "C" {
 #include "se_export.h"
 }
 #include "BenchClient.h"
+#include "LiveDriver.h"
 #include "SeLiveProtocol.h"
 #include "SePerfCounters.h"
 
@@ -46,6 +53,19 @@ std::atomic<int> gHookCalls{ 0 };
 extern "C" void FakeSetProfiler(unsigned int flags) { gHookFlags = flags; ++gHookCalls; }
 std::atomic<int> gSlotLoads{ 0 };
 std::atomic<int> gSlotLoaded{ -1 };
+// The savestate the exporter takes per frame while a client wants rewind capture (REW 1, the default
+// of every new connection); a client that sent REW 0 stops it. Counting these is how the stand-in
+// sees whether rewind capture is on.
+std::atomic<int> gSaves{ 0 };
+extern "C" size_t FakeSave(unsigned char* buf, size_t cap)
+{
+    ++gSaves;
+    if (!buf) return 64;
+    if (cap < 64) return 0;
+    std::memset(buf, 0xA5, 64);
+    return 64;
+}
+extern "C" int FakeLoad(const unsigned char*, size_t) { return 0; }
 extern "C" int FakeSlotInfo(unsigned int, unsigned long long* mtime) { *mtime = 1; return 1; }
 extern "C" int FakeSlotLoad(unsigned int slot)
 {
@@ -273,6 +293,176 @@ void TestLoadSlot()
     CHECK(gSlotLoaded.load() == 3);
 }
 
+
+// A byte-for-byte TCP forwarder in front of the exporter's TCP port that records every request header
+// the client sends ("REW:0", "PRF:1", ...), per connection. bench_client sends no request with a
+// payload, so the stream splits into 8-byte headers.
+class Sniffer
+{
+public:
+    bool Start(uint16_t upstreamPort)
+    {
+        mUp = upstreamPort;
+        mL = ::socket(AF_INET, SOCK_STREAM, 0);
+        if (mL < 0) return false;
+        sockaddr_in a = {};
+        a.sin_family = AF_INET;
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        a.sin_port = 0;
+        if (::bind(mL, reinterpret_cast<sockaddr*>(&a), sizeof a) != 0 || ::listen(mL, 8) != 0) return false;
+        socklen_t len = sizeof a;
+        ::getsockname(mL, reinterpret_cast<sockaddr*>(&a), &len);
+        mPort = ntohs(a.sin_port);
+        mRun = true;
+        mAcceptor = std::thread([this] {
+            while (mRun.load())
+            {
+                const int c = ::accept(mL, nullptr, nullptr);
+                if (c < 0 || !mRun.load()) { if (c >= 0) ::close(c); break; }
+                const int u = ::socket(AF_INET, SOCK_STREAM, 0);
+                sockaddr_in ua = {};
+                ua.sin_family = AF_INET;
+                ua.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                ua.sin_port = htons(mUp);
+                if (u < 0 || ::connect(u, reinterpret_cast<sockaddr*>(&ua), sizeof ua) != 0) { ::close(c); if (u >= 0) ::close(u); continue; }
+                size_t idx;
+                { std::lock_guard<std::mutex> lk(mMu); idx = mConns.size(); mConns.emplace_back(); }
+                std::lock_guard<std::mutex> lk(mMu);
+                mThreads.emplace_back([this, c, u, idx] { Relay(c, u, idx, true); });
+                mThreads.emplace_back([this, c, u, idx] { Relay(u, c, idx, false); });
+            }
+        });
+        return true;
+    }
+    void Stop()
+    {
+        if (!mRun.exchange(false)) return;
+        const int w = ::socket(AF_INET, SOCK_STREAM, 0);   // wake accept()
+        sockaddr_in a = {};
+        a.sin_family = AF_INET;
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        a.sin_port = htons(mPort);
+        if (w >= 0) { (void)::connect(w, reinterpret_cast<sockaddr*>(&a), sizeof a); ::close(w); }
+        if (mAcceptor.joinable()) mAcceptor.join();
+        ::close(mL);
+        for (std::thread& t : mThreads) if (t.joinable()) t.join();
+    }
+    ~Sniffer() { Stop(); }
+    std::string Endpoint() const { return "tcp:127.0.0.1:" + std::to_string(mPort); }
+    // Connections that carried at least one request, each as its list of "VERB:arg" tokens.
+    std::vector<std::vector<std::string>> Used()
+    {
+        std::lock_guard<std::mutex> lk(mMu);
+        std::vector<std::vector<std::string>> out;
+        for (const auto& c : mConns) if (!c.empty()) out.push_back(c);
+        return out;
+    }
+private:
+    void Relay(int from, int to, size_t idx, bool parse)
+    {
+        std::vector<unsigned char> acc;
+        unsigned char buf[65536];
+        for (;;)
+        {
+            const ssize_t n = ::recv(from, buf, sizeof buf, 0);
+            if (n <= 0) break;
+            if (parse)
+            {
+                acc.insert(acc.end(), buf, buf + n);
+                while (acc.size() >= 8)
+                {
+                    std::string v(reinterpret_cast<const char*>(acc.data()), 3);
+                    const uint32_t arg = acc[4] | (acc[5] << 8) | (acc[6] << 16) | (static_cast<uint32_t>(acc[7]) << 24);
+                    { std::lock_guard<std::mutex> lk(mMu); mConns[idx].push_back(v + ":" + std::to_string(arg)); }
+                    acc.erase(acc.begin(), acc.begin() + 8);
+                }
+            }
+            ssize_t off = 0;
+            while (off < n) { const ssize_t w = ::send(to, buf + off, static_cast<size_t>(n - off), MSG_NOSIGNAL); if (w <= 0) { off = n; break; } off += w; }
+        }
+        ::shutdown(from, SHUT_RDWR);
+        ::shutdown(to, SHUT_RDWR);
+    }
+    uint16_t mUp = 0, mPort = 0;
+    int mL = -1;
+    std::atomic<bool> mRun{ false };
+    std::thread mAcceptor;
+    std::vector<std::thread> mThreads;
+    std::mutex mMu;
+    std::vector<std::vector<std::string>> mConns;
+};
+
+bool Has(const std::vector<std::string>& v, const std::string& t)
+{
+    for (const std::string& x : v) if (x == t) return true;
+    return false;
+}
+
+// Rewind capture is held off in every mode: on the wire (REW:0 on every connection that asks for
+// anything) and at the server (no per-frame savestates while the client is attached).
+void TestRewindOffEveryMode()
+{
+    // Positive control: a client that does not send REW 0 makes the stand-in take savestates.
+    {
+        se_data_source ds{};
+        for (int i = 0; i < 2000 && se_live_open(kSock, &ds) != SE_OK; ++i) SleepMs(5);
+        CHECK(ds.close != nullptr);
+        SleepMs(150);
+        const int before = gSaves.load();
+        SleepMs(600);
+        CHECK(gSaves.load() - before > 40);
+        if (ds.close) ds.close(ds.user);
+        SleepMs(200);
+    }
+    // Server side, stream mode over the local socket (no proxy in the way).
+    {
+        v3::BenchOptions o = Base("rew_srv");
+        o.warmupS = 0.3;
+        o.durationS = 1.2;
+        const int before = gSaves.load();
+        CHECK(v3::RunBench(o, stdout) == v3::kOk);
+        const int taken = gSaves.load() - before;
+        std::printf("savestates taken during a 1.5 s stream run: %d\n", taken);
+        CHECK(taken < 30);   // ~375 frames ran; only those before REW 0 landed may be saved
+    }
+    // Wire side, all three modes, through the sniffer.
+    Sniffer sn;
+    CHECK(sn.Start(6953));
+    v3::BenchOptions st = Base("rew_stream");
+    st.endpoint = sn.Endpoint();
+    st.functions = true;
+    st.warmupS = 0.3;
+    st.durationS = 0.6;
+    (void)v3::RunBench(st, stdout);   // over TCP the stand-in may overrun the ring: validity is not the point here
+    v3::BenchOptions br = Base("rew_bracket");
+    br.endpoint = sn.Endpoint();
+    br.mode = v3::Mode::Bracket;
+    br.warmupS = 0.2;
+    br.durationS = 0.5;
+    CHECK(v3::RunBench(br, stdout) == v3::kOk);
+    v3::BenchOptions ls = Base("rew_slot");
+    ls.endpoint = sn.Endpoint();
+    ls.mode = v3::Mode::LoadSlot;
+    ls.loadSlot = 2;
+    CHECK(v3::RunBench(ls, stdout) == v3::kOk);
+    SleepMs(200);
+    sn.Stop();
+    const auto used = sn.Used();
+    // stream: 1 connection, bracket: 2, load-slot: 1
+    CHECK(used.size() == 4);
+    size_t withRew = 0, withPrf1 = 0, withEls = 0;
+    for (const auto& c : used)
+    {
+        if (Has(c, "REW:0")) ++withRew;
+        if (Has(c, "PRF:1")) ++withPrf1;
+        if (Has(c, "ELS:2")) ++withEls;
+        CHECK(!Has(c, "REW:1"));
+    }
+    CHECK(withRew == used.size());   // every connection that sent anything turned rewind capture off
+    CHECK(withPrf1 == 1);            // attribution on reached the wire once (the stream)
+    CHECK(withEls == 1);             // and the slot request reached it too
+}
+
 int Exec(const std::string& cmd)
 {
     const int st = std::system(cmd.c_str());
@@ -309,6 +499,8 @@ int main(int argc, char** argv)
     SeExportSetProfilerHook(FakeSetProfiler);
     SeExportSetPerfCapable(1);
     SeExportSetEmuSlotHooks(FakeSlotInfo, FakeSlotLoad);
+    SeExportSetSaveStateHook(FakeSave);
+    SeExportSetLoadStateHook(FakeLoad);
     if (SeExportStart() != 0) { std::printf("SeExportStart failed\n"); return 1; }
     std::thread emu(Emulator);
 
@@ -317,6 +509,7 @@ int main(int argc, char** argv)
     TestBracket();
     TestLossIsCountedAndInvalid();
     TestLoadSlot();
+    TestRewindOffEveryMode();
     if (argc > 1) TestExecutable(argv[1]);
 
     gStop = true;

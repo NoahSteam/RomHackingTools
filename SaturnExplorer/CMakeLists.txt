@@ -1680,6 +1680,9 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         add_test(NAME SaturnExplorerV3AnalyzeTests
                  COMMAND ${Python3_EXECUTABLE} -I
                          ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Validation/V3/test_analyze_v3.py)
+        add_test(NAME SaturnExplorerV3CheckSettingsTests
+                 COMMAND ${Python3_EXECUTABLE} -I
+                         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Validation/V3/test_check_settings.py)
     endif()
 
     # The driver's reconnect counter — how a client notices the emulator on the other end
@@ -1820,6 +1823,20 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
         target_link_libraries(SaturnExplorerV3FakeEmulator PRIVATE Threads::Threads)
+
+        # Diagnostic (not a test): poll period and loss over the unix socket versus TCP (own socket, port 6955).
+        add_executable(se-v3-poll-probe
+            Integration/Validation/V3/PollPeriodProbe.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(se-v3-poll-probe PRIVATE
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_v3_poll_probe.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6955)
+        target_include_directories(se-v3-poll-probe PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(se-v3-poll-probe PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         find_program(SE_BASH bash)
         if(SE_BASH AND Python3_FOUND)
             add_test(NAME SaturnExplorerV3RunScriptTests

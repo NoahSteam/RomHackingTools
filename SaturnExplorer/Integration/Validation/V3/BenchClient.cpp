@@ -194,6 +194,15 @@ bool Probe(const BenchOptions& o, Clock::time_point t0, std::vector<Row>& rows, 
         if (!got) SleepMs(1);
     }
     if (got && cpu) *cpu = SampleCpu(o.pid, t0);
+    // The first reply is the handshake's; the REW 0 request goes out behind it. Hanging up before it was
+    // sent would leave the server capturing a savestate per frame for the whole (short) connection, so
+    // wait for the second reply, which is REW's. Bounded: a server that never answers must not hang a probe.
+    for (int i = 0; got && i < 500; ++i)
+    {
+        se_live_perf_status st{};
+        if (se_live_perf_status_get(&ds, &st) && st.replies >= 2) break;
+        SleepMs(1);
+    }
     Close(ds);
     if (holdNs) *holdNs = NowNs(t0) - sampledNs;
     return got;
@@ -210,6 +219,7 @@ int RunLoadSlot(const BenchOptions& o, std::FILE* out)
     cfg.reserved = 0;
     se_context* ctx = se_create(&ds, &cfg);
     if (!ctx) { Close(ds); std::fprintf(out, "error: se_create failed\n"); return kError; }
+    se_live_set_rewind_enabled(&ds, 0);   // no per-frame savestates while the scene is being loaded
     int rc = kError;
     uint32_t done0 = 0, failed0 = 0;
     // A load is aimed at the session this thread last captured, so capture until there is one.

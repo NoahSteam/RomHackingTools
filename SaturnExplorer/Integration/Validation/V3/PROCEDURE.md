@@ -57,7 +57,7 @@ the runs of each configuration (4000 draws, seed 1).
 A connection of any kind makes `SeExportHasClient()` true. From then on `SeExportSnapshot` copies
 the frame (VDP1/VDP2 VRAM, CRAM, registers, work RAM windows) into the ring on every emulated frame,
 and, unless the client has sent `REW 0`, takes a full savestate per frame. There is no protocol request
-that costs less: every verb replies with a full snapshot, and the driver polls at about 120 Hz. So
+that costs less: every verb replies with a full snapshot, and the driver polls with an 8 ms sleep between requests (measured here: about 80 replies per second over the unix socket). So
 "a client that wants nothing" does not exist, which is why the plan's "no client" cannot be a probe
 that stays connected. The bracket makes (a) client-free for the whole window at the price of two short
 connections inside it (a few hundred milliseconds of client-attached emulation per 60 s, reported as
@@ -81,10 +81,29 @@ on": this harness records no guest counters, so that comparison is not covered h
 
 ### Limits you will meet
 
-* **Stream ceiling.** The server keeps 16 records per connection and a reply carries at most 8; the driver
-  polls at about 120 Hz, so at most about 960 frames per second can be delivered whole. An unthrottled
-  emulator faster than that makes (b) and (c) lose records and the run is flagged invalid. Then use
-  `--throttle on` (CPU per frame only) or accept that (b)/(c) speed cannot be measured above the ceiling.
+* **Stream ceiling, and TCP.** The server keeps 16 records per connection and a reply carries at most 8, so the
+  frame rate that can be delivered whole is 8 divided by the driver's poll period. Measured with
+  `se-v3-poll-probe` (real exporter and driver, a stand-in emulator, one machine; the stand-in's snapshots are
+  empty, so a real emulator's period will be longer, not shorter):
+
+  | transport | poll period | replies/s | ceiling (8 per reply) | frames lost at 226 fps |
+  |---|---|---|---|---|
+  | unix socket | 12.4 ms | 81 | about 650 fps | 0 |
+  | TCP (as shipped) | 30 ms | 33 | about 265 fps | 61 to 84 in 3 s |
+  | TCP with `TCP_NODELAY` forced on both ends (diagnostic shim, not in the repo) | 12.1 ms | 83 | about 660 fps | 0 |
+
+  At 94 fps the TCP run loses nothing (its period is still 24 to 26 ms). So the loss over TCP is not the
+  stand-in bursting: it is the transport. The exporter writes each reply as roughly twenty `send()` calls, several
+  of them 4 bytes (`se_export.c` around lines 2668 to 2771), and neither side sets `TCP_NODELAY`; Nagle's
+  algorithm holds each small segment until the previous one is acknowledged and the peer's delayed ACK answers
+  late, which stretches every poll round trip. **Consequence:** over TCP (Windows users who cannot use the
+  pipe, or any remote setup) the measurable emulated frame rate in (b) and (c) tops out around 200 fps, far below
+  the unix-socket ceiling; above it the runs are invalid and only `--throttle on` (CPU per frame) works. Prefer the
+  unix socket on Linux and macOS. The named pipe used by default on Windows has **not** been measured.
+  Product-side fix, not made here (v27 and the exporter and driver are frozen for this work): set `TCP_NODELAY`
+  on accepted sockets in `se_export.c` and on the connected socket in `LiveDriver.cpp`, or gather each reply into
+  one buffer and send it with one call. An unthrottled emulator faster than the transport's ceiling makes (b) and
+  (c) lose records and the run is flagged invalid.
 * **Attribution on is meant to be several times slower** (it runs the per-instruction loop). That is the
   designed cost of the opt-in, not an F12 finding.
 * **F13 (UI caching)** is about the panel's timing. There is no UI here; V3 yields nothing for F13 except
@@ -113,23 +132,47 @@ Losses during the discarded warm-up are reported but do not invalidate.
 2. Build the patched Mednafen (`Integration/Mednafen`), record `git -C _emu/mednafen rev-parse HEAD` and
    the patch revision. Use a build with the profiler (`SE_LIVE_CAP_PROFILER`) and function attribution
    (`SE_LIVE_CAP_PROF_FUNCTIONS`); the client refuses otherwise.
-3. Pick the scene (see `Docs/ProfilerFixPlan.md` V2 for candidates), run it in the emulator, and save it to a
-   numbered save slot with the emulator's own hotkey. Note the game revision and the slot.
+3. Pick the scene (see `Docs/ProfilerFixPlan.md` V2 for candidates), run it in the emulator under the same
+   `--cache` mode you will benchmark, and save it with Mednafen's own save-state key into a numbered slot (the
+   selected slot changes with its `state_slot_dec` / `state_slot_inc` keys, `-` and `=` by default,
+   `drivers/input.cpp:1357`). Note the game revision and the slot. `se-bench-client --mode load-slot --slot N` asks
+   the patched emulator to load that slot with its own loader (ELS verb; `apply.py:650-660` builds the path with
+   `MDFN_MakeFName(MDFNMKF_STATE, slot)`, which includes the disc's MD5, so the slot only loads for the same
+   disc image). `-autosave` is not used and is pinned to 0.
 4. Quiesce the machine: AC power, performance governor (`cpupower frequency-set -g performance`),
    no other heavy processes, same desktop state for every run.
-5. The setting names in `run_v3.sh` are checked against `<emulator> -help` before anything runs; if your
-   Mednafen names one differently the script stops. The pinned set is: `-sound 0`, `-nothrottle 1` (throttle off),
-   `-video.fs 0`, `-video.glvsync 0`, `-video.frameskip 0`, `-fps.autoenable 1`, `-cheats 0`, `-autosave 0`, and with
-   `--cache MODE` the SH-2 cache setting named by `CACHE_SETTING` (default `ss.cpucache_emumode`; check the name
-   with `-help`). Video driver: set `SDL_VIDEODRIVER` in the environment if the machine is headless. Keep
-   the window size and driver identical across runs.
+5. Settings. `run_v3.sh` writes the pinned settings to `OUT/pinned.cfg` and gives it to the emulator with
+   `-ovconfig`, so they are neither saved into your `mednafen.cfg` nor left behind (a setting given as
+   `-name value` on the command line is saved there by Mednafen, `drivers/main.cpp:981`). Before any run it asks the
+   emulator for its settings (`-dump_settings_def`; `-help` lists no settings, and an override file silently
+   ignores unknown names) and checks every pinned name, type and value with `check_settings.py`. Each entry was
+   **checked against the pinned Mednafen source** (`_emu/mednafen/src`), not recalled:
+
+   | Setting | Type, legal values | Pinned | Source | Why |
+   |---|---|---|---|---|
+   | `sound` | BOOL | 0 | `drivers/main.cpp:186` | no audio device; without it `MDFND_Update` takes the timer branch at `main.cpp:2549` |
+   | `nothrottle` | BOOL | 1 (0 with `--throttle on`) | `drivers/main.cpp:181`, used at `2549-2552` | skips `ers.Sync()`; the description says "when sound is disabled", and the code only reaches it then |
+   | `video.frameskip` | BOOL | 0 | `drivers/main.cpp:167`, used at `1306` | with the limiter off the emulator is always "behind"; frameskip would drop VDP work |
+   | `video.blit_timesync` | BOOL | 0 | `drivers/main.cpp:170`, used at `2682-2696` | only the order of blit and sound sync; pinned to remove a wait |
+   | `video.glvsync` | BOOL | 0 | `drivers/video.cpp:197`, used at `965` | OpenGL swap interval of the blit thread |
+   | `video.fs` | BOOL | 0 | `drivers/video.cpp:185` | windowed |
+   | `fps.autoenable` | BOOL | 1 | `drivers/main.cpp:199` | the on-screen fps cross-check |
+   | `cheats` | BOOL | 0 | `mempatcher.cpp:998` | no patches |
+   | `autosave` | BOOL | 0 | `drivers/main.cpp:182` | no state load or save on open or close |
+   | `ss.dbg_cem` | ENUM `data_cb`, `data`, `full`, `auto` | `--cache MODE`, else unpinned | `ss/ss.cpp:2572` (list `2475-2483`), applied at `1326` | SH-2 cache emulation override; non-persistent and undocumented, so it appears in no manual |
+
+   What can still cap the emulation thread, read from `drivers/main.cpp` and `drivers/video.cpp`: only
+   `ers.Sync()` (removed by the two settings above). The blit thread never blocks it for more than the 100 ms
+   starvation guard in `PassBlit` (`main.cpp:2604-2616`), and `video.driver` (`default|opengl|softfb`,
+   `video.cpp:183`) is recorded, not pinned: choose one, keep it, set `SDL_VIDEODRIVER` if headless. There is no
+   `ss.videoip` setting in this source. The per-run record `run_meta.txt` holds the settings file and hashes.
 
 ## Run
 
 ```
 Integration/Validation/V3/run_v3.sh --emu /path/mednafen --game /path/game.cue --slot 0 \
     --bench build/bin/se-bench-client --out runs/2026-xx-xx-patched --reps 5 --warmup 10 --duration 60 \
-    --throttle off --cache 1
+    --throttle off --cache full
 python3 -I Integration/Validation/V3/analyze_v3.py runs/2026-xx-xx-patched
 ```
 
@@ -167,7 +210,7 @@ Emulator revision:  Mednafen <ver> + patch <rev>      binary sha256:
 Build flags:        (compiler, -O level, SE_* defines, cache mode build option)
 Game revision:      (title, region, disc image sha256)
 Scene / save slot:  (what it is, how it was reached, slot N)
-Settings:           (run_meta.txt pinned_args, SDL driver, window size, throttle on/off, cache mode)
+Settings:           (pinned.cfg and run_meta.txt, video.driver, SDL driver, window size, throttle on/off, cache mode)
 Repetitions:        N, warm-up s, window s, valid runs per config (a/b/c)
 Mednafen on-screen fps cross-check for (a): ____ (read during a window)
 
