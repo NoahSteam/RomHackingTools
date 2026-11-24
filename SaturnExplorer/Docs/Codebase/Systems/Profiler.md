@@ -314,8 +314,9 @@ is E, from evidence it observed itself, per CPU:
 
 | Landing | Result |
 |---|---|
-| E itself, or in (E, hi(E)] | Kept: code E has already run. Proof, no registers needed |
+| E itself | Kept |
 | A known entry other than E | **Tail call.** The frame is neither pushed nor popped: its function becomes the landing, its return address, SP, trust and the frames below are unchanged, so the callee's `rts` is matched against the same frame and restores the ORIGINAL caller (named again when that caller was known). Stack depth is unchanged; the recursion case works the same |
+| In (E, hi(E)] with no known entry in (E, landing] | Kept: code E has already run and nothing observed says it is another function's. An extent is an interval, not proof of every address in it (a forward jump can grow it past skipped code that a later call shows to be a function), so the rows are tried in this order and a known entry outranks the extent |
 | In (hi(E), hi(E)+0x1000] with no known entry in (E, landing], and SP at the landing is not the SP the call saw or PR is not the call's return address | Kept: the function is still in its body (a tail call is made after the epilogue restored both, and SP / PR are read at the landing so the delay slot's `add #n, r15` is included). (the one rule that is not proof, see below) |
 | Anything else (backward below E, further than the window, past a known entry, or the tail-call register state with an unproven target: a frameless function looks exactly like a tail call) | Unknown (raw-PC bucket) |
 

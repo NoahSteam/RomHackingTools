@@ -805,6 +805,61 @@ static void TestSwitchInsideFunction(void)
         }
 }
 
+/* An extent is an interval, not proof of every address in it: A's forward jump grows hi(A) past code it
+ * skipped, and a LATER call shows that skipped code to be function B's entry. A tail jump from A to B is
+ * then a tail call (the known entry is the stronger evidence), and a jump into A's old extent beyond B is
+ * no longer A's own code. */
+static void TestKnownEntryInsideOlderExtent(void)
+{
+    const unsigned int B2 = AA + 0x40u;
+    int cpu, how;
+    for (cpu = 0; cpu < 2; ++cpu)
+        for (how = J_BRA; how <= J_BRAF; ++how)
+        {
+            Fresh(1); gT = 0;
+            Call(cpu, MAIN, PP, SP0);
+            N(cpu, PP);
+            Call(cpu, PP + 2, AA, SP0 - 16);
+            N(cpu, AA);
+            Regs(cpu, SP0 - 48, 0x06009999u);              /* frame live: a permitted forward jump */
+            Jump(cpu, how, AA + 2, AA + 0x80u, SP0 - 48);  /* hi(A) grows past the skipped A+0x40 */
+            N(cpu, AA + 0x80u);
+            CHECK_EQ(Named(cpu), AA);
+            Ret(cpu, AA + 0x82u, SP0 - 16);
+            N(cpu, PP + 6);
+            Call(cpu, PP + 8, B2, SP0 - 16);               /* now B = A+0x40 is entered by a call */
+            N(cpu, B2);
+            Ret(cpu, B2 + 2, SP0 - 16);
+            N(cpu, PP + 12);
+            Call(cpu, PP + 14, AA, SP0 - 16);              /* A again */
+            N(cpu, AA);
+            CHECK_EQ(Named(cpu), AA);
+            Regs(cpu, SP0 - 16, PP + 18);                  /* the state a tail call is made in */
+            { const unsigned long long a0 = Cycles(FnKey(AA, cpu)), b0 = Cycles(FnKey(B2, cpu));
+            Jump(cpu, how, AA + 2, B2, SP0 - 16);
+            N(cpu, B2);
+            CHECK_EQ(Named(cpu), B2);                      /* not A, although B lies inside A's old extent */
+            CHECK_EQ(Depth(cpu), 2);
+            CHECK_EQ(FrameFn(cpu, 0), B2);
+            CHECK_EQ(FrameFn(cpu, 1), PP);
+            Ret(cpu, B2 + 2, SP0 - 16);
+            N(cpu, PP + 18);
+            CHECK_EQ(Named(cpu), PP);                      /* B's rts returns to the original caller */
+            CHECK_EQ(Depth(cpu), 1);
+            N(cpu, PP + 20);
+            CHECK_EQ(Cycles(FnKey(AA, cpu)) - a0, 12);     /* A's first instruction (charged when the next arrives), the jump, its slot */
+            CHECK_EQ(Cycles(FnKey(B2, cpu)) - b0, 12);     /* first instruction, rts, slot */
+            }
+            /* and code beyond B inside A's old extent is no longer taken to be A's */
+            Call(cpu, PP + 22, AA, SP0 - 16);
+            N(cpu, AA);
+            Regs(cpu, SP0 - 48, 0x06009999u);
+            Jump(cpu, how, AA + 2, AA + 0x80u, SP0 - 48);
+            N(cpu, AA + 0x80u);
+            CHECK_EQ(Named(cpu), 0u);
+        }
+}
+
 /* A frameless function (SP and PR as the call left them) looks exactly like a tail call, so a forward jump to
  * code it has never run is NOT assumed to be its own: raw. Code it already ran is proven by that. */
 static void TestFramelessForwardJumpIsRaw(void)
@@ -1029,6 +1084,7 @@ int main(void)
     TestTailCallToUnseenFunction();
     TestJumpOutsideAnyEvidence();
     TestSwitchInsideFunction();
+    TestKnownEntryInsideOlderExtent();
     TestFramelessForwardJumpIsRaw();
     TestInterruptAroundTailJump();
     TestJumpFromUnknownOwner();

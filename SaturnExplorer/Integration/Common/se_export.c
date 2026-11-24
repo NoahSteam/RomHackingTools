@@ -1977,10 +1977,16 @@ int SeExportUncondJumpLanded(int cpu, unsigned int landing, int haveRegs, unsign
         {
             const unsigned int E = f->func;
             const unsigned int hi = SeHiOf(c, E);
-            if (landing == E || (landing > E && landing <= hi)) { /* kept */ }
+            /* Order matters. An extent is an interval, not proof of every address in it: a forward
+             * jump can have grown it past code E skipped, and a later call can show that code to be
+             * another function. So a known entry outranks the extent, and E's own code -- already
+             * run or not -- is only ever an address with no known entry in (E, landing]. */
+            if (landing == E) { /* its own entry: kept */ }
             else if (SeEntryIsKnown(c, landing)) f->func = landing;
-            else if (landing > hi && landing - hi <= SE_OWN_FWD_WINDOW &&
-                     SeEntryIsKnown(c, E) && sEntryAddr[c][SeEntryLower(c, landing) - 1u] == E)
+            else if (landing < E || !SeEntryIsKnown(c, E) ||
+                     sEntryAddr[c][SeEntryLower(c, landing) - 1u] != E) sOwnKnown[c] = 0;
+            else if (landing <= hi) { /* code E already ran, nothing known in between: kept */ }
+            else if (landing - hi <= SE_OWN_FWD_WINDOW)
             {
                 if (!haveRegs) result = SE_JUMP_NEED_REGS;
                 else if (sp == f->sp && pr == f->ret) sOwnKnown[c] = 0;   /* in the state a tail call is made in */
