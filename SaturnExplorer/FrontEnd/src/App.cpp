@@ -4436,6 +4436,22 @@ void App::UpdateProfiler()
     // reads and hashes every captured RAM. They come from the displayed context, so a scrubbed
     // frame or a savestate shows its own occupancy.
     if (!mbHasData || !mPanels.profiler || !mProfilerPanel.WantsPools()) return;
+    // "Changed since sample" compares a sample with the previous one, which means something only when
+    // both are of the same capture. The tracker therefore re-primes (the first sample after reports
+    // nothing changed) when the displayed source moves -- another file, a savestate, a scrubbed frame
+    // (SourceId moves on every scrub step), or a new emulator process -- when the machine-state
+    // timeline changes (rewind, slot or native load; the profiler frames carry it), and when a
+    // scrubbed frame goes BACKWARDS. A live view has no displayed frame number of its own (the capture
+    // can trail the profiler's newest frame), so only a scrub supplies one.
+    {
+        uint32_t timeline = 0;
+        uint64_t liveFrame = 0;
+        mProfiler.LatestIdentity(&timeline, &liveFrame);
+        const bool scrubbed = mScrubContext && mContext == mScrubContext;
+        mPoolTracker.SetSource(mMemBackend.SourceId(), mLiveConnGeneration, timeline,
+                               scrubbed ? mScrubShownFrame : 0);
+        if (mPoolTracker.Count() == 0) mPoolSampleCountdown = 0;   // re-primed: sample now, don't show an empty tab
+    }
     if (mPoolSampledSource != mMemBackend.SourceId())
     {
         mPoolSampledSource = mMemBackend.SourceId();
@@ -8424,6 +8440,8 @@ void App::AdoptNewEmulatorInstance()
     ResetCompareSession();   // the old run's snapshots are not comparable with this one's
     DropRecordedHistory();   // the ring, the slot tracker and any scrubbed-frame edits
     mProfiler.Clear();       // a different emulator process: its frame counts start over
+    mPoolTracker.Reset();    // and its RAM is not the previous run's: nothing compares across the switch
+    mPoolSampleCountdown = 0;
     mRestoreOutstanding = 0; // its counters start over; a wait on the old run can never resolve
     mBlockEpochFloor = 0;
     mRestoreTimedOut = mRestoreUnconfirmable = false;   // a new process: the load is moot
