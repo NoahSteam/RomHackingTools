@@ -59,7 +59,7 @@
                                   * section header gains newestSeq and a lost range, and the record gets
                                   * a 64-bit sampleSeq, timelineId, 64-bit frameNo, the latched mode,
                                   * the cache mode, a 'valid' word, the per-CPU Other split and the
-                                  * appended counters 54..61 (index 6 retired). Not readable by a v26
+                                  * appended counters 55..61 (index 6 retired, 54 reserved). Not readable by a v26
                                   * parser, hence the bump. Layout at "Perf section" below.
                                   * +v26 profiler: a trailing perf block of per-frame hardware
                                   * counters (SePerfCounters.h) and the PRF verb, which switches

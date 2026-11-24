@@ -5,7 +5,8 @@ Inspected revision: the change that introduced it (protocol v26), on top of
 **v27 status:** the record layout and counter indices below are frozen; the fields the fix plan
 has not filled yet are declared and carried but marked "not available" on the wire (a clear bit in
 the record's `valid` word). Filled so far: frame identity and lost-record accounting (F3), and
-capability bits correct from the first reply (F14); the rest (F1, F2, F4 to F9, F11) follow. Behavior below is verified from source and from the tests listed; the
+capability bits correct from the first reply (F14), the slave on-time and the latched mode (F2 + F6, one frame-lifecycle
+contract); the rest (F1, F7, F9, F10) follow. Behavior below is verified from source and from the tests listed; the
 emulator-side numbers have **not** been checked against a running game (see Coverage limits).
 
 ## Purpose and responsibilities
@@ -32,7 +33,7 @@ transport (see [State sources](StateSources.md)).
 |---|---|
 | Counter indices and the function key (single source of truth for emulator, wire and client) | [SePerfCounters.h](../../../Integration/Common/SePerfCounters.h): `SE_PERF_*`, `SE_PERF_DEV_*`, `SE_PERF_FN_*` |
 | Emulator instrumentation | [apply.py](../../../Integration/Mednafen/apply.py): `PERF_DECL`, `PERF_BUS_HELPER`, the `*_PERF_*` / `SH2_*` anchors, `process_profiler`; `SsDbgCpuTimestamp`, `SsDbgSetProfileActive` in `SS_ACCESSORS` |
-| Frame hand-over and function sampling | [se_mednafen_glue.c](../../../Integration/Mednafen/se_mednafen_glue.c): `SeSsPerfC`, `SeMdfnPerfEndFrame`, `SeMdfnProfSample`, `SeMdfnSetProfiler` |
+| Frame hand-over and function sampling | [se_mednafen_glue.c](../../../Integration/Mednafen/se_mednafen_glue.c): `SeSsPerfC`, `SeMdfnPerfEndFrame`, `SeMdfnProfSampleAt`, `SeMdfnApplyMode`, the lifecycle entry points `SeMednafenSlaveActive` / `CpuReset` / `StateLoaded` / `FrameClose` |
 | Server | [se_export.c](../../../Integration/Common/se_export.c): `SeExportPublishPerf`, `SeExportBuildPerfSection` (a connection's reply section and its lost range), `SeExportFrameIdentity` / `SeIdReserve` / `SeExportEndFrame` (frame identity), `SeExportNotifyStateLoaded` (timeline), `SeExportPrepare` / `SeExportStart` (startup), `SeExportSetProfilerHook`, `SeExportSetPerfCapable`, `SeExportCurrentFunction`, `SePublishProfiler` |
 | Wire contract | [SeLiveProtocol.h](../../../Integration/Common/SeLiveProtocol.h): `SE_LIVE_VERB_PROFILE`, `SE_LIVE_PROF_FUNCTIONS`, `SE_LIVE_CAP_PROFILER`, `SE_LIVE_CAP_PROF_FUNCTIONS`, "Perf section" |
 | Client | [LiveDriver.cpp](../../../Drivers/Live/src/LiveDriver.cpp): `LivePerf`, the v26 and v27 parse in `ReadSnapshot`, `IngestPerf` (ordering, gaps, eviction); [LiveDriver.h](../../../Drivers/Live/src/LiveDriver.h): `se_live_perf_frame`, `se_live_drain_perf`, `se_live_perf_status_get`, `se_live_set_profiler` |
@@ -45,7 +46,7 @@ transport (see [State sources](StateSources.md)).
 ```mermaid
 flowchart TD
     I["Injected increments in Mednafen: SeSsPerfC[...]"] --> E["SeMdfnPerfEndFrame (end of Emulate)"]
-    S["SeMdfnProfSample (per instruction, opt-in)"] --> E
+    S["SeMdfnProfSampleAt (per instruction, opt-in)"] --> E
     E --> P["SeExportPublishPerf: serialized record, seq + 1"]
     P --> R["Server ring of the last 16 frames"]
     R --> D["Each reply: the records this connection has not had yet"]
@@ -62,7 +63,8 @@ The patch adds one 64-bit array, `SeSsPerfC`, and increments it where the work h
 
 | Counter | Where it is counted |
 |---|---|
-| Frame length, slave-on time (v26 semantics; F2 integrates real on/off edges) | End of `Emulate()` (`end_ts`; the slave's timestamp reads `SS_EVENT_DISABLED_TS` while SMPC holds it off) |
+| Frame length | End of `Emulate()` (`end_ts`) |
+| Slave on-time (index 5, **F2**) | Integrated over the slave's real power edges, see "Frame lifecycle" below. `SeMednafenFrameClose`, called before the rebase |
 | SH-2 sleep | The `SLEEP` op's idle step and `PSEUDO_STANDBY`, per CPU (`which`) |
 | SH-2 bus stall | `PSEUDO_DMABURST` (DMA burst or external halt), per CPU |
 | SH-2 bus accesses per device | `BSC_BusRead` / `BSC_BusWrite`, classified by a 64 KiB lookup table |
@@ -156,7 +158,7 @@ record `u32 length` and
 |---|---|
 | `u64 sampleSeq` | orders publications in one exporter run, never 0 |
 | `u32 timelineId`, `u64 frameNo` | frame identity (F3); valid with `SE_PERF_VALID_IDENTITY` |
-| `u32 mode` | attribution mode latched for the frame (F6); `SE_PERF_VALID_MODE` |
+| `u32 mode` | attribution mode the frame ran in, latched (F6, `sFrameMode`); `SE_PERF_VALID_MODE` |
 | `u32 cacheMode` | `SE_PERF_CACHE_*` (F8); `SE_PERF_VALID_CACHE` |
 | `u32 valid` | `SE_PERF_VALID_*`: which v27-only fields the producer really filled |
 | `u32 satFlags`, `u64 otherNotAdmitted[2]`, `u64 otherEvicted[2]` | per-CPU Other split (F7); `SE_PERF_VALID_OTHER` |
@@ -167,9 +169,10 @@ The lost range is the `sampleSeq` span the server dropped for this connection ju
 first record of the reply (`lostLast + 1` equals that record's `sampleSeq`); 0, 0 means none.
 
 Counters: indices 0 to 53 keep their v26 meaning. Index 5 (slave on-cycles) keeps its index and
-meaning (only its producer is corrected, F2). **Index 6 (v26: elapsed VDP1 drawing) is retired:
-a v27 producer writes 0 and it is never reused.** Appended: 54 slave on-cycles integrated (F2),
-55 VDP1 command-work cycles, 56 VDP1 budget discarded by DMA (F4), 57 68000 idle cycles (F5),
+meaning; only its producer is corrected (F2), and `SE_PERF_VALID_SSH2_INT` says index 5 is the
+integrated figure. **Index 6 (v26: elapsed VDP1 drawing) is retired: a v27 producer writes 0 and it
+is never reused. Index 54 is reserved (`SE_PERF_RESERVED_54`): it is never produced, since a second
+copy of index 5 could only disagree with it.** Appended: 55 VDP1 command-work cycles, 56 VDP1 budget discarded by DMA (F4), 57 68000 idle cycles (F5),
 58 to 61 A-bus dummy and unmapped bus buckets, `[xdev * 2 + write]` (F8).
 
 Version handling: the driver reads both forms by the negotiated server version. A v26 record is
@@ -205,13 +208,43 @@ debug run loop, which is several times slower, so:
 - it needs `--enable-debugger`; otherwise no hook is registered and the capability bit is
   clear, and the panel disables the checkbox.
 
-Per instruction, `SeMdfnProfSample` charges the cycles since that CPU's previous
+Per instruction, `SeMdfnProfSampleAt` charges the cycles since that CPU's previous
 instruction, minus the sleep/stall cycles counted in between, to the function the previous
 instruction was in. The function is the innermost shadow-call-stack frame's entry
-(`SeExportCurrentFunction`); with no recorded frame (code already running when profiling
-began, e.g. the main loop) the key is a 16-byte bucket of the raw PC, flagged
-`SE_PERF_FN_RAW_PC`. A per-frame hash table collects the keys; the 64 hottest go on the
-wire and the rest are summed into `fn_other_cycles`.
+(`SeExportCurrentFunction`); with no recorded frame (code already running when profiling began,
+e.g. the main loop) the key is a 16-byte bucket of the raw PC, flagged `SE_PERF_FN_RAW_PC`. A per-frame hash table collects
+the keys; the 64 hottest go on the wire and the rest are summed into `fn_other_cycles`.
+
+### Frame lifecycle: slave on-time and the latched mode (F2 + F6)
+
+- **Slave on-time (index 5)** is the sum of the intervals `[on edge, off edge)` inside
+  `[0, end_ts)` for which the slave SH-2 was powered. An edge is a real `SH7095::SetActive`
+  transition (a redundant call is no edge), taken at the slave's own timestamp (on: the one it was
+  given; off: how far it had run). `SeMednafenFrameClose` closes the open interval at `end_ts`
+  *before* the rebase and reopens it at 0 for the next frame if the slave is still on. A state load
+  (rewind, slot, native; none of them calls `SetActive`) discards the partial figure and reseeds the
+  on-state from the loaded CPU. An interval whose edge was never seen (the very first frame, or a
+  disagreement between our record and the CPU at the frame end) counts 0: on-time is never
+  over-claimed.
+- **No attribution across power-off.** When the slave is switched off, or either CPU is reset (the
+  watchdog resets with power left on), the cycles up to that moment are charged to the function that
+  ran them, then the sampling baseline, the recorded stack and the pending delayed flow are dropped.
+  The off interval, and the first instructions after power-on, are never charged to the function
+  that ran before shutdown.
+- **The final interval of a frame** is charged before the rebase (it used to be discarded), and the
+  baseline moves to the rebased clock, so the next frame's first sample measures from the frame's
+  start. Idle cycles (sleep, stall) are subtracted as for every interval (37 cycles of which 7 are
+  idle charge 30).
+- **The mode is latched per frame.** The server applies a profiler request only between frames:
+  at the top-of-frame gate, and at the end-of-frame hook after the frame was published
+  (`SeExportApplyInstalls`, which declares a boundary; halts and snapshots use
+  `SeExportApplyInstallsMidFrame`, which leaves the profiler request pending). So a frame runs
+  entirely in one mode, `sFrameMode` is that mode, and the record is published under it
+  (`SE_PERF_VALID_MODE`); a request that arrives during a mid-frame halt waits for the next
+  boundary and the clock does not move while halted. The wire carries no "pending mode": the
+  record only says what ran. Showing a pending request would need a field the frozen v27 record
+  does not have (and the request path is per-connection after F1), so it is not reported.
+
 
 ### Memory pools
 
@@ -259,6 +292,21 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
 - [ProfilerPanelTests.cpp](../../../FrontEnd/tests/ProfilerPanelTests.cpp): the panel drawn
   headlessly; drawn figures, tab-driven data requests, disabled attribution, row
   double-click through a row with a hoverable bar.
+- [ProfilerLifecycleTests.c](../../../Integration/tests/ProfilerLifecycleTests.c) (ctest
+  `SaturnExplorerProfilerLifecycleTests`): the real glue accounting against the real shadow stack, on
+  a clock the test controls. F2: 1,000-cycle frame, slave on `[0,200)` and `[800,1000)` = 400
+  on-cycles and 400 function cycles; rebase, redundant `SetActive`, state restore (on to off, off to on, record/CPU
+  disagreement), watchdog reset with power on, the 37-cycle / 7-idle interval, the mode latch. Each was
+  mutation-checked.
+- [LiveProfilerModeTests.cpp](../../../FrontEnd/tests/LiveProfilerModeTests.cpp): F6 on the real exporter
+  and driver: a request that arrives during a frame (halt gate, snapshot) is not applied there, the
+  old frame is published in its old mode, the next in the new one, in both directions, and a
+  request between frames is applied by the next gate.
+- [perf_sh2_harness.cpp](../../../Integration/Mednafen/component/perf_sh2_harness.cpp) (via
+  `check_component.py`): the **real** patched `SH7095::SetActive` and `SH7095::Reset` (inside the
+  patched `ss.cpp`) call the real glue: on `[0,200)` and `[800,1000)` is 400; a watchdog `Reset`
+  drops the stack and leaves on-time whole. `check_component.py` also checks where the frame-close and
+  state-load hooks sit in the patched source.
 - [LiveProfilerTests.cpp](../../../FrontEnd/tests/LiveProfilerTests.cpp): real exporter and
   real driver, in lockstep (the producer never gets ahead of what the driver has queued, judged
   by `se_live_perf_status_get`, never by sleeping); every frame once, intact and gap-free from the
@@ -272,7 +320,7 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
 - [MemoryRoundTripTests.cpp](../../../FrontEnd/tests/MemoryRoundTripTests.cpp) (profiler
   section): the real glue, in lockstep with the client; counters handed over and zeroed per
   frame with consecutive producer-stamped frame numbers, a rewind starting a new timeline, and
-  `SeMdfnProfSample` charging cycles to a recorded function, to a raw-PC bucket, per CPU,
+  `SeMdfnProfSampleAt` charging cycles to a recorded function, to a raw-PC bucket, per CPU,
   less sleep, and not across a timestamp jump.
 - The panel was also run in the native frontend against a stand-in emulator (the real
   export server fed synthetic counters) and inspected on all four tabs.
@@ -296,6 +344,9 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
 - Function time is self time only, and the raw-PC buckets are not folded into functions
   (`ProfilerPanel::Host::functionContaining` is an unfilled hook for the function finder).
 - VDP2 has no time figure: its raster is fixed-length.
+- F2 + F6 are verified against the real `SetActive` / `Reset` and the glue with synthetic instruction streams, not on a game:
+  that SMPC delivers power edges in the expected order during guest execution and the slave on-time of a real
+  boot need a BIOS (V1).
 
 ## Related documentation
 

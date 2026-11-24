@@ -969,6 +969,7 @@ static SeSetProfilerFn sSetProfiler;
 static volatile int sProfWanted;      /* SE_LIVE_PROF_* the client asked for */
 static volatile int sProfPending;     /* sProfWanted changed and has not been applied */
 static volatile int sProfApplied;     /* what the emulator is running with (emulate thread writes) */
+static int sProfAtBoundary;           /* F6: emulate thread is at a frame boundary: a profiler change may be applied now */
 static volatile int sPerfWired;       /* the emulator has handed over counters at least once */
 static volatile int sPerfCapable;     /* the build produces counters (declared up front, F14) */
 #define SE_PERF_RING 16u
@@ -1241,7 +1242,9 @@ static void SeApplyPendingInstalls(void)
         SE_SUNLOCK();
         if (sSetTracepoints) sSetTracepoints(n, sTpApply);
     }
-    if (SeAtLoad(&sProfPending))
+    /* F6: only between frames. The mode is latched for a whole frame, so a request that arrives during a
+     * mid-frame halt or snapshot waits (sProfPending stays set) for the next boundary. */
+    if (sProfAtBoundary && SeAtLoad(&sProfPending))
     {
         /* Cleared before the read: a PRF that lands in between sets it again and is applied next
          * time, so the last request always wins. */
@@ -1350,7 +1353,17 @@ int SeExportInsnStepTick(int cpu, unsigned int pc, int selfBranchTaken)
     return 0;
 }
 
+/* F6: a call made BETWEEN frames (the glue's end-of-frame hook, after the record was published; a
+ * test standing in for it): everything pending, the profiler request included, takes effect for the
+ * next frame. SeExportApplyInstallsMidFrame is the same without the profiler request. */
 void SeExportApplyInstalls(void)
+{
+    sProfAtBoundary = 1;
+    SeApplyPendingInstalls();
+    sProfAtBoundary = 0;
+}
+
+void SeExportApplyInstallsMidFrame(void)
 {
     SeApplyPendingInstalls();
 }
@@ -1390,7 +1403,9 @@ static int SeGateDecide(int frameBoundary)
     /* Install what the server thread has published (breakpoints, tracepoints) -- here, on the
      * emulate thread, because it is the only one that reads them. This is also reached from the halt
      * gate, so an edit made while a breakpoint holds the CPU still lands. */
+    sProfAtBoundary = frameBoundary;
     SeApplyPendingInstalls();
+    sProfAtBoundary = 0;
     /* A load (LST or ELS) is applied only at a frame boundary. The halt gate spins inside the CPU
      * hook, part-way through an instruction dispatch and a frame: a state loaded there is resumed by a
      * run loop holding the abandoned timeline's locals, and the machine that comes out differs from
@@ -1479,7 +1494,7 @@ static int SeGateRelease(int frameBoundary)
      * top of the gate ran before the pause check, and a resume landing between the two released the
      * CPU with its temporary breakpoint (Step Over, Run to Cursor) still unapplied, which a short
      * subroutine can run straight past. */
-    if (run) SeApplyPendingInstalls();
+    if (run) { sProfAtBoundary = frameBoundary; SeApplyPendingInstalls(); sProfAtBoundary = 0; }
     /* The frame about to run: any pending load has been applied, the guest has not started. */
     if (run && frameBoundary) SeIdReserve();
     return run;

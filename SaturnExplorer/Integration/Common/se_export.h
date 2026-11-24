@@ -93,8 +93,14 @@ int SeExportHasClient(void);
  * running the install hooks on the CALLING thread, which must be the emulate thread: the only one
  * that reads what they change. SeExportGateFrame and SeExportSnapshot do this themselves; a glue
  * that returns before reaching either on frames where nothing is attached (so that a client leaving
- * has its breakpoints dropped promptly) calls this first. Cheap when nothing is pending. */
+ * has its breakpoints dropped promptly) calls this first. Cheap when nothing is pending.
+ *
+ * This form declares a FRAME BOUNDARY (F6): a pending profiler request (function attribution on /
+ * off) is applied too, for the next frame. The mode is latched per frame, so a request is never
+ * applied part-way through one: call SeExportApplyInstallsMidFrame from anywhere inside a frame
+ * (a snapshot hook, a halt), which installs everything but leaves the profiler request pending. */
 void SeExportApplyInstalls(void);
+void SeExportApplyInstallsMidFrame(void);
 
 /* Copy the current Saturn memory into the export double-buffer. Call once per
  * frame, e.g. at the end of Vdp2VBlankOUT(), passing Yabause's globals:

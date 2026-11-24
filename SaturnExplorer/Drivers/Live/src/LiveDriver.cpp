@@ -1412,7 +1412,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
             f.fn_count = fns;
             if (!u32(f.fn_other_cycles) || f.sample_seq == 0u) continue;
             // A counter the record is too short to carry is "not available" whatever the bits say.
-            if (f.counter_count <= SE_PERF_SSH2_ON_INTEGRATED) f.valid &= ~SE_PERF_VALID_SSH2_INT;
+            if (f.counter_count <= SE_PERF_SSH2_ON_CYCLES)     f.valid &= ~SE_PERF_VALID_SSH2_INT;   // index 5 is the integrated figure
             if (f.counter_count <= SE_PERF_VDP1_DMA_DISCARDED) f.valid &= ~SE_PERF_VALID_VDP1_WORK;
             if (f.counter_count <= SE_PERF_M68K_IDLE_CYCLES)   f.valid &= ~SE_PERF_VALID_M68K_IDLE;
             if (f.counter_count < SE_PERF_COUNT)               f.valid &= ~SE_PERF_VALID_BUS_X;

@@ -3,6 +3,8 @@
 
 F4: vdp1.cpp (VDP1::Update / DoDrawing) driven with a tiny VRAM command list (component/perf_vdp1_harness.cpp).
 F5: hw_cpu/m68k and sound.cpp (SOUND_Update, its longjmp paths) (component/perf_m68k_harness.cpp).
+F2: SH7095::SetActive and SH7095::Reset (inside the patched ss.cpp) calling the real glue (component/perf_sh2_harness.cpp),
+and where the frame-close and state-load hooks sit in the patched text (f2_hook_checks).
 
 The harnesses #include the patched .cpp files themselves, so nothing under test is a copy or a mock; only
 the devices around them are stubbed. The Mednafen source is not in this repository, so this is a script
@@ -15,7 +17,8 @@ Exit status 0 = all checks passed.
 --drop KEY removes every injected block containing KEY from the scratch copy after patching, and the
 run must then FAIL (exit 0 means "the mutation was detected"; 1 means the tests did not notice the hook
 was gone). Keys: "SeSsVdp1Debit" (command work), "SE_PERF_VDP1_DMA_DISCARDED", "IdleCycleCount += 4;"
-(the idle hook in the 68000 core), "SE_PERF_M68K_IDLE_CYCLES" (the SOUND_Update exit)."""
+(the idle hook in the 68000 core), "SE_PERF_M68K_IDLE_CYCLES" (the SOUND_Update exit), "SE_SLAVE_ON_EDGE" / "SE_SLAVE_OFF_EDGE" (the slave's
+power edges in SetActive), "SE_CPU_RESET_HOOK" (the top of Reset)."""
 import os
 import subprocess
 import sys
@@ -80,6 +83,46 @@ def f11_checks(work):
     return bad
 
 
+def f2_hook_checks(work):
+    """F2 + F6: where the lifecycle hooks sit in the patched source (the places the glue's contract assumes)."""
+    import re
+    bad = 0
+    ss = open(os.path.join(work, "src/ss/ss.cpp"), errors="replace").read()
+    inc = open(os.path.join(work, "src/ss/sh7095.inc"), errors="replace").read()
+    # the frame is closed on the PRE-rebase clock: after SMPC_EndFrame (which can still change the slave's
+    # power), before RebaseTS and the AdjustTS calls that move the timestamps
+    e = ss.index("static void Emulate(")
+    body = ss[e:ss.index("static void OutputMIDI", e)]
+    order = [body.find(k) for k in ("SMPC_EndFrame(espec, end_ts);", "SeMednafenFrameClose(end_ts", "RebaseTS(end_ts);",
+                                    "CPU[c].AdjustTS(-end_ts);", "SeMednafenEndFrameHook();")]
+    if min(order) < 0 or order != sorted(order):
+        print("FAIL: SeMednafenFrameClose is not between SMPC_EndFrame and the rebase (positions %r)" % order)
+        bad += 1
+    if "SE_PERF_SSH2_ON_CYCLES" in body:
+        print("FAIL: Emulate still counts the slave on-time by the all-or-nothing rule")
+        bad += 1
+    # a load never calls SetActive: the state-load hook follows the last PostStateLoad
+    p = ss.find("CPU[1].PostStateLoad(")
+    if p < 0 or not (p < ss.find("SeMednafenStateLoaded(", p) < ss.find("}", ss.find("SeMednafenStateLoaded(", p) + 80)):
+        print("FAIL: SeMednafenStateLoaded does not follow CPU[1].PostStateLoad")
+        bad += 1
+    # SetActive: the on edge after the timestamp is given, the off edge before it is thrown away
+    a = inc.index("void SH7095::SetActive(bool active)")
+    sa = inc[a:inc.index("void SH7095::AdjustTS", a)]
+    on, off = sa.find("SE_SLAVE_ON_EDGE"), sa.find("SE_SLAVE_OFF_EDGE")
+    if not (0 < sa.find("timestamp = SH7095_mem_timestamp;") < on < sa.find("Reset(true);")) or not \
+            (sa.find("else if(!active") < off < sa.find("timestamp = SS_EVENT_DISABLED_TS;")):
+        print("FAIL: the SetActive hooks are not on the right sides of the transitions")
+        bad += 1
+    # Reset: on a powered CPU only (after the disabled early return)
+    r = inc.index("void NO_INLINE SH7095::Reset(")
+    rb = inc[r:r + 600]
+    if not (0 <= rb.find("return;") < rb.find("SE_CPU_RESET_HOOK")):
+        print("FAIL: the Reset hook is not after the disabled early return")
+        bad += 1
+    return bad
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
@@ -99,12 +142,12 @@ def main():
         print("apply.py failed:\n" + out[-1000:])
         return 1
     if not drops:
-        if f8_decoder_checks(work) or f11_checks(work):
+        if f8_decoder_checks(work) or f11_checks(work) or f2_hook_checks(work):
             return 1
-        print("decoder checks: ok")
+        print("decoder and hook-placement checks: ok")
     apply_mod = cm.load_new()
     for key in drops:
-        for rel in ("src/ss/vdp1.cpp", "src/ss/sound.cpp", "src/hw_cpu/m68k/m68k.cpp"):
+        for rel in ("src/ss/vdp1.cpp", "src/ss/sound.cpp", "src/hw_cpu/m68k/m68k.cpp", "src/ss/sh7095.inc"):
             path = os.path.join(work, rel)
             text = open(path).read()
             new, n = apply_mod.retire_fences_text(text, key)
@@ -124,13 +167,24 @@ def main():
         print("m68k.cpp does not compile:\n" + r.stderr[-1500:])
         return 1
     bad = 0
+    # The real glue (unwired: no emulator symbols) and the real shadow call stack, for the SH-2 harness.
+    glue_objs = []
+    for c_src in (os.path.join(HERE, "se_mednafen_glue.c"), os.path.join(HERE, "..", "Common", "se_export.c")):
+        o = os.path.join(scratch, os.path.basename(c_src) + ".o")
+        r = subprocess.run(["gcc", "-std=gnu99", "-O1", "-g", "-w", "-I" + os.path.join(HERE, "..", "Common"),
+                            "-I" + HERE, "-c", c_src, "-o", o], capture_output=True, text=True)
+        if r.returncode:
+            print("%s does not compile:\n%s" % (c_src, r.stderr[-1500:]))
+            return 1
+        glue_objs.append(o)
     for name, define, src, extra in (
             ("f4_vdp1", "SE_VDP1_CPP", "perf_vdp1_harness.cpp", []),
-            ("f5_m68k", "SE_SOUND_CPP", "perf_m68k_harness.cpp", [m68k_o])):
+            ("f5_m68k", "SE_SOUND_CPP", "perf_m68k_harness.cpp", [m68k_o]),
+            ("f2_sh2", "SE_SS_CPP", "perf_sh2_harness.cpp", glue_objs + ["-lpthread"])):
         if not os.path.isfile(os.path.join(HERE, "component", src)):
             continue
         exe = os.path.join(scratch, name)
-        target = "vdp1.cpp" if define == "SE_VDP1_CPP" else "sound.cpp"
+        target = {"SE_VDP1_CPP": "vdp1.cpp", "SE_SOUND_CPP": "sound.cpp", "SE_SS_CPP": "ss.cpp"}[define]
         cmd = [cxx] + flags + ['-D%s="%s"' % (define, os.path.join(ss, target)),
                                os.path.join(HERE, "component", src)] + extra + ["-o", exe] + link
         r = subprocess.run(cmd, capture_output=True, text=True, cwd=ss)

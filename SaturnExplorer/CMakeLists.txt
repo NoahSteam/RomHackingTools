@@ -1531,6 +1531,19 @@ if(BUILD_TESTING)
         PRIVATE Integration/Common Integration/Mednafen)
     target_link_libraries(SaturnExplorerShadowCallStackTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerShadowCallStackTests COMMAND SaturnExplorerShadowCallStackTests)
+
+    # The profiler's frame-lifecycle contract (F2 + F6: slave on-time integrated over its power edges,
+    # the latched attribution mode, a last interval charged exactly) and function ownership (F9: a
+    # function is charged only while ownership is known; the positive oracle), on the same footing:
+    # the real glue accounting and the real shadow stack, a clock the test controls, no emulator.
+    add_executable(SaturnExplorerProfilerLifecycleTests
+        Integration/tests/ProfilerLifecycleTests.c
+        Integration/Common/se_export.c
+    )
+    target_include_directories(SaturnExplorerProfilerLifecycleTests
+        PRIVATE Integration/Common Integration/Mednafen)
+    target_link_libraries(SaturnExplorerProfilerLifecycleTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerProfilerLifecycleTests COMMAND SaturnExplorerProfilerLifecycleTests)
     find_package(Python3 COMPONENTS Interpreter)
     if(Python3_FOUND)
         # Release packaging, offline: the MSYS2 library manifest against canned pacman output, the rule that a
@@ -1694,6 +1707,20 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerLiveProfilerTests
                  COMMAND SaturnExplorerLiveProfilerTests)
+
+        # F6: the attribution mode is latched per frame. A request that arrives during a frame (halt,
+        # snapshot) is applied at the boundary, in both directions; each record carries the mode it ran in.
+        add_executable(SaturnExplorerLiveProfilerModeTests
+            FrontEnd/tests/LiveProfilerModeTests.cpp
+            Integration/Common/se_export.c)
+        target_include_directories(SaturnExplorerLiveProfilerModeTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveProfilerModeTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveProfilerModeTests
+                 COMMAND SaturnExplorerLiveProfilerModeTests)
 
         # Frame identity and lost records of the profiler stream (F3) and the first reply's capability
         # bits (F14): the exporter's section builder without a socket, the driver against a scripted
