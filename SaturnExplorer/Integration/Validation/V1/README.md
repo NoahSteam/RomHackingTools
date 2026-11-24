@@ -41,7 +41,7 @@ Layout, from the documented Saturn system ID format (**not yet run against a BIO
 Everything after the guest in the 32 KB system area is zeroed, followed by an empty ISO 9660 volume
 and a `.cue` (32 sectors total). With the IP at `0x06002000` the entry is `0x06002E00 + 0x20*n`; the
 trampoline is position independent. The payload always runs at `0x06010000`, so `func_a` / `func_b` and
-every other label sit at the same addresses whatever `n` is (`v1_symbols.json` lists them).
+every other label sit at the same addresses whatever `n` is (they did move when the IMS re-arm was added to the handler; read them from `v1_symbols.json` of the build you run) (`v1_symbols.json` lists them).
 
 `build_v1.py --probe PATH` prints the system ID fields under their documented names, `n` and the detected
 area blocks. Not verified: that the BIOS accepts the result and runs the code. If it does not boot, the
@@ -55,3 +55,28 @@ documented in the pinned source and could not be tested.
 * After `SSHON` the slave runs whatever the BIOS gives it; the slave's busy/sleep split is not asserted.
 * `-ss.dbg_cem full` (instruction cache emulation) numbers are expected to be wider; see `EXPECTED.md`.
 * The function-attribution phase needs a `--enable-debugger` build and the Functions checkbox.
+
+## Hardware state the fake machine does not model (risk stated)
+
+`tests/sh2sim.py` models: SCU IMask reset to `0xBFFF` on every master vector fetch (`SCU_MSH2VectorFetch`) and
+the IMS write path; SMPC SF reading 0 (commands instant); cached versus uncached accesses. It does **not**
+model, so these are unchecked risks until a real run:
+
+* SCU `IPending` (IST): pending bits are cleared by the CPU's vector fetch (`CheckDoMasterInt`), so no IST
+  write is needed; the guest relies on that. Other pending bits (VDP1 draw end, DMA end) accumulate masked
+  and are harmless only while masked.
+* SMPC: command execution takes time and `SF` clears later; an INTBACK left in progress by the BIOS (a
+  peripheral-continue handshake) could make a new COMREG write misbehave. The guest waits for `SF` clear
+  before and after each command but cannot tell an INTBACK continuation from idle.
+* SMPC `SSHON` leaves the slave running BIOS code; what it does (and whether it disturbs shared work RAM
+  low) is unknown.
+* VDP1: drawing starts only at a frame-buffer swap with `PTMR` = 2 and `FBCR` = 0; `EDSR`/`COPR` and the
+  draw-end interrupt are not acknowledged by the guest. Whether the BIOS left `TVMR`/erase registers in a
+  state that changes the swap is not modelled (the guest rewrites `TVMR`, `FBCR`, `PTMR`).
+* SCU DMA: level 0 `D0EN` is assumed to stay set after a transfer (no self-clear in `scu.inc` for
+  VBlank-OUT start); the guest zeroes `D1EN`/`D2EN` too but cannot know a BIOS-started transfer is not
+  still running at entry.
+* Sound: the SCSP's own interrupt enables are not touched; the 68000 programs run with SR = `0x2700` (reset
+  value) and `STOP #$2700`, so SCSP interrupts cannot reach them even if the BIOS left them enabled.
+* VDP2: `TVMD` takes effect at the next frame; the back-screen colour write assumes VRAM bank settings left by
+  the BIOS allow a CPU write at VRAM offset `0x7FFFE`.

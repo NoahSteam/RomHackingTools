@@ -3,7 +3,8 @@
 It decodes the raw 16-bit opcodes itself (it does not reuse the assembler's tables), so running the
 assembled bytes through it is an independent check that the program does what its source says. It
 models: registers, T, SR.I, VBR, PR, delay slots, the exceptions that SLEEP waits for (an SCU VBlank-IN
-at vector 0x40, taken only when SCU IMS bit 0 is clear and SR.I < 15), and per-instruction cycle cost
+at vector 0x40, taken only when the SCU mask bit 0 is clear and SR.I < 15; a vector fetch re-masks
+everything, as SCU_MSH2VectorFetch() does), and per-instruction cycle cost
 under the Mednafen model stated in EXPECTED.md (1 per instruction, +2 for a taken bt/bf; memory waits
 are NOT modelled, so only register-only loops are cycle-exact). It is a test fixture, not an emulator.
 """
@@ -34,6 +35,7 @@ class Machine:
         self.events = []              # (kind, ...) writes to interesting registers, in order
         self.vblank_count = 0
         self.sleeping = False
+        self.imask = 0xBFFF           # SCU IMask: reset value (scu.inc: 0xBFFF), bit set = masked
 
     # ---------------------------------------------------------------- memory
     @staticmethod
@@ -45,6 +47,8 @@ class Machine:
         if log:
             self.log.append((p, size, "r", a))
         if p == 0x00100063:           # SMPC SF: commands complete instantly
+            return 0
+        if p == 0x05FE00A0:           # SCU IMS has no read path in scu.inc (falls to "unknown read" = 0)
             return 0
         v = 0
         for i in range(size):
@@ -59,6 +63,8 @@ class Machine:
             self.events.append(("smpc_cmd", v & 0xFF))
         if p == 0x00100063:
             return
+        if p == 0x05FE00A0 and size == 4:     # scu.inc case 0xA0: IMask = value & 0xBFFF
+            self.imask = v & 0xBFFF
         if 0x05D00000 <= p < 0x05D00010 or 0x05FE0000 <= p < 0x05FE0070 or 0x05F80000 <= p < 0x05F80100:
             self.events.append(("reg", p, size, v & ((1 << (8 * size)) - 1)))
         for i in range(size):
@@ -90,11 +96,13 @@ class Machine:
         self.push(self.PC)
         self.SR = (self.SR & ~0xF0) | 0xF0
         self.PC = self.rd(self.VBR + vec * 4, 4)
+        # SCU_MSH2VectorFetch(): IMask = 0xBFFF (everything masked) and ILevel = 0 on EVERY master vector
+        # fetch; a handler that wants the next interrupt must write IMS again.
+        self.imask = 0xBFFF
         self.cycles += 8              # informational; not asserted anywhere
 
     def irq_deliverable(self):
-        ims = self.rd(0x05FE00A0, 4, log=False)
-        return (not ims & 1) and ((self.SR >> 4) & 0xF) < 15
+        return (not self.imask & 1) and ((self.SR >> 4) & 0xF) < 15
 
     def run_frame(self, max_instr=2000000):
         """Run until the next sleep, then deliver one VBlank-IN; return when the sleep is about to wake."""
