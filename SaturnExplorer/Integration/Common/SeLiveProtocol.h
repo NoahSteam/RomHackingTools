@@ -517,6 +517,13 @@
                                            * not been published yet. A client that has caught up
                                            * (served frame == latest_frame) with step_pending == 0
                                            * is looking at the end of the step.
+                                           * Both are emulated-FRAME labels. Since the server
+                                           * orders the ring by its own delivery sequence (a halt
+                                           * and the frame it is inside can carry the same label),
+                                           * served frame == latest_frame means "the same frame
+                                           * label", NOT "every snapshot has been consumed": a
+                                           * caller must keep issuing GETs to receive a snapshot
+                                           * that is queued behind one with an equal label.
                                            * (v21) stop_seq(u32 @+40): the sequence number of the
                                            * stop in {reason,cpu,pc}; it advances with every halt
                                            * the emulator publishes and is not reset by a resume
