@@ -1778,7 +1778,15 @@ void SeExportPopFrameAt(int cpu, unsigned int landing) { SePopCallFrame(cpu, lan
  * equals the sp recorded at the entry. No match means the exception was one we never
  * observed (asynchronous interrupts execute no instruction we can hook), and the call
  * stack must be left exactly as it is. Unlike rts this never touches the overflow count:
- * a frame we could not store kept no sp to match against. */
+ * a frame we could not store kept no sp to match against.
+ *
+ * Two cases, kept apart (F9). An UNOBSERVED ASYNCHRONOUS interrupt (IRQ / NMI / fault) pushed no
+ * exception frame here, so its rte matches nothing and leaves ownership unknown: the interrupted
+ * function stays raw until an observed call establishes a new known callee, or its own matching
+ * rts proves the known caller again (returning from a handler's nested call into the unknown handler
+ * also stays unknown). An OBSERVED trapa recorded an exception frame with parent, return address and
+ * sp, so a matching rte may restore the parent when parentKnown is true, the trust epoch is current
+ * and the landing matches: observed evidence, not a reconstructed exception stack. */
 static void SePopExceptionFrame(int cpu, unsigned int sp, unsigned int landing, int haveLanding)
 {
     int c = cpu ? 1 : 0;

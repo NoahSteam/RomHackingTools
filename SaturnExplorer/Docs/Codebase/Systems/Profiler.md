@@ -395,8 +395,14 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
 - F2 + F6 + F9 are verified against the real `SetActive` / `Reset` and the glue with synthetic instruction streams, not on a game:
   that SMPC delivers power edges in the expected order during guest execution, the slave on-time of a real
   boot, and ownership against an independent instruction / exception trace all need a BIOS (V1, V2).
-- Ownership is conservative: after an interrupt, a switch (`jmp @Rn`) or a `bra` tail call the interrupted function is
-  charged to its raw-PC bucket until its own return proves ownership again.
+- Ownership is conservative. After an UNOBSERVED ASYNCHRONOUS interrupt (IRQ / NMI / fault) no exception frame was
+  pushed for it, so its unmatched `rte` leaves ownership unknown: the interrupted function stays raw until an observed
+  call establishes a new known callee or its own matching `rts` proves the known caller again (returning from a
+  handler's nested call into the unknown handler also stays unknown). An OBSERVED `trapa` is different: its exception
+  frame records parent, return address and SP, so a matching `rte` may restore the parent when `parentKnown` is true,
+  the trust epoch is current and the landing matches -- observed evidence, not a reconstructed exception stack. After a
+  switch (`jmp @Rn`) or a `bra` tail call the function is likewise charged to its raw-PC bucket until a return proves
+  ownership again.
 
 ## Related documentation
 
