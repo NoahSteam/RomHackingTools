@@ -21,6 +21,7 @@
  * Modified for SaturnExplorer: whether a STORE is guarded as pending, for the save slots (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a function the host calls back when a flow has been followed, to record the flow a restart follows (patches/0096-engine-flow-done-hook.patch).
  * Modified for SaturnExplorer: each op made by cloning another is recorded with the op it copies (patches/0100-engine-op-clone-origins.patch).
+ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
  */
 #ifndef __FUNCDATA_HH__
 #define __FUNCDATA_HH__
@@ -74,17 +75,27 @@ struct AccessRecord {
   bool slot = false;		///< SaturnExplorer (0075): the op was built by the instruction in a delay slot; \b pc is its branch's
 };
 
-/// \brief An op made as a copy of another op (SaturnExplorer, 0100)
+/// \brief An op made as a copy of another op, or made from others (SaturnExplorer, 0100 and 0101)
 ///
 /// A clone gets a new time at the address of its original, so by time alone it reads as an op the engine made, and the host
 /// would walk a cloned STORE or folded-store COPY back to a different store of the flow (a block split by ActionReturnSplit
-/// copies a shared epilogue). The record says which op it copies.
+/// copies a shared epilogue). The record says which op it copies. 0101 adds the three ways an op comes to stand for the instructions
+/// of others: a value forwarded into it, a store made from two, a duplicate it replaced, an op it was made in place of.
 struct OriginRecord {
   uintm survivor;		///< PcodeOp::getTime() of the clone
   uintm origin;			///< ...and of the op it copies (itself a clone, perhaps)
   Address pc;			///< The address of the copied op's instruction
   bool slot;			///< The copied op was built by the instruction in a delay slot; \b pc is its branch's
-  uint4 kind;			///< 0: a block was split (CloneBlockOps::buildOpClone); 1: a flow inlined a function (Funcdata::cloneOp)
+  uint4 kind;			///< 0: a block was split (CloneBlockOps::buildOpClone); 1: a flow inlined a function (Funcdata::cloneOp);
+				///< 2 (0101): \b origin was a folded STORE (a COPY) whose value a reader of it gave up (Funcdata::opSetInput: RulePropagateCopy, totalReplace);
+				///< 3 (0101): \b survivor is the STORE RuleDoubleStore made from \b origin and another;
+				///< 4 (0101): \b survivor replaced \b origin as the same computation (Funcdata::cseElimination);
+				///< 5 (0101): \b survivor was made in place of \b origin (TransformOp::createReplacement, SubvariableFlow::doReplacement,
+				///< totalReplaceConstant's COPY, Heritage::normalizeReadSize's SUBPIECE for the reading \b origin), or took over the storage a
+				///< folded STORE wrote (Funcdata::opSetOutput)
+  OpCode code;			///< (0101) What \b origin was when recorded (a STORE no rule has folded yet, a COPY, ...)
+  Address addr;			///< (0101) The storage \b origin wrote (invalid when it wrote none)
+  int4 size;			///< (0101) ...and how many bytes (0 when none)
 };
 
 /// \brief A call of the flow that heritage guarded a stack local at: it may read it (SaturnExplorer, 0068)
@@ -274,6 +285,10 @@ public:
   static bool isMarkerOrUnbuilt(const PcodeOp *op) { return op->getOpcode() == (TypeOp *)0 || op->code() == CPUI_MULTIEQUAL || op->code() == CPUI_INDIRECT; }
   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
   void setFlowDone(const std::function<void(Funcdata &)> &f) { flowDone = f; }	///< SaturnExplorer (0096): the host's call after each flow
+  bool standsForStore(const PcodeOp *op) const { return (op->code() == CPUI_COPY && op->isFoldedStore()) || op->isStoreOrigin(); }	///< SaturnExplorer (0101): \b op is a flow STORE folded into a COPY (whatever it now writes), or stands for one
+  void noteStoreForwarded(PcodeOp *op,const Varnode *old) {	///< SaturnExplorer (0101): \b op stops reading \b old, the value of a folded STORE: it stands for the store from now on
+    if (old != (const Varnode *)0 && old->isWritten() && standsForStore(old->getDef())) noteOrigin(op,old->getDef(),2);
+  }
   const vector<OriginRecord> &getOriginRecords(void) const { return originRecords; }	///< Every op made by cloning another (SaturnExplorer, 0100)
   uintm getFlowOps(void) const { return flowOps; }	///< SaturnExplorer (0100): ops with a lower time were made by the flow, the rest by rules and actions
   void noteOrigin(const PcodeOp *survivor,const PcodeOp *origin,uint4 kind) {	///< SaturnExplorer (0100): \b survivor is a clone of \b origin
@@ -283,6 +298,13 @@ public:
     rec.pc = origin->getAddr();
     rec.slot = origin->isFromDelaySlot();
     rec.kind = kind;
+    rec.size = 0;
+    rec.code = origin->code();
+    if (standsForStore(origin) || origin->code() == CPUI_STORE) survivor->setStoreOrigin();	// (a chain of ops that stand for a store is followed by what each is given)
+    if (origin->getOut() != (Varnode *)0) {	// (0101)
+      rec.addr = origin->getOut()->getAddr();
+      rec.size = origin->getOut()->getSize();
+    }
     originRecords.push_back(rec);
   }
   const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)

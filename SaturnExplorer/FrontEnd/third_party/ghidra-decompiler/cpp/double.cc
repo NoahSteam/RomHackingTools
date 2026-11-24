@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * Modified for SaturnExplorer: an op a rule made from others, or a value one forwarded, says which ops it stands for (patches/0101-engine-merged-forwarded-twin-origins.patch).
  */
 #include "double.hh"
 
@@ -3537,6 +3538,8 @@ int4 RuleDoubleStore::applyOp(PcodeOp *op,Funcdata &data)
 	  addrvn = data.newConstant(addrvn->getSize(),addrvn->getOffset());
 	data.opSetInput(newstore,addrvn,1);
 	data.opSetInput(newstore,whole,2);
+	data.noteOrigin(newstore,storelo,3);	// SaturnExplorer (0101): the new STORE stands for both
+	data.noteOrigin(newstore,storehi,3);
 	// We need to guarantee that -newstore- reads -addrvn- after
 	// it has been defined. So insert it after the latest.
 	data.opInsertAfter(newstore,latest);

@@ -1,0 +1,231 @@
+## Grammar 2, seeds 1 to 20,000: 46988 functions, 1042772 lines, 530421 statements, 819310 links
+
+Printed ops by origin and class (report only):
+| origin | STORE | CALL | BRANCH | RETURN | COPY | LOAD | HARDWARE | OTHER |
+|---|---|---|---|---|---|---|---|---|
+| flow | 83476 | 21971 | 89458 | 47906 | 69848 | 130035 | 0 | 257034 |
+| clone | 0 | 0 | 0 | 11 | 9 | 0 | 0 | 8 |
+| engine | 0 | 0 | 0 | 0 | 14204 | 0 | 7114 | 137184 |
+
+Statements: None 279, Store 90587, Assign 251449, Branch 116672, Call 21779, Return 47917, Halt 0, Label 1738
+Halt statements by type: baddata 0, halt 0, unimplemented 0, missing 0
+
+| Measure | Result | Threshold | Verdict |
+|---|---|---|---|
+| Store statements with a surviving flow op or folded COPY | 90300 of 90587 = 99.683% | go at 95% or more; 85 to 95% needs a per-class account and step 2b; below 85% rework section 3 | go |
+| Engine-made store statements: the bounded walk finds a store / candidates / nothing | 282 / 5 / 0 of 287 | report (feeds the next row) | - |
+| Lines that name a store today left with no proven store (candidates or nothing) / lines that name a store | 2 of 76925 = 0.003% | go at 2% or less; 2 to 10% requires step 2b; above 10% stop | go |
+| ...of those, the ones with no proven Effect at all | 1 of 76925 = 0.001% | report (the row above also counts a store found with another missing) | - |
+| Lines left with no proven Effect, by the printed op's class | OTHER 1 | report | - |
+| Patch 0100/0101 records: clone / inline / forwarded / merged / twin / replaced | 46 / 0 / 67500 / 0 / 2426 / 330249 | report | - |
+| Proven stores the walk found: by identity / forwarded / merged / replaced | 11 / 44 / 0 / 270 | report | - |
+| Flow store, branch, call and return statements with exactly one proven Effect | 276668 of 276668 | every one | go |
+| Clone-made effect ops | 11 | non-zero confirms the Clone record | confirms |
+| Lines with more than one statement | 9316 | report | - |
+| Lines with an op token and no statement | 0 | report | - |
+| Walk bound hits (64 ops, 8 links) | 0 of 287 walks = 0.000% | under 0.1% | go |
+| Functions over the flow record's cap (20,000 ops) | 0 | report | - |
+| Assertions: opsEnd past flowOps / inlined clones | 0 / 0 | both zero | go |
+| Time building the links against the decompilation | 663.4 ms of 244480.4 ms = 0.271% | within 5% of today | go |
+
+Lines against today's click target (firstAddr): 478385 lines have a proven Effect, 342076 agree, 136309 disagree (28.494%)
+Address sets (the line's token addresses against its links): equal 489178, old has more 464, new has more 19704, different 749
+The way back: 580199 instructions with an exact answer today; 12153 unlinked in the model, 542752 agree on the first line, 25294 disagree
+
+Disagreements by class:
+- line.disagree/Branch/old-is-value/below: 77127
+    - 69341C47.1 | line 15 firstAddr 06009080 new 06009082 |   } while (iVar2 != 0);
+    - 69341C47.0 | line 10 firstAddr 0600902A new 0600902C |   while (iVar3 = iVar3 + -1, iVar3 != 0) {
+    - 69341C47.0 | line 14 firstAddr 06009040 new 06009042 |   while (iVar3 = iVar3 + -1, iVar3 != 0) {
+    - 69341C47.0 | line 17 firstAddr 06009044 new 06009046 |   if (iVar2 != 3) {
+    - CDC359BF.1 | line 8 firstAddr 06009036 new 06009038 |   if (param_2 < 5) {
+- line.no-effect/Assign: 30409
+    - 69341C47.1 | line 9 firstAddr 0600907A new 00000000 |   piVar3 = &iStack_4;
+    - 69341C47.1 | line 12 firstAddr 0600907E new 00000000 |     piVar3 = piVar3 + -1;
+    - 92DABD45.0 | line 21 firstAddr 06009048 new 00000000 |   pcVar6 = param_2;
+    - 92DABD45.0 | line 22 firstAddr 06009048 new 00000000 |   iVar5 = param_3;
+    - 92DABD45.0 | line 21 firstAddr 06009048 new 00000000 |   pcVar6 = param_2;
+- line.disagree/Branch/old-not-linked/below: 17781
+    - 69341C47.1 | line 20 firstAddr 00000000 new 060090BA |     break;
+    - 69341C47.1 | line 23 firstAddr 00000000 new 060090C2 |     break;
+    - 69341C47.1 | line 27 firstAddr 00000000 new 060090CC |     break;
+    - 69341C47.1 | line 30 firstAddr 00000000 new 060090D2 |     break;
+    - CDC359BF.1 | line 13 firstAddr 00000000 new 0600905C |       break;
+- insn.disagree/new-effect/old-first-unlinked: 12316
+    - 69341C47.1 | line 28 firstAddr 060090D0 new 060090D0 |   case 3:
+    - 69341C47.1 | line 31 firstAddr 060090D6 new 060090D6 |   case 4:
+    - CDC359BF.1 | line 11 firstAddr 06009058 new 06009058 |     case 0:
+    - CDC359BF.1 | line 19 firstAddr 06009070 new 06009070 |     case 3:
+    - CDC359BF.1 | line 23 firstAddr 0600907A new 0600907A |     case 4:
+- insn.disagree/new-effect/old-first-linked: 11295
+    - 69341C47.1 | line 12 firstAddr 0600907E new 0600907E |     piVar3 = piVar3 + -1;
+    - 92DABD45.0 | line 21 firstAddr 06009048 new 06009048 |   pcVar6 = param_2;
+    - 92DABD45.0 | line 21 firstAddr 06009048 new 06009048 |   pcVar6 = param_2;
+    - 4AEE9342.1 | line 32 firstAddr 06009116 new 06009116 |   puVar3 = param_3;
+    - 4AEE9342.1 | line 32 firstAddr 06009116 new 06009116 |   puVar3 = param_3;
+- line.disagree/Store/old-is-value/below: 11270
+    - 69341C47.1 | line 19 firstAddr 060090B4 new 060090B8 |     *(int2 *)(param_1 + 0xc) = (int2)(char)*param_2;
+    - 69341C47.1 | line 33 firstAddr 06009088 new 060090D6 |     *param_3 = in_r3 + param_1;
+    - CDC359BF.1 | line 15 firstAddr 0600902E new 06009062 |       *(int4 *)param_4 = (int4)*(int2 *)((param_3 & 0x1c) - 0x20);
+    - CDC359BF.0 | line 23 firstAddr 0600902E new 06009062 |       SH2_RTCSR = (int4)*(int2 *)((param_3 & 0x1c) - 0x20);
+    - 92DABD45.1 | line 16 firstAddr 06009086 new 06009094 |   *param_4 = (int4)cVar1;
+- store.old-not-in-set/old-is-value: 11268
+    - 69341C47.1 | line 19 firstAddr 060090B4 new 060090B8 |     *(int2 *)(param_1 + 0xc) = (int2)(char)*param_2;
+    - 69341C47.1 | line 33 firstAddr 06009088 new 060090D6 |     *param_3 = in_r3 + param_1;
+    - CDC359BF.1 | line 15 firstAddr 0600902E new 06009062 |       *(int4 *)param_4 = (int4)*(int2 *)((param_3 & 0x1c) - 0x20);
+    - CDC359BF.0 | line 23 firstAddr 0600902E new 06009062 |       SH2_RTCSR = (int4)*(int2 *)((param_3 & 0x1c) - 0x20);
+    - 92DABD45.1 | line 16 firstAddr 06009086 new 06009094 |   *param_4 = (int4)cVar1;
+- line.disagree/Return/old-is-value/below: 10829
+    - 91237D91.0 | line 11 firstAddr 06009042 new 06009048 |   return (int4)*param_2;
+    - 3F0D058C.1 | line 9 firstAddr 06009068 new 0600906A |   return CONCAT44(*param_4,xVar2);
+    - 3F0D058C.0 | line 43 firstAddr 06009068 new 0600906A |   return CONCAT44(*pxVar6,xVar4);
+    - 1C985FAE.1 | line 8 firstAddr 06009044 new 06009046 |   return (int4)*param_1;
+    - 04901CDE.2 | line 14 firstAddr 06009110 new 06009114 |   return CONCAT44((int4)*param_2,xStack_4);
+- line.disagree/Assign/old-is-value/below: 6212
+    - CDC359BF.1 | line 9 firstAddr 0600903A new 0600903E |     uVar2 = *(uint4 *)(param_2 * 4 + 0x6009044);
+    - CDC359BF.1 | line 25 firstAddr 0600902E new 0600907C |       xVar1 = *(xunknown1 *)((param_3 & 0x1c) - 0x1d);
+    - CDC359BF.0 | line 17 firstAddr 0600903A new 0600903E |     uVar2 = *(uint4 *)(param_2 * 4 + 0x6009044);
+    - CDC359BF.0 | line 33 firstAddr 0600902E new 0600907C |       xVar1 = *(xunknown1 *)((param_3 & 0x1c) - 0x1d);
+    - 4AEE9342.1 | line 12 firstAddr 060090D6 new 060090DA |     uVar2 = *(uint4 *)(param_1 * 4 + 0x60090e0);
+- line.disagree/Branch/old-is-candidate-value/below: 5122
+    - CDC359BF.1 | line 28 firstAddr 06009084 new 06009086 |   if ((uVar2 & (uint4)param_4) == 0) {
+    - CDC359BF.0 | line 36 firstAddr 06009084 new 06009086 |   if ((uVar2 & (uint4)puVar5) == 0) {
+    - 302EA704.0 | line 30 firstAddr 06009068 new 0600906A |   if ((param_2 & (uint4)param_1) != 0) {
+    - 5CB172C6.0 | line 23 firstAddr 06009084 new 06009086 |   if ((param_4 & (uint4)param_3) != 0) {
+    - 4C0614BC.0 | line 13 firstAddr 0600902A new 0600902C |   if ((uVar3 & (uint4)param_4) == 0) {
+- store.old-not-in-set/old-is-candidate-value: 2637
+    - 0871FCB5.0 | line 17 firstAddr 06009012 new 0600901C |     *(int4 *)(((uint4)param_2 | 0xe0000000) + 4) = iVar3;
+    - 5C43FD94.1 | line 9 firstAddr 06009036 new 06009038 |     *param_3 = param_4[0xb];
+    - F963BAF9.0 | line 12 firstAddr 0600900A new 06009010 |   Ram36001000 = (uint4)pxVar4 & 0xff;
+    - DABDE367.0 | line 10 firstAddr 06009034 new 0600903E |   *param_3 = (int4)((uint8)xVar1 >> 0x20);
+    - 4CAF7D7C.0 | line 15 firstAddr 06009010 new 06009014 |     Ram15b00094 = (uint4)param_1 & 0xffff;
+- line.disagree/Store/old-is-candidate-value/below: 2630
+    - 0871FCB5.0 | line 17 firstAddr 06009012 new 0600901C |     *(int4 *)(((uint4)param_2 | 0xe0000000) + 4) = iVar3;
+    - 5C43FD94.1 | line 9 firstAddr 06009036 new 06009038 |     *param_3 = param_4[0xb];
+    - F963BAF9.0 | line 12 firstAddr 0600900A new 06009010 |   Ram36001000 = (uint4)pxVar4 & 0xff;
+    - DABDE367.0 | line 10 firstAddr 06009034 new 0600903E |   *param_3 = (int4)((uint8)xVar1 >> 0x20);
+    - 4CAF7D7C.0 | line 15 firstAddr 06009010 new 06009014 |     Ram15b00094 = (uint4)param_1 & 0xffff;
+- line.disagree/Call/old-is-value/below: 1691
+    - E89CC072.1 | line 12 firstAddr 06009060 new 06009074 |     func_0x060090b4(param_1,0x15,(param_3 & 0xc) - 0x100);
+    - 344CD21D.0 | line 22 firstAddr 0600903C new 06009042 |     (**(code **)(param_2 * 4 + 0x600904c))();
+    - 344CD21D.0 | line 22 firstAddr 0600903C new 06009042 |     (**(code **)(param_2 * 4 + 0x600904c))();
+    - 41DEF87F.0 | line 6 firstAddr 06009026 new 06009032 |   xVar2 = func_0x06009064(param_3 & 0x1ffffff0 | 0xa0000000,(int4)param_1);
+    - B7817528.0 | line 9 firstAddr 0600903A new 06009040 |     xVar1 = (**(code **)(param_3 * 4 + 0x6009048))(param_1,param_2,param_3 * 4,param_4);
+- line.disagree/Return/old-is-candidate-value/below: 1359
+    - 92DABD45.0 | line 31 firstAddr 06009058 new 0600906E |   return CONCAT44(param_3,(int4)xVar7) & 0xffffffffff;
+    - 92DABD45.0 | line 31 firstAddr 06009058 new 0600906E |   return CONCAT44(param_3,(int4)xVar7) & 0xffffffffff;
+    - E89CC072.1 | line 23 firstAddr 060090C6 new 060090D6 |   return param_2 + 0x1d;
+    - 3004F2E7.0 | line 31 firstAddr 06009000 new 06009004 |   return (uint4)puVar4 & 0xff;
+    - DFB5F5A6.2 | line 17 firstAddr 060090A2 new 060090AA |   return param_1;
+- line.disagree/Assign/old-is-candidate-value/below: 1141
+    - 4AEE9342.0 | line 17 firstAddr 06009004 new 06009034 |     uStack_10 = uStack_10 ^ ((uint4)param_1 & 0xff) * 2;
+    - 4AEE9342.0 | line 17 firstAddr 06009004 new 06009034 |     uStack_10 = uStack_10 ^ ((uint4)param_1 & 0xff) * 2;
+    - E817B709.0 | line 35 firstAddr 0600909E new 060090C2 |     xVar2 = param_2[1];
+    - 0871FCB5.0 | line 41 firstAddr 06009012 new 06009068 |     xVar4 = *(xunknown4 *)(((uint4)param_2 | 0xe0000000) + 0x10);
+    - DEF2F7AA.1 | line 12 firstAddr 0600905C new 0600908A |     xVar1 = *(xunknown1 *)(((uint4)param_2 ^ 0x40000000) + 2);
+- insn.disagree/new-value/old-first-unlinked: 836
+    - 69341C47.1 | line 18 firstAddr 060090B4 new 060090B4 |   case 0:
+    - CDC359BF.1 | line 14 firstAddr 06009060 new 06009060 |     case 1:
+    - CDC359BF.0 | line 22 firstAddr 06009060 new 06009060 |     case 1:
+    - 4AEE9342.0 | line 16 firstAddr 06009032 new 06009032 |   case 2:
+    - 4AEE9342.0 | line 16 firstAddr 06009032 new 06009032 |   case 2:
+- line.disagree/Call/old-is-candidate-value/below: 618
+    - E87DEFB1.0 | line 18 firstAddr 06009036 new 0600904C |     func_0x060090e4((uint4)param_1 & 0x1ffffff0 | 0x40000000,param_4,param_1);
+    - DD177C2E.0 | line 14 firstAddr 0600903C new 06009042 |   func_0x06009074((uint4 *)((uint4)param_1 & 0xffff),0x1c,param_3,extraout_r7);
+    - 65E3FA36.0 | line 12 firstAddr 06009028 new 0600903E |   func_0x06009058(param_2,param_2 + 1,pxVar4);
+    - 0C841834.1 | line 10 firstAddr 0600907A new 06009080 |   func_0x060090b8((int4)param_2[10],param_2);
+    - 1ED45B6B.0 | line 13 firstAddr 0600901C new 06009036 |     func_0x060090e8(param_1,(xunknown4 *)((uint4)param_2 | 0xe0000000),(uint4)param_3,param_4);
+- insn.disagree/new-condition/old-first-linked: 441
+    - 2130DE95.0 | line 28 firstAddr 06009060 new 06009060 |     iVar1 = (int4)((uint8)xVar6 >> 0x20);
+    - 2130DE95.0 | line 28 firstAddr 06009060 new 06009060 |     iVar1 = (int4)((uint8)xVar6 >> 0x20);
+    - 3A2B1954.1 | line 6 firstAddr 0600903A new 0600903A |   xVar1 = *(xunknown4 *)((param_2 | 0xfffffff0) + 0x30);
+    - 3A2B1954.0 | line 18 firstAddr 0600903A new 0600903A |   xVar2 = *(xunknown4 *)(((uint4)param_2 | 0xfffffff0) + 0x30);
+    - 2ACE405A.2 | line 10 firstAddr 060090C0 new 060090C0 |   *(int4 *)(in_r7 + 0x3c) = (int4)iStack_4;
+- insn.disagree/new-placement/old-first-unlinked: 260
+    - 4AEE9342.1 | line 20 firstAddr 060090FE new 060090FE |     case 4:
+    - 4AEE9342.1 | line 20 firstAddr 060090FE new 060090FE |     case 4:
+    - E7CE6A09.2 | line 27 firstAddr 0600913A new 0600913A |     case 2:
+    - E7CE6A09.2 | line 27 firstAddr 0600913A new 0600913A |     case 2:
+    - 59020EC5.2 | line 21 firstAddr 060090DC new 060090DC |     case 0:
+- line.disagree/Store/old-not-linked/below: 254
+    - 71EB3358.0 | line 12 firstAddr 00000000 new 06009062 |     break;
+    - 8ABD37EC.1 | line 21 firstAddr 00000000 new 060090A4 |     break;
+    - 8ABD37EC.1 | line 21 firstAddr 00000000 new 060090A4 |     break;
+    - BB44D15E.0 | line 19 firstAddr 0600900E new 0600904C |     *param_1 = (int2)iVar2;
+    - BB44D15E.0 | line 30 firstAddr 0600900E new 06009064 |   *(int2 *)param_3 = (int2)iVar2;
+- line.disagree/Assign/old-not-linked/below: 216
+    - 4AEE9342.0 | line 15 firstAddr 00000000 new 0600904A |     break;
+    - 4AEE9342.0 | line 15 firstAddr 00000000 new 0600904A |     break;
+    - 344CD21D.1 | line 23 firstAddr 00000000 new 06009120 |     break;
+    - 344CD21D.0 | line 45 firstAddr 00000000 new 06009120 |     break;
+    - 344CD21D.1 | line 23 firstAddr 00000000 new 06009120 |     break;
+- store.old-not-in-set/old-not-linked: 163
+    - BB44D15E.0 | line 19 firstAddr 0600900E new 0600904C |     *param_1 = (int2)iVar2;
+    - BB44D15E.0 | line 30 firstAddr 0600900E new 06009064 |   *(int2 *)param_3 = (int2)iVar2;
+    - D86A922D.1 | line 21 firstAddr 0600902E new 0600903E |     *(int2 *)param_1 = (int2)xVar2;
+    - 060CB8FC.0 | line 37 firstAddr 0600905E new 0600906A |     *param_3 = (char)xStack_20;
+    - 060CB8FC.0 | line 41 firstAddr 0600905E new 060090AC |   *(char *)param_2 = (char)xStack_20;
+- insn.disagree/new-value/old-first-linked: 108
+    - 534574E5.1 | line 12 firstAddr 0600905A new 0600905A |     uVar4 = in_sr;
+    - 1126353D.1 | line 11 firstAddr 06009010 new 06009010 |     uVar4 = in_sr;
+    - 1126353D.0 | line 13 firstAddr 06009010 new 06009010 |     uVar4 = in_sr;
+    - 9663B429.0 | line 7 firstAddr 06009000 new 06009000 |   xVar2 = pxRam2600220c;
+    - 35B3E7C9.1 | line 5 firstAddr 06009054 new 06009054 |   xVar1 = iRam26002084;
+- insn.disagree/new-condition/old-first-unlinked: 35
+    - 526541DD.1 | line 11 firstAddr 060090FE new 060090FE |     case 0:
+    - E87722DF.2 | line 13 firstAddr 060090B4 new 060090B4 |     case 2:
+    - C965F939.0 | line 32 firstAddr 06009076 new 06009076 |     case 2:
+    - BC6E9D9F.1 | line 22 firstAddr 060090A2 new 060090A2 |     case 2:
+    - 52618735.1 | line 17 firstAddr 060090A0 new 060090A0 |     case 1:
+- line.disagree/Store/old-is-other-effect/below: 33
+    - 10C676CD.0 | line 22 firstAddr 06009008 new 0600904C |       iRam80003014 = CONCAT22(0x9034,iRam80003014._2_2_);
+    - 10C676CD.0 | line 22 firstAddr 06009008 new 0600904C |       iRam80003014 = CONCAT22(0x9034,iRam80003014._2_2_);
+    - 43BE4925.0 | line 31 firstAddr 0600900C new 0600904C |   xStack_18 = CONCAT22(in_macl,xStack_18._2_2_);
+    - 82B9E316.2 | line 37 firstAddr 06009076 new 060090B2 |       iRam06002288 = CONCAT22(xVar2,(int2)iVar5);
+    - 82B9E316.1 | line 59 firstAddr 06009076 new 060090B2 |       iRam06002288 = CONCAT22(xVar1,(int2)iVar6);
+- line.disagree/Return/old-not-linked/below: 17
+    - 11568199.0 | line 13 firstAddr 0600901C new 0600902A |   return 0x7c;
+    - E8B92DB4.1 | line 22 firstAddr 0600908C new 06009094 |   return 0x4c;
+    - E8B92DB4.0 | line 53 firstAddr 0600908C new 06009094 |   return 0x4c;
+    - 5961B74D.0 | line 24 firstAddr 06009054 new 0600905A |   return 0x4a;
+    - FD136566.1 | line 17 firstAddr 06009088 new 06009096 |   return 0x5c;
+- line.no-effect/None: 16
+    - 8FC3BAE0.0 | line 11 firstAddr 06009008 new 00000000 |       ((uint4)param_2 & 0xffff0000) != 0) {
+    - DA0FA57C.0 | line 14 firstAddr 06009032 new 00000000 |                   (xunknown4 *)(uint4)(uint1)param_2[1]);
+    - CF452BAF.1 | line 10 firstAddr 06009072 new 00000000 |                 (uint4)param_1 & 0xffff0000)) {
+    - 562F06AD.0 | line 13 firstAddr 06009012 new 00000000 |       & uVar1) != 0) {
+    - 562F06AD.0 | line 13 firstAddr 06009012 new 00000000 |       & uVar1) != 0) {
+- line.disagree/Store/old-is-candidate-value/above: 7
+    - 197B017E.2 | line 6 firstAddr 06009040 new 0600903E |   cStack_40 = (char)((uint2)xStack_3e >> 8);
+    - EBC3609C.0 | line 12 firstAddr 06009018 new 0600900C |   cStack_30 = (char)((uint2)in_r1 >> 8);
+    - EBC3609C.0 | line 12 firstAddr 06009018 new 0600900C |   cStack_30 = (char)((uint2)in_r1 >> 8);
+    - E2168152.1 | line 20 firstAddr 060090A6 new 0600907A |   cStack_2 = (char)((uint4)in_mach >> 8);
+    - 1F8AFF79.1 | line 18 firstAddr 060090CA new 0600905E |   uVar2 = (uint1)((uint4)unaff_r11 >> 0x18);
+- line.no-effect/Store: 4
+    - B925A7C8.0 | line 8 firstAddr 06009018 new 00000000 |   uRam2600228c._1_3_ = (unkint3)iVar1;
+    - DFFEED9A.0 | line 5 firstAddr 0600900E new 00000000 |   cStack_34 = *param_3 >> 7;
+    - 9F7EA055.1 | line 7 firstAddr 06009074 new 00000000 |   cStack_20 = *param_2 >> 7;
+    - 9F7EA055.1 | line 7 firstAddr 06009074 new 00000000 |   cStack_20 = *param_2 >> 7;
+- stmt.store-no-effect: 4
+    - B925A7C8.0 | line 8 firstAddr 06009018 new 00000000 |   uRam2600228c._1_3_ = (unkint3)iVar1;
+    - DFFEED9A.0 | line 5 firstAddr 0600900E new 00000000 |   cStack_34 = *param_3 >> 7;
+    - 9F7EA055.1 | line 7 firstAddr 06009074 new 00000000 |   cStack_20 = *param_2 >> 7;
+    - 9F7EA055.1 | line 7 firstAddr 06009074 new 00000000 |   cStack_20 = *param_2 >> 7;
+- store.no-effect: 4
+    - B925A7C8.0 | line 8 firstAddr 06009018 new 00000000 |   uRam2600228c._1_3_ = (unkint3)iVar1;
+    - DFFEED9A.0 | line 5 firstAddr 0600900E new 00000000 |   cStack_34 = *param_3 >> 7;
+    - 9F7EA055.1 | line 7 firstAddr 06009074 new 00000000 |   cStack_20 = *param_2 >> 7;
+    - 9F7EA055.1 | line 7 firstAddr 06009074 new 00000000 |   cStack_20 = *param_2 >> 7;
+- insn.disagree/new-placement/old-first-linked: 3
+    - 69E40D54.2 | line 26 firstAddr 0600907C new 06009084 |   iVar2 = 4;
+    - 7D971C25.0 | line 43 firstAddr 06009098 new 06009098 |     puVar6 = param_1;
+    - 7D971C25.0 | line 43 firstAddr 06009098 new 06009098 |     puVar6 = param_1;
+- store.old-not-in-set/old-is-candidate-effect: 2
+    - 49E9C4B4.2 | line 21 firstAddr 06009152 new 06009158 |     uRam2600218c = uVar2 | 0x80000000;
+    - 49E9C4B4.2 | line 21 firstAddr 06009152 new 06009158 |     uRam2600218c = uVar2 | 0x80000000;
+- line.disagree/Assign/old-not-linked/above: 1
+    - D30BAE0A.1 | line 29 firstAddr 060090A8 new 06009086 |       xStack_30 = 0x906c;
+- line.disagree/Store/old-is-placement/above: 1
+    - 66DF241A.1 | line 29 firstAddr 06009092 new 06009090 |   cStack_5 = (char)uVar2;
+- store.old-not-in-set/old-is-placement: 1
+    - 66DF241A.1 | line 29 firstAddr 06009092 new 06009090 |   cStack_5 = (char)uVar2;

@@ -1,6 +1,6 @@
 # SH-2 pseudocode and embedded decompiler
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04), `review/7-a722-fix` (2026-11-05), `review/7-a726-fix` (2026-11-05) and `review/7-round7-fix` (2026-11-06); step 7's endless-loop store caution at `review/3-a3167-fix` (2026-11-08) its code-after-the-loop reads, stores and calls at `review/3-a3178-fix` (2026-11-09), and the loop's edges into kept code at `review/3-a3182-fix` (2026-11-09).
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04), `review/7-a722-fix` (2026-11-05), `review/7-a726-fix` (2026-11-05) and `review/7-round7-fix` (2026-11-06); step 7's endless-loop store caution at `review/3-a3167-fix` (2026-11-08) its code-after-the-loop reads, stores and calls at `review/3-a3178-fix` (2026-11-09), and the loop's edges into kept code at `review/3-a3182-fix` (2026-11-09); the link model's shadow (step 2, `BuildLinks`) at `review/7-step2` (2026-11-22).
 Captured-inspection sections rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 The panel's status/trust drawing, Decompile-as-a-request and Copy marks rechecked against `5428fe6` plus the area 8 fixer branch (2026-10-30).
 Unless labelled otherwise, behavior below is verified from the cited implementation.
@@ -157,9 +157,14 @@ and lists these classes as open until they are fixed.
    link model (`DecompileResult::links` and `statements`, `Line::statement`; area 7 redesign step 1,
    `Docs/Decompiler/LINK_MODEL.md`) from the p-code's own identity: the printer's `<statement>`
    elements and each token's op (`MarkupOps`), `Funcdata::getFlowOps()` to tell flow ops from ones
-   rules made, and patch 0100's clone records for ops a block split copied. Nothing reads it for a
-   click, a hover or an order; `tests/LinkCensus.h` (`SE_LINK_CENSUS`) measures it against the token
-   addresses. `AddJoinConstantTokens` addresses a number the engine
+   rules made, and patch 0100's clone records for ops a block split copied. Since step 2 an
+   engine-made statement that writes memory (a merged word, a copy at a call or a return, a widened
+   read-modify-write) also gets an `Effect` link at each store it shows, from a bounded walk
+   (`storeWalk`) that reads patch 0101's records (`OriginRecord` kinds forwarded, merged, twin and
+   replaced: which ops an op stands for, and the stores among them) and, for an op made for an op of
+   an instruction the flow made, that instruction's one store into the shown bytes. Nothing reads
+   the shadow for a click, a hover or an order; `tests/LinkCensus.h` (`SE_LINK_CENSUS`) measures it
+   against the token addresses and the store lines' click targets. `AddJoinConstantTokens` addresses a number the engine
    merged (a COPY that is no flow op, at an instruction that does not make the number into the
    COPY's register: a collapsed MULTIEQUAL at a join; or a copy of a temporary the engine made of a
    number and prints in place, A7-40's triage, even on a line it shares with that copy, A7-47) to the instruction on each path that set the
