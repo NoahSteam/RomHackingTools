@@ -966,7 +966,15 @@ static volatile int sClients;
  * only be changed there, like a breakpoint install). ---- */
 typedef void (*SeSetProfilerFn)(unsigned int flags);
 static SeSetProfilerFn sSetProfiler;
-static volatile int sProfWanted;      /* SE_LIVE_PROF_* the client asked for */
+/* F1: the request belongs to a connection. Each live connection owns a slot for as long as
+ * SeServeClient runs; sProfWanted is the OR of the slots, recomputed under SE_LOCK whenever one
+ * joins, changes or leaves, so a client's request can neither outlive its connection nor leak into
+ * another's. The emulate thread applies sProfWanted and publishes the result in sProfApplied: the
+ * single value everything downstream (the attribution mode a frame is latched with) reads. */
+#define SE_PROF_SLOTS 8
+static int sProfSlotUsed[SE_PROF_SLOTS];      /* guarded by SE_LOCK */
+static int sProfSlotFlags[SE_PROF_SLOTS];     /* guarded by SE_LOCK */
+static volatile int sProfWanted;      /* OR of every connection's request (written under SE_LOCK) */
 static volatile int sProfPending;     /* sProfWanted changed and has not been applied */
 static volatile int sProfApplied;     /* what the emulator is running with (emulate thread writes) */
 static volatile int sPerfWired;       /* the emulator has handed over counters at least once */
@@ -994,10 +1002,52 @@ unsigned int SeExportProfilerFlags(void)
     return (unsigned int)SeAtLoad(&sProfApplied);
 }
 
-static void SePublishProfiler(unsigned int flags)
+/* Caller holds SE_LOCK. Recompute the union and tell the emulate thread, only on a change. */
+static void SeProfRecomputeLocked(void)
 {
-    SeAtStore(&sProfWanted, (int)(flags & SE_LIVE_PROF_FUNCTIONS));
-    SeAtStore(&sProfPending, 1);
+    int i, want = 0;
+    for (i = 0; i < SE_PROF_SLOTS; ++i)
+        if (sProfSlotUsed[i]) want |= sProfSlotFlags[i];
+    if (want != SeAtLoad(&sProfWanted))
+    {
+        SeAtStore(&sProfWanted, want);
+        SeAtStore(&sProfPending, 1);
+    }
+}
+
+/* A connection starts with no request. -1 when every slot is taken (that connection cannot ask). */
+static int SeProfAcquire(void)
+{
+    int i, got = -1;
+    SE_LOCK();
+    for (i = 0; i < SE_PROF_SLOTS; ++i)
+        if (!sProfSlotUsed[i]) { sProfSlotUsed[i] = 1; sProfSlotFlags[i] = 0; got = i; break; }
+    SE_UNLOCK();
+    return got;
+}
+
+static void SeProfSetRequest(int slot, unsigned int flags)
+{
+    if (slot < 0 || slot >= SE_PROF_SLOTS) return;
+    SE_LOCK();
+    if (sProfSlotUsed[slot])
+    {
+        sProfSlotFlags[slot] = (int)(flags & SE_LIVE_PROF_FUNCTIONS);
+        SeProfRecomputeLocked();
+    }
+    SE_UNLOCK();
+}
+
+/* Every way a connection ends passes through here (SeServeClient wraps all three accept sites,
+ * POSIX local and TCP, and the Windows pipe). */
+static void SeProfRelease(int slot)
+{
+    if (slot < 0 || slot >= SE_PROF_SLOTS) return;
+    SE_LOCK();
+    sProfSlotUsed[slot] = 0;
+    sProfSlotFlags[slot] = 0;
+    SeProfRecomputeLocked();
+    SE_UNLOCK();
 }
 
 void SeExportSetDebugCaps(unsigned int caps)
@@ -1034,8 +1084,9 @@ static void SeOnClientDisconnect(void)
      * fork) and its events would stream to whichever client attaches next. */
     SePublishTracepoints(NULL, 0);
     SeAtStore(&sRewindWanted, 1);   /* the next client states its own setting; don't inherit this one's */
-    /* Function attribution keeps the per-instruction hook on; nobody is left to read it. */
-    SePublishProfiler(0);
+    /* Function attribution: nothing to do here. Each connection released its own request when it
+     * ended (SeProfRelease), so the union is already what the remaining clients (none, here) want;
+     * zeroing it again here could overwrite a client that connected since (F1). */
     SE_LOCK();
     sEvHead = sEvCount = 0;   /* events fired for the client that left are its own */
     SeCancelSteps();
@@ -2151,8 +2202,8 @@ static int SeRecvPokeStream(SeConn cl, int sound, unsigned int count, unsigned i
     return SeDrainWith(cl, count, block, (unsigned int)sizeof(block));
 }
 
-static void SeServeClientLoop(SeConn cl, SeFrame* snap);
-static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut);
+static void SeServeClientLoop(SeConn cl, SeFrame* snap, int profSlot);
+static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut, int profSlot);
 
 /* Count this client in for as long as it is attached. A wrapper around the serve loop, rather
  * than a bump at each of the three accept sites: the loop returns from a dozen places on any I/O
@@ -2160,13 +2211,15 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* 
  * them impossible to leave unpaired. */
 static void SeServeClient(SeConn cl, SeFrame* snap)
 {
+    const int profSlot = SeProfAcquire();   /* F1: this connection's profiler request, if it makes one */
     SeAtAdd(&sClients, 1);
     /* A client that joins part-way through a run has never seen the keyframe the deltas now being
      * produced are measured against, so none of them could be rebuilt until the next one came
      * round -- up to SE_STATE_KF_MAX frames of the history it records would be unusable. Make the
      * next state a keyframe so the first thing it receives is a base it can start from. */
     SeStateFlushAndRekey();
-    SeServeClientLoop(cl, snap);
+    SeServeClientLoop(cl, snap, profSlot);
+    SeProfRelease(profSlot);   /* before the count drops: the request ends with the connection */
     /* Release what the debugger holds only when the LAST client leaves. Two can be attached (the
      * local socket and the TCP port), and the one that remains still owns its breakpoints and its
      * halt: a stray connection to the TCP port -- a second Saturn Explorer, the web build, a port
@@ -2176,7 +2229,7 @@ static void SeServeClient(SeConn cl, SeFrame* snap)
 
 /* Serve one connected client until it disconnects or the server stops. 'snap' is
  * scratch the size of one frame. */
-static void SeServeClientLoop(SeConn cl, SeFrame* snap)
+static void SeServeClientLoop(SeConn cl, SeFrame* snap, int profSlot)
 {
     /* v26: the newest profiler frame this connection has been sent (0 = none yet), and the
      * buffer its unsent records are copied into. Heap, not stack: 20 KiB, and two server
@@ -2186,11 +2239,11 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
     if (!perfOut) return;
     perfSent.sent = 0;
     perfSent.started = 0;   /* "first reply" is its own state: 0 sent can also mean an empty ring */
-    SeServeClientRequests(cl, snap, &perfSent, perfOut);
+    SeServeClientRequests(cl, snap, &perfSent, perfOut, profSlot);
     free(perfOut);
 }
 
-static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut)
+static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut, int profSlot)
 {
 #define perfSent (*perfSentP)
     SeLogPortDevices();   /* report the emulator's controller config on connect */
@@ -2244,7 +2297,7 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* 
         }
         else if (memcmp(req, SE_LIVE_VERB_PROFILE, SE_LIVE_VERB_LEN) == 0)
         {
-            SePublishProfiler(arg);   /* applied by the emulate thread */
+            SeProfSetRequest(profSlot, arg);   /* applied by the emulate thread */
         }
         else if (memcmp(req, SE_LIVE_VERB_ISTEP, SE_LIVE_VERB_LEN) == 0)
         {
@@ -2898,6 +2951,7 @@ int SeExportPrepare(void)
     sRingWrite = 0;
     SeAtStore(&sPaused, 0); SeCancelSteps(); sFrameNo = 0; SeAtStore(&sClients, 0); SeAtStore(&sRewindWanted, 1);
     SeAtStore(&sProfWanted, 0); SeAtStore(&sProfPending, 0); SeAtStore(&sProfApplied, 0);
+    { int i; for (i = 0; i < SE_PROF_SLOTS; ++i) { sProfSlotUsed[i] = 0; sProfSlotFlags[i] = 0; } }
     /* Nothing of a previous run survives into this one: not its profiler records, its sequence, its
      * identity reservation, nor the capabilities it declared. */
     sSetProfiler = 0;

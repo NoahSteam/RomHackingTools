@@ -1843,8 +1843,10 @@ void PollLoop(LiveState* st)
             // full savestate per frame on a feature the user switched off. Unconditional: the
             // value we want is the value this connection has not been told.
             st->rewindDirty = true;
-            // Function attribution likewise starts off in a fresh server; only an "on" needs saying.
-            st->profDirty = st->profFlags != 0;
+            // Function attribution is per connection on the server (F1): this connection starts with
+            // no request whatever the last one said, so the setting is restated unconditionally,
+            // "off" included, rather than inferred from the server's start-up default.
+            st->profDirty = true;
             st->connected = true;
         }
         {
