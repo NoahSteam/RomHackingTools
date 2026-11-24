@@ -547,11 +547,10 @@
                                       * counter-capable build WITHOUT debugger support advertises
                                       * only SE_LIVE_CAP_PROFILER (before its first sample) and
                                       * leaves this clear. A debugger-enabled build advertises both.
-                                      * Both bits must be right in the very first reply, so the hook
-                                      * registration must be published before listeners are admitted
-                                      * (F14). v27 Step 0: documented; the first-reply guarantee is
-                                      * filled by F14 -- today SE_LIVE_CAP_PROFILER appears only after
-                                      * the first publication. */
+                                      * Both bits are right in the very first reply: the emulator
+                                      * registers its hooks and declares counters (SeExportPrepare /
+                                      * SeExportSetPerfCapable) before listeners are admitted
+                                      * (SeExportStart). */
 #define SE_LIVE_MINVER_CAPS     24u  /* servers older than this report only SE_LIVE_CAP_VDP_POKE */
 #define SE_LIVE_MINVER_POKEINFO 23u  /* servers older than this send no poke counters or caps */
 #define SE_LIVE_SH2_REGS_LEN    92u        /* one CPU: 23 u32 (R[16],SR,GBR,VBR,MACH,MACL,PR,PC) */

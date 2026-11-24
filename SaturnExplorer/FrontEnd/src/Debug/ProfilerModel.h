@@ -22,9 +22,8 @@ struct PerfFrame
 {
     uint32_t seq = 0;          // the emulator's own frame count (see se_live_perf_frame)
     uint32_t frame = 0;        // snapshot frame number it arrived with
-    // ---- v27 (Step 0). 'valid' is SE_PERF_VALID_* | SE_LIVE_PERF_V26_VDP1_ELAPSED (0x80000000):
-    // a field whose bit is clear is "not available", not a measured zero. wireVersion 0 (a
-    // hand-built frame) is treated like a v26 record.
+    // ---- v27 (Step 0). 'valid' is SE_PERF_VALID_*: a field whose bit is clear is "not available",
+    // not a measured zero. wireVersion 0 (a hand-built frame) is treated like a v26 record.
     uint32_t wireVersion = 0;
     uint32_t valid = 0;
     uint64_t sampleSeq = 0;
@@ -35,7 +34,17 @@ struct PerfFrame
     uint32_t satFlags = 0;     // SE_PERF_VALID_OTHER
     uint64_t otherNotAdmitted[2] = {};   // SE_PERF_VALID_OTHER
     uint64_t otherEvicted[2] = {};       // SE_PERF_VALID_OTHER
-    uint64_t gapFirst = 0, gapLast = 0;  // lost sampleSeq range before this record (0, 0 = none)
+    // Lost sampleSeq ranges just before this record (0, 0 = none), kept apart because they mean
+    // different things: gap* is what the server's ring dropped for this connection (the client
+    // never had it), evict* is what the driver's bounded queue evicted because the application
+    // did not drain it in time (the client had it and let it go).
+    uint64_t gapFirst = 0, gapLast = 0;
+    uint64_t evictFirst = 0, evictLast = 0;
+    // Not a frame: a reply that carried only a lost range and/or a newer newest sequence. It
+    // never enters the history; its ranges attach to the next frame pushed (and are counted at once).
+    bool     gapOnly = false;
+    uint64_t newestSeq = 0;    // the server's newest sampleSeq when this was sent (0 = unknown)
+    bool HasGap() const { return gapLast != 0 || evictLast != 0; }
     bool Has(uint32_t bit) const { return (valid & bit) != 0; }
     // True for a v26 server's record: counters[6] is the old elapsed VDP1 figure.
     bool LegacyVdp1() const { return wireVersion < 27; }
@@ -124,9 +133,32 @@ public:
     explicit ProfilerModel(size_t capacity = 600);   // ten seconds at 60 fps
 
     void Clear();
-    // Add a frame. A frame whose seq is the one already newest is ignored (the same numbers
-    // delivered twice); a seq that goes BACKWARDS means a new emulator run, and starts over.
+    // Add a frame. Ordering is by the 64-bit sampleSeq when the frame has one, else by the 32-bit
+    // seq compared wrap-aware (a wrap is not a restart). A frame that is the newest again is
+    // ignored (the same numbers delivered twice); one that goes BACKWARDS means a new emulator
+    // run, and starts over. A gap-only entry (PerfFrame::gapOnly) adds no frame: it records its
+    // lost ranges, to be attached to the next frame, and the newest sequence it reports.
     void Push(PerfFrame frame);
+
+    // ---- Lost records. The plot breaks wherever a frame HasGap(); an averaging window reports
+    // how many frames it is missing, so its denominator is the frames it really holds.
+    // Totals are since the last Clear().
+    struct SeqRange
+    {
+        uint64_t first = 0, last = 0;
+        bool     Empty() const { return last == 0; }
+        uint64_t Count() const { return last == 0 ? 0 : last - first + 1; }
+    };
+    uint64_t TotalServerLost() const { return mServerLost; }     // dropped by the server's ring
+    uint64_t TotalDriverEvicted() const { return mDriverEvicted; }   // evicted from the driver's queue
+    // A range reported by a gap-only entry and not yet attached to a frame.
+    SeqRange PendingServerGap() const { return mPendServer; }
+    SeqRange PendingDriverEviction() const { return mPendEvict; }
+    // The newest sampleSeq the server reported (via a frame or a gap-only entry); 0 = unknown.
+    uint64_t NewestSeq() const { return mNewestSeq; }
+    // Frames missing from the newest min(window, Count()) frames' span, by cause: the gaps carried
+    // by every one of them except the oldest (its gap precedes the window).
+    void LostIn(size_t window, uint64_t* serverLost, uint64_t* driverEvicted) const;
 
     size_t Count() const { return mCount; }
     size_t Capacity() const { return mFrames.size(); }
@@ -148,6 +180,8 @@ private:
     std::vector<PerfFrame> mFrames;   // ring
     size_t mHead = 0;                 // index of the oldest
     size_t mCount = 0;
+    uint64_t mServerLost = 0, mDriverEvicted = 0, mNewestSeq = 0;
+    SeqRange mPendServer, mPendEvict;
 };
 
 // ---- Memory pools ----

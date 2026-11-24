@@ -880,7 +880,9 @@ static void SeMdfnPerfEndFrame(void)
              * 'valid' stays 0 and a client shows them as "not available" rather than as zero. */
             SeExportPerfInfo info;
             memset(&info, 0, sizeof info);
-            /* v27 Step 0: filled by F3  (info.timelineId, info.frameNo; SE_PERF_VALID_IDENTITY) */
+            /* The frame's own identity, reserved at the gate and committed after this hook (F3). */
+            SeExportFrameIdentity(&info.timelineId, &info.frameNo);
+            info.valid |= SE_PERF_VALID_IDENTITY;
             /* v27 Step 0: filled by F6  (info.mode latched for the frame; SE_PERF_VALID_MODE) */
             /* v27 Step 0: filled by F7  (info.otherNotAdmitted / otherEvicted / satFlags; SE_PERF_VALID_OTHER) */
             /* F8: the instruction-cache emulation mode, once a game has set it. */
@@ -930,7 +932,10 @@ void SeMednafenFrameHook(void)
     if (!inited)
     {
         inited = 1;
-        SeExportInit();
+        /* Hooks first, listeners last (F14): nothing can ask for capabilities, or read a hook
+         * pointer, while it is being registered. Prepare (not "register, then init") because the
+         * save hook starts the rewind worker, which needs the server running. */
+        const int prepared = (SeExportPrepare() == 0);
         SeExportSetMemWriteHook(SeMdfnWriteByte);
         SeExportSetSoundWriteHook(SeMdfnWriteSoundByte);   /* Sound RAM pokes (v13) */
         SeExportSetVdpWriteHook(SeMdfnWriteVdpByte);       /* CRAM / VDP1 FB pokes (v23) */
@@ -952,6 +957,11 @@ void SeMednafenFrameHook(void)
                                  ? (SE_LIVE_CAP_EXEC_BP | SE_LIVE_CAP_MEM_WATCH |
                                     SE_LIVE_CAP_INSN_STEP | SE_LIVE_CAP_TRACEPOINTS)
                                  : 0u);
+        /* Counters exist in every build this glue is part of: say so before the first sample, so
+         * the very first reply advertises SE_LIVE_CAP_PROFILER (a build without a debugger then
+         * advertises only that, never SE_LIVE_CAP_PROF_FUNCTIONS). */
+        SeExportSetPerfCapable(1);
+        if (prepared) SeExportStart();
     }
     SeMednafenSnapshot();
 }

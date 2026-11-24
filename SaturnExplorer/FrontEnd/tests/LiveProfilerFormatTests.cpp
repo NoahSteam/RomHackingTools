@@ -112,7 +112,7 @@ int main()
         {
             const se_live_perf_frame& f = got[0];
             CHECK(f.wire_version == 26);
-            CHECK(f.valid == SE_LIVE_PERF_V26_VDP1_ELAPSED);   // no v27 bit, only the legacy-VDP1 marker
+            CHECK(f.valid == 0);   // no v27 bit; wire_version says counters[6] is the old VDP1 figure
             CHECK(f.seq == 5 && f.sample_seq == 5);
             CHECK(f.flags == SE_LIVE_PROF_FUNCTIONS && f.mode == SE_LIVE_PROF_FUNCTIONS);
             CHECK(f.counter_count == SE_PERF_V26_COUNT);

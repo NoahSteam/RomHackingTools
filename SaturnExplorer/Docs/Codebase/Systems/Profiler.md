@@ -2,9 +2,10 @@
 
 Inspected revision: the change that introduced it (protocol v26), on top of
 `6491e73`, plus the v27 wire/counter freeze (Step 0 of [ProfilerFixPlan](../../ProfilerFixPlan.md)).
-**v27 status:** the record layout and counter indices below are frozen; most of the new fields are
-declared and carried but not yet produced (each is marked "not available" on the wire by a clear
-bit in the record's `valid` word) until the plan items F2 to F8 fill them. Behavior below is verified from source and from the tests listed; the
+**v27 status:** the record layout and counter indices below are frozen; the fields the fix plan
+has not filled yet are declared and carried but marked "not available" on the wire (a clear bit in
+the record's `valid` word). Filled so far: frame identity and lost-record accounting (F3), and
+capability bits correct from the first reply (F14); the rest (F1, F2, F4 to F9, F11) follow. Behavior below is verified from source and from the tests listed; the
 emulator-side numbers have **not** been checked against a running game (see Coverage limits).
 
 ## Purpose and responsibilities
@@ -32,10 +33,10 @@ transport (see [State sources](StateSources.md)).
 | Counter indices and the function key (single source of truth for emulator, wire and client) | [SePerfCounters.h](../../../Integration/Common/SePerfCounters.h): `SE_PERF_*`, `SE_PERF_DEV_*`, `SE_PERF_FN_*` |
 | Emulator instrumentation | [apply.py](../../../Integration/Mednafen/apply.py): `PERF_DECL`, `PERF_BUS_HELPER`, the `*_PERF_*` / `SH2_*` anchors, `process_profiler`; `SsDbgCpuTimestamp`, `SsDbgSetProfileActive` in `SS_ACCESSORS` |
 | Frame hand-over and function sampling | [se_mednafen_glue.c](../../../Integration/Mednafen/se_mednafen_glue.c): `SeSsPerfC`, `SeMdfnPerfEndFrame`, `SeMdfnProfSample`, `SeMdfnSetProfiler` |
-| Server | [se_export.c](../../../Integration/Common/se_export.c): `SeExportPublishPerf`, `SeExportSetProfilerHook`, `SeExportCurrentFunction`, `SePublishProfiler`, the v27 perf record |
+| Server | [se_export.c](../../../Integration/Common/se_export.c): `SeExportPublishPerf`, `SeExportBuildPerfSection` (a connection's reply section and its lost range), `SeExportFrameIdentity` / `SeIdReserve` / `SeExportEndFrame` (frame identity), `SeExportNotifyStateLoaded` (timeline), `SeExportPrepare` / `SeExportStart` (startup), `SeExportSetProfilerHook`, `SeExportSetPerfCapable`, `SeExportCurrentFunction`, `SePublishProfiler` |
 | Wire contract | [SeLiveProtocol.h](../../../Integration/Common/SeLiveProtocol.h): `SE_LIVE_VERB_PROFILE`, `SE_LIVE_PROF_FUNCTIONS`, `SE_LIVE_CAP_PROFILER`, `SE_LIVE_CAP_PROF_FUNCTIONS`, "Perf section" |
-| Client | [LiveDriver.cpp](../../../Drivers/Live/src/LiveDriver.cpp): `LivePerf`, the v26 and v27 parse in `ReadSnapshot`; [LiveDriver.h](../../../Drivers/Live/src/LiveDriver.h): `se_live_perf_frame`, `se_live_drain_perf`, `se_live_set_profiler` |
-| Model (UI-free) | [ProfilerModel.h](../../../FrontEnd/src/Debug/ProfilerModel.h): `PerfFrame`, `ComputePerfShares`, `ComputeBusTotals`, `ProfilerModel`, `MemoryPoolTracker` |
+| Client | [LiveDriver.cpp](../../../Drivers/Live/src/LiveDriver.cpp): `LivePerf`, the v26 and v27 parse in `ReadSnapshot`, `IngestPerf` (ordering, gaps, eviction); [LiveDriver.h](../../../Drivers/Live/src/LiveDriver.h): `se_live_perf_frame`, `se_live_drain_perf`, `se_live_perf_status_get`, `se_live_set_profiler` |
+| Model (UI-free) | [ProfilerModel.h](../../../FrontEnd/src/Debug/ProfilerModel.h): `PerfFrame`, `ComputePerfShares`, `ComputeBusTotals`, `ProfilerModel` (ordering, `LostIn`, lost totals), `MemoryPoolTracker` |
 | Panel | [ProfilerPanel.cpp](../../../FrontEnd/src/ProfilerPanel.cpp): `ProfilerPanel::Draw`, `Host` |
 | App glue | [App.cpp](../../../FrontEnd/src/App.cpp): `App::UpdateProfiler`, `App::DrawProfiler`; registered in `App::PanelList` (Windows → Debugger → Profiler, hidden by default) |
 
@@ -48,7 +49,8 @@ flowchart TD
     E --> P["SeExportPublishPerf: serialized record, seq + 1"]
     P --> R["Server ring of the last 16 frames"]
     R --> D["Each reply: the records this connection has not had yet"]
-    D --> A["App::UpdateProfiler: se_live_drain_perf"]
+    D --> Q["Driver queue (600): IngestPerf, gaps"]
+    Q --> A["App::UpdateProfiler: se_live_drain_perf"]
     A --> M["ProfilerModel history"]
     M --> U["ProfilerPanel"]
     C["Captured RAM (any source)"] --> T["MemoryPoolTracker"] --> U
@@ -93,11 +95,53 @@ Every hook is an insertion (never a replacement), so `apply.py --revert` restore
 
 `SeMdfnPerfEndFrame` runs from `SeMednafenEndFrameHook`, hands the array to
 `SeExportPublishPerf` when a client is attached, and zeroes it. The server numbers each
-frame (`seq`) and keeps the last 16; every reply carries the records its connection has not
-been sent yet, oldest first (at most `SE_LIVE_PERF_MAX_PER_REPLY`). The records are a queue
-beside the snapshot, not part of it: a client that is served a newer snapshot and skips one
-still receives every frame's counters, and a paused or halted emulator sends none. The
-driver additionally drops a `seq` it has already queued.
+publication (`sampleSeq`, 64-bit, from 1 per exporter run) and keeps the last 16; every reply
+carries the records its connection has not been sent yet, oldest first (at most
+`SE_LIVE_PERF_MAX_PER_REPLY`). The records are a queue beside the snapshot, not part of it: a
+client that is served a newer snapshot and skips one still receives every frame's counters, and a
+paused or halted emulator sends none. A connection's first reply starts at the newest record (not
+a loss); that decision is taken on the first reply whether or not it carries a record, so an
+empty first reply does not later skip the early publications.
+
+### Frame identity and lost records (F3)
+
+- **Identity is the producer's.** The frame about to run has its number reserved at the
+  top-of-frame gate (`SeGateRelease` -> `SeIdReserve`, after a pending load was applied and before
+  the guest runs) and committed once by `SeExportEndFrame` when `Emulate()` completes. The glue
+  stamps the perf record with `SeExportFrameIdentity` (`timelineId`, `frameNo`,
+  `SE_PERF_VALID_IDENTITY`), so a frame with no snapshot (`NeedSoundReverse`) or with several
+  debugger halts still reports its own number, and a record is never labelled with the snapshot
+  frame of the reply that happened to carry it (`se_live_perf_frame.frame` is kept only for old
+  callers). Ring/snapshot numbering is unchanged for ordinary execution; halt snapshots keep the
+  last completed frame's number (a GET that has seen it must still receive the finished frame), and
+  the one exception is the very first halt of a run (slot 0 means "empty"): it takes number 1 and
+  the running frame is renamed 2.
+- **Timeline** changes on every replaced machine state, through one owner: an SE rewind or slot
+  load (`SeStateAfterRestore`) and a native Mednafen load (`SeExportNotifyStateLoaded`, injected
+  by `apply.py` after `CPU[1].PostStateLoad` in `StateAction`). A load the server ordered sets
+  `sInSeLoad` around the emulator call, so its own `PostStateLoad` notification is not a second
+  change; a failed load changes nothing. The first frame after a rewind to N is N+1. A native or
+  slot load has no saved SE frame number: numbering continues from the counter it had (the
+  documented origin); the timeline id tells the two apart.
+- **Lost range, per connection.** The reply header carries `lostFirst..lostLast`: what the
+  server's 16-deep ring overwrote before this connection was sent it, ending just before the
+  reply's first record (or at the newest publication when the reply has none). One range per reply
+  is sufficient; records merely deferred by the 8-per-reply cap are not lost.
+  `SeExportBuildPerfSection` builds the section and is testable without a socket.
+- **Driver.** `IngestPerf` orders records by the 64-bit `sampleSeq` (a v26 server's 32-bit `seq`
+  is extended wrap-aware: a wrap is not a restart, going backwards is a duplicate). A range
+  reported on a reply with no record becomes a *gap-only* queue entry (`gap_only`), in order, so it
+  reaches the consumer; a newer `newestSeq` with nothing to carry it likewise, once. A jump the
+  server did not report (an unreadable record, a v26 server) is inferred as a gap. When the 600
+  entry queue evicts undrained records the new oldest entry carries the exact `evict_first..evict_last`
+  range, separate from the server's `gap_first..gap_last`: the server never had it to give versus
+  the application did not drain it. `se_live_perf_status_get` exposes `newest_seq`, `queued_seq`,
+  a reply count and lost/evicted totals, so tests and panels can wait for "everything published has
+  arrived" instead of sleeping.
+- **Model.** `ProfilerModel::Push` orders by the 64-bit sequence (32-bit wrap-aware when absent),
+  keeps gap-only ranges pending until the next frame, and exposes per-frame `HasGap()` (the plot
+  breaks there), `TotalServerLost()` / `TotalDriverEvicted()`, and `LostIn(window)` so an
+  averaging window can state how many frames it is missing.
 
 ### Wire record and counter layout (v27, frozen)
 
@@ -129,17 +173,25 @@ a v27 producer writes 0 and it is never reused.** Appended: 54 slave on-cycles i
 58 to 61 A-bus dummy and unmapped bus buckets, `[xdev * 2 + write]` (F8).
 
 Version handling: the driver reads both forms by the negotiated server version. A v26 record is
-presented with `se_live_perf_frame.valid == SE_LIVE_PERF_V26_VDP1_ELAPSED` only: counter 6 is
+presented with `wire_version == 26` (and no `valid` bit): counter 6 is
 the old figure, shown under its old label ("VDP1 drawing"), and identity, mode, cache mode, the
 Other split and every v27-only counter are "not available". A v27 record is shown as "VDP1
 command work", and as "not available" until `SE_PERF_VALID_VDP1_WORK` is set. A v26 client
 rejects a v27 server at its version check (a v25 client already rejects v26): update emulator and
 app together.
 
-Capability bits (documented in `SeLiveProtocol.h`; the first-reply guarantee is F14):
-`SE_LIVE_CAP_PROFILER` means counters are produced, and a counter-capable build advertises it
-before its first sample; `SE_LIVE_CAP_PROF_FUNCTIONS` means the per-instruction hook exists, so a
-build without debugger support advertises only the first.
+Capability bits (documented in `SeLiveProtocol.h`), both correct in the very first reply (F14):
+`SE_LIVE_CAP_PROFILER` means counters are produced, declared at startup with
+`SeExportSetPerfCapable` (not inferred from the first publication); `SE_LIVE_CAP_PROF_FUNCTIONS`
+means the per-instruction hook exists, so a build without debugger support advertises only the
+first.
+
+Startup order (F14): `SeMednafenFrameHook` calls `SeExportPrepare` (locks and state, server marked
+running so the savestate worker can start), registers every hook and the counter capability, and
+only then `SeExportStart` admits listeners. Moving registration before init would not work:
+`SeStateStartWorker` returns while `sRunning` is false, silently disabling rewind. `SeExportInit` is
+Prepare + Start for callers with nothing to register; a deinit/init cycle clears the profiler
+records, sequence, declared capabilities and the profiler hook.
 
 ### Function attribution (opt-in)
 
@@ -177,11 +229,14 @@ allocator, which the hardware knows nothing about.
 - `sPerfBlk` (the server's record ring) is guarded by `SE_LOCK`; `perfSent`, the newest
   frame a connection has been sent, is local to that connection's serving loop, so the
   local-socket and TCP clients each get every frame.
-- The driver's perf queue is guarded by `ctlMtx`, bounded at 600 records, and cleared on a
-  new connection; `perfSeqSeen` belongs to the poll thread.
+- The driver's perf queue (records and gap-only entries), its sequence cursor, the pending lost
+  range and the totals are guarded by `ctlMtx`, bounded at 600 entries, and reset on a new
+  connection.
 - `ProfilerModel` is UI-thread state. It is cleared on `CloseData`, on
-  `AdoptNewEmulatorInstance`, by the panel's Clear button, and by a `seq` that goes
+  `AdoptNewEmulatorInstance`, by the panel's Clear button, and by a sequence that goes
   backwards (a new emulator run).
+- Frame identity state (`sIdFrame`, `sIdOpen`, `sFrameNo`) is the emulate thread's; `sTimelineId`
+  is atomic.
 
 ## Extension points and constraints
 
@@ -205,10 +260,18 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
   headlessly; drawn figures, tab-driven data requests, disabled attribution, row
   double-click through a row with a hoverable bar.
 - [LiveProfilerTests.cpp](../../../FrontEnd/tests/LiveProfilerTests.cpp): real exporter and
-  real driver; every frame once and intact, `PRF` reaching the emulate-thread hook, and
-  attribution dropped on disconnect.
+  real driver, in lockstep (the producer never gets ahead of what the driver has queued, judged
+  by `se_live_perf_status_get`, never by sleeping); every frame once, intact and gap-free from the
+  first publication, `PRF` reaching the emulate-thread hook, and attribution dropped on disconnect.
+- [LivePerfLossTests.cpp](../../../FrontEnd/tests/LivePerfLossTests.cpp): the section builder
+  (empty and non-empty first replies, exact ring-overrun range, crossing 2^32, deinit/init), the
+  driver against a scripted server (gap-only replies, server loss kept apart from driver eviction,
+  32- and 64-bit sequences), the capability bits of the first reply with and without a debugger,
+  and identity end to end (batch, no snapshot, native load, slot load once, refused load, reconnect,
+  several halts in a frame).
 - [MemoryRoundTripTests.cpp](../../../FrontEnd/tests/MemoryRoundTripTests.cpp) (profiler
-  section): the real glue; counters handed over and zeroed per frame, and
+  section): the real glue, in lockstep with the client; counters handed over and zeroed per
+  frame with consecutive producer-stamped frame numbers, a rewind starting a new timeline, and
   `SeMdfnProfSample` charging cycles to a recorded function, to a raw-PC bucket, per CPU,
   less sleep, and not across a timestamp jump.
 - The panel was also run in the native frontend against a stand-in emulator (the real

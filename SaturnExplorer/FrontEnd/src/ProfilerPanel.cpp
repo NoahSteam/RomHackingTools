@@ -132,7 +132,18 @@ void HistoryStrip(const char* id, const ProfilerModel& model, ImU32 color, float
         pts[i] = ImVec2(p0.x + width - step * static_cast<float>(n - 1 - i),
                         p0.y + height - pad - static_cast<float>(v) * (height - pad * 2.0f));
     }
-    dl->AddPolyline(pts.data(), static_cast<int>(n), color, ImDrawFlags_None, 2.0f);
+    // The line breaks wherever records are missing (lost by the server's ring, or evicted from the
+    // driver's queue): joining the two sides would draw a trend through frames nobody measured.
+    {
+        size_t runStart = 0;
+        for (size_t i = 1; i <= n; ++i)
+        {
+            if (i < n && !model.At(i).HasGap()) continue;
+            if (i - runStart >= 2)
+                dl->AddPolyline(pts.data() + runStart, static_cast<int>(i - runStart), color, ImDrawFlags_None, 2.0f);
+            runStart = i;
+        }
+    }
     if (ImGui::IsItemHovered())
     {
         const float mx = ImGui::GetIO().MousePos.x;

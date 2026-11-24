@@ -71,13 +71,47 @@ void Drain(const se_data_source& ds)
         for (uint32_t i = 0; i < n; ++i) gGot.push_back(batch[i]);
 }
 
+// Lockstep with the client: wait, without ticking, until the driver has queued the newest sequence
+// the exporter published (the section header's newestSeq, as the driver saw it). The server's ring
+// drops what a starved client misses, so a test that ticks freely and sleeps loses frames
+// whenever the client is scheduled late; one that never lets the producer get further ahead than
+// the ring cannot. The deadline only bounds a broken run.
+bool Settle(const se_data_source& ds, int budgetMs = 15000)
+{
+    const unsigned long long want = SeExportPerfNewestSeq();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(budgetMs);
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        se_live_perf_status st = {};
+        if (se_live_perf_status_get(&ds, &st) && st.queued_seq >= want) return true;
+        Sleep(1);
+    }
+    return false;
+}
+
+// Waits for the driver to ingest 'n' more replies than it had: whatever the exporter had to say
+// when this was called has been said and handled, so "nothing more arrived" is a fact, not a guess.
+void AfterReplies(const se_data_source& ds, uint64_t n)
+{
+    se_live_perf_status st = {};
+    se_live_perf_status_get(&ds, &st);
+    const uint64_t target = st.replies + n;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(15000);
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        if (se_live_perf_status_get(&ds, &st) && st.replies >= target) return;
+        Sleep(1);
+    }
+}
+
+// One frame at a time, never ahead of the client.
 template <typename Pred>
 bool Until(Pred pred, const se_data_source& ds, bool withPerf = true)
 {
     for (int i = 0; i < 600; ++i)
     {
         EmulatorFrame(withPerf);
-        Sleep(5);
+        if (withPerf) Check(Settle(ds), "the client keeps up with the producer");
         Drain(ds);
         if (pred()) return true;
     }
@@ -111,6 +145,12 @@ int main()
     se_context* ctx = se_create(&ds, &cfg);
     if (!ctx) { std::cerr << "se_create failed\n"; SeExportDeinit(); return 1; }
 
+    // The first replies are built before anything was published: they are empty, and every record
+    // published afterwards must still arrive (a first reply is not "nothing sent yet").
+    for (int i = 0; i < 2000 && se_live_server_version(&ds) == 0; ++i) Sleep(2);
+    AfterReplies(ds, 3);
+    Check(SeExportPerfNewestSeq() == 0, "nothing was published before the client's first replies");
+
     // Counters arrive without anything being asked for.
     Check(Until([] { return gGot.size() >= 20; }, ds), "perf frames arrive");
     Check(se_live_server_version(&ds) == SE_LIVE_VERSION, "the server speaks v27");
@@ -122,7 +162,8 @@ int main()
     for (size_t i = 0; i < gGot.size(); ++i)
     {
         const se_live_perf_frame& f = gGot[i];
-        if (i && f.seq <= gGot[i - 1].seq) ordered = false;   // never the same frame twice, never backwards
+        if (i && f.seq != gGot[i - 1].seq + 1) ordered = false;   // every frame, once, in order: no gap
+        if (f.sample_seq != i + 1 || f.gap_last != 0 || f.gap_first != 0 || f.evict_last != 0) ordered = false;
         if (f.counter_count != SE_PERF_COUNT) intact = false;
         for (unsigned k = 0; k < SE_PERF_COUNT && intact; ++k)
             if (f.counters[k] != CounterValue(f.seq, k)) intact = false;
@@ -138,12 +179,19 @@ int main()
 
     // Snapshots that carry no NEW completed frame (a paused emulator, a debugger halt) repeat
     // the last frame's block; the client must not count it again.
-    Drain(ds);
-    for (int i = 0; i < 5; ++i) { EmulatorFrame(false); Sleep(5); }   // let in-flight replies land
+    Check(Settle(ds), "everything published has been delivered");
     Drain(ds);
     const size_t before = gGot.size();
-    for (int i = 0; i < 40; ++i) { EmulatorFrame(false); Sleep(5); Drain(ds); }
+    for (int i = 0; i < 40; ++i) EmulatorFrame(false);
+    AfterReplies(ds, 4);   // the replies that carry (and repeat) the last frame's block have been handled
+    Drain(ds);
     Check(gGot.size() == before, "a repeated frame is not delivered twice");
+    {
+        se_live_perf_status st = {};
+        se_live_perf_status_get(&ds, &st);
+        Check(st.queued_seq == SeExportPerfNewestSeq() && st.server_lost == 0 && st.driver_evicted == 0,
+              "and nothing was lost on the way");
+    }
 
     // The v27 fields a producer does fill reach the client, every one distinct and non-zero.
     {
@@ -185,7 +233,8 @@ int main()
     }
     // Restating the same setting sends nothing more.
     se_live_set_profiler(&ds, SE_LIVE_PROF_FUNCTIONS);
-    for (int i = 0; i < 20; ++i) { EmulatorFrame(); Sleep(5); }
+    for (int i = 0; i < 20; ++i) { EmulatorFrame(); Check(Settle(ds), "the client keeps up"); }
+    AfterReplies(ds, 3);
     Check(gHookCalls.load() == 1, "an unchanged setting is not re-applied");
 
     se_live_set_profiler(&ds, 0);

@@ -634,9 +634,20 @@ int main()
                 for (uint16& w : WorkRAMH) w ^= 0xFFFF;
                 const int loadsBefore = gLoads.load();
                 const std::vector<uint8_t> blob = sfe::EncodeEditBlob(staged);
+                unsigned tlBefore = 0; unsigned long long frBefore = 0;
+                SeExportFrameIdentity(&tlBefore, &frBefore);
                 Check(se_load_state(ctx, 1, state.data(), state.size(), blob.data(), blob.size()) == SE_OK,
                       m + ": Play From Here is accepted");
                 Check(Until([&] { return gLoads.load() == loadsBefore + 1; }), m + ": the state is restored");
+                {
+                    // The restore replaced the machine: a new timeline, and the numbering resumed from
+                    // the loaded frame (1) -- the frame that ran after the load was 2, so 3 is next --
+                    // although frame numbers up to frBefore had already been used on the old timeline.
+                    unsigned tlAfter = 0; unsigned long long frAfter = 0;
+                    SeExportFrameIdentity(&tlAfter, &frAfter);
+                    Check(tlAfter == tlBefore + 1 && frAfter == 3 && frBefore > 3,
+                          m + ": a rewind starts a new timeline and reuses an already-used frame number");
+                }
                 size_t i = 0;
                 for (const Region& reg : kRegions)
                 {
@@ -666,8 +677,27 @@ int main()
             uint32_t n;
             while ((n = se_live_drain_perf(&ds, b, 8)) != 0) got.insert(got.end(), b, b + n);
         };
+        // Lockstep with the client. The server keeps the last 16 records and drops what a client that
+        // was scheduled late missed, so a test that ticks freely and sleeps loses the very frame it
+        // is looking for now and then. Every frame of interest is produced by ONE tick, after which
+        // nothing ticks until the driver holds the newest sequence the exporter published (the
+        // section header's newestSeq), so nothing it asserts about can have been dropped.
+        auto settle = [&]() -> bool
+        {
+            const unsigned long long want = SeExportPerfNewestSeq();
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+            while (std::chrono::steady_clock::now() < deadline)
+            {
+                se_live_perf_status st = {};
+                if (se_live_perf_status_get(&ds, &st) && st.queued_seq >= want) return true;
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            return false;
+        };
         // One frame's counters reach the client, and the next frame starts from zero.
         Until([&] { drain(); return !got.empty(); });
+        Check(settle(), "profiler: the client has caught up with the exporter");
+        drain();
         got.clear();
         SeSsPerfC[SE_PERF_FRAME_CYCLES] = 477000;
         SeSsPerfC[SE_PERF_VDP1_COMMANDS] = 321;
@@ -675,26 +705,30 @@ int main()
         EmulatorTick();
         Check(SeSsPerfC[SE_PERF_FRAME_CYCLES] == 0 && SeSsPerfC[SE_PERF_VDP1_COMMANDS] == 0,
               "profiler: the glue zeroes the counters once a frame is handed over");
-        bool seen = false, zeroAfter = false;
-        Check(Until([&]
-              {
-                  drain();
-                  for (size_t i = 0; i < got.size(); ++i)
-                  {
-                      if (got[i].counters[SE_PERF_FRAME_CYCLES] != 477000) continue;
-                      seen = got[i].counter_count == SE_PERF_COUNT && got[i].counters[SE_PERF_VDP1_COMMANDS] == 321 &&
-                             got[i].counters[SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2 + 1] == 0x100000002ull;
-                      if (i + 1 < got.size()) zeroAfter = got[i + 1].counters[SE_PERF_FRAME_CYCLES] == 0;
-                  }
-                  return seen && zeroAfter;
-              }),
-              "profiler: a frame's counters arrive intact, and belong to that frame alone");
+        EmulatorTick();   // the next frame, counted from zero
+        Check(settle(), "profiler: both frames reached the client");
+        drain();
+        Check(got.size() == 2, "profiler: exactly the two frames just produced arrived");
+        if (got.size() == 2)
+        {
+            Check(got[0].counters[SE_PERF_FRAME_CYCLES] == 477000 && got[0].counter_count == SE_PERF_COUNT &&
+                      got[0].counters[SE_PERF_VDP1_COMMANDS] == 321 &&
+                      got[0].counters[SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2 + 1] == 0x100000002ull,
+                  "profiler: a frame's counters arrive intact");
+            Check(got[1].counters[SE_PERF_FRAME_CYCLES] == 0 && got[1].counters[SE_PERF_VDP1_COMMANDS] == 0,
+                  "profiler: and belong to that frame alone");
+            Check(got[1].sample_seq == got[0].sample_seq + 1 && got[1].gap_last == 0 &&
+                      (got[0].valid & SE_PERF_VALID_IDENTITY) && (got[1].valid & SE_PERF_VALID_IDENTITY) &&
+                      got[1].timeline_id == got[0].timeline_id && got[1].frame_no == got[0].frame_no + 1,
+                  "profiler: consecutive, with the producer's own consecutive frame numbers");
+        }
 
         // Function attribution. Off until asked for; the request arms the emulator's hook.
         Check(gProfActive == 0, "profiler: the per-instruction hook is not armed unasked");
         se_live_set_profiler(&ds, SE_LIVE_PROF_FUNCTIONS);
         Check(Until([&] { return gProfActive == 1; }), "profiler: PRF arms the per-instruction hook");
         EmulatorTick();   // a frame boundary: the sampler starts the next frame unsynchronized
+        Check(settle(), "profiler: the client has caught up before the attributed frame");
         drain();
         got.clear();
 
@@ -715,14 +749,11 @@ int main()
         SeSsPerfC[SE_PERF_FRAME_CYCLES] = 5000;
         EmulatorTick();
         const se_live_perf_frame* f = nullptr;
-        Check(Until([&]
-              {
-                  drain();
-                  for (const se_live_perf_frame& x : got)
-                      if (x.counters[SE_PERF_FRAME_CYCLES] == 5000) f = &x;
-                  return f != nullptr;
-              }),
-              "profiler: the attributed frame arrives");
+        Check(settle(), "profiler: the attributed frame reached the client");
+        drain();
+        for (const se_live_perf_frame& x : got)
+            if (x.counters[SE_PERF_FRAME_CYCLES] == 5000) f = &x;
+        Check(f != nullptr && got.size() == 1, "profiler: the attributed frame arrives, alone");
         if (f)
         {
             Check((f->flags & SE_LIVE_PROF_FUNCTIONS) != 0, "profiler: the frame is flagged as attributed");

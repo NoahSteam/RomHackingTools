@@ -213,6 +213,46 @@ static void SeStepFramePublished(void)
 }
 static volatile unsigned long long sFrameNo;
 
+/* ---- Frame identity for the profiler (F3). A record is stamped (timeline, frame) by the producer.
+ * The frame under execution has its number reserved at the top-of-frame gate -- after a pending
+ * load was applied, before the guest runs -- and committed once when Emulate() completes
+ * (SeExportEndFrame). Snapshots (ordinary and mid-frame halts) and the end-of-frame perf record all
+ * read the same reservation, so a frame that took no snapshot (NeedSoundReverse) or took several
+ * halts still reports its own number. The timeline changes on every successful replacement of
+ * machine state: an SE rewind or slot load (SeStateAfterRestore) or a native load that reaches
+ * SeExportNotifyStateLoaded. Emulate thread only, except sTimelineId which is atomic. ---- */
+static volatile int sTimelineId = 1;
+static unsigned long long sIdFrame;     /* number of the frame now executing */
+static int sIdOpen;                      /* sIdFrame is reserved and not yet committed */
+static int sIdSnapped;                   /* a normal snapshot already took sIdFrame (no EndFrame yet) */
+static int sInSeLoad;                    /* an SE-initiated load is running: its PostStateLoad is not a second change */
+
+/* Reserve the number of the frame about to run. */
+static void SeIdReserve(void)
+{
+    sIdFrame = sFrameNo + 1;
+    sIdOpen = 1;
+    sIdSnapped = 0;
+}
+
+int SeExportFrameIdentity(unsigned int* timelineId, unsigned long long* frameNo)
+{
+    if (timelineId) *timelineId = (unsigned int)SeAtLoad(&sTimelineId);
+    if (frameNo) *frameNo = sIdOpen ? sIdFrame : sFrameNo + 1;
+    return 1;
+}
+
+static void SeBumpTimeline(void)
+{
+    if (SeAtAddFetch(&sTimelineId, 1) == 0) SeAtStore(&sTimelineId, 1);   /* 0 is never a timeline */
+}
+
+void SeExportNotifyStateLoaded(void)
+{
+    if (sInSeLoad) return;   /* SeStateAfterRestore owns this change */
+    SeBumpTimeline();
+}
+
 /* ---- Stop-event state (v5+). When the emulator halts on an execution
  * breakpoint, Yabause's breakpoint callback calls SeExportNotifyStop(); the next
  * snapshot's control block reports it so the debugger can jump to the halted PC.
@@ -638,6 +678,10 @@ static unsigned           sPendingStateEpoch;
 static void SeServiceEmuSave(void);
 void SeExportEndFrame(void)
 {
+    /* Commit the frame's identity, once, whether or not it took a snapshot. */
+    sFrameNo = sIdOpen ? sIdFrame : sFrameNo + 1;
+    sIdOpen = 0;
+    sIdSnapped = 0;
     SeServiceEmuSave();   /* a frame just ended: the state is whole */
     if (!sPendingState) return;
     sPendingState = 0;
@@ -691,6 +735,7 @@ static void SeStateAfterRestore(void)
     { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
     ++sRestoreAckPending;   /* each restore is counted done when the next frame lands in the emptied ring */
     SE_UNLOCK();
+    SeBumpTimeline();   /* the machine was replaced: the next frame belongs to a new timeline */
     /* The restored machine has its own, different SH-2 stacks; every frame we recorded
      * belongs to the timeline we just abandoned, and the returns that would have unwound
      * them will never execute. Drop them rather than let them sit under whatever the
@@ -715,13 +760,18 @@ static void SeStateApplyLoad(const unsigned char* buf, size_t len)
     if ((size_t)8 + edits_len > len) { SeRestoreFailed(); return; }   /* malformed */
     state = buf + 8 + edits_len;
     state_len = len - 8 - (size_t)edits_len;
-    if (sLoadState(state, state_len) == 0)
+    sInSeLoad = 1;   /* the emulator's own PostStateLoad notification is this load, not a second one */
     {
-        SeStateApplyEdits(buf + 8, edits_len);   /* patch RAM on top of the restore */
-        sFrameNo = frame;
-        SeStateAfterRestore();
+        const int loaded = sLoadState(state, state_len);
+        sInSeLoad = 0;
+        if (loaded == 0)
+        {
+            SeStateApplyEdits(buf + 8, edits_len);   /* patch RAM on top of the restore */
+            sFrameNo = frame;                        /* the first frame after a rewind to N is N + 1 */
+            SeStateAfterRestore();
+        }
+        else { SeExportLog("rewind: load state failed"); SeRestoreFailed(); }
     }
-    else { SeExportLog("rewind: load state failed"); SeRestoreFailed(); }
 }
 
 static void SeStateConsumeLoad(void)
@@ -920,15 +970,23 @@ static volatile int sProfWanted;      /* SE_LIVE_PROF_* the client asked for */
 static volatile int sProfPending;     /* sProfWanted changed and has not been applied */
 static volatile int sProfApplied;     /* what the emulator is running with (emulate thread writes) */
 static volatile int sPerfWired;       /* the emulator has handed over counters at least once */
+static volatile int sPerfCapable;     /* the build produces counters (declared up front, F14) */
 #define SE_PERF_RING 16u
 static unsigned char sPerfBlk[SE_PERF_RING][SE_LIVE_PERF_MAX_LEN];   /* guarded by SE_LOCK */
 static unsigned int  sPerfLen[SE_PERF_RING];
-static unsigned int  sPerfSeqOf[SE_PERF_RING];   /* 0 = empty slot */
-static unsigned int  sPerfSeq;                   /* frames handed over so far */
+static unsigned long long sPerfSeqOf[SE_PERF_RING];   /* 0 = empty slot */
+static unsigned long long sPerfSeq;                   /* publications so far; 64-bit, never wraps in practice */
 
 void SeExportSetProfilerHook(void (*set)(unsigned int flags))
 {
     sSetProfiler = set;
+}
+
+/* The build produces counters. Declared at startup, before listeners are admitted, so the first
+ * reply already advertises SE_LIVE_CAP_PROFILER instead of waiting for the first publication. */
+void SeExportSetPerfCapable(int capable)
+{
+    SeAtStore(&sPerfCapable, capable ? 1 : 0);
 }
 
 unsigned int SeExportProfilerFlags(void)
@@ -1368,7 +1426,14 @@ static int SeGateDecide(int frameBoundary)
         const int slot = pendingSlot - 1;
         if (pendingSlot != 0)
         {
-            if (sEmuSlotLoad && sEmuSlotLoad((unsigned int)slot) == 0)
+            int loaded = -1;
+            if (sEmuSlotLoad)
+            {
+                sInSeLoad = 1;
+                loaded = sEmuSlotLoad((unsigned int)slot);
+                sInSeLoad = 0;
+            }
+            if (loaded == 0)
             {
                 SeStateAfterRestore();
             }
@@ -1415,6 +1480,8 @@ static int SeGateRelease(int frameBoundary)
      * CPU with its temporary breakpoint (Step Over, Run to Cursor) still unapplied, which a short
      * subroutine can run straight past. */
     if (run) SeApplyPendingInstalls();
+    /* The frame about to run: any pending load has been applied, the guest has not started. */
+    if (run && frameBoundary) SeIdReserve();
     return run;
 }
 
@@ -1662,12 +1729,11 @@ void SeExportPublishPerf(const unsigned long long* counters, unsigned int count,
     if (!counters) count = 0;
     if (!fnKeys || !fnCycles) fnCount = 0;
     SE_LOCK();
-    ++sPerfSeq;
-    if (sPerfSeq == 0) sPerfSeq = 1;   /* 0 means "no frame yet" on the wire */
-    slot = sPerfSeq % SE_PERF_RING;
+    ++sPerfSeq;   /* 64-bit: starts at 1, 0 means "no frame yet" on the wire, and it does not wrap */
+    slot = (unsigned int)(sPerfSeq % SE_PERF_RING);
     p = sPerfBlk[slot];
     /* v27 record, field order frozen in SeLiveProtocol.h. */
-    SeWr64(p, sPerfSeq);                                  p += 8;   /* v27 Step 0: filled by F3 (64-bit server sequence) */
+    SeWr64(p, sPerfSeq);                                  p += 8;
     SeWr32(p, info->timelineId);                          p += 4;
     SeWr64(p, info->frameNo);                             p += 8;
     SeWr32(p, (info->valid & SE_PERF_VALID_MODE) ? info->mode
@@ -1691,6 +1757,85 @@ void SeExportPublishPerf(const unsigned long long* counters, unsigned int count,
     sPerfSeqOf[slot] = sPerfSeq;
     SE_UNLOCK();
     SeAtStore(&sPerfWired, 1);
+}
+
+/* Build one reply's perf section for the connection whose position is 'c' (header: u32 count, u64
+ * newestSeq, u64 lostFirst, u64 lostLast; then the records) and advance the cursor. 'out' holds at
+ * least SE_EXPORT_PERF_SECTION_MAX bytes. Returns the length. */
+size_t SeExportBuildPerfSection(SeExportPerfCursor* c, unsigned char* out)
+{
+    unsigned char* rec = out + SE_EXPORT_PERF_HEADER_LEN;
+    unsigned int cnt = 0;
+    unsigned long long k, newest, lostFirst = 0, lostLast = 0;
+    SE_LOCK();
+    /* A connection made mid-run starts with the newest publication only, not a stale backlog.
+     * That is not a loss: nothing was ever owed to it. The decision is taken on the FIRST reply,
+     * empty or not -- "nothing sent yet" cannot stand for it, or a first reply built before the
+     * first publication would later skip the early records. */
+    if (!c->started)
+    {
+        c->started = 1;
+        if (sPerfSeq > 1) c->sent = sPerfSeq - 1;
+    }
+    /* Whatever the ring no longer holds between the cursor and the newest publication is lost to
+     * this connection: say so, as the exact range. */
+    if (sPerfSeq - c->sent > SE_PERF_RING)
+    {
+        lostFirst = c->sent + 1;
+        c->sent = sPerfSeq - SE_PERF_RING;
+        lostLast = c->sent;
+    }
+    for (k = c->sent + 1; cnt < SE_LIVE_PERF_MAX_PER_REPLY && k <= sPerfSeq; ++k)
+    {
+        const unsigned int slot = (unsigned int)(k % SE_PERF_RING);
+        if (sPerfSeqOf[slot] != k || sPerfLen[slot] == 0 || sPerfLen[slot] > SE_LIVE_PERF_MAX_LEN)
+        {
+            /* Not deliverable (cannot happen inside the ring window; kept so a broken slot is
+             * reported as lost rather than as a silent hole). Only a leading run can be expressed
+             * as the one lost range of a reply. */
+            if (cnt == 0)
+            {
+                if (!lostFirst) lostFirst = k;
+                lostLast = k;
+                c->sent = k;
+            }
+            continue;
+        }
+        SeWr32(rec, sPerfLen[slot]);
+        memcpy(rec + 4, sPerfBlk[slot], sPerfLen[slot]);
+        rec += 4 + sPerfLen[slot];
+        ++cnt;
+        c->sent = k;
+    }
+    newest = sPerfSeq;
+    SE_UNLOCK();
+    /* The lost range ends just before this reply's first record, or at the newest publication
+     * when the reply carries none. */
+    SeWr32(out, cnt);
+    SeWr64(out + 4, newest);
+    SeWr64(out + 12, lostFirst);
+    SeWr64(out + 20, lostLast);
+    return (size_t)(rec - out);
+}
+
+#if defined(SE_EXPORT_TEST_HOOKS)
+/* Test builds only: start the publication sequence part-way (a 64-bit sequence cannot be walked
+ * across 2^32 one record at a time). The ring must be empty. */
+void SeExportTestSetPerfSeq(unsigned long long seq)
+{
+    SE_LOCK();
+    sPerfSeq = seq;
+    SE_UNLOCK();
+}
+#endif
+
+unsigned long long SeExportPerfNewestSeq(void)
+{
+    unsigned long long n;
+    SE_LOCK();
+    n = sPerfSeq;
+    SE_UNLOCK();
+    return n;
 }
 
 static volatile unsigned int sCallStackEpoch;
@@ -1745,7 +1890,9 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     /* Nobody attached: capture nothing. The ring copy and the staged savestate below would
      * both be thrown away unread, and the savestate is the single most expensive thing the
      * emulate thread does per frame. Capture resumes on the first frame after a client
-     * attaches; the frame counter simply stands still across the gap. */
+     * attaches. The frame counter does not stand still across the gap any more: the frame number
+     * is committed once per emulated frame (SeExportEndFrame), snapshot or not, so a profiler
+     * record's identity is the emulator's own count. */
     if (!SeExportHasClient())
     {
         return;
@@ -1786,10 +1933,28 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
      * frame. Tag it with the current number so the counter keeps counting emulated frames -- 300
      * halts used to advance it by 300 while the machine moved a few hundred instructions -- and a
      * GET with nothing newer serves the latest slot, which is this one. */
-    sRingFrame[sRingWrite] = (SeAtLoad(&sPaused) && SE_STOP_REASON(dst->stop) != SE_LIVE_STOP_NONE &&
-                              sFrameNo != 0)
-                                 ? sFrameNo      /* a halt: a moment inside the current frame */
-                                 : ++sFrameNo;   /* a frame (free-running, or granted by a step) */
+    if (SeAtLoad(&sPaused) && SE_STOP_REASON(dst->stop) != SE_LIVE_STOP_NONE)
+    {
+        if (sFrameNo != 0)
+            sRingFrame[sRingWrite] = sFrameNo;   /* a halt: a moment inside the current frame */
+        else
+        {
+            /* The very first halt: slot 0 means "empty", so it takes number 1 and the frame now
+             * running is renamed 2, as the halt consumed the number before the frame completed. */
+            sRingFrame[sRingWrite] = ++sFrameNo;
+            SeIdReserve();
+        }
+    }
+    else
+    {
+        /* A frame (free-running, or granted by a step): it takes the number the gate reserved. A
+         * second snapshot without a gate or an end-of-frame in between (a glue that has neither)
+         * is a new frame. */
+        if (!sIdOpen || sIdSnapped) SeIdReserve();
+        sIdSnapped = 1;
+        sFrameNo = sIdFrame;
+        sRingFrame[sRingWrite] = sFrameNo;
+    }
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
     if (sRestoreAckPending) { sRestoreDone += sRestoreAckPending; sRestoreAckPending = 0; }   /* first post-restore frame */
     /* How many loads have been settled, one way or the other: the stamp each savestate block of
@@ -1987,7 +2152,7 @@ static int SeRecvPokeStream(SeConn cl, int sound, unsigned int count, unsigned i
 }
 
 static void SeServeClientLoop(SeConn cl, SeFrame* snap);
-static void SeServeClientRequests(SeConn cl, SeFrame* snap, unsigned int* perfSentP, unsigned char* perfOut);
+static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut);
 
 /* Count this client in for as long as it is attached. A wrapper around the serve loop, rather
  * than a bump at each of the three accept sites: the loop returns from a dozen places on any I/O
@@ -2016,14 +2181,16 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
     /* v26: the newest profiler frame this connection has been sent (0 = none yet), and the
      * buffer its unsent records are copied into. Heap, not stack: 20 KiB, and two server
      * threads. */
-    unsigned int perfSent = 0;
-    unsigned char* perfOut = (unsigned char*)malloc((size_t)SE_LIVE_PERF_MAX_PER_REPLY * (4u + SE_LIVE_PERF_MAX_LEN));
+    SeExportPerfCursor perfSent;
+    unsigned char* perfOut = (unsigned char*)malloc((size_t)SE_EXPORT_PERF_SECTION_MAX);
     if (!perfOut) return;
+    perfSent.sent = 0;
+    perfSent.started = 0;   /* "first reply" is its own state: 0 sent can also mean an empty ring */
     SeServeClientRequests(cl, snap, &perfSent, perfOut);
     free(perfOut);
 }
 
-static void SeServeClientRequests(SeConn cl, SeFrame* snap, unsigned int* perfSentP, unsigned char* perfOut)
+static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut)
 {
 #define perfSent (*perfSentP)
     SeLogPortDevices();   /* report the emulator's controller config on connect */
@@ -2289,7 +2456,9 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, unsigned int* perfSe
             if (sWriteVdpByte)       caps |= SE_LIVE_CAP_VDP_POKE;
             if (SeAtLoad(&sGateSeen)) caps |= SE_LIVE_CAP_FRAME_GATE;
             if (sEmuSlotSave)        caps |= SE_LIVE_CAP_EMU_SAVE;
-            if (SeAtLoad(&sPerfWired)) caps |= SE_LIVE_CAP_PROFILER;   /* v27 Step 0: filled by F14 (from the first reply, before any sample) */
+            /* From the first reply: a counter-capable build declares itself at startup (F14), so this
+             * does not wait for the first publication. */
+            if (SeAtLoad(&sPerfCapable) || SeAtLoad(&sPerfWired)) caps |= SE_LIVE_CAP_PROFILER;
             if (sSetProfiler)        caps |= SE_LIVE_CAP_PROF_FUNCTIONS;
             SE_SLOCK();
             if (sStateCap && sLoadState) caps |= SE_LIVE_CAP_STATE_REWIND;   /* the worker sized a real state */
@@ -2492,37 +2661,10 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, unsigned int* perfSe
         }
 
         /* v26/v27 trailing section: the profiler records this connection has not been sent yet,
-         * oldest first. u32 count, then per record u32 length + the body SeExportPublishPerf
-         * serialized. Copied out under the lock, sent outside it. */
+         * oldest first, built under the lock into one buffer and sent outside it. */
         {
-            unsigned char* out = perfOut;
-            unsigned char cntb[28];
-            unsigned int cnt = 0, k, newest;
-            SE_LOCK();
-            /* A connection made mid-run starts with the newest frame only, not a stale backlog. */
-            if (perfSent == 0 && sPerfSeq > 1) perfSent = sPerfSeq - 1;
-            if (sPerfSeq < perfSent) perfSent = 0;   /* the counter wrapped */
-            if (sPerfSeq - perfSent > SE_PERF_RING) perfSent = sPerfSeq - SE_PERF_RING;
-            for (k = perfSent + 1; cnt < SE_LIVE_PERF_MAX_PER_REPLY && k != sPerfSeq + 1; ++k)
-            {
-                const unsigned int slot = k % SE_PERF_RING;
-                if (sPerfSeqOf[slot] != k || sPerfLen[slot] == 0 || sPerfLen[slot] > SE_LIVE_PERF_MAX_LEN)
-                    continue;
-                SeWr32(out, sPerfLen[slot]);
-                memcpy(out + 4, sPerfBlk[slot], sPerfLen[slot]);
-                out += 4 + sPerfLen[slot];
-                ++cnt;
-                perfSent = k;
-            }
-            newest = sPerfSeq;
-            SE_UNLOCK();
-            /* v27 section header: count, newestSeq, lostFirst, lostLast. */
-            SeWr32(cntb, cnt);
-            SeWr64(cntb + 4, newest);
-            SeWr64(cntb + 12, 0);   /* v27 Step 0: filled by F3 (lostFirst: the dropped range for this connection) */
-            SeWr64(cntb + 20, 0);   /* v27 Step 0: filled by F3 (lostLast) */
-            if (SeSend(cl, cntb, 28) != 0) return;
-            if (out != perfOut && SeSend(cl, perfOut, (size_t)(out - perfOut)) != 0) return;
+            const size_t n = SeExportBuildPerfSection(&perfSent, perfOut);
+            if (SeSend(cl, perfOut, n) != 0) return;
         }
     }
 }
@@ -2720,7 +2862,16 @@ const char* SeExportTitleSuffix(const char* emu_name, const char* emu_rev)
     return buf;
 }
 
-int SeExportInit(void)
+/* Initialization is two steps so hooks can be installed BEFORE a listener exists (F14). The listener
+ * threads read the hook pointers (the capability word of the very first reply, the profiler setter)
+ * with no lock, so a hook registered after SeExportInit could be seen half-published, or not at all
+ * by a client that asks at the first instant. Prepare brings up locks and state with sRunning set --
+ * the savestate worker needs it, which is why registration cannot simply move BEFORE init -- and
+ * Start admits listeners. SeExportInit is both, for callers with nothing to register in between. */
+static int sPrepared;     /* SeExportPrepare ran and SeExportDeinit has not */
+static int sStarted;      /* the listener threads exist */
+
+int SeExportPrepare(void)
 {
     if (sShutdownIncomplete)
     {
@@ -2728,6 +2879,11 @@ int SeExportInit(void)
          * over them would give the survivor a frame ring that two threads write. */
         fprintf(stderr, "[SaturnExplorer] live tap: not restarting -- a thread from the previous "
                         "session never exited\n");
+        return -1;
+    }
+    if (sPrepared)
+    {
+        fprintf(stderr, "[SaturnExplorer] live tap: already initialized\n");
         return -1;
     }
     {
@@ -2742,6 +2898,17 @@ int SeExportInit(void)
     sRingWrite = 0;
     SeAtStore(&sPaused, 0); SeCancelSteps(); sFrameNo = 0; SeAtStore(&sClients, 0); SeAtStore(&sRewindWanted, 1);
     SeAtStore(&sProfWanted, 0); SeAtStore(&sProfPending, 0); SeAtStore(&sProfApplied, 0);
+    /* Nothing of a previous run survives into this one: not its profiler records, its sequence, its
+     * identity reservation, nor the capabilities it declared. */
+    sSetProfiler = 0;
+    SeAtStore(&sPerfWired, 0); SeAtStore(&sPerfCapable, 0);
+    {
+        unsigned int i;
+        for (i = 0; i < SE_PERF_RING; ++i) { sPerfLen[i] = 0; sPerfSeqOf[i] = 0; }
+        sPerfSeq = 0;
+    }
+    sIdFrame = 0; sIdOpen = 0; sIdSnapped = 0; sInSeLoad = 0;
+    SeAtStore(&sTimelineId, 1);
     SeAtStore64(&sStopWord, 0);
     /* Savestate rewind (v16): the worker + buffer pool are created lazily when a save hook is
      * wired (SeExportSetSaveStateHook); here we only reset the bookkeeping for a fresh session. */
@@ -2755,6 +2922,15 @@ int SeExportInit(void)
     InitializeCriticalSection(&sLock);
     InitializeCriticalSection(&sStateLock);
     sLocksReady = 1;   /* both CSes are now real -- enable locking BEFORE any locking thread starts */
+#endif
+    sPrepared = 1;
+    return 0;
+}
+
+int SeExportStart(void)
+{
+    if (!sPrepared || sStarted) return -1;
+#if defined(_WIN32)
     sThread = CreateThread(NULL, 0, SeServerThread, NULL, 0, NULL);
     if (!sThread) { SeAtStore(&sRunning, 0); return -1; }
 #else
@@ -2763,11 +2939,18 @@ int SeExportInit(void)
      * local socket, which is the primary path for native clients. */
     sTcpThreadStarted = (pthread_create(&sTcpThread, NULL, SeTcpServerThread, NULL) == 0);
 #endif
+    sStarted = 1;
     /* Surface the protocol version so a client/emulator mismatch is diagnosable
      * (Saturn Explorer must be built for the same SE_LIVE_VERSION to capture). */
     fprintf(stderr, "[SaturnExplorer] live tap ready: protocol v%u\n",
             (unsigned)SE_LIVE_VERSION);
     return 0;
+}
+
+int SeExportInit(void)
+{
+    if (SeExportPrepare() != 0) return -1;
+    return SeExportStart();
 }
 
 void SeExportDeinit(void)
@@ -2781,7 +2964,7 @@ void SeExportDeinit(void)
         /* The state worker only ever sleeps between queue polls, so clearing its flag is enough
          * and it needs no nudge. The server does (see SeWinWakeServer). */
         int joined = SeWinJoinThread(&sStateWorker, 0);
-        if (!SeWinJoinThread(&sThread, 1))
+        if (sStarted && !SeWinJoinThread(&sThread, 1))
         {
             joined = 0;
         }
@@ -2810,7 +2993,7 @@ void SeExportDeinit(void)
     if (sListenFd >= 0) { shutdown(sListenFd, SHUT_RDWR); close(sListenFd); sListenFd = -1; }
     if (sTcpListenFd >= 0) { shutdown(sTcpListenFd, SHUT_RDWR); close(sTcpListenFd); sTcpListenFd = -1; }
     SeInterruptClients();   /* a client that stopped answering would otherwise pin the joins below */
-    pthread_join(sThread, NULL);
+    if (sStarted) pthread_join(sThread, NULL);   /* Prepare without Start has no thread to join */
     if (sTcpThreadStarted) { pthread_join(sTcpThread, NULL); sTcpThreadStarted = 0; }
     SeStateShutdown();
 #endif
@@ -2827,4 +3010,6 @@ void SeExportDeinit(void)
         sPokeBoxBytes = 0;
         SeAtStore(&sPokePending, 0);
     }
+    sStarted = 0;
+    sPrepared = 0;
 }

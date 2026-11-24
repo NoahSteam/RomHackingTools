@@ -1122,6 +1122,7 @@ SS_CACHE_MODE_HOOK = " SeSsCacheMode = NeedEmuICache ? SE_PERF_CACHE_ON : SE_PER
 FWD_DECLS = (
     "extern \"C\" void SeMednafenFrameHook(void);\n"
     "extern \"C\" void SeMednafenEndFrameHook(void);\n"
+    "extern \"C\" void SeExportNotifyStateLoaded(void);\n"
     "extern \"C\" int  SeExportGateFrame(void);\n"
     "extern \"C\" int  SeExportGateHalt(void);\n"
     "extern \"C\" void SeExportNotifyStop(int cpu, unsigned int pc);\n"
@@ -1204,6 +1205,14 @@ END_FRAME_HOOK = (
     " SeMednafenEndFrameHook();\n"
 )
 END_FRAME_ANCHOR = r'(\n)\}\n\nstatic void OutputMIDI\(uint8 v\)'
+
+# A native (emulator-initiated) state load replaces the machine: the profiler's frame identity moves
+# to a new timeline. Anchored inside StateAction's `if(load)` block, on the last PostStateLoad. A load
+# the server itself ordered reaches this too and is recognized there (SeExportNotifyStateLoaded).
+STATE_LOADED_HOOK = (
+    "  SeExportNotifyStateLoaded();   /* Saturn Explorer: a new profiler timeline begins */\n"
+)
+STATE_LOADED_ANCHOR = r'(CPU\[1\]\.PostStateLoad\([^;]*\);\s*\n)'
 
 # Optional pause/step gate at the top of Emulate() (opt-in: can disturb audio timing).
 GATE_HOOK = (
@@ -1352,6 +1361,8 @@ def process_ss(src_dir, do_write, with_pause):
     text, n = apply_anchored(text, FRAME_ANCHOR, FRAME_HOOK, "SeMednafenFrameHook();")
     notes.append(n)
     text, n = apply_anchored(text, END_FRAME_ANCHOR, END_FRAME_HOOK, "SeMednafenEndFrameHook();")
+    notes.append(n)
+    text, n = apply_anchored(text, STATE_LOADED_ANCHOR, STATE_LOADED_HOOK, "SeExportNotifyStateLoaded();")
     notes.append(n)
     if with_pause:
         text, n = apply_anchored(text, GATE_ANCHOR, GATE_HOOK, "while (!SeExportGateFrame())")
