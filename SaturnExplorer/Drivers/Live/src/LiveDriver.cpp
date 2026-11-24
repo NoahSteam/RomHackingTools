@@ -205,8 +205,8 @@ void MergeGap(uint64_t& first, uint64_t& last, uint64_t addFirst, uint64_t addLa
 {
     if (addLast == 0) return;
     if (last == 0) { first = addFirst; last = addLast; return; }
-    first = std::min(first, addFirst);
-    last = std::max(last, addLast);
+    first = (std::min)(first, addFirst);
+    last = (std::max)(last, addLast);
 }
 
 // The ingestion state of one connection's perf queue (the caller holds the lock guarding it).
@@ -253,7 +253,7 @@ void IngestPerf(const PerfIngest& st, LivePerf& in, uint32_t deliveringFrame, si
         }
         // A jump the server did not report (a record this client could not read, or a v26 server,
         // which cannot report one) is a loss all the same.
-        const uint64_t covered = std::max(seen, *st.pendLast);   // what a range already accounts for
+        const uint64_t covered = (std::max)(seen, *st.pendLast);   // what a range already accounts for
         if (seen != 0 && f.sample_seq > covered + 1)
         {
             *st.serverLost += f.sample_seq - covered - 1;
@@ -271,7 +271,7 @@ void IngestPerf(const PerfIngest& st, LivePerf& in, uint32_t deliveringFrame, si
     {
         if (in.newest > *st.newestReported) *st.newestReported = in.newest;
     }
-    else if (*st.pendLast != 0 || in.newest > std::max(*st.newestReported, seen))
+    else if (*st.pendLast != 0 || in.newest > (std::max)(*st.newestReported, seen))
     {
         // Header only: nothing to attach the range or the newer sequence to. It still has to reach
         // the consumer, in order.
