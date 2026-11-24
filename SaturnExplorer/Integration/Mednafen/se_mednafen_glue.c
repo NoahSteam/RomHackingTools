@@ -884,7 +884,7 @@ static void SeMdfnPerfEndFrame(void)
             /* F4 (counters 55, 56), F5 (57) and F8 (58..61) are produced by the injected hooks in
              * every patched build (apply.py fails on a missing anchor), so their bits go up with
              * them. v27 Step 0: F2 (counter 54) sets SE_PERF_VALID_SSH2_INT with its producer. */
-            info.valid |= SE_PERF_VALID_VDP1_WORK;
+            info.valid |= SE_PERF_VALID_VDP1_WORK | SE_PERF_VALID_M68K_IDLE;
             SeExportPublishPerf(SeSsPerfC, SE_PERF_COUNT, keys, cycles, n, other, &info);
         }
     }

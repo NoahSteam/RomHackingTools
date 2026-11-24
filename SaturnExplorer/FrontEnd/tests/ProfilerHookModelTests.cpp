@@ -34,6 +34,14 @@ int main()
         c[SE_PERF_RETIRED_6] = 999;
         CHECK(Near(ComputePerfShares(c).vdp1Work, 0.4));
     }
+    {   // F5: the executed share is executed / total, both on the 68000's own clock
+        uint64_t c[SE_PERF_COUNT] = {};
+        c[SE_PERF_FRAME_CYCLES] = 1000;
+        c[SE_PERF_M68K_TOTAL_CYCLES] = 400;
+        c[SE_PERF_M68K_IDLE_CYCLES] = 300;
+        c[SE_PERF_M68K_CYCLES] = 100;       // = total - idle, as the emulator now produces it
+        CHECK(Near(ComputePerfShares(c).m68k, 0.25));
+    }
     std::printf(gFailures ? "FAILED\n" : "PASSED\n");
     return gFailures ? 1 : 0;
 }

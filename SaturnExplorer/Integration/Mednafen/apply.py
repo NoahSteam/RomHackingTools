@@ -1040,22 +1040,54 @@ VDP1_PERF_START_HOOK = (
 VDP1_PERF_ABORT_ANCHOR = r'(SS_DBGTI\(SS_DBG_WARNING \| SS_DBG_VDP1, "\[VDP1\] Drawing aborted by framebuffer swap\."\);[ \t]*\n)'
 VDP1_PERF_ABORT_HOOK = "     ++SeSsPerfC[SE_PERF_VDP1_OVERRUNS];   /* SE_PERF_FBSWAP_ABORT */\n"
 
-# sound.cpp: the 68000 runs in slices; a slice that starts stopped (STOP instruction) or halted
-# idles to its end, so only the others count as executed. Not in the SSF player, which has no tap.
-SOUND_PERF_FWD = "/* SE_SOUND_PERF_FWD */\n#ifndef MDFN_SSFPLAY_COMPILE\n" + PERF_DECL + "#endif\n"
-SOUND_PERF_PRE_ANCHOR = r'(int32 next_time = std::min<int32>\(next_scsp_time, run_until_time >> 32\);[ \t]*\n)'
-SOUND_PERF_PRE_HOOK = (
-    "   const int32 se_perf_t0 = SoundCPU.timestamp;\n"
-    "   const bool se_perf_idle = (SoundCPU.XPending & (M68K::XPENDING_MASK_STOPPED | M68K::XPENDING_MASK_ERRORHALTED |\n"
-    "                              M68K::XPENDING_MASK_DTACKHALTED | M68K::XPENDING_MASK_EXTHALTED)) != 0;\n"
+# F5 (v27): 68000 idle and executed time.
+#
+# Idle is counted where the core spends it. M68K::InternalStep() has one place that burns time
+# without executing an instruction: after the reset / bus-error / interrupt branches have returned,
+# an XPending that is only STOPPED or one of the halt bits falls through to `timestamp += 4`. A
+# per-instance accumulator on the core (no Saturn Explorer linkage: the core is shared with other
+# systems and the SSF player, and just gains one counter) is bumped by the same 4 there, so total
+# time and idle time cannot disagree about a step. The previous scheme sampled "stopped" once before
+# a slice of many steps, so a STOP reached or left partway through a slice was charged wholesale to
+# one side.
+M68K_DIR = os.path.join("src", "hw_cpu", "m68k")
+M68K_FILES = ["m68k.h", "m68k.cpp"]
+M68K_IDLE_MEMBER_ANCHOR = r'( uint32 XPending;[ \t]*\n)'
+M68K_IDLE_MEMBER = (
+    " /* Saturn Explorer profiler (F5): cycles InternalStep() spent stopped or halted, running total\n"
+    "    (unsigned wrap is fine: callers take differences). Not part of the savestate. */\n"
+    " uint32 IdleCycleCount;\n"
 )
-SOUND_PERF_POST_ANCHOR = r'(SoundCPU\.Run\(next_time\);[ \t]*\n)'
+M68K_IDLE_INIT_ANCHOR = r'( timestamp = 0;[ \t]*\n XPending = 0;[ \t]*\n)'
+M68K_IDLE_INIT = " IdleCycleCount = 0;\n"
+M68K_IDLE_STEP_ANCHOR = r'(// STOP and ExtHalted fallthrough:[ \t]*\n[ \t]*timestamp \+= 4;[ \t]*\n)'
+M68K_IDLE_STEP = "  IdleCycleCount += 4;   /* Saturn Explorer profiler (F5): the same 4 cycles, as idle */\n"
+
+# sound.cpp: SOUND_Update() runs the 68000 in slices between SCSP samples, and the CPU's bus handlers
+# abandon an instruction with MDFN_longjmp (four paths: an address error or no-DTACK on a read or a
+# write), which lands back at the MDFN_setjmp at the top of SOUND_Update() -- past anything a slice
+# did after SoundCPU.Run(). So the baselines (entry timestamp, entry idle count) are taken ONCE,
+# before the setjmp, as const locals that nothing writes afterwards (their values therefore
+# survive the longjmp), and both deltas are taken once on the normal exit, whatever route got there.
+# Executed = total - idle. Not in the SSF player, which has no tap.
+SOUND_PERF_FWD = "/* SE_SOUND_PERF_FWD */\n#ifndef MDFN_SSFPLAY_COMPILE\n" + PERF_DECL + "#endif\n"
+SOUND_PERF_PRE_ANCHOR = r'(run_until_time \+= \(\(uint64\)\(timestamp - lastts\) \* clock_ratio\);[ \t]*\n lastts = timestamp;[ \t]*\n)'
+SOUND_PERF_PRE_HOOK = (
+    " const int32 se_perf_ts0 = SoundCPU.timestamp;\n"
+    " const uint32 se_perf_idle0 = SoundCPU.IdleCycleCount;\n"
+)
+SOUND_PERF_POST_ANCHOR = r'(else\s*\{\s*\n\s*while\(next_scsp_time < \(run_until_time >> 32\)\)\s*\n\s*RunSCSP\(\);[ \t]*\n \}[ \t]*\n)'
 SOUND_PERF_POST_HOOK = (
     "#ifndef MDFN_SSFPLAY_COMPILE\n"
-    "   SeSsPerfC[SE_PERF_M68K_TOTAL_CYCLES] += SoundCPU.timestamp - se_perf_t0;\n"
-    "   if(!se_perf_idle) SeSsPerfC[SE_PERF_M68K_CYCLES] += SoundCPU.timestamp - se_perf_t0;\n"
+    " {\n"
+    "  const uint32 se_perf_total = (uint32)(SoundCPU.timestamp - se_perf_ts0);\n"
+    "  const uint32 se_perf_idle = SoundCPU.IdleCycleCount - se_perf_idle0;\n"
+    "  SeSsPerfC[SE_PERF_M68K_TOTAL_CYCLES] += se_perf_total;\n"
+    "  SeSsPerfC[SE_PERF_M68K_IDLE_CYCLES] += se_perf_idle;\n"
+    "  SeSsPerfC[SE_PERF_M68K_CYCLES] += se_perf_total - se_perf_idle;\n"
+    " }\n"
     "#else\n"
-    "   (void)se_perf_t0; (void)se_perf_idle;\n"
+    " (void)se_perf_ts0; (void)se_perf_idle0;\n"
     "#endif\n"
 )
 
@@ -1352,8 +1384,11 @@ def process_anchored(src_dir, fname, title, edits, do_write, prepend=None):
 # (file, substring that identifies the fence and no fence we still write). Removed before any hook is
 # applied. A rename of a key is a retirement of the old key plus a new key.
 #   vdp1.cpp  SE_PERF_VDP1_DRAW_CYCLES  index 6, elapsed drawing -- retired in v27, never aliased
+#   sound.cpp se_perf_t0                the v26 per-slice 68000 hooks (baseline taken after the setjmp,
+#                                       so a longjmp skipped the increments); v27 uses se_perf_ts0
 RETIRED_FENCES = [
     ("vdp1.cpp", "SE_PERF_VDP1_DRAW_CYCLES"),
+    ("sound.cpp", "se_perf_t0"),
 ]
 
 
@@ -1410,9 +1445,17 @@ def process_profiler(src_dir, do_write):
         (VDP1_PERF_DMA_ANCHOR, VDP1_PERF_DMA_HOOK, "SE_PERF_VDP1_DMA_DISCARDED"),
     ], do_write, prepend=(VDP1_PERF_FWD, "SE_VDP1_PERF_FWD"))
     notes += process_anchored(src_dir, "sound.cpp", "profiler: 68000 time", [
-        (SOUND_PERF_PRE_ANCHOR, SOUND_PERF_PRE_HOOK, "se_perf_idle ="),
-        (SOUND_PERF_POST_ANCHOR, SOUND_PERF_POST_HOOK, "SE_PERF_M68K_TOTAL_CYCLES"),
+        (SOUND_PERF_PRE_ANCHOR, SOUND_PERF_PRE_HOOK, "se_perf_idle0 ="),
+        (SOUND_PERF_POST_ANCHOR, SOUND_PERF_POST_HOOK, "SE_PERF_M68K_IDLE_CYCLES"),
     ], do_write, prepend=(SOUND_PERF_FWD, "SE_SOUND_PERF_FWD"))
+    m68k_dir = os.path.normpath(os.path.join(src_dir, "..", "hw_cpu", "m68k"))
+    notes += process_anchored(m68k_dir, "m68k.h", "profiler: 68000 idle accumulator", [
+        (M68K_IDLE_MEMBER_ANCHOR, M68K_IDLE_MEMBER, "IdleCycleCount;"),
+    ], do_write)
+    notes += process_anchored(m68k_dir, "m68k.cpp", "profiler: 68000 idle accumulator", [
+        (M68K_IDLE_INIT_ANCHOR, M68K_IDLE_INIT, "IdleCycleCount = 0;"),
+        (M68K_IDLE_STEP_ANCHOR, M68K_IDLE_STEP, "IdleCycleCount += 4;"),
+    ], do_write)
     return notes
 
 
@@ -1667,6 +1710,8 @@ def revert(src_dir, root):
     edited = [os.path.join(src_dir, f) for f in
               ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "scu.inc", "debug.inc", "sound.cpp", "scsp.h", "cdb.cpp", "smpc.cpp", "smpc.h",
                "sh7095.inc", "sh7095_ops.inc")]
+    for f in M68K_FILES:   # the shared 68000 core (F5), outside src/ss
+        edited.append(os.path.join(root, M68K_DIR, f))
     edited.append(os.path.join(root, TITLE_FILE))   # window-title mark (SDL frontend)
     edited.append(os.path.join(root, INPUT_FILE))   # keyboard-map hook (SDL frontend)
     for path in edited:
