@@ -25,6 +25,17 @@ endif()
 
 include(CTest)
 
+# Opt-in sanitizer build (default off, no effect on normal builds). SE_SANITIZE=thread instruments every target
+# (C and C++, compile and link) with ThreadSanitizer, for the live socket tap's threads; see
+# Docs/Codebase/Systems/Profiler.md "Race-detector run". Use a separate build directory.
+set(SE_SANITIZE "" CACHE STRING "Sanitizer for every target: empty (off) or 'thread'")
+if(SE_SANITIZE STREQUAL "thread")
+    add_compile_options(-fsanitize=thread -g -O1 -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
+elseif(NOT SE_SANITIZE STREQUAL "")
+    message(FATAL_ERROR "SE_SANITIZE must be empty or 'thread' (got '${SE_SANITIZE}')")
+endif()
+
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
