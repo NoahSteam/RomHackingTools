@@ -228,6 +228,16 @@ if(BUILD_TESTING AND NOT WIN32 AND NOT EMSCRIPTEN)
     target_link_libraries(SaturnExplorerExportAttachTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerExportAttachTests
              COMMAND SaturnExplorerExportAttachTests)
+
+    # Start/stop churn of the listener threads: the published listening descriptors (TSan, double close).
+    add_executable(SaturnExplorerExportStartStopTests
+        Integration/Common/tests/SeExportStartStopTests.c
+        Integration/Common/se_export.c)
+    target_include_directories(SaturnExplorerExportStartStopTests
+        PRIVATE Integration/Common)
+    target_link_libraries(SaturnExplorerExportStartStopTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerExportStartStopTests
+             COMMAND SaturnExplorerExportStartStopTests)
 endif()
 
 # The shared normalization helpers: what they do with input that is not the shape the

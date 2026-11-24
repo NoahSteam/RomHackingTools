@@ -541,6 +541,10 @@ static pthread_t sThread;
 static pthread_t sTcpThread;
 static int sTcpThreadStarted = 0;
 static pthread_mutex_t sLock = PTHREAD_MUTEX_INITIALIZER;
+/* The published listening sockets (-1 = none). Written by a listener thread when it is up and by
+ * SeExportDeinit, so both go through SeAtXchg; whoever swaps the fd out owns closing it. Deinit
+ * closing a descriptor the thread then closed again (or the thread closing one the emulator had
+ * meanwhile been handed the same number for) was a double close; see SeCloseListener. */
 static int sListenFd = -1;
 static int sTcpListenFd = -1;
 /* The accepted client of each listener (-1 = none), so shutdown can interrupt a server thread
@@ -2972,6 +2976,17 @@ static void SeInterruptClients(void)
     pthread_mutex_unlock(&sConnLock);
 }
 
+/* Close a published listening socket exactly once, whichever of the listener thread and
+ * SeExportDeinit gets there first: the fd is swapped out atomically and only the swapper closes it
+ * (shutdown first, which is what wakes a thread parked in accept()). A listener publishes its fd
+ * BEFORE it re-tests sRunning and Deinit clears sRunning BEFORE it swaps, so with seq_cst ops one
+ * of the two always sees the other: either the thread notices the stop, or Deinit finds the fd. */
+static void SeCloseListener(int* slot)
+{
+    int fd = SeAtXchg(slot, -1);
+    if (fd >= 0) { shutdown(fd, SHUT_RDWR); close(fd); }
+}
+
 static void* SeServerThread(void* arg)
 {
     SeFrame* snap = (SeFrame*)malloc(sizeof(SeFrame));
@@ -2987,7 +3002,7 @@ static void* SeServerThread(void* arg)
     {
         close(srv); free(snap); return NULL;
     }
-    sListenFd = srv;
+    SeAtStore(&sListenFd, srv);
     while (SeAtLoad(&sRunning))
     {
         int cl = accept(srv, NULL, NULL);
@@ -2998,7 +3013,7 @@ static void* SeServerThread(void* arg)
         SeUnregisterClient(0);
         close(cl);
     }
-    close(srv);
+    SeCloseListener(&sListenFd);   /* a no-op when Deinit already took (and closed) it */
     unlink(SE_LIVE_DEFAULT_SOCK_PATH);
     free(snap);
     return NULL;
@@ -3024,7 +3039,7 @@ static void* SeTcpServerThread(void* arg)
     {
         close(srv); free(snap); return NULL;
     }
-    sTcpListenFd = srv;
+    SeAtStore(&sTcpListenFd, srv);
     while (SeAtLoad(&sRunning))
     {
         int cl = accept(srv, NULL, NULL);
@@ -3035,7 +3050,7 @@ static void* SeTcpServerThread(void* arg)
         SeUnregisterClient(1);
         close(cl);
     }
-    close(srv);
+    SeCloseListener(&sTcpListenFd);
     free(snap);
     return NULL;
 }
@@ -3178,8 +3193,8 @@ void SeExportDeinit(void)
     DeleteCriticalSection(&sLock);
 #else
     if (sStateWorkerStarted) { pthread_join(sStateWorker, NULL); }
-    if (sListenFd >= 0) { shutdown(sListenFd, SHUT_RDWR); close(sListenFd); sListenFd = -1; }
-    if (sTcpListenFd >= 0) { shutdown(sTcpListenFd, SHUT_RDWR); close(sTcpListenFd); sTcpListenFd = -1; }
+    SeCloseListener(&sListenFd);
+    SeCloseListener(&sTcpListenFd);
     SeInterruptClients();   /* a client that stopped answering would otherwise pin the joins below */
     if (sStarted) pthread_join(sThread, NULL);   /* Prepare without Start has no thread to join */
     if (sTcpThreadStarted) { pthread_join(sTcpThread, NULL); sTcpThreadStarted = 0; }
