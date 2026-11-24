@@ -93,6 +93,18 @@ cache mode, which travels with the sample. Address buckets (64 KiB steps, from t
 A / B bus totals (`BusTotals::dummy*`, `unmapped*`). `CS0_OTHER` still lumps MINIT/SINIT with the
 unmapped part of CS0.
 
+**Tested counts (cache fills, SH-2 DMAC).** [BUS_EXPECTED.md](../../../Integration/Mednafen/component/BUS_EXPECTED.md)
+derives them from the patched source and `perf_bus_harness.cpp` asserts them exactly on the real core:
+a cached miss is **4** requests (1 + 3 burst, whatever the access size or device, instruction or data), a
+hit and the associative-purge / array / on-chip spaces are **0**, a cache-through (`0x2xxxxxxx`) read is 1,
+`CCR.OD` (data) / `CCR.ID` (instruction and PC-relative reads) turn a miss into a single uncached read, a
+purge (`CCR.CP` or associative) makes the next read refill, and a write is always exactly 1. With the
+instruction cache not emulated (`SE_PERF_CACHE_OFF`) fetches cost 0; emulated, 4 per line filled (CE) or 1
+per 32-bit word (CE clear / ID). The DMAC does one read on the source and one write on the destination
+per unit for 8/16/32-bit units (burst and cycle-steal identical), crossing devices and the dummy /
+unmapped buckets as expected; the 16-byte mode reads in batches of 4 (K not a multiple of 4 over-reads:
+reads = 4 x ceil(K/4), writes = K), and an address error stops the channel after the unit in flight.
+
 The increments are unconditional: each sits on a path that already does far more work.
 Every hook is an insertion (never a replacement), so `apply.py --revert` restores the files.
 
@@ -452,6 +464,19 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
   patched `ss.cpp`) call the real glue: on `[0,200)` and `[800,1000)` is 400; a watchdog `Reset`
   drops the stack and leaves on-time whole. `check_component.py` also checks where the frame-close,
   state-load and exception-entry hooks sit in the patched source.
+- [perf_bus_harness.cpp](../../../Integration/Mednafen/component/perf_bus_harness.cpp) (via
+  `check_component.py`, also as the ctest `SaturnExplorerMednafenBusComponent`, which is **skipped**, not
+  passed, when no Mednafen checkout is present): the F8 request counts of cache fills and the SH-2 DMAC.
+  Real: the whole patched `ss.cpp`, so `sh7095.inc` (`MemRead` / `MemWrite`, the cache, `SetCCR`,
+  `ExtBus*_INLINE`, `BSC_BusRead` / `BSC_BusWrite` with the injected hook, `DMA_DoTransfer` /
+  `DMA_Update`, the on-chip register writes that start a DMA, `Step<0,EIC,false>` on a NOP stream), the
+  `SeSsBusSlot` table, and the SCU / CS0 decode with real BIOS and work RAM. Stubbed: the devices behind
+  the SCU (VDP1, VDP2, SCSP, CD block, SMPC; the cartridge is not addressed), the fast memory map (filled by
+  hand), the event list (all disabled), the slave (off). Not executed: `InitCommon`'s
+  `SeSsCacheMode` assignment (its placement is a text check; the two modes are produced by `Init(EIC)`).
+  Mutation-checked (`--mutate bus-burst | bus-dma-read | bus-dma-write | bus-all-reads | bus-all-writes`,
+  applied to the scratch copy only): burst reads uncounted fails the cache-fill and 16-byte checks, DMA
+  reads or writes uncounted fails only the DMAC checks.
 - [LiveProfilerTests.cpp](../../../FrontEnd/tests/LiveProfilerTests.cpp): real exporter and
   real driver, in lockstep (the producer never gets ahead of what the driver has queued, judged
   by `se_live_perf_status_get`, never by sleeping); every frame once, intact and gap-free from the

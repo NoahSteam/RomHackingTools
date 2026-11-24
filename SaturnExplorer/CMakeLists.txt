@@ -1598,6 +1598,16 @@ if(BUILD_TESTING)
                      COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_apply_hooks.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
                              ${CMAKE_CURRENT_BINARY_DIR}/profiler_hooks_test ${SE_CXX_FOR_HOOKTEST})
+            # F8 bus counts of cache fills and the SH-2 DMAC, on the real patched SH-2 core (about a minute of
+            # compiling ss.cpp). Needs the Mednafen checkout (untracked _emu/mednafen, or -DSE_MEDNAFEN_ROOT=...):
+            # without one check_component.py exits 77 and CTest reports the test as skipped, not passed.
+            set(SE_MEDNAFEN_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/_emu/mednafen" CACHE PATH
+                "Mednafen checkout for the component tests that run the real patched source")
+            add_test(NAME SaturnExplorerMednafenBusComponent
+                     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/check_component.py
+                             ${SE_MEDNAFEN_ROOT} ${CMAKE_CURRENT_BINARY_DIR}/bus_component_test ${SE_CXX_FOR_HOOKTEST}
+                             --only f8_bus --skip-if-missing)
+            set_tests_properties(SaturnExplorerMednafenBusComponent PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
         endif()
         add_test(NAME SaturnExplorerMednafenHaltOrdering
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_halt_ordering.py

@@ -5,20 +5,31 @@ F4: vdp1.cpp (VDP1::Update / DoDrawing) driven with a tiny VRAM command list (co
 F5: hw_cpu/m68k and sound.cpp (SOUND_Update, its longjmp paths) (component/perf_m68k_harness.cpp).
 F2/F9: SH7095::SetActive and SH7095::Reset (inside the patched ss.cpp) calling the real glue (component/perf_sh2_harness.cpp),
 and where the frame-close, state-load and exception-entry hooks sit in the patched text (f2_hook_checks).
+F8: bus-request counts of SH-2 cache fills and the on-chip DMAC, through the real SH7095 core and the real
+BSC_BusRead / BSC_BusWrite hook (component/perf_bus_harness.cpp; the expected numbers are component/BUS_EXPECTED.md).
 
 The harnesses #include the patched .cpp files themselves, so nothing under test is a copy or a mock; only
 the devices around them are stubbed. The Mednafen source is not in this repository, so this is a script
 for a machine that has the pinned checkout (the same tree apply.py patches). It takes the pristine bytes
 from the checkout's repository HEAD, patches a scratch copy with the CURRENT apply.py, compiles and runs.
 
-Usage: check_component.py <mednafen root> <scratch dir> [c++ compiler] [--drop KEY ...]
+Usage: check_component.py <mednafen root> <scratch dir> [c++ compiler] [--drop KEY ...] [--mutate NAME ...]
+                          [--only HARNESS ...] [--skip-if-missing]
 Exit status 0 = all checks passed.
+--only f4_vdp1|f5_m68k|f2_sh2|f8_bus runs just those harnesses (and no text checks).
+--skip-if-missing exits 77 (CTest's SKIP_RETURN_CODE) when there is no Mednafen checkout at <root>, so the
+caller can be a ctest that is skipped on machines without one.
 
 --drop KEY removes every injected block containing KEY from the scratch copy after patching, and the
 run must then FAIL (exit 0 means "the mutation was detected"; 1 means the tests did not notice the hook
 was gone). Keys: "SeSsVdp1Debit" (command work), "SE_PERF_VDP1_DMA_DISCARDED", "IdleCycleCount += 4;"
 (the idle hook in the 68000 core), "SE_PERF_M68K_IDLE_CYCLES" (the SOUND_Update exit), "SE_SLAVE_ON_EDGE" / "SE_SLAVE_OFF_EDGE" (the slave's
-power edges in SetActive), "SE_CPU_RESET_HOOK" (the top of Reset)."""
+power edges in SetActive), "SE_CPU_RESET_HOOK" (the top of Reset).
+
+--mutate NAME edits the bus hooks in the SCRATCH copy (never the checkout) and the f8_bus harness must then
+fail (exit 0 = detected): "bus-burst" (burst reads are not counted: the three burst reads of a cache fill and
+the 16-byte DMA's reads 1..3 vanish), "bus-dma-read" (a read made by the DMAC, SH2DMAHax set, is not counted),
+"bus-dma-write" (same for writes), "bus-all-reads" / "bus-all-writes" (the hook is gone)."""
 import os
 import subprocess
 import sys
@@ -44,6 +55,10 @@ def f8_decoder_checks(work):
         if not re.search(r"A >= 0x%08x && A <= 0x%08x" % (lo, hi), ss, re.I):
             print("FAIL: ss.cpp no longer decodes CS0 0x%08x-0x%08x as the bus map assumes" % (lo, hi))
             bad += 1
+    # the cache mode label travels with the sample: assigned right after the emulator picks NeedEmuICache
+    if not re.search(r"NeedEmuICache = \(cpucache_emumode == CPUCACHE_EMUMODE_FULL\);\s*\n(?:/\*[^\n]*\*/\s*\n)?[^\n]*SeSsCacheMode = NeedEmuICache \? SE_PERF_CACHE_ON : SE_PERF_CACHE_OFF;", ss):
+        print("FAIL: SeSsCacheMode is not set right after NeedEmuICache is chosen")
+        bad += 1
     return bad
 
 
@@ -133,17 +148,33 @@ def f2_hook_checks(work):
     return bad
 
 
+BUS_MUTATIONS = {
+    "bus-burst": (" SeSsPerfBus(A, 0);   /* SE_PERF_BUS_READ */", " if(!BurstHax) SeSsPerfBus(A, 0);   /* SE_PERF_BUS_READ */"),
+    "bus-dma-read": (" SeSsPerfBus(A, 0);   /* SE_PERF_BUS_READ */", " if(!SH2DMAHax) SeSsPerfBus(A, 0);   /* SE_PERF_BUS_READ */"),
+    "bus-dma-write": (" SeSsPerfBus(A, 1);   /* SE_PERF_BUS_WRITE */", " if(!SH2DMAHax) SeSsPerfBus(A, 1);   /* SE_PERF_BUS_WRITE */"),
+    "bus-all-reads": (" SeSsPerfBus(A, 0);   /* SE_PERF_BUS_READ */", " /* mutated away */"),
+    "bus-all-writes": (" SeSsPerfBus(A, 1);   /* SE_PERF_BUS_WRITE */", " /* mutated away */"),
+}
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
         return 2
     args = sys.argv[1:]
-    drops = []
-    while "--drop" in args:
-        i = args.index("--drop")
-        drops.append(args[i + 1])
-        del args[i:i + 2]
+    drops, mutates, only = [], [], []
+    skip_missing = "--skip-if-missing" in args
+    if skip_missing:
+        args.remove("--skip-if-missing")
+    for flag, dest in (("--drop", drops), ("--mutate", mutates), ("--only", only)):
+        while flag in args:
+            i = args.index(flag)
+            dest.append(args[i + 1])
+            del args[i:i + 2]
     root, scratch = os.path.abspath(args[0]), os.path.abspath(args[1])
+    if skip_missing and not os.path.isfile(os.path.join(root, "src", "ss", "sh7095.inc")):
+        print("SKIP: no Mednafen checkout at %s" % root)
+        return 77
     cxx = args[2] if len(args) > 2 else os.environ.get("CXX", "g++")
     os.makedirs(scratch, exist_ok=True)
     work = cm.make_scratch(root, scratch)
@@ -151,11 +182,20 @@ def main():
     if rc != 0 or "ANCHOR MISS" in out:
         print("apply.py failed:\n" + out[-1000:])
         return 1
-    if not drops:
+    if not drops and not mutates and not only:
         if f8_decoder_checks(work) or f11_checks(work) or f2_hook_checks(work):
             return 1
         print("decoder and hook-placement checks: ok")
     apply_mod = cm.load_new()
+    for key in mutates:
+        old, new = BUS_MUTATIONS[key]
+        path = os.path.join(work, "src/ss/sh7095.inc")
+        text = open(path).read()
+        if old not in text:
+            print("mutation %s: the hook text is not in the patched sh7095.inc" % key)
+            return 1
+        open(path, "w").write(text.replace(old, new))
+        print("mutation: %s" % key)
     for key in drops:
         for rel in ("src/ss/vdp1.cpp", "src/ss/sound.cpp", "src/hw_cpu/m68k/m68k.cpp", "src/ss/sh7095.inc"):
             path = os.path.join(work, rel)
@@ -171,9 +211,10 @@ def main():
     link = ["-Wl,--unresolved-symbols=ignore-in-object-files"]
     # The patched 68000 core, linked into the sound harness (the VDP1 one does not use it).
     m68k_o = os.path.join(scratch, "m68k.o")
+    need_m68k = not mutates and (not only or "f5_m68k" in only)
     r = subprocess.run([cxx] + flags + ["-c", os.path.join(work, "src/hw_cpu/m68k/m68k.cpp"), "-o", m68k_o],
-                       capture_output=True, text=True)
-    if r.returncode:
+                       capture_output=True, text=True) if need_m68k else None
+    if r is not None and r.returncode:
         print("m68k.cpp does not compile:\n" + r.stderr[-1500:])
         return 1
     bad = 0
@@ -190,7 +231,12 @@ def main():
     for name, define, src, extra in (
             ("f4_vdp1", "SE_VDP1_CPP", "perf_vdp1_harness.cpp", []),
             ("f5_m68k", "SE_SOUND_CPP", "perf_m68k_harness.cpp", [m68k_o]),
-            ("f2_sh2", "SE_SS_CPP", "perf_sh2_harness.cpp", glue_objs + ["-lpthread"])):
+            ("f2_sh2", "SE_SS_CPP", "perf_sh2_harness.cpp", glue_objs + ["-lpthread"]),
+            ("f8_bus", "SE_SS_CPP", "perf_bus_harness.cpp", glue_objs + ["-lpthread"])):
+        if only and name not in only:
+            continue
+        if mutates and name != "f8_bus":
+            continue
         if not os.path.isfile(os.path.join(HERE, "component", src)):
             continue
         exe = os.path.join(scratch, name)
@@ -208,7 +254,7 @@ def main():
         if r.returncode:
             print(r.stderr[-500:])
             bad += 1
-    if drops:
+    if drops or mutates:
         print("mutation %s" % ("detected" if bad else "NOT DETECTED"))
         return 0 if bad else 1
     return 1 if bad else 0
