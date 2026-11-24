@@ -155,6 +155,17 @@ class Analyze(unittest.TestCase):
         with tempfile.TemporaryDirectory() as e:
             self.assertEqual(A.main([e]), 1)
 
+    def test_aborted_directory_counts_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            make(d, [600] * 3, [540] * 3, [300] * 3)
+            self.assertEqual(A.analyse(d, boots=100)["configs"]["a"]["valid"], 3)
+            with open(os.path.join(d, "ABORTED"), "w") as f:
+                f.write("ABORTED: run02_b: client error (exit 1)\n")
+            res = A.analyse(d, boots=100)
+            for cfg in "abc":
+                self.assertEqual(res["configs"][cfg]["valid"], 0)
+            self.assertTrue(all("run aborted" in " ".join(r["why"]) for r in res["runs"]))
+
 
 if __name__ == "__main__":
     unittest.main()

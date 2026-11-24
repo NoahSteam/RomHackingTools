@@ -79,6 +79,12 @@ directories and compare with `analyze_v3.py DIR_NEW --vs DIR_OTHER`, which compa
 The same holds for base `6491e73` (speed baseline only) and for "guest counters with attribution off versus
 on": this harness records no guest counters, so that comparison is not covered here.
 
+### One directory per run
+
+`run_v3.sh` refuses an `--out` directory that already holds run files, and a failed slot load or client error
+stops the whole run, deletes that attempt's partial CSV and leaves an `ABORTED` marker. `analyze_v3.py` counts
+nothing from a directory with that marker. Start again in a new directory.
+
 ### Limits you will meet
 
 * **Stream ceiling, and TCP.** The server keeps 16 records per connection and a reply carries at most 8, so the

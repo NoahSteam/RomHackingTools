@@ -59,6 +59,14 @@ done
 [ -f "$GAME" ] || { echo "game not found: $GAME" >&2; exit 1; }
 case "$THROTTLE" in on|off) ;; *) echo "--throttle takes on or off" >&2; exit 1;; esac
 mkdir -p "$OUT" || exit 1
+# A directory that already holds a run is refused: a failed attempt would otherwise leave the older
+# CSVs in place under this run's metadata, and the analyzer would report them as this build's result.
+for old in "$OUT"/run[0-9]*_[abc].* "$OUT/run_meta.txt" "$OUT/pinned.cfg"; do
+  if [ -e "$old" ]; then
+    echo "refusing --out $OUT: it already holds run files ($(basename "$old")). Use a new directory per run." >&2
+    exit 1
+  fi
+done
 
 # ---- pinned emulator settings -------------------------------------------------------------
 # Everything that can change the emulator's speed between runs is fixed in an OVERRIDE settings file
@@ -151,6 +159,13 @@ PID=""
 cleanup() { if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null; fi; }
 trap cleanup EXIT INT TERM
 
+# A fatal failure stops the whole run and marks the directory, so an incomplete set can neither be
+# mistaken for a finished one nor be topped up by a second invocation (see the refusal above).
+abort_run() {
+  echo "ABORTED: $1" | tee "$OUT/ABORTED" >&2
+  exit 1
+}
+
 run_config() { # rep cfg
   local rep="$1" cfg="$2" tag name
   tag=$(printf 'run%02d_%s' "$rep" "$cfg"); name="$OUT/$tag"
@@ -160,7 +175,7 @@ run_config() { # rep cfg
   # One fresh process per run, each placed on the same scene by the emulator's own slot loader.
   if ! "$BENCH" --mode load-slot --slot "$SLOT" --connect-timeout 60 "${BENCH_EP[@]}" > "$name.load.log" 2>&1; then
     echo "  slot load failed, see $name.load.log" >&2
-    cleanup; PID=""; return 1
+    cleanup; PID=""; abort_run "$tag: slot load failed"
   fi
   sleep "$SETTLE"
   local rc=0
@@ -175,7 +190,10 @@ run_config() { # rep cfg
   case "$rc" in
     0) echo "  ok";;
     2) echo "  completed but INVALID (lost samples or similar): $(grep -E '^LOSS' "$name.client.log")";;
-    *) echo "  client error (exit $rc), see $name.client.log" >&2;;
+    *) echo "  client error (exit $rc), see $name.client.log" >&2
+       # whatever it wrote before failing is not a measurement
+       rm -f "$name.csv" "$name.summary"
+       cleanup; PID=""; abort_run "$tag: client error (exit $rc)";;
   esac
   cleanup; PID=""
   sleep 2   # let the OS and the endpoint settle before the next process

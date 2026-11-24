@@ -31,6 +31,25 @@ python3 -I "$HERE/analyze_v3.py" "$OUT" --min-frames 200 --min-window-s 1 --boot
 cat "$OUT/analysis.txt"
 n="$(grep -c '^  rep .* valid$' "$OUT/analysis.txt")"
 [ "$n" -eq 6 ] || fail "expected 6 valid runs, got $n"
+# a directory that already holds a run is refused and left exactly as it was
+before="$(cd "$OUT" && cksum run*_*.csv run*_*.summary run_meta.txt pinned.cfg)"
+"$HERE/run_v3.sh" --emu "$FAKE" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT" --bench "$BENCH" \
+    --endpoint "$SOCK" --reps 1 --warmup 0.5 --duration 1 --settle 0.5 > "$OUT/reuse.log" 2>&1 && fail "reused --out accepted"
+grep -q 'refusing --out' "$OUT/reuse.log" || fail "no refusal message for a reused directory"
+[ "$before" = "$(cd "$OUT" && cksum run*_*.csv run*_*.summary run_meta.txt pinned.cfg)" ] || fail "refused run changed the directory"
+# a client that fails is fatal: non-zero exit, a marker, and nothing the analyzer could count
+printf '#!/bin/sh\nsleep 30\n' > "$OUT/emu_stub.sh"; printf '#!/bin/sh\nexit 1\n' > "$OUT/bench_fail.sh"
+printf '#!/bin/sh\ncase "$*" in *load-slot*) exit 0;; esac\nwhile [ $# -gt 0 ]; do [ "$1" = --csv ] && echo partial > "$2"; shift; done\nexit 1\n' > "$OUT/bench_half.sh"
+chmod +x "$OUT/emu_stub.sh" "$OUT/bench_fail.sh" "$OUT/bench_half.sh"
+"$HERE/run_v3.sh" --emu "$OUT/emu_stub.sh" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT/f1" --bench "$OUT/bench_fail.sh" \
+    --reps 1 --settle 0 --skip-preflight > "$OUT/f1.log" 2>&1 && fail "failed slot load exited 0"
+[ -s "$OUT/f1/ABORTED" ] || fail "no ABORTED marker after a failed slot load"
+"$HERE/run_v3.sh" --emu "$OUT/emu_stub.sh" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT/f2" --bench "$OUT/bench_half.sh" \
+    --reps 1 --settle 0 --skip-preflight > "$OUT/f2.log" 2>&1 && fail "client error exited 0"
+[ -s "$OUT/f2/ABORTED" ] || fail "no ABORTED marker after a client error"
+ls "$OUT/f2"/run*.csv "$OUT/f2"/run*.summary > /dev/null 2>&1 && fail "a failed client left a CSV or summary behind"
+grep -q 'done. Analyze' "$OUT/f1.log" "$OUT/f2.log" && fail "an aborted run printed done"
+
 # a server without function attribution: the client must refuse to run config c rather than record a lie
 "$FAKE" --no-functions > /dev/null 2>&1 &
 NOFN=$!

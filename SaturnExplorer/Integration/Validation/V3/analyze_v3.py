@@ -188,6 +188,13 @@ def collect(directory, min_frames, min_window_s):
 def analyse(directory, min_frames=DEFAULT_MIN_FRAMES, min_window_s=DEFAULT_MIN_WINDOW_S,
             drift_pct=DEFAULT_DRIFT_PCT, boots=4000, seed=1):
     runs = collect(directory, min_frames, min_window_s)
+    # run_v3.sh leaves this marker when a slot load or the client failed: the set is incomplete and
+    # the interleaving is broken, so none of it counts.
+    aborted = os.path.join(directory, "ABORTED")
+    if os.path.exists(aborted):
+        why = "run aborted: " + open(aborted).read().strip()
+        for r in runs:
+            r["why"] = list(r["why"]) + [why]
     result = {"runs": runs, "configs": {}, "overhead": {}, "warnings": []}
     for cfg in "abc":
         mine = [r for r in runs if r["cfg"] == cfg]
