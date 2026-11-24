@@ -25,6 +25,17 @@ endif()
 
 include(CTest)
 
+# Opt-in sanitizer build (default off, no effect on normal builds). SE_SANITIZE=thread instruments every target
+# (C and C++, compile and link) with ThreadSanitizer, for the live socket tap's threads; see
+# Docs/Codebase/Systems/Profiler.md "Race-detector run". Use a separate build directory.
+set(SE_SANITIZE "" CACHE STRING "Sanitizer for every target: empty (off) or 'thread'")
+if(SE_SANITIZE STREQUAL "thread")
+    add_compile_options(-fsanitize=thread -g -O1 -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
+elseif(NOT SE_SANITIZE STREQUAL "")
+    message(FATAL_ERROR "SE_SANITIZE must be empty or 'thread' (got '${SE_SANITIZE}')")
+endif()
+
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -217,6 +228,16 @@ if(BUILD_TESTING AND NOT WIN32 AND NOT EMSCRIPTEN)
     target_link_libraries(SaturnExplorerExportAttachTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerExportAttachTests
              COMMAND SaturnExplorerExportAttachTests)
+
+    # Start/stop churn of the listener threads: the published listening descriptors (TSan, double close).
+    add_executable(SaturnExplorerExportStartStopTests
+        Integration/Common/tests/SeExportStartStopTests.c
+        Integration/Common/se_export.c)
+    target_include_directories(SaturnExplorerExportStartStopTests
+        PRIVATE Integration/Common)
+    target_link_libraries(SaturnExplorerExportStartStopTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerExportStartStopTests
+             COMMAND SaturnExplorerExportStartStopTests)
 endif()
 
 # The shared normalization helpers: what they do with input that is not the shape the

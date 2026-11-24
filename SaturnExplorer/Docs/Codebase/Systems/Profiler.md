@@ -475,6 +475,32 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
 - The panel was also run in the native frontend against a stand-in emulator (the real
   export server fed synthetic counters) and inspected on all four tabs.
 
+### Race-detector run (ThreadSanitizer)
+
+The live tap is multi-threaded on both sides (`se_export.c`: listener threads, the emulation thread and
+the savestate worker; `LiveDriver.cpp`: worker and UI threads). `-DSE_SANITIZE=thread` (default off, no
+effect on normal builds) adds `-fsanitize=thread -g -O1` to every target's compile and link, C and C++.
+Use a separate build directory; gcc worked here, the installed clang lacked the TSan runtime.
+
+```sh
+cmake -S . -B build-tsan -DSE_SANITIZE=thread -DSE_ENABLE_DECOMPILER=OFF
+cmake --build build-tsan -j4
+TSAN_OPTIONS="halt_on_error=0 second_deadlock_stack=1" \
+  ctest --test-dir build-tsan -j1 -E DecompilerFault -R 'Live|Export|Profiler|MemoryRoundTrip' --output-on-failure
+```
+
+A report makes the test exit non-zero, so run it several times (races are intermittent) and read the
+`WARNING: ThreadSanitizer` blocks in the output. The live tests share ports: do not run two at once.
+The emulator itself cannot be run under it here; the glue's own state (`sTpState`, the pending-flow
+records) is emulation-thread only and its hooks are registered before `SeExportStart`.
+
+Found so far: `sListenFd` / `sTcpListenFd` were published and cleared with plain stores, and closed by
+both the listener thread and `SeExportDeinit` (data race, and a double `close()` that could hit a
+descriptor number the emulator had since been given; a Deinit that beat the thread's publish also left
+`accept()` unwoken). Fixed by publishing with `SeAtStore` and closing through `SeCloseListener`, whose
+atomic swap makes exactly one side responsible for the close; `ExportStartStopTests` pins it. Not run:
+the Windows named-pipe path (`SeWinJoinThread` etc.) and macOS.
+
 ## Coverage limits
 
 - The patched Mednafen 1.32.1 was **compiled and linked** with these hooks
