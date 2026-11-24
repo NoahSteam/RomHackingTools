@@ -1974,7 +1974,11 @@ unsigned long long SeExportPerfNewestSeq(void)
     return n;
 }
 
-static volatile unsigned int sCallStackEpoch;
+/* One epoch PER CPU: it moves when that CPU's stack is reset, and a flow instruction the glue is holding
+ * for that CPU is dropped when its epoch no longer matches. A single shared epoch let a reset of one SH-2
+ * silently discard the other's pending call or return while its recorded frames survived (wrong owner).
+ * A whole-machine discontinuity (state load, hook mode off) resets both CPUs, which moves both epochs. */
+static volatile unsigned int sCallStackEpoch[2];
 
 void SeExportResetCallStack(int cpu)
 {
@@ -1984,13 +1988,13 @@ void SeExportResetCallStack(int cpu)
     sCallOverflow[c] = 0;
     sOwnKnown[c] = 0;     /* F9: a reset / load / disable replaced the code the frames described */
     ++sOwnTrust[c];
-    SeAtAdd((volatile int*)&sCallStackEpoch, 1);
+    SeAtAdd((volatile int*)&sCallStackEpoch[c], 1);
     SE_UNLOCK();
 }
 
-unsigned int SeExportCallStackEpoch(void)
+unsigned int SeExportCallStackEpoch(int cpu)
 {
-    return (unsigned int)SeAtLoad((volatile int*)&sCallStackEpoch);
+    return (unsigned int)SeAtLoad((volatile int*)&sCallStackEpoch[cpu ? 1 : 0]);
 }
 
 unsigned int SeExportSerializeCallStack(int cpu, unsigned char* out)

@@ -611,7 +611,7 @@ typedef struct
     SeFlowKind   kind;
     unsigned short op;
     unsigned int rn, sp, handler;
-    unsigned int epoch;          /* SeExportCallStackEpoch when it was seen */
+    unsigned int epoch;          /* SeExportCallStackEpoch(cpu) when it was seen */
 } SeMdfnFlowPending;
 static SeMdfnFlowPending sFlowPending[2];
 
@@ -622,7 +622,7 @@ static int SeMdfnFlowAdvance(int cpu, unsigned int pc)
 {
     SeMdfnFlowPending* p = &sFlowPending[cpu ? 1 : 0];
     if (p->stage == 0) return 0;
-    if (p->epoch != SeExportCallStackEpoch())
+    if (p->epoch != SeExportCallStackEpoch(cpu))
     {
         p->stage = 0;   /* the stacks were reset under it: it belongs to a timeline that is gone */
         return 0;
@@ -663,7 +663,7 @@ void SeMednafenHookMode(int continuous)
     {
         SeMdfnFlowPending* p = &sFlowPending[c];
         SeExportOwnershipInvalidate(c, 1);   /* F9: the code now runs unwatched; no recorded frame can be trusted again */
-        if (p->stage != 0 && p->epoch == SeExportCallStackEpoch() &&
+        if (p->stage != 0 && p->epoch == SeExportCallStackEpoch(c) &&
             (p->kind == SeFlowReturn || p->kind == SeFlowExcReturn))
             SeMdfnApplyFlow(c, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler, 0, 0);
         p->stage = 0;
@@ -677,7 +677,7 @@ static void SeMdfnFlowDefer(int cpu, unsigned int pc, SeFlowKind kind, unsigned 
     SeMdfnFlowPending* p = &sFlowPending[cpu ? 1 : 0];
     p->kind = kind; p->op = op; p->rn = rn; p->sp = sp; p->handler = handler;
     p->flowPc = pc;
-    p->epoch = SeExportCallStackEpoch();
+    p->epoch = SeExportCallStackEpoch(cpu);
     if (kind == SeFlowTrap) { p->stage = 2; p->waitPc = pc; }   /* no delay slot */
     else                    { p->stage = 1; p->waitPc = pc + 2; }
 }
@@ -923,7 +923,7 @@ void SeMednafenCpuReset(int cpu, int ts)
     const int c = cpu ? 1 : 0;
     if (sProfOn) SeMdfnProfCharge(c, ts);
     sProfSynced[c] = 0;
-    SeExportResetCallStack(c);   /* frames, ownership, and (epoch) any flow instruction still pending */
+    SeExportResetCallStack(c);   /* THIS cpu's frames, ownership and (its epoch) pending flow; the other CPU is untouched */
 }
 
 /* An exception was entered on 'cpu' (interrupt, NMI, address error, illegal instruction). The hardware
@@ -933,7 +933,7 @@ void SeMednafenCpuReset(int cpu, int ts)
 void SeMednafenExceptionEntry(int cpu)
 {
     const SeMdfnFlowPending* p = &sFlowPending[cpu ? 1 : 0];
-    if (p->stage == 2 && p->kind == SeFlowTrap && p->epoch == SeExportCallStackEpoch()) return;
+    if (p->stage == 2 && p->kind == SeFlowTrap && p->epoch == SeExportCallStackEpoch(cpu)) return;
     SeExportOwnershipInvalidate(cpu, 0);
 }
 

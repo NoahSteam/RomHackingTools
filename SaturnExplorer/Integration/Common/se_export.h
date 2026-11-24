@@ -357,7 +357,7 @@ void SeExportResetCallStack(int cpu);
 /* A number that changes every time a stack is reset. A glue that keeps control flow in flight
  * between two instructions (a call or return waiting out its delay slot) compares it to drop what
  * it was holding when the timeline it belonged to has been replaced. */
-unsigned int SeExportCallStackEpoch(void);
+unsigned int SeExportCallStackEpoch(int cpu);   /* per CPU: moves when THAT CPU's stack is reset */
 
 /* Serialize one CPU's shadow stack into the v9 wire block: u32 frameCount (capped at
  * SE_LIVE_CALLSTACK_MAX) then that many SE_LIVE_CALLFRAME_LEN frames, innermost first.

@@ -487,6 +487,67 @@ static void TestStaleFrameCannotRestoreOwnership(void)
     CHECK_EQ(Cycles(RawKey(A, 0)), 112 - 108);       /* back on the recorded return address: still unproven */
 }
 
+/* ====================== a reset of one CPU leaves the other's pending flow alone ====================== */
+
+/* CPU 'flow' runs observed code while the OTHER CPU is reset (SH7095::Reset by the watchdog, or the slave's
+ * SetActive) between the flow instruction and its delay slot / landing. The reset invalidates the other CPU's
+ * flow only; this CPU never lost observation. */
+static void ResetPendingCall(int flow)
+{
+    const unsigned int A = 0x06001800u, B = 0x06002000u;
+    Fresh(1);
+    Insn(flow, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);        /* unknown code calls A */
+    Nop(flow, U_PC + 2, 4);
+    Insn(flow, A, BsrTo(A, B), 0, 0x060EFFF0, 8);              /* A calls B (presented at 8) */
+    Nop(flow, A + 2, 12);                                      /* its delay slot */
+    SeMednafenCpuReset(flow ? 0 : 1, 12);                      /* the OTHER cpu is reset while B's call is pending */
+    Nop(flow, B, 16);
+    Nop(flow, B + 2, 20);
+    Nop(flow, B + 4, 24);
+    CHECK_EQ(Cycles(FnKey(A, flow)), 8);                       /* [8,16): the call and its slot */
+    CHECK_EQ(Cycles(FnKey(B, flow)), 8);                       /* [16,24) */
+    CHECK(SeExportCurrentFunction(flow) == B);
+}
+
+static void ResetPendingReturn(int flow)
+{
+    const unsigned int A = 0x06001800u, B = 0x06002000u;
+    Fresh(1);
+    Insn(flow, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);
+    Nop(flow, U_PC + 2, 4);
+    Insn(flow, A, BsrTo(A, B), 0, 0x060EFFF0, 8);
+    Nop(flow, A + 2, 12);
+    Insn(flow, B, OP_RTS, 0, 0x060EFFE0, 16);                  /* B's rts */
+    Nop(flow, B + 2, 20);                                      /* its delay slot */
+    SeMednafenCpuReset(flow ? 0 : 1, 20);                      /* the other cpu is reset with the return pending */
+    Nop(flow, A + 4, 24);                                      /* lands on the return address: A again */
+    Nop(flow, A + 6, 32);
+    CHECK_EQ(Cycles(FnKey(B, flow)), 8);                       /* [16,24): rts and slot */
+    CHECK_EQ(Cycles(FnKey(A, flow)), (16 - 8) + (32 - 24));
+    CHECK(SeExportCurrentFunction(flow) == A);
+}
+
+static void TestCrossCpuReset(void)
+{
+    ResetPendingCall(0);     /* master's pending call, slave reset */
+    ResetPendingCall(1);     /* slave's pending call, master reset */
+    ResetPendingReturn(0);
+    ResetPendingReturn(1);
+}
+
+/* The reset CPU's OWN pending flow is still dropped. */
+static void TestOwnResetDropsOwnFlow(void)
+{
+    const unsigned int A = 0x06001800u;
+    Fresh(1);
+    Insn(0, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);
+    Nop(0, U_PC + 2, 4);
+    SeMednafenCpuReset(0, 4);
+    Nop(0, A, 8);
+    Nop(0, A + 2, 12);
+    CHECK(SeExportCurrentFunction(0) == 0u);                   /* the call was not applied after the reset */
+}
+
 /* ================================ F6: the latched mode ================================ */
 
 static void TestModeLatch(void)
@@ -522,6 +583,8 @@ int main(void)
     TestStaleFrameCannotRestoreOwnership();
     TestLostObservation();
     TestHookModeLoss();
+    TestCrossCpuReset();
+    TestOwnResetDropsOwnFlow();
     TestModeLatch();
     if (gFailures) { fprintf(stderr, "%d failure(s)\n", gFailures); return 1; }
     printf("ProfilerLifecycleTests: all passed\n");

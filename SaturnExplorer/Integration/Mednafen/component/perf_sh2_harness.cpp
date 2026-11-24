@@ -18,7 +18,7 @@
 
 extern "C"
 {
-unsigned int SeExportCallStackEpoch(void);
+unsigned int SeExportCallStackEpoch(int cpu);
 unsigned int SeExportCurrentFunction(int cpu);
 void SeExportPushFrame(int cpu, unsigned int callSite, unsigned int func, unsigned int ret, unsigned int sp, unsigned long long cycle);
 }
@@ -100,9 +100,9 @@ int main()
     SH7095_mem_timestamp = 10;
     SeExportPushFrame(1, 0x06001000u, 0x06002000u, 0x06001004u, 0x060F0000u, 0);
     Expect("a function is recorded", SeExportCurrentFunction(1) != 0, 1);
-    const unsigned epoch = SeExportCallStackEpoch();
+    const unsigned epoch = SeExportCallStackEpoch(1);
     CPU[1].Reset(false, true);
-    Expect("the stack was reset (epoch moved)", SeExportCallStackEpoch() != epoch, 1);
+    Expect("the stack was reset (epoch moved)", SeExportCallStackEpoch(1) != epoch, 1);
     Expect("and no function is named for the reset code", (long long)SeExportCurrentFunction(1), 0);
     Expect("the slave is still on", CPU[1].timestamp != SS_EVENT_DISABLED_TS, 1);
     SlaveRunsTo(900);
