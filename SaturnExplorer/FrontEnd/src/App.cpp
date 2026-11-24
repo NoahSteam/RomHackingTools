@@ -4409,6 +4409,8 @@ void App::UpdateProfiler()
                 f.gapLast = in.gap_last;
                 f.evictFirst = in.evict_first;
                 f.evictLast = in.evict_last;
+                f.gapCount = in.gap_count;
+                f.evictCount = in.evict_count;
                 f.gapOnly = in.gap_only != 0;
                 f.newestSeq = in.newest_seq;
                 f.functions = (in.flags & SE_LIVE_PROF_FUNCTIONS) != 0;

@@ -40,11 +40,15 @@ struct PerfFrame
     // did not drain it in time (the client had it and let it go).
     uint64_t gapFirst = 0, gapLast = 0;
     uint64_t evictFirst = 0, evictLast = 0;
+    // The spans above only say where to break the plot; they merge separate losses into their
+    // enclosing interval, which can contain delivered records. How many frames are missing is
+    // these exact counts, by cause, never derived from a span.
+    uint64_t gapCount = 0, evictCount = 0;
     // Not a frame: a reply that carried only a lost range and/or a newer newest sequence. It
     // never enters the history; its ranges attach to the next frame pushed (and are counted at once).
     bool     gapOnly = false;
     uint64_t newestSeq = 0;    // the server's newest sampleSeq when this was sent (0 = unknown)
-    bool HasGap() const { return gapLast != 0 || evictLast != 0; }
+    bool HasGap() const { return gapLast != 0 || evictLast != 0 || gapCount != 0 || evictCount != 0; }
     bool Has(uint32_t bit) const { return (valid & bit) != 0; }
     // True for a v26 server's record: counters[6] is the old elapsed VDP1 figure.
     bool LegacyVdp1() const { return wireVersion < 27; }
@@ -143,11 +147,14 @@ public:
     // ---- Lost records. The plot breaks wherever a frame HasGap(); an averaging window reports
     // how many frames it is missing, so its denominator is the frames it really holds.
     // Totals are since the last Clear().
+    // A span to break the plot at plus the exact number of frames missing inside it (the span may
+    // enclose delivered records, so Count is stored, not derived).
     struct SeqRange
     {
         uint64_t first = 0, last = 0;
-        bool     Empty() const { return last == 0; }
-        uint64_t Count() const { return last == 0 ? 0 : last - first + 1; }
+        uint64_t count = 0;
+        bool     Empty() const { return last == 0 && count == 0; }
+        uint64_t Count() const { return count; }
     };
     uint64_t TotalServerLost() const { return mServerLost; }     // dropped by the server's ring
     uint64_t TotalDriverEvicted() const { return mDriverEvicted; }   // evicted from the driver's queue

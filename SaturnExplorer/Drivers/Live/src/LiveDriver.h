@@ -229,6 +229,11 @@ typedef struct se_live_perf_frame
     uint32_t gap_only;          /* 1 = not a frame: a reply carried a lost range (gap_*) or a newer */
     uint32_t pad2;              /*     newest_seq and no record to attach it to. Only gap_*, evict_*, */
                                 /*     newest_seq and wire_version are meaningful; sample_seq is 0 */
+    /* Exact COUNTS of records lost just before this one, by cause. gap_* / evict_* above are only the
+     * plot-break span (several losses merge into their enclosing interval, which may contain
+     * delivered records); the number of missing frames is never derived from a span. */
+    uint64_t gap_count;         /* records the server's ring dropped for this connection */
+    uint64_t evict_count;       /* records this client's bounded queue evicted undrained */
 } se_live_perf_frame;
 
 /* Move up to 'max' queued records into 'out', oldest first; returns how many. The queue is

@@ -4,8 +4,8 @@ Inspected revision: the change that introduced it (protocol v26), on top of
 `6491e73`, plus the v27 wire/counter freeze (Step 0 of [ProfilerFixPlan](../../ProfilerFixPlan.md)).
 **v27 status:** the record layout and counter indices below are frozen; the fields the fix plan
 has not filled yet are declared and carried but marked "not available" on the wire (a clear bit in
-the record's `valid` word). Filled so far: frame identity and lost-record accounting (F3), and
-capability bits correct from the first reply (F14); the rest (F1, F2, F4 to F9, F11) follow. Behavior below is verified from source and from the tests listed; the
+the record's `valid` word). Filled so far: frame identity and lost-record accounting (F3), the per-connection profiler request (F1), and
+capability bits correct from the first reply (F14); the rest (F2, F4 to F9, F11) follow. Behavior below is verified from source and from the tests listed; the
 emulator-side numbers have **not** been checked against a running game (see Coverage limits).
 
 ## Purpose and responsibilities
@@ -113,9 +113,11 @@ empty first reply does not later skip the early publications.
   debugger halts still reports its own number, and a record is never labelled with the snapshot
   frame of the reply that happened to carry it (`se_live_perf_frame.frame` is kept only for old
   callers). Ring/snapshot numbering is unchanged for ordinary execution; halt snapshots keep the
-  last completed frame's number (a GET that has seen it must still receive the finished frame), and
-  the one exception is the very first halt of a run (slot 0 means "empty"): it takes number 1 and
-  the running frame is renamed 2.
+  last completed frame's number (a GET that has seen it must still receive the finished frame). A
+  halt's ring number is a *delivery* number, never an identity: it does not reserve, rename or commit
+  the frame it happens in. The first halt of a run (slot 0 means "empty") is delivered as 1, the
+  number its frame will commit, so the frame's identity is the same before the halt, after it and in
+  its record.
 - **Timeline** changes on every replaced machine state, through one owner: an SE rewind or slot
   load (`SeStateAfterRestore`) and a native Mednafen load (`SeExportNotifyStateLoaded`, injected
   by `apply.py` after `CPU[1].PostStateLoad` in `StateAction`). A load the server ordered sets
@@ -134,7 +136,10 @@ empty first reply does not later skip the early publications.
   reaches the consumer; a newer `newestSeq` with nothing to carry it likewise, once. A jump the
   server did not report (an unreadable record, a v26 server) is inferred as a gap. When the 600
   entry queue evicts undrained records the new oldest entry carries the exact `evict_first..evict_last`
-  range, separate from the server's `gap_first..gap_last`: the server never had it to give versus
+  range, separate from the server's `gap_first..gap_last` (these two are only the span to break the
+  plot at; they merge separate losses into their enclosing interval, so a span can contain delivered
+  records or overlap the other cause's span. The *number* of frames missing is `gap_count` (server)
+  and `evict_count` (driver) on the record, exact and summed per cause, never derived from a span): the server never had it to give versus
   the application did not drain it. `se_live_perf_status_get` exposes `newest_seq`, `queued_seq`,
   a reply count and lost/evicted totals, so tests and panels can wait for "everything published has
   arrived" instead of sleeping.
@@ -201,7 +206,18 @@ debug run loop, which is several times slower, so:
 
 - the client sends it only while the panel is open with the checkbox ticked
   (`App::UpdateProfiler` restates the setting every frame; the driver sends changes);
-- the server drops it when the client disconnects (`SeOnClientDisconnect`);
+- **the request belongs to the connection (F1).** `SeServeClient` (common to the POSIX local
+  socket, the TCP/web-bridge listener and the Windows pipe) takes a slot (`SeProfAcquire`) for the
+  connection's lifetime and releases it (`SeProfRelease`) on every way out of the serve loop. The
+  PRF verb sets that slot (`SeProfSetRequest`); under `SE_LOCK` every join, change or leave
+  recomputes `sProfWanted`, the OR of all slots, and marks it pending. Only the emulate thread
+  applies it (`SeApplyPendingInstalls`) and publishes the result in `sProfApplied`
+  (`SeExportProfilerFlags()`), the single value the emulator runs with. So one client's request
+  neither leaks to a second client nor outlives its connection, and the last-client cleanup
+  (`SeOnClientDisconnect`) no longer writes the request at all, so it cannot clobber a newer
+  client's. At most 8 connections hold a slot; one beyond that cannot request;
+- a new connection starts with no request, whatever the previous one said, and the driver restates
+  its setting on every new connection, **off included** (`profDirty = true` on connect);
 - it needs `--enable-debugger`; otherwise no hook is registered and the capability bit is
   clear, and the panel disables the checkbox.
 
@@ -269,6 +285,11 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
   32- and 64-bit sequences), the capability bits of the first reply with and without a debugger,
   and identity end to end (batch, no snapshot, native load, slot load once, refused load, reconnect,
   several halts in a frame).
+- [LiveProfilerRequestTests.cpp](../../../FrontEnd/tests/LiveProfilerRequestTests.cpp): F1. Real
+  exporter and two real drivers at once (local socket and TCP, own socket and port): A requests, B
+  does not; A leaves (and is reset abruptly) while B stays; both request and one leaves; repeated
+  connect-enable-leave; the TCP listener's lifetime. Plus the driver against a scripted server:
+  the setting, "off" included, is restated on every reconnect.
 - [MemoryRoundTripTests.cpp](../../../FrontEnd/tests/MemoryRoundTripTests.cpp) (profiler
   section): the real glue, in lockstep with the client; counters handed over and zeroed per
   frame with consecutive producer-stamped frame numbers, a rewind starting a new timeline, and

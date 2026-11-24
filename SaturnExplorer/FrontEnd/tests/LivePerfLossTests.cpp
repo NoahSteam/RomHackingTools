@@ -397,6 +397,71 @@ void TestDriverGaps()
             CHECK(at > 1 && got[at - 1].sample_seq == 309);
         }
     }
+    // Counts are exact and never derived from a span. Records 1 and 2 arrive, the server reports 3..4
+    // lost, then 5..605 arrive undrained: the queue (600) evicts 1, 2 and 5 -- the record that
+    // carried the server's gap among them. The survivor 6 spans 1..5 and 3..4, which overlap, and
+    // must still say 3 evicted + 2 lost.
+    {
+        std::vector<Reply> script;
+        { Reply r1; r1.perf = { Rec(1), Rec(2) }; r1.perfNewest = 2; script.push_back(r1); }
+        for (uint64_t base = 5; base <= 605; base += 8)   // replies carry at most 8 records
+        {
+            Reply r;
+            for (uint64_t k = base; k < base + 8 && k <= 605; ++k) r.perf.push_back(Rec(k));
+            r.perfNewest = r.perf.back().sampleSeq;
+            if (base == 5) { r.perfLostFirst = 3; r.perfLostLast = 4; }
+            script.push_back(r);
+        }
+        script.push_back(Idle(605));
+        const size_t n = script.size();
+        Scripted s(script);
+        CHECK(s.Open());
+        CHECK(s.WaitReplies(n));
+        const se_live_perf_status st = s.Status();
+        CHECK(st.server_lost == 2 && st.driver_evicted == 3);
+        const auto got = s.Drain();
+        CHECK(got.size() == 600);
+        if (got.size() == 600)
+        {
+            CHECK(got[0].sample_seq == 6);
+            CHECK(got[0].gap_count == 2 && got[0].evict_count == 3);
+            CHECK(got[0].evict_first == 1 && got[0].evict_last == 5 && got[0].gap_first == 3 && got[0].gap_last == 4);
+            CHECK(got[1].gap_count == 0 && got[1].evict_count == 0);
+        }
+    }
+    // Two separate server gaps (2..3 and 10..11) with delivered records (4..9) between them, both
+    // carried by records that the queue then evicts: the survivor spans 2..11 but lost exactly 4
+    // to the server (the 6 delivered records inside the span are not lost), and 8 were evicted
+    // (1, 4..9 and 12).
+    {
+        std::vector<Reply> script;
+        { Reply r1; r1.perf = { Rec(1) }; r1.perfNewest = 1; script.push_back(r1); }
+        { Reply r2; r2.perf = { Rec(4), Rec(5), Rec(6), Rec(7), Rec(8), Rec(9) }; r2.perfNewest = 9;
+          r2.perfLostFirst = 2; r2.perfLostLast = 3; script.push_back(r2); }
+        for (uint64_t base = 12; base <= 612; base += 8)
+        {
+            Reply r;
+            for (uint64_t k = base; k < base + 8 && k <= 612; ++k) r.perf.push_back(Rec(k));
+            r.perfNewest = r.perf.back().sampleSeq;
+            if (base == 12) { r.perfLostFirst = 10; r.perfLostLast = 11; }
+            script.push_back(r);
+        }
+        script.push_back(Idle(612));
+        const size_t n = script.size();
+        Scripted s(script);
+        CHECK(s.Open());
+        CHECK(s.WaitReplies(n));
+        const se_live_perf_status st = s.Status();
+        CHECK(st.server_lost == 4 && st.driver_evicted == 8);
+        const auto got = s.Drain();
+        CHECK(got.size() == 600);
+        if (got.size() == 600)
+        {
+            CHECK(got[0].sample_seq == 13);
+            CHECK(got[0].gap_first == 2 && got[0].gap_last == 11 && got[0].gap_count == 4);
+            CHECK(got[0].evict_first == 1 && got[0].evict_last == 12 && got[0].evict_count == 8);
+        }
+    }
     // A v27 sequence crossing 2^32 is delivered in order, with no gap and no restart.
     {
         Reply r1; r1.perf = { Rec(0xFFFFFFFEull), Rec(0xFFFFFFFFull), Rec(0x100000000ull), Rec(0x100000001ull) };
@@ -481,7 +546,11 @@ uint32_t FirstReplyCaps(bool counters, bool debugger)
         se_data_source ds = {};
         while (!stop.load() && se_live_open(kSock, &ds) != SE_OK) std::this_thread::yield();
         if (stop.load()) return;
-        for (int i = 0; i < 100000 && !stop.load() && samples.load() < 100; ++i)
+        // Bounded by time, not by a count of yields: a slow transport (TCP) can need longer than any
+        // fixed number of spins before its first reply exists, and a run with no first-reply sample
+        // would assert nothing. The first sample is still taken the instant the version is known.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+        while (!stop.load() && samples.load() < 100 && std::chrono::steady_clock::now() < deadline)
         {
             if (se_live_server_version(&ds) != 0)
             {
@@ -498,7 +567,7 @@ uint32_t FirstReplyCaps(bool counters, bool debugger)
     if (debugger) SeExportSetProfilerHook(FakeSetProfiler);
     if (counters) SeExportSetPerfCapable(1);
     CHECK(SeExportStart() == 0);
-    for (int i = 0; i < 4000 && samples.load() < 100; ++i) SleepMs(2);
+    for (int i = 0; i < 10000 && samples.load() < 100; ++i) SleepMs(2);   // up to 20 s, as the racer
     stop = true;
     racer.join();
     SeExportDeinit();
@@ -725,6 +794,57 @@ void TestIdentityEndToEnd()
     for (int i = 0; i < 200; ++i) { SeExportApplyInstalls(); SleepMs(2); }
     SeExportDeinit();
 }
+// F3 review (B): a halt delivers a snapshot; it never consumes the identity of the frame it is in.
+void TestFirstHaltKeepsIdentity()
+{
+    CHECK(SeExportPrepare() == 0);
+    SeExportSetPerfCapable(1);
+    CHECK(SeExportStart() == 0);
+    se_data_source ds = {};
+    CHECK(OpenRetry(&ds));
+    for (int i = 0; i < 2000 && se_live_server_version(&ds) == 0; ++i) SleepMs(5);   // a client is attached
+
+    // The very first frame of the run (sFrameNo == 0), halted three times before any normal snapshot.
+    SeExportGateFrame();
+    unsigned tl0 = 0, tl1 = 0, tl2 = 0;
+    unsigned long long before = 0, afterHalt = 0, perHalt[3] = {};
+    SeExportFrameIdentity(&tl0, &before);
+    CHECK(before == 1);
+    for (unsigned h = 0; h < 3; ++h)
+    {
+        SeExportNotifyStop(0, 0x06001000u + h * 2);
+        SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, nullptr, nullptr);
+        SeExportFrameIdentity(&tl1, &perHalt[h]);
+    }
+    afterHalt = perHalt[2];
+    CHECK(perHalt[0] == 1 && perHalt[1] == 1 && perHalt[2] == 1);   // unchanged by each halt
+    CHECK(tl1 == tl0);
+    {
+        SeExportPerfInfo info;
+        std::memset(&info, 0, sizeof info);
+        SeExportFrameIdentity(&info.timelineId, &info.frameNo);
+        info.valid = SE_PERF_VALID_IDENTITY;
+        unsigned long long c[SE_PERF_COUNT] = {};
+        SeExportPublishPerf(c, SE_PERF_COUNT, nullptr, nullptr, 0, 0, &info);
+        CHECK(info.frameNo == 1);
+    }
+    SeExportEndFrame();   // commits the frame: 1, once
+    unsigned long long next = 0;
+    SeExportFrameIdentity(&tl2, &next);
+    CHECK(afterHalt == before && next == 2);   // only one frame completed: the next one is 2, not 3
+    SeExportGateFrame();
+    unsigned long long reserved = 0;
+    SeExportFrameIdentity(&tl2, &reserved);
+    CHECK(reserved == 2);
+    SeExportEndFrame();
+    SeExportFrameIdentity(&tl2, &next);
+    CHECK(next == 3);
+
+    ds.close(ds.user);
+    for (int i = 0; i < 200; ++i) { SeExportApplyInstalls(); SleepMs(2); }
+    SeExportDeinit();
+}
 }  // namespace
 
 int main()
@@ -733,6 +853,7 @@ int main()
     TestDriverGaps();
     TestFirstReplyCapabilities();
     TestIdentityEndToEnd();
+    TestFirstHaltKeepsIdentity();
     if (gFailures) { std::printf("%d check(s) failed\n", gFailures); return 1; }
     std::printf("LivePerfLossTests passed\n");
     return 0;
