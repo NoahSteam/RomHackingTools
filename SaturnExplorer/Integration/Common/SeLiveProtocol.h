@@ -115,10 +115,15 @@
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 /* Snapshot request. arg = the client's last-seen frame number: the server keeps an N-deep
- * ring of completed frames and replies with the OLDEST frame newer than 'arg' (gap-free, so
- * a client that keeps up never skips a frame), or the latest when arg is 0 or the client has
- * caught up. The reply's control block reports the frame number actually served. arg 0 (an
- * older client that doesn't track frames) always gets the latest — the original behavior. */
+ * ring of snapshots and replies with the OLDEST one newer than the last this connection was served
+ * (gap-free, so a client that keeps up never skips a snapshot), or the latest when arg is 0 or the
+ * client has caught up. "Newer" is decided on a server-side delivery sequence that every snapshot
+ * takes, halts included; a halt can show the same frame number as the frame it is inside, so the
+ * frame number alone cannot order them. The reply's control block reports the emulated frame number
+ * of the snapshot served (unchanged: it is the frame identity the client displays and rewinds to,
+ * not the delivery sequence). A connection that names a frame other than the one it was last served
+ * is ordered by frame number alone. arg 0 (an older client that doesn't track frames) always gets
+ * the latest — the original behavior. */
 #define SE_LIVE_VERB_GET     "GET\n"
 #define SE_LIVE_VERB_PAUSE   "PAU\n"
 #define SE_LIVE_VERB_RESUME  "RUN\n"

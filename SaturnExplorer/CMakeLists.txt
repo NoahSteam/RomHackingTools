@@ -1907,8 +1907,18 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
         target_link_libraries(SaturnExplorerLiveHaltRaceTests PRIVATE Threads::Threads)
         add_test(NAME SaturnExplorerLiveHaltRaceTests COMMAND SaturnExplorerLiveHaltRaceTests)
+        # The ring's snapshot delivery sequence: a first halt, halts inside one frame, a halt in a later
+        # frame and a rewind after a halt, each followed by normal frames that are already queued.
+        add_executable(SaturnExplorerLiveSnapshotDeliveryTests
+            FrontEnd/tests/LiveSnapshotDeliveryTests.cpp
+            Integration/Common/se_export.c)
+        target_include_directories(SaturnExplorerLiveSnapshotDeliveryTests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveSnapshotDeliveryTests PRIVATE Threads::Threads)
+        add_test(NAME SaturnExplorerLiveSnapshotDeliveryTests COMMAND SaturnExplorerLiveSnapshotDeliveryTests)
         set_tests_properties(SaturnExplorerLiveRestoreSignalTests SaturnExplorerLiveProfilerTests SaturnExplorerLivePerfLossTests SaturnExplorerLiveProfilerRequestTests SaturnExplorerExportAttachTests
-                             SaturnExplorerLiveExporterRobustnessTests SaturnExplorerLiveHaltRaceTests
+                             SaturnExplorerLiveExporterRobustnessTests SaturnExplorerLiveHaltRaceTests SaturnExplorerLiveSnapshotDeliveryTests
                              PROPERTIES RESOURCE_LOCK live_tap_socket)
     endif()
 endif()

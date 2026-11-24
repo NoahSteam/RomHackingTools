@@ -105,6 +105,15 @@ static void SeBuildVdp1Image(const unsigned char* dst_img, const void* vdp1struc
 #define SE_RING 4
 static SeFrame* sRing[SE_RING];
 static uint64_t sRingFrame[SE_RING];   /* frame number stored in each slot (0 = empty) */
+/* DELIVERY sequence. Every snapshot written to the ring -- a halt's or a normal frame's -- takes the next
+ * number of one strictly monotonic counter (sRingSeq[slot] = ++sDeliverySeq, under the lock; never reset
+ * by a restore, only by SeExportInit). It orders the ring and is what a GET's "newer than what this
+ * connection was last served" is decided on. It is NOT the frame identity: sRingFrame is the number the
+ * reply header shows and the client displays / rewinds to, and two snapshots (a halt and the frame it is
+ * inside) can show the same one. The mapping slot -> (delivery number, frame) is this pair of arrays. */
+static uint64_t sRingSeq[SE_RING];
+static uint64_t sDeliverySeq;
+static unsigned int sRingEpoch;        /* bumped whenever the ring is emptied by a restore */
 static int      sRingWrite;            /* next slot the producer will write */
 static volatile int sRunning;
 
@@ -213,7 +222,20 @@ static void SeStepFramePublished(void)
 }
 static volatile unsigned long long sFrameNo;
 
-/* ---- Frame identity for the profiler (F3). A record is stamped (timeline, frame) by the producer.
+/* ---- Three different numbers, not to be confused:
+ *   1. The RESERVED perf identity (sIdFrame / SeIdReserve, read by SeExportFrameIdentity and committed
+ *      once in SeExportEndFrame): the emulated frame under execution. Halts never touch it.
+ *   2. The COMMITTED frame number sFrameNo (0 before the first frame completes): what the ring shows
+ *      for a normal snapshot, and what the event queue (sEvQ[].frame), call-stack frames
+ *      (SeCallFrame.frameNo) and tracepoint records are stamped with at the moment they are produced.
+ *      Those stamps therefore read 0 -- or the previous frame's number -- for anything that happens
+ *      before the frame in progress commits, including everything before the first normal snapshot or
+ *      end of frame. They are display hints, never keys.
+ *   3. The snapshot DELIVERY sequence (sRingSeq): one number per ring write, halts included, strictly
+ *      monotonic and never reused; it is what a GET's "newer than what this connection saw" is
+ *      decided on. It is server-side only (the reply header keeps showing the emulated frame number).
+ *
+ * ---- Frame identity for the profiler (F3). A record is stamped (timeline, frame) by the producer.
  * The frame under execution has its number reserved at the top-of-frame gate -- after a pending
  * load was applied, before the guest runs -- and committed once when Emulate() completes
  * (SeExportEndFrame). Snapshots (ordinary and mid-frame halts) and the end-of-frame perf record all
@@ -746,7 +768,7 @@ static void SeRestoreFailed(void)
 static void SeStateAfterRestore(void)
 {
     SE_LOCK();
-    { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
+    { int i; for (i = 0; i < SE_RING; ++i) { sRingFrame[i] = 0; sRingSeq[i] = 0; } sRingWrite = 0; ++sRingEpoch; }
     ++sRestoreAckPending;   /* each restore is counted done when the next frame lands in the emptied ring */
     SE_UNLOCK();
     SeBumpTimeline();   /* the machine was replaced: the next frame belongs to a new timeline */
@@ -2077,12 +2099,13 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
      * GET with nothing newer serves the latest slot, which is this one. */
     if (SeAtLoad(&sPaused) && SE_STOP_REASON(dst->stop) != SE_LIVE_STOP_NONE)
     {
-        /* The ring number of a halt snapshot is a DELIVERY number, not a frame identity: it never
-         * reserves, renames or commits the emulated frame (sIdFrame / sFrameNo), so the frame the
-         * halt happened in reports the same identity before the halt, after it and in its record.
-         * Slot value 0 means "empty", so a halt before any frame has completed (sFrameNo == 0) is
-         * delivered as 1, the number the frame it is inside will commit; a client that has been
-         * served that halt is later re-served the latest slot (nothing newer), not skipped. */
+        /* A halt snapshot never reserves, renames or commits the emulated frame (sIdFrame /
+         * sFrameNo), so the frame the halt happened in reports the same identity before the halt,
+         * after it and in its record. The frame number it SHOWS in the reply header is the last
+         * committed frame, or 1 before any frame has committed (slot value 0 means "empty"), which can
+         * equal the number of a normal snapshot. That is harmless: the order in which snapshots are
+         * delivered is the separate delivery sequence (sRingSeq, assigned below), which every
+         * snapshot takes, so a halt and a frame showing the same number are still two deliveries. */
         sRingFrame[sRingWrite] = sFrameNo != 0 ? sFrameNo : 1;
     }
     else
@@ -2095,6 +2118,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
         sFrameNo = sIdFrame;
         sRingFrame[sRingWrite] = sFrameNo;
     }
+    sRingSeq[sRingWrite] = ++sDeliverySeq;             /* the delivery number: unique, whatever frame it shows */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
     if (sRestoreAckPending) { sRestoreDone += sRestoreAckPending; sRestoreAckPending = 0; }   /* first post-restore frame */
     /* How many loads have been settled, one way or the other: the stamp each savestate block of
@@ -2335,6 +2359,11 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap, int profSlot)
 static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut, int profSlot)
 {
 #define perfSent (*perfSentP)
+    /* This connection's snapshot cursor: the delivery number of the slot its last reply carried, the
+     * (32-bit) frame number that reply showed, and the ring epoch it was served in. */
+    uint64_t connServedSeq = 0;
+    uint32_t connServedFrame = 0;
+    unsigned int connRingEpoch = 0;
     SeLogPortDevices();   /* report the emulator's controller config on connect */
     while (SeAtLoad(&sRunning))
     {
@@ -2548,20 +2577,36 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* 
             int slot = (sRingWrite + SE_RING - 1) % SE_RING;   /* latest by default */
             if (lastSeen != 0)
             {
+                /* "Unseen" is decided on the DELIVERY sequence when the client's cursor is the snapshot
+                 * this connection was last served (its arg is that snapshot's frame), or when a restore
+                 * emptied the ring since (the arg is then a resync to the load's frame, and everything
+                 * now in the ring is newer than anything served before). The frame number cannot decide
+                 * it: a halt and the frame it is inside show the same one. Otherwise -- a client that
+                 * names some other frame, or a fresh connection -- the old rule applies: a slot is
+                 * unseen when its (32-bit) frame number is newer than the arg. Either way the OLDEST
+                 * unseen slot by delivery order is served. */
+                const int byDelivery = connServedSeq != 0 &&
+                                       (connServedFrame == lastSeen || connRingEpoch != sRingEpoch);
                 int i, found = -1;
-                uint32_t best = 0;
+                uint64_t best = 0;
                 for (i = 0; i < SE_RING; ++i)
                 {
-                    /* Compare in 32-bit to match the client's frame counter, but test
-                     * emptiness on the full 64-bit value (0 only means never-written). */
-                    uint32_t f = (uint32_t)sRingFrame[i];
-                    if (sRingFrame[i] != 0 && f > lastSeen && (found < 0 || f < best))
-                    { best = f; found = i; }
+                    /* Emptiness is tested on the full 64-bit frame (0 only means never-written). */
+                    const int unseen = byDelivery ? sRingSeq[i] > connServedSeq
+                                                  : (uint32_t)sRingFrame[i] > lastSeen;
+                    if (sRingFrame[i] != 0 && unseen && (found < 0 || sRingSeq[i] < best))
+                    { best = sRingSeq[i]; found = i; }
                 }
                 if (found >= 0) slot = found;   /* oldest unseen; else stay on latest */
             }
             memcpy(snap, sRing[slot], sizeof(SeFrame));
             served = sRingFrame[slot];
+            if (served != 0)   /* the cursor follows whatever this reply carried, for any verb */
+            {
+                connServedSeq = sRingSeq[slot];
+                connServedFrame = (uint32_t)(served & 0xFFFFFFFFu);
+                connRingEpoch = sRingEpoch;
+            }
         }
         SeWr32(ctl + 4, (unsigned int)(served & 0xFFFFFFFFu));
         SeWr32(ctl + 8, (unsigned int)((served >> 32) & 0xFFFFFFFFu));
@@ -3033,11 +3078,11 @@ int SeExportPrepare(void)
         for (i = 0; i < SE_RING; ++i)
         {
             sRing[i] = (SeFrame*)calloc(1, sizeof(SeFrame));
-            sRingFrame[i] = 0;
+            sRingFrame[i] = 0; sRingSeq[i] = 0;
             if (!sRing[i]) { SeExportDeinit(); return -1; }
         }
     }
-    sRingWrite = 0;
+    sRingWrite = 0; sDeliverySeq = 0; sRingEpoch = 0;
     SeAtStore(&sPaused, 0); SeCancelSteps(); sFrameNo = 0; SeAtStore(&sClients, 0); SeAtStore(&sRewindWanted, 1);
     SeAtStore(&sProfWanted, 0); SeAtStore(&sProfPending, 0); SeAtStore(&sProfApplied, 0);
     { int i; for (i = 0; i < SE_PROF_SLOTS; ++i) { sProfSlotUsed[i] = 0; sProfSlotFlags[i] = 0; } }
@@ -3142,7 +3187,7 @@ void SeExportDeinit(void)
 #endif
     {
         int i;
-        for (i = 0; i < SE_RING; ++i) { free(sRing[i]); sRing[i] = NULL; sRingFrame[i] = 0; }
+        for (i = 0; i < SE_RING; ++i) { free(sRing[i]); sRing[i] = NULL; sRingFrame[i] = 0; sRingSeq[i] = 0; }
     }
     sRingWrite = 0;
     {
