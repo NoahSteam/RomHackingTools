@@ -30,6 +30,14 @@ python3 -I "$HERE/analyze_v3.py" "$OUT" --min-frames 200 --min-window-s 1 --boot
 cat "$OUT/analysis.txt"
 n="$(grep -c '^  rep .* valid$' "$OUT/analysis.txt")"
 [ "$n" -eq 6 ] || fail "expected 6 valid runs, got $n"
+# a server without function attribution: the client must refuse to run config c rather than record a lie
+"$FAKE" --no-functions > /dev/null 2>&1 &
+NOFN=$!
+"$BENCH" --endpoint "$SOCK" --attribution on --warmup 0.2 --duration 1 --connect-timeout 20 > "$OUT/nofn.log" 2>&1
+rc=$?
+kill $NOFN 2>/dev/null; wait $NOFN 2>/dev/null
+[ "$rc" -eq 1 ] || { cat "$OUT/nofn.log"; fail "attribution request against a server without the capability exited $rc, expected 1"; }
+grep -q 'lacks SE_LIVE_CAP_PROF_FUNCTIONS' "$OUT/nofn.log" || fail "no capability message"
 # an emulator that does not list a pinned setting must stop the script before any run
 "$HERE/run_v3.sh" --emu "$FAKE" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT/x" --bench "$BENCH" \
     --endpoint "$SOCK" --reps 1 --cache 1 --throttle bogus > /dev/null 2>&1 && fail "bad --throttle accepted"

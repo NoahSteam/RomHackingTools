@@ -34,10 +34,13 @@ int main(int argc, char** argv)
                       "-cheats\n-autosave\n-ss.cpucache_emumode");
             return 0;
         }
+    bool functions = true;   // --no-functions: a build without attribution (no SE_LIVE_CAP_PROF_FUNCTIONS)
+    for (int i = 1; i < argc; ++i)
+        if (!std::strcmp(argv[i], "--no-functions")) functions = false;
     std::signal(SIGTERM, OnSignal);
     std::signal(SIGINT, OnSignal);
     if (SeExportPrepare() != 0) return 1;
-    SeExportSetProfilerHook(SetProfiler);
+    if (functions) SeExportSetProfilerHook(SetProfiler);
     SeExportSetPerfCapable(1);
     SeExportSetEmuSlotHooks(SlotInfo, SlotLoad);
     if (SeExportStart() != 0) return 1;

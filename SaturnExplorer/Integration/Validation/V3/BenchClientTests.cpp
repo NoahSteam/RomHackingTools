@@ -243,6 +243,12 @@ void TestLossIsCountedAndInvalid()
     CHECK(rc == v3::kInvalid);
     const auto s = ReadSummary(o.summaryPath);
     CHECK(s.at("valid") == "0");
+    {
+        std::ifstream sf(o.summaryPath);
+        std::stringstream all;
+        all << sf.rdbuf();
+        CHECK(all.str().find("invalid_reason=samples lost in the measured window") != std::string::npos);
+    }
     const uint64_t lost = std::strtoull(s.at("lost_server_ring_window").c_str(), nullptr, 10);
     CHECK(lost > 150);   // 200 frames at once into a 16-deep ring
     CHECK(std::atoll(s.at("lost_client_queue_window").c_str()) == 0);
