@@ -1117,8 +1117,10 @@ SOUND_PERF_POST_HOOK = (
 SS_CACHE_MODE_ANCHOR = r'(NeedEmuICache = \(cpucache_emumode == CPUCACHE_EMUMODE_FULL\);[ \t]*\n)'
 SS_CACHE_MODE_HOOK = " SeSsCacheMode = NeedEmuICache ? SE_PERF_CACHE_ON : SE_PERF_CACHE_OFF;   /* Saturn Explorer profiler (F8) */\n"
 
-# F2: power edges and resets of the SH-2s. SetActive's two real transitions (a redundant call changes
-# nothing and is no edge) and the top of Reset on a powered CPU (watchdog or SetActive's own).
+# F2 / F9: power edges and resets of the SH-2s, and exception entries. SetActive's two real transitions
+# (a redundant call changes nothing and is no edge), the top of Reset on a powered CPU (watchdog or
+# SetActive's own), and every exception the core takes that the shadow stack cannot see as an
+# instruction. TRAPA is deliberately not hooked: the glue records it as the call it is.
 SH2_SETACTIVE_ON_ANCHOR = (r'(void SH7095::SetActive\(bool active\)\s*\{\s*\n if\(active && timestamp == SS_EVENT_DISABLED_TS\)\s*\{\s*\n'
                            r'  timestamp = SH7095_mem_timestamp;[ \t]*\n)')
 SH2_SETACTIVE_ON_HOOK = "  if(this == &CPU[1]) SeMednafenSlaveActive(1, (int)timestamp);   /* SE_SLAVE_ON_EDGE */\n"
@@ -1126,6 +1128,13 @@ SH2_SETACTIVE_OFF_ANCHOR = r'(else if\(!active && timestamp != SS_EVENT_DISABLED
 SH2_SETACTIVE_OFF_HOOK = "  if(this == &CPU[1]) SeMednafenSlaveActive(0, (int)timestamp);   /* SE_SLAVE_OFF_EDGE */\n"
 SH2_RESET_ANCHOR = r'(void NO_INLINE SH7095::Reset\(bool power_on_reset, bool from_internal_wdt\)\s*\{\s*\n if\(timestamp == SS_EVENT_DISABLED_TS\)\s*\n  return;[ \t]*\n)'
 SH2_RESET_HOOK = " SeMednafenCpuReset((int)(this - CPU), (int)timestamp);   /* SE_CPU_RESET_HOOK */\n"
+SH2_EXCEPTIONS = ("INT", "NMI", "CPUADDR", "DMAADDR", "ILLINSTR", "ILLSLOT")
+
+
+def sh2_exception_edit(kind):
+    return (r'(\bException\(EXCEPTION_%s, [^;\n]*;[ \t]*\n)' % kind,
+            "\t SeMednafenExceptionEntry((int)(this - CPU));   /* SE_OWN_EXC_%s */\n" % kind,
+            "SE_OWN_EXC_%s" % kind)
 
 
 # File-scope forward declarations (extern "C" is illegal inside a function body, so
@@ -1137,6 +1146,7 @@ FWD_DECLS = (
     # F2 + F6 + F9 lifecycle (se_mednafen_glue.c): slave power edges, CPU resets, exception entries, loads, frame close.
     "extern \"C\" void SeMednafenSlaveActive(int on, int ts);\n"
     "extern \"C\" void SeMednafenCpuReset(int cpu, int ts);\n"
+    "extern \"C\" void SeMednafenExceptionEntry(int cpu);\n"
     "extern \"C\" void SeMednafenStateLoaded(int slaveOn);\n"
     "extern \"C\" void SeMednafenFrameClose(int end_ts, int ts0, int ts1, int slaveOn);\n"
     "extern \"C\" int  SeExportGateFrame(void);\n"
@@ -1507,6 +1517,8 @@ def process_profiler(src_dir, do_write):
         (SH2_SETACTIVE_OFF_ANCHOR, SH2_SETACTIVE_OFF_HOOK, "SE_SLAVE_OFF_EDGE"),
         (SH2_RESET_ANCHOR, SH2_RESET_HOOK, "SE_CPU_RESET_HOOK"),
     ], do_write)
+    notes += process_anchored(src_dir, "sh7095_ops.inc", "profiler: exception entries (function ownership)",
+                              [sh2_exception_edit(k) for k in SH2_EXCEPTIONS], do_write)
     notes += process_anchored(src_dir, "scu.inc", "profiler: DMA + DSP", [
         (SCU_DMA_PERF_ANCHOR, SCU_DMA_PERF_HOOK, "SE_PERF_DMA_ROUTE_BYTES"),
         (SCU_DSP_PERF_ANCHOR, SCU_DSP_PERF_HOOK, "SE_PERF_DSP_CYCLES"),

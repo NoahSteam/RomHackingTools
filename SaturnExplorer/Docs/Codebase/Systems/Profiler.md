@@ -6,7 +6,7 @@ Inspected revision: the change that introduced it (protocol v26), on top of
 has not filled yet are declared and carried but marked "not available" on the wire (a clear bit in
 the record's `valid` word). Filled so far: frame identity and lost-record accounting (F3), and
 capability bits correct from the first reply (F14), the slave on-time and the latched mode (F2 + F6, one frame-lifecycle
-contract); the rest (F1, F7, F9, F10) follow. Behavior below is verified from source and from the tests listed; the
+contract), and function ownership (F9); the rest (F1, F7, F10) follow. Behavior below is verified from source and from the tests listed; the
 emulator-side numbers have **not** been checked against a running game (see Coverage limits).
 
 ## Purpose and responsibilities
@@ -33,7 +33,7 @@ transport (see [State sources](StateSources.md)).
 |---|---|
 | Counter indices and the function key (single source of truth for emulator, wire and client) | [SePerfCounters.h](../../../Integration/Common/SePerfCounters.h): `SE_PERF_*`, `SE_PERF_DEV_*`, `SE_PERF_FN_*` |
 | Emulator instrumentation | [apply.py](../../../Integration/Mednafen/apply.py): `PERF_DECL`, `PERF_BUS_HELPER`, the `*_PERF_*` / `SH2_*` anchors, `process_profiler`; `SsDbgCpuTimestamp`, `SsDbgSetProfileActive` in `SS_ACCESSORS` |
-| Frame hand-over and function sampling | [se_mednafen_glue.c](../../../Integration/Mednafen/se_mednafen_glue.c): `SeSsPerfC`, `SeMdfnPerfEndFrame`, `SeMdfnProfSampleAt`, `SeMdfnApplyMode`, the lifecycle entry points `SeMednafenSlaveActive` / `CpuReset` / `StateLoaded` / `FrameClose` |
+| Frame hand-over and function sampling | [se_mednafen_glue.c](../../../Integration/Mednafen/se_mednafen_glue.c): `SeSsPerfC`, `SeMdfnPerfEndFrame`, `SeMdfnProfSampleAt`, `SeMdfnApplyMode`, the lifecycle entry points `SeMednafenSlaveActive` / `CpuReset` / `ExceptionEntry` / `StateLoaded` / `FrameClose` |
 | Server | [se_export.c](../../../Integration/Common/se_export.c): `SeExportPublishPerf`, `SeExportBuildPerfSection` (a connection's reply section and its lost range), `SeExportFrameIdentity` / `SeIdReserve` / `SeExportEndFrame` (frame identity), `SeExportNotifyStateLoaded` (timeline), `SeExportPrepare` / `SeExportStart` (startup), `SeExportSetProfilerHook`, `SeExportSetPerfCapable`, `SeExportCurrentFunction`, `SePublishProfiler` |
 | Wire contract | [SeLiveProtocol.h](../../../Integration/Common/SeLiveProtocol.h): `SE_LIVE_VERB_PROFILE`, `SE_LIVE_PROF_FUNCTIONS`, `SE_LIVE_CAP_PROFILER`, `SE_LIVE_CAP_PROF_FUNCTIONS`, "Perf section" |
 | Client | [LiveDriver.cpp](../../../Drivers/Live/src/LiveDriver.cpp): `LivePerf`, the v26 and v27 parse in `ReadSnapshot`, `IngestPerf` (ordering, gaps, eviction); [LiveDriver.h](../../../Drivers/Live/src/LiveDriver.h): `se_live_perf_frame`, `se_live_drain_perf`, `se_live_perf_status_get`, `se_live_set_profiler` |
@@ -211,9 +211,32 @@ debug run loop, which is several times slower, so:
 Per instruction, `SeMdfnProfSampleAt` charges the cycles since that CPU's previous
 instruction, minus the sleep/stall cycles counted in between, to the function the previous
 instruction was in. The function is the innermost shadow-call-stack frame's entry
-(`SeExportCurrentFunction`); with no recorded frame (code already running when profiling began,
-e.g. the main loop) the key is a 16-byte bucket of the raw PC, flagged `SE_PERF_FN_RAW_PC`. A per-frame hash table collects
+(`SeExportCurrentFunction`) **while ownership is known (F9)**; otherwise (code already running when
+profiling began, an interrupt handler, the body after a computed jump, a parent we never saw) the
+key is a 16-byte bucket of the raw PC, flagged `SE_PERF_FN_RAW_PC`. A per-frame hash table collects
 the keys; the 64 hottest go on the wire and the rest are summed into `fn_other_cycles`.
+
+### Function ownership (F9)
+
+The shadow stack records calls and returns; whether its innermost frame names the code that is
+*executing* is a separate fact, kept per CPU in `se_export.c` (`sOwnKnown`, `sOwnTrust`, and per frame
+`parentKnown` / `trust`). `SeExportCurrentFunction` returns 0, so the profiler charges the raw-PC
+bucket, while ownership is unknown.
+
+| Event | Ownership afterwards |
+|---|---|
+| Observed call (`bsr` / `bsrf` / `jsr`, observed `trapa`) | Known: the callee's entry is the function now running. The frame remembers whether its parent was known |
+| Return (`rts` / `rte`) landing on the frame's recorded return address, from a frame whose parent was known and that was pushed since observation was last lost | Known: the parent is named again |
+| Any other return: the parent was unknown (a call made from unknown code), the landing address is not the recorded one, the frame predates a loss of observation, or there was no frame | Unknown |
+| Actual exception entry (interrupt, NMI, address error, illegal instruction: hooks in `sh7095_ops.inc`; **not** `trapa`, which is observed) | Unknown. The stack is kept, since a balanced handler returns through it |
+| A call whose target is not where execution arrived (an interrupt came between the call and the callee's first instruction) | Unknown |
+| Completed computed transfer (`jmp @Rn`, `braf Rn`: a switch or a tail call, indistinguishable) | Unknown until a call or a matching return proves it |
+| Loss of continuous observation (profiler toggled, `SeMednafenHookMode(0)`) | Unknown, and every frame recorded so far is distrusted (it may have returned unseen) |
+| CPU reset (watchdog, `SetActive`), state load | Stack dropped, ownership unknown |
+
+Not done (deferred, as in the plan): reconstructing the exception stack. An interrupt therefore
+costs the interrupted function its naming until its own `rts` lands back on its caller; and a plain
+`bra` / `bt` / `bf` used as a tail call is not recognised (only `jmp` / `braf` are).
 
 ### Frame lifecycle: slave on-time and the latched mode (F2 + F6)
 
@@ -296,8 +319,11 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
   `SaturnExplorerProfilerLifecycleTests`): the real glue accounting against the real shadow stack, on
   a clock the test controls. F2: 1,000-cycle frame, slave on `[0,200)` and `[800,1000)` = 400
   on-cycles and 400 function cycles; rebase, redundant `SetActive`, state restore (on to off, off to on, record/CPU
-  disagreement), watchdog reset with power on, the 37-cycle / 7-idle interval, the mode latch. Each was
-  mutation-checked.
+  disagreement), watchdog reset with power on, the 37-cycle / 7-idle interval. F9: the positive oracle (unknown
+  parent's call and delay slot raw, callee body and return slot named, raw after the return), known-parent
+  return, interrupt, tail `jmp`, an interrupted call, `trapa`, nested call on a stale frame, wrong return
+  address, stale frame after lost observation, disable/re-enable. Each was mutation-checked (21
+  mutations of the glue and the stack, all caught).
 - [LiveProfilerModeTests.cpp](../../../FrontEnd/tests/LiveProfilerModeTests.cpp): F6 on the real exporter
   and driver: a request that arrives during a frame (halt gate, snapshot) is not applied there, the
   old frame is published in its old mode, the next in the new one, in both directions, and a
@@ -305,8 +331,8 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
 - [perf_sh2_harness.cpp](../../../Integration/Mednafen/component/perf_sh2_harness.cpp) (via
   `check_component.py`): the **real** patched `SH7095::SetActive` and `SH7095::Reset` (inside the
   patched `ss.cpp`) call the real glue: on `[0,200)` and `[800,1000)` is 400; a watchdog `Reset`
-  drops the stack and leaves on-time whole. `check_component.py` also checks where the frame-close and
-  state-load hooks sit in the patched source.
+  drops the stack and leaves on-time whole. `check_component.py` also checks where the frame-close,
+  state-load and exception-entry hooks sit in the patched source.
 - [LiveProfilerTests.cpp](../../../FrontEnd/tests/LiveProfilerTests.cpp): real exporter and
   real driver, in lockstep (the producer never gets ahead of what the driver has queued, judged
   by `se_live_perf_status_get`, never by sleeping); every frame once, intact and gap-free from the
@@ -344,9 +370,11 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
 - Function time is self time only, and the raw-PC buckets are not folded into functions
   (`ProfilerPanel::Host::functionContaining` is an unfilled hook for the function finder).
 - VDP2 has no time figure: its raster is fixed-length.
-- F2 + F6 are verified against the real `SetActive` / `Reset` and the glue with synthetic instruction streams, not on a game:
-  that SMPC delivers power edges in the expected order during guest execution and the slave on-time of a real
-  boot need a BIOS (V1).
+- F2 + F6 + F9 are verified against the real `SetActive` / `Reset` and the glue with synthetic instruction streams, not on a game:
+  that SMPC delivers power edges in the expected order during guest execution, the slave on-time of a real
+  boot, and ownership against an independent instruction / exception trace all need a BIOS (V1, V2).
+- Ownership is conservative: after an interrupt, a switch (`jmp @Rn`) or a `bra` tail call the interrupted function is
+  charged to its raw-PC bucket until its own return proves ownership again.
 
 ## Related documentation
 

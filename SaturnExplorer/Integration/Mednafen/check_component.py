@@ -3,8 +3,8 @@
 
 F4: vdp1.cpp (VDP1::Update / DoDrawing) driven with a tiny VRAM command list (component/perf_vdp1_harness.cpp).
 F5: hw_cpu/m68k and sound.cpp (SOUND_Update, its longjmp paths) (component/perf_m68k_harness.cpp).
-F2: SH7095::SetActive and SH7095::Reset (inside the patched ss.cpp) calling the real glue (component/perf_sh2_harness.cpp),
-and where the frame-close and state-load hooks sit in the patched text (f2_hook_checks).
+F2/F9: SH7095::SetActive and SH7095::Reset (inside the patched ss.cpp) calling the real glue (component/perf_sh2_harness.cpp),
+and where the frame-close, state-load and exception-entry hooks sit in the patched text (f2_hook_checks).
 
 The harnesses #include the patched .cpp files themselves, so nothing under test is a copy or a mock; only
 the devices around them are stubbed. The Mednafen source is not in this repository, so this is a script
@@ -84,11 +84,12 @@ def f11_checks(work):
 
 
 def f2_hook_checks(work):
-    """F2 + F6: where the lifecycle hooks sit in the patched source (the places the glue's contract assumes)."""
+    """F2 + F6 + F9: where the lifecycle hooks sit in the patched source (the places the glue's contract assumes)."""
     import re
     bad = 0
     ss = open(os.path.join(work, "src/ss/ss.cpp"), errors="replace").read()
     inc = open(os.path.join(work, "src/ss/sh7095.inc"), errors="replace").read()
+    ops = open(os.path.join(work, "src/ss/sh7095_ops.inc"), errors="replace").read()
     # the frame is closed on the PRE-rebase clock: after SMPC_EndFrame (which can still change the slave's
     # power), before RebaseTS and the AdjustTS calls that move the timestamps
     e = ss.index("static void Emulate(")
@@ -119,6 +120,15 @@ def f2_hook_checks(work):
     rb = inc[r:r + 600]
     if not (0 <= rb.find("return;") < rb.find("SE_CPU_RESET_HOOK")):
         print("FAIL: the Reset hook is not after the disabled early return")
+        bad += 1
+    # every exception the core takes except TRAPA is hooked, right after its Exception() statement
+    for kind in ("INT", "NMI", "CPUADDR", "DMAADDR", "ILLINSTR", "ILLSLOT"):
+        m = re.search(r"Exception\(EXCEPTION_%s, [^;\n]*;[^\n]*\n(?:/\*[^\n]*\n)?[^\n]*SE_OWN_EXC_%s" % (kind, kind), ops)
+        if not m:
+            print("FAIL: no ownership hook after Exception(EXCEPTION_%s, ...)" % kind)
+            bad += 1
+    if re.search(r"Exception\(EXCEPTION_TRAP[^\n]*\n[^\n]*SE_OWN_EXC", ops):
+        print("FAIL: TRAPA is hooked, but the glue observes it as a call")
         bad += 1
     return bad
 

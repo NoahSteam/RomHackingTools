@@ -389,12 +389,26 @@ typedef struct {
     unsigned long long cycle;
     unsigned int frameNo;
     unsigned int kind;           /* SE_FRAME_* — internal, not on the wire */
+    unsigned int trust;          /* sOwnTrust[cpu] when pushed; a frame from an older trust epoch proves nothing (F9) */
+    unsigned char parentKnown;   /* ownership was known when this frame was pushed (F9) */
 } SeCallFrame;
 static SeCallFrame sCallStack[2][SE_CALLSTACK_CAP];
 static unsigned int sCallDepth[2];   /* frames stored (saturates at CAP) */
 /* Frames deeper than we store. Counted rather than dropped so their returns unwind the
  * counter instead of deleting a stored frame that is still live. */
 static unsigned int sCallOverflow[2];
+/* Function ownership (F9). The innermost frame NAMES the function that is running only while we
+ * know that it does. Per CPU:
+ *   sOwnKnown  1 = the innermost frame's function is the code now executing. It becomes 1 when a
+ *              call is observed (the callee's entry is then known) and when a return lands back in
+ *              a parent that was itself known; it becomes 0 on an actual exception entry, on loss
+ *              of continuous observation, on reset / load, on a computed transfer (jmp / braf) that
+ *              may be a tail call, and on a return into a parent that was not known.
+ *   sOwnTrust  bumped when observation was lost: frames pushed before that cannot restore
+ *              ownership, because what they describe may have returned unseen.
+ * While unknown, SeExportCurrentFunction says 0 and the profiler charges the raw PC bucket. */
+static unsigned char sOwnKnown[2];
+static unsigned int sOwnTrust[2];
 
 /* ---- Breakpoint hooks (v5+). se_export stays free of Yabause headers: apply.py
  * wires these to Yabause's SH2 breakpoint API. SeAddExecBp(cpu, addr) installs one
@@ -1242,8 +1256,8 @@ static void SeApplyPendingInstalls(void)
         SE_SUNLOCK();
         if (sSetTracepoints) sSetTracepoints(n, sTpApply);
     }
-    /* F6: only between frames. The mode is latched for a whole frame, so a request that arrives during a
-     * mid-frame halt or snapshot waits (sProfPending stays set) for the next boundary. */
+    /* F6: only between frames. The mode is latched for a whole frame, so a request that arrives
+     * during a mid-frame halt or snapshot waits (sProfPending stays set) for the next boundary. */
     if (sProfAtBoundary && SeAtLoad(&sProfPending))
     {
         /* Cleared before the read: a PRF that lands in between sets it again and is applied next
@@ -1657,7 +1671,10 @@ static void SePushCallFrame(int cpu, unsigned int kind, unsigned int callSite,
         f->cycle = cycle;
         f->frameNo = (unsigned int)(sFrameNo & 0xFFFFFFFFu);
         f->kind = kind;
+        f->trust = sOwnTrust[c];
+        f->parentKnown = sOwnKnown[c];
         ++sCallDepth[c];
+        sOwnKnown[c] = 1;      /* a call we watched: its target is the function now running */
     }
     else ++sCallOverflow[c];
     SE_UNLOCK();
@@ -1675,18 +1692,35 @@ void SeExportPushExceptionFrame(int cpu, unsigned int site, unsigned int handler
     SePushCallFrame(cpu, SE_FRAME_EXCEPTION, site, handler, ret, sp, cycle);
 }
 
+/* After a return that removed 'f' and landed on 'landing': the parent is known again only if it
+ * was known when the call was made, nothing since made the frame untrustworthy, and the return
+ * really did land where the call said it would. Anything else leaves ownership unknown. */
+static void SeOwnAfterReturn(int c, const SeCallFrame* f, unsigned int landing, int haveLanding)
+{
+    sOwnKnown[c] = (unsigned char)(f && haveLanding && f->parentKnown && f->trust == sOwnTrust[c] &&
+                                   landing == f->ret);
+}
+
 /* rts. Unwinds the overflow first (those frames are the innermost), then a stored frame —
  * but only a call frame: an rts cannot return across an exception boundary, so meeting an
- * exception frame means this rts belongs to a call made before recording started. */
-void SeExportPopFrame(int cpu)
+ * exception frame means this rts belongs to a call made before recording started.
+ * 'landing' is the PC the return arrived at (haveLanding 0: not known, ownership stays unknown). */
+static void SePopCallFrame(int cpu, unsigned int landing, int haveLanding)
 {
     int c = cpu ? 1 : 0;
     SE_LOCK();
-    if (sCallOverflow[c]) --sCallOverflow[c];
+    if (sCallOverflow[c]) --sCallOverflow[c];   /* ownership is already "unknown" while frames overflowed */
     else if (sCallDepth[c] && sCallStack[c][sCallDepth[c] - 1].kind == SE_FRAME_CALL)
+    {
+        SeOwnAfterReturn(c, &sCallStack[c][sCallDepth[c] - 1], landing, haveLanding);
         --sCallDepth[c];
+    }
+    else sOwnKnown[c] = 0;                      /* a return from code that was running before recording */
     SE_UNLOCK();
 }
+
+void SeExportPopFrame(int cpu) { SePopCallFrame(cpu, 0, 0); }
+void SeExportPopFrameAt(int cpu, unsigned int landing) { SePopCallFrame(cpu, landing, 1); }
 
 /* rte, with R15 as the instruction sees it. Unwinds the exception frame this rte returns
  * from — identified by that R15, which SH-2 rte pops PC and SR from and which therefore
@@ -1694,15 +1728,43 @@ void SeExportPopFrame(int cpu)
  * observed (asynchronous interrupts execute no instruction we can hook), and the call
  * stack must be left exactly as it is. Unlike rts this never touches the overflow count:
  * a frame we could not store kept no sp to match against. */
-void SeExportPopExceptionFrame(int cpu, unsigned int sp)
+static void SePopExceptionFrame(int cpu, unsigned int sp, unsigned int landing, int haveLanding)
 {
     int c = cpu ? 1 : 0;
     SE_LOCK();
     if (sCallDepth[c])
     {
         const SeCallFrame* top = &sCallStack[c][sCallDepth[c] - 1];
-        if (top->kind == SE_FRAME_EXCEPTION && top->sp == sp) --sCallDepth[c];
+        if (top->kind == SE_FRAME_EXCEPTION && top->sp == sp)
+        {
+            SeOwnAfterReturn(c, top, landing, haveLanding);
+            --sCallDepth[c];
+            SE_UNLOCK();
+            return;
+        }
     }
+    sOwnKnown[c] = 0;   /* an rte we cannot match ends a handler we never saw begin: we land in unknown code */
+    SE_UNLOCK();
+}
+
+void SeExportPopExceptionFrame(int cpu, unsigned int sp) { SePopExceptionFrame(cpu, sp, 0, 0); }
+void SeExportPopExceptionFrameAt(int cpu, unsigned int sp, unsigned int landing)
+{
+    SePopExceptionFrame(cpu, sp, landing, 1);
+}
+
+/* F9: the code running on 'cpu' is no longer provably the innermost recorded frame's function: an
+ * exception was taken (asynchronous entry is not an instruction presentation), or a computed
+ * transfer that may be a tail call completed. The stack is kept -- a balanced handler or tail
+ * callee still returns through it -- but nothing is named until a call or a matching return
+ * proves ownership again. 'lostObservation' also distrusts every recorded frame: the CPU ran
+ * while nobody watched, so any of them may have returned unseen. */
+void SeExportOwnershipInvalidate(int cpu, int lostObservation)
+{
+    int c = cpu ? 1 : 0;
+    SE_LOCK();
+    sOwnKnown[c] = 0;
+    if (lostObservation) ++sOwnTrust[c];
     SE_UNLOCK();
 }
 
@@ -1716,7 +1778,7 @@ unsigned int SeExportCurrentFunction(int cpu)
     const unsigned int depth = sCallDepth[c];
     /* Frames deeper than the cap are counted, not stored: the stored top is then an ancestor of
      * the running function, not the function itself. */
-    if (!depth || sCallOverflow[c]) return 0;
+    if (!depth || sCallOverflow[c] || !sOwnKnown[c]) return 0;   /* F9: only while ownership is known */
     return sCallStack[c][depth - 1].func;
 }
 
@@ -1861,6 +1923,8 @@ void SeExportResetCallStack(int cpu)
     SE_LOCK();
     sCallDepth[c] = 0;
     sCallOverflow[c] = 0;
+    sOwnKnown[c] = 0;     /* F9: a reset / load / disable replaced the code the frames described */
+    ++sOwnTrust[c];
     SeAtAdd((volatile int*)&sCallStackEpoch, 1);
     SE_UNLOCK();
 }

@@ -505,7 +505,8 @@ typedef enum
     SeFlowCallReg,      /* jsr  @Rn   */
     SeFlowReturn,       /* rts        */
     SeFlowTrap,         /* trapa #imm */
-    SeFlowExcReturn     /* rte        */
+    SeFlowExcReturn,    /* rte        */
+    SeFlowComputed      /* jmp @Rn, braf Rn: a computed transfer that may be a tail call (F9) */
 } SeFlowKind;
 
 static SeFlowKind SeMdfnClassifyFlow(unsigned short op)
@@ -516,6 +517,7 @@ static SeFlowKind SeMdfnClassifyFlow(unsigned short op)
     if ((op & 0xFF00u) == 0xC300u) return SeFlowTrap;
     if (op == 0x000Bu)             return SeFlowReturn;
     if (op == 0x002Bu)             return SeFlowExcReturn;
+    if ((op & 0xF0FFu) == 0x402Bu || (op & 0xF0FFu) == 0x0023u) return SeFlowComputed;
     return SeFlowNone;
 }
 
@@ -526,39 +528,61 @@ static SeFlowKind SeMdfnClassifyFlow(unsigned short op)
  * 'rn' is the source register for bsrf/jsr, 'sp' is R15 as the instruction sees it,
  * 'handler' the trapa vector's target. */
 static void SeMdfnApplyFlow(int cpu, SeFlowKind kind, unsigned int pc, unsigned short op,
-                            unsigned int rn, unsigned int sp, unsigned int handler)
+                            unsigned int rn, unsigned int sp, unsigned int handler,
+                            unsigned int landing, int haveLanding)
 {
     const unsigned int ret = pc + 4;   /* past the delay slot: where a call comes back to */
+    unsigned int target = 0;
+    int isCall = 1;
     switch (kind)
     {
         case SeFlowCallDisp:
         {
             int disp = (int)(op & 0x0FFFu);
             if (disp & 0x0800) disp -= 0x1000;         /* sign-extend 12-bit */
-            SeExportPushFrame(cpu, pc, pc + 4 + (unsigned int)(disp << 1), ret, sp, 0);
+            target = pc + 4 + (unsigned int)(disp << 1);
+            SeExportPushFrame(cpu, pc, target, ret, sp, 0);
             break;
         }
         case SeFlowCallPcRelReg:
-            SeExportPushFrame(cpu, pc, pc + 4 + rn, ret, sp, 0);
+            target = pc + 4 + rn;
+            SeExportPushFrame(cpu, pc, target, ret, sp, 0);
             break;
         case SeFlowCallReg:
-            SeExportPushFrame(cpu, pc, rn, ret, sp, 0);
+            target = rn;
+            SeExportPushFrame(cpu, pc, target, ret, sp, 0);
             break;
         case SeFlowReturn:
-            SeExportPopFrame(cpu);
+            isCall = 0;
+            if (haveLanding) SeExportPopFrameAt(cpu, landing); else SeExportPopFrame(cpu);
             break;
         case SeFlowTrap:
             /* The entry pushes SR then PC+2, so the handler — and the rte that ends it —
              * run with R15 - 8. Record that as the frame's SP so the rte can be matched
              * to this frame and to no other. */
+            target = handler;
             SeExportPushExceptionFrame(cpu, pc, handler, pc + 2, sp - 8, 0);
             break;
         case SeFlowExcReturn:
-            SeExportPopExceptionFrame(cpu, sp);
+            isCall = 0;
+            if (haveLanding) SeExportPopExceptionFrameAt(cpu, sp, landing); else SeExportPopExceptionFrame(cpu, sp);
+            break;
+        case SeFlowComputed:
+            /* jmp @Rn / braf Rn, now complete: a switch inside the function or a tail call into
+             * another one, and nothing here can tell which. The stack stays (a tail callee's rts
+             * still returns through it); only the claim "the innermost frame's function is running"
+             * is withdrawn, until a call or a matching return proves it again. */
+            isCall = 0;
+            SeExportOwnershipInvalidate(cpu, 0);
             break;
         case SeFlowNone:
+            isCall = 0;
             break;
     }
+    /* A call or trap whose target is not where execution actually arrived: something ran in between
+     * (an interrupt was taken before the target's first instruction), so the callee name is not what
+     * is executing. */
+    if (isCall && haveLanding && landing != target) SeExportOwnershipInvalidate(cpu, 0);
 }
 
 /* Control flow takes effect when it COMPLETES, not when it is first seen. The per-instruction hook
@@ -613,7 +637,7 @@ static int SeMdfnFlowAdvance(int cpu, unsigned int pc)
         return 1;                                               /* the slot again (bus stall) */
     }
     /* The transfer has completed: this PC is where it landed (or a later one, if the hook missed it). */
-    SeMdfnApplyFlow(cpu, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler);
+    SeMdfnApplyFlow(cpu, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler, pc, 1);
     p->stage = 0;
     return 0;
 }
@@ -638,9 +662,10 @@ void SeMednafenHookMode(int continuous)
     for (c = 0; c < 2; ++c)
     {
         SeMdfnFlowPending* p = &sFlowPending[c];
+        SeExportOwnershipInvalidate(c, 1);   /* F9: the code now runs unwatched; no recorded frame can be trusted again */
         if (p->stage != 0 && p->epoch == SeExportCallStackEpoch() &&
             (p->kind == SeFlowReturn || p->kind == SeFlowExcReturn))
-            SeMdfnApplyFlow(c, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler);
+            SeMdfnApplyFlow(c, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler, 0, 0);
         p->stage = 0;
     }
 }
@@ -834,7 +859,8 @@ static void SeMdfnProfSampleAt(int cpu, unsigned int pc, int ts)
     sProfLastTs[c] = ts;
     sProfLastIdle[c] = SeMdfnProfIdle(c);
     sProfSynced[c] = 1;
-    /* The function the shadow stack says is running; with no recorded frame, a 16-byte bucket of the raw PC. Key 0 marks an empty slot; a raw-PC key always has its top bit
+    /* The function the shadow stack says is running, which it says only while it knows (F9); otherwise
+     * a 16-byte bucket of the raw PC. Key 0 marks an empty slot; a raw-PC key always has its top bit
      * set, and a recorded function at address 0 cannot be told from "none", so it falls to the raw-PC
      * form as well. */
     fn = SeExportCurrentFunction(c);
@@ -897,7 +923,18 @@ void SeMednafenCpuReset(int cpu, int ts)
     const int c = cpu ? 1 : 0;
     if (sProfOn) SeMdfnProfCharge(c, ts);
     sProfSynced[c] = 0;
-    SeExportResetCallStack(c);   /* frames and (epoch) any flow instruction still pending */
+    SeExportResetCallStack(c);   /* frames, ownership, and (epoch) any flow instruction still pending */
+}
+
+/* An exception was entered on 'cpu' (interrupt, NMI, address error, illegal instruction). The hardware
+ * pushed SR and PC and vectored without presenting an instruction, so which function is running is no
+ * longer known. A trapa is the exception we DO observe -- its flow is held and its handler recorded --
+ * so it does not withdraw ownership. */
+void SeMednafenExceptionEntry(int cpu)
+{
+    const SeMdfnFlowPending* p = &sFlowPending[cpu ? 1 : 0];
+    if (p->stage == 2 && p->kind == SeFlowTrap && p->epoch == SeExportCallStackEpoch()) return;
+    SeExportOwnershipInvalidate(cpu, 0);
 }
 
 /* A state was loaded (rewind, slot, native): the machine is whatever the file said. Partial accounting
@@ -944,12 +981,15 @@ void SeMednafenFrameClose(int end_ts, int ts0, int ts1, int slaveOn)
 /* The attribution mode for the NEXT frame, taken on the emulate thread when the server applies a
  * request -- which it does only between frames, so the mode is latched: every frame runs entirely in
  * the mode it is published under (sFrameMode), and a request that arrived mid-frame or during a halt
- * waited. Continuous observation starts or ends here, so no baseline carries over. */
+ * waited. Continuous observation starts or ends here, so no baseline and no recorded frame carries
+ * over (F9). */
 static void SeMdfnApplyMode(unsigned int flags)
 {
     sProfOn = (flags & SE_LIVE_PROF_FUNCTIONS) ? 1 : 0;
     sFrameMode = flags & SE_LIVE_PROF_FUNCTIONS;
     sProfSynced[0] = sProfSynced[1] = 0;
+    SeExportOwnershipInvalidate(0, 1);
+    SeExportOwnershipInvalidate(1, 1);
 }
 
 #if defined(SE_MEDNAFEN_WIRED)

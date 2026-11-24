@@ -696,9 +696,11 @@ exception, since one hook there replaces a line). An `ANCHOR MISS` here costs on
 Profiler panel (it reads zero) and is reported like any other miss. What each counter means is in
 `Docs/Codebase/Systems/Profiler.md`.
 
-**Frame lifecycle (F2 + F6).** Hooks added for it: `sh7095.inc`
+**Frame lifecycle (F2 + F6) and function ownership (F9).** Hooks added for them: `sh7095.inc`
 `SH7095::SetActive` (the slave's power edges, `SE_SLAVE_ON_EDGE` / `SE_SLAVE_OFF_EDGE`) and the top of
-`SH7095::Reset` (`SE_CPU_RESET_HOOK`, after the early return for a switched-off CPU); `ss.cpp`
+`SH7095::Reset` (`SE_CPU_RESET_HOOK`, after the early return for a switched-off CPU); `sh7095_ops.inc` one
+`SeMednafenExceptionEntry` call after each `Exception(EXCEPTION_INT / NMI / CPUADDR / DMAADDR / ILLINSTR /
+ILLSLOT, ...)` statement (`SE_OWN_EXC_*`; TRAPA is deliberately not hooked, its flow is observed); `ss.cpp`
 `SeMednafenFrameClose(end_ts, ...)` in `Emulate()` after `SMPC_EndFrame` and **before** the rebase
 (`SE_FRAME_CLOSE_HOOK`), and `SeMednafenStateLoaded` in the `StateAction` load path beside the timeline
 notification (neither `PostStateLoad` nor a load calls `SetActive`). The slave on-time (counter 5) is
@@ -727,15 +729,16 @@ Any future rename needs a new entry there. Checks:
   patched 68000 core and `sound.cpp` (F5: real STOP / interrupt wake / external halt, and a real
   faulting sound-bus read whose `MDFN_longjmp` lands in `SOUND_Update`) into small harnesses with
   only the surrounding devices stubbed, and checks the SCU / CS0 decode windows and the DMA / DSP hook
-  placement in `scu.inc`. F2: the **real** `SH7095::SetActive` / `SH7095::Reset` (whole patched `ss.cpp`
+  placement in `scu.inc`. F2 / F9: the **real** `SH7095::SetActive` / `SH7095::Reset` (whole patched `ss.cpp`
   included, hidden-visibility data stubbed) calling the real glue, plus where the frame-close, state-load
-  hooks sit. `--drop KEY` removes one hook and must make it fail (`SE_SLAVE_ON_EDGE`,
+  and exception hooks sit. `--drop KEY` removes one hook and must make it fail (`SE_SLAVE_ON_EDGE`,
   `SE_SLAVE_OFF_EDGE`, `SE_CPU_RESET_HOOK` among them).
 
 Function attribution is separate and opt-in: the client's `PRF` verb makes `SeSyncCpuHook` keep
 the continuous per-instruction callback installed (`SsDbgSetProfileActive`), and
 `SeMdfnProfSampleAt` charges each instruction's cycles (`SsDbgCpuTimestamp` deltas, less the
-sleep/stall cycles counted meanwhile) to the innermost shadow-call-stack frame. The mode only changes between frames (the server applies the request
+sleep/stall cycles counted meanwhile) to the innermost shadow-call-stack frame while its ownership is
+known, else to a raw-PC bucket (F9). The mode only changes between frames (the server applies the request
 at the top-of-frame gate or the end-of-frame hook, never at a halt or snapshot) and is published with
 the record. It therefore needs
 `--enable-debugger`, costs what a tracepoint costs (the debug run loop), and is switched off by

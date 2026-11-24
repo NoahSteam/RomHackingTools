@@ -264,21 +264,25 @@ if HAS_LIFECYCLE:
             if key in hook:
                 fail("a current F2 hook contains the retired key %r" % key)
     # keys must not collide with another fence's text (a key found in the wrong fence is "updated" forever)
-    keys = ["SE_FRAME_CLOSE_HOOK", "SE_SLAVE_ON_EDGE", "SE_SLAVE_OFF_EDGE", "SE_CPU_RESET_HOOK"]
+    keys = ["SE_FRAME_CLOSE_HOOK", "SE_SLAVE_ON_EDGE", "SE_SLAVE_OFF_EDGE", "SE_CPU_RESET_HOOK"] + \
+           ["SE_OWN_EXC_" + k for k in mod.SH2_EXCEPTIONS]
     fence_texts = [mod.FWD_DECLS, mod.END_FRAME_HOOK, mod.FRAME_CLOSE_HOOK, mod.STATE_LOADED_HOOK, mod.SH2_SETACTIVE_ON_HOOK,
-                   mod.SH2_SETACTIVE_OFF_HOOK, mod.SH2_RESET_HOOK]
+                   mod.SH2_SETACTIVE_OFF_HOOK, mod.SH2_RESET_HOOK] + [mod.sh2_exception_edit(k)[1] for k in mod.SH2_EXCEPTIONS]
     for key in keys:
         if sum(key in t for t in fence_texts) != 1:
             fail("key %r is not unique to its own fence" % key)
     # every hook the glue defines is declared where the injected code calls it
-    for fn in ("SeMednafenSlaveActive", "SeMednafenCpuReset", "SeMednafenStateLoaded", "SeMednafenFrameClose"):
+    for fn in ("SeMednafenSlaveActive", "SeMednafenCpuReset", "SeMednafenExceptionEntry", "SeMednafenStateLoaded",
+               "SeMednafenFrameClose"):
         if "void " + fn + "(" not in mod.FWD_DECLS:
             fail(fn + " is not forward-declared for the injected code")
         if not re.search(r"^void " + fn + r"\(", glue, re.M):
             fail(fn + " is not defined by the glue")
-    # the SetActive hooks are guarded to the slave
+    # the SetActive hooks are guarded to the slave; TRAPA is not hooked (its flow is observed); each anchor matches one place
     if "CPU[1]" not in mod.SH2_SETACTIVE_ON_HOOK + mod.SH2_SETACTIVE_OFF_HOOK:
         fail("the SetActive hooks are not restricted to the slave")
+    if "TRAP" in "".join(mod.SH2_EXCEPTIONS):
+        fail("TRAPA must not withdraw ownership: its flow is observed")
     sample = "void SH7095::SetActive(bool active)\n{\n if(active && timestamp == SS_EVENT_DISABLED_TS)\n {\n  timestamp = SH7095_mem_timestamp;\n  FRT.lastts = timestamp;\n }\n else if(!active && timestamp != SS_EVENT_DISABLED_TS)\n {\n  Reset(true);\n  timestamp = SS_EVENT_DISABLED_TS;\n }\n}\n"
     t, _ = mod.apply_anchored(sample, mod.SH2_SETACTIVE_ON_ANCHOR, mod.SH2_SETACTIVE_ON_HOOK, "SE_SLAVE_ON_EDGE")
     t, _ = mod.apply_anchored(t, mod.SH2_SETACTIVE_OFF_ANCHOR, mod.SH2_SETACTIVE_OFF_HOOK, "SE_SLAVE_OFF_EDGE")

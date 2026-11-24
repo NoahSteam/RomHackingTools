@@ -339,6 +339,19 @@ void SeExportPushExceptionFrame(int cpu, unsigned int site, unsigned int handler
                                 unsigned int ret, unsigned int sp, unsigned long long cycle);
 void SeExportPopFrame(int cpu);
 void SeExportPopExceptionFrame(int cpu, unsigned int sp);
+/* The same two, told where the return LANDED (the first PC presented after its delay slot). Function
+ * ownership (F9) is restored to the parent only when the landing is the frame's recorded return
+ * address and the parent was known when the call was made; the plain forms never restore it.
+ * Frames are removed identically by both. */
+void SeExportPopFrameAt(int cpu, unsigned int landing);
+void SeExportPopExceptionFrameAt(int cpu, unsigned int sp, unsigned int landing);
+/* F9. The code running on 'cpu' is no longer provably the innermost frame's function (an exception
+ * was entered, a computed jmp / braf that may be a tail call completed): SeExportCurrentFunction says
+ * 0 until a call or a matching return proves ownership again. 'lostObservation' (instructions ran
+ * unwatched, e.g. the continuous hook was dropped) additionally distrusts every frame recorded so far,
+ * since any of them may have returned unseen. A call pushed while ownership is unknown names the
+ * callee, and a return to that unknown parent makes ownership unknown again. */
+void SeExportOwnershipInvalidate(int cpu, int lostObservation);
 void SeExportResetCallStack(int cpu);
 
 /* A number that changes every time a stack is reset. A glue that keeps control flow in flight
