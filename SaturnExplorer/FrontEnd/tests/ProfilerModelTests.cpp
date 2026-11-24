@@ -205,6 +205,90 @@ void TestPools()
     t.Reset();
     CHECK(t.Count() == 0);
 }
+PerfFrame Seq64(uint64_t seq, uint64_t cycles = 1)
+{
+    PerfFrame f = MakeFrame(static_cast<uint32_t>(seq), cycles);
+    f.wireVersion = 27;
+    f.sampleSeq = seq;
+    return f;
+}
+PerfFrame GapOnly(uint64_t first, uint64_t last, uint64_t newest, bool evict = false)
+{
+    PerfFrame g;
+    g.gapOnly = true;
+    g.wireVersion = 27;
+    (evict ? g.evictFirst : g.gapFirst) = first;
+    (evict ? g.evictLast : g.gapLast) = last;
+    g.newestSeq = newest;
+    return g;
+}
+
+// Lost records: where they are, what caused them, and the real denominator of a window.
+void TestGaps()
+{
+    ProfilerModel m(16);
+    m.Push(Seq64(1));
+    // A header-only report (nothing to attach it to) is remembered, not dropped, and rides on the
+    // next frame: the plot breaks there.
+    m.Push(GapOnly(2, 5, 8));
+    CHECK(m.Count() == 1);                                   // not a frame
+    CHECK(!m.PendingServerGap().Empty() && m.PendingServerGap().first == 2 && m.PendingServerGap().last == 5);
+    CHECK(m.NewestSeq() == 8 && m.TotalServerLost() == 4 && m.TotalDriverEvicted() == 0);
+    PerfFrame f6 = Seq64(6);
+    m.Push(f6);
+    CHECK(m.Count() == 2 && m.PendingServerGap().Empty());
+    CHECK(m.Latest().gapFirst == 2 && m.Latest().gapLast == 5 && m.Latest().HasGap());
+    CHECK(m.TotalServerLost() == 4);                         // counted once, not again on attach
+    // The driver's own eviction is a different cause and stays apart from the server's.
+    PerfFrame f7 = Seq64(7);
+    f7.evictFirst = 1; f7.evictLast = 3;
+    m.Push(f7);
+    CHECK(m.TotalDriverEvicted() == 3 && m.TotalServerLost() == 4);
+    CHECK(m.Latest().evictFirst == 1 && m.Latest().evictLast == 3 && m.Latest().gapLast == 0);
+    m.Push(GapOnly(9, 11, 12, true));                        // evicted, header-only
+    CHECK(m.PendingDriverEviction().first == 9 && m.PendingServerGap().Empty());
+    m.Push(Seq64(12));
+    CHECK(m.Latest().evictFirst == 9 && m.Latest().evictLast == 11 && m.Latest().gapLast == 0);
+    CHECK(m.TotalDriverEvicted() == 6 && m.TotalServerLost() == 4);
+
+    // A window reports what it is missing: the gaps of every frame but its oldest (whose gap lies
+    // before the window), so the figure matches the frames' span.
+    uint64_t srv = 99, drv = 99;
+    m.LostIn(100, &srv, &drv);                               // frames 1, 6, 7, 12: gaps 4 (on 6), 3 (on 7), 3 (on 12)
+    CHECK(srv == 4 && drv == 6);
+    m.LostIn(2, &srv, &drv);                                 // frames 7, 12: only 12's gap is inside
+    CHECK(srv == 0 && drv == 3);
+    m.LostIn(1, &srv, &drv);
+    CHECK(srv == 0 && drv == 0);
+    uint64_t sum[SE_PERF_COUNT];
+    CHECK(m.Sum(100, sum) == 4);                             // the denominator is the frames really held
+
+    // 64-bit ordering: crossing 2^32 is not a restart, an older record is not a new run's first.
+    ProfilerModel w(8);
+    w.Push(Seq64(0xFFFFFFFEull));
+    w.Push(Seq64(0xFFFFFFFFull));
+    w.Push(Seq64(0x100000000ull));
+    w.Push(Seq64(0x100000001ull));
+    CHECK(w.Count() == 4);
+    w.Push(Seq64(0x100000001ull));                            // the same record again
+    CHECK(w.Count() == 4);
+    w.Push(Seq64(3));                                         // genuinely backwards: a new run
+    CHECK(w.Count() == 1 && w.Latest().sampleSeq == 3 && w.TotalServerLost() == 0 && w.NewestSeq() == 3);
+
+    // Hand-built frames with only a 32-bit seq: wrap-aware too.
+    ProfilerModel h(8);
+    h.Push(MakeFrame(0xFFFFFFFEu, 1));
+    h.Push(MakeFrame(0xFFFFFFFFu, 1));
+    h.Push(MakeFrame(1u, 1));                                 // wrapped past 0
+    CHECK(h.Count() == 3 && h.Latest().seq == 1);
+    h.Push(MakeFrame(1u, 9));
+    CHECK(h.Count() == 3);
+
+    // Clear forgets pending ranges and totals.
+    m.Push(GapOnly(20, 25, 30));
+    m.Clear();
+    CHECK(m.PendingServerGap().Empty() && m.TotalServerLost() == 0 && m.NewestSeq() == 0);
+}
 }  // namespace
 
 int main()
@@ -212,6 +296,7 @@ int main()
     TestShares();
     TestBuses();
     TestHistory();
+    TestGaps();
     TestFunctions();
     TestPools();
     if (gFailures) { std::printf("%d check(s) failed\n", gFailures); return 1; }

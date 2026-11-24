@@ -4407,6 +4407,10 @@ void App::UpdateProfiler()
                 for (int k = 0; k < 2; ++k) { f.otherNotAdmitted[k] = in.other_not_admitted[k]; f.otherEvicted[k] = in.other_evicted[k]; }
                 f.gapFirst = in.gap_first;
                 f.gapLast = in.gap_last;
+                f.evictFirst = in.evict_first;
+                f.evictLast = in.evict_last;
+                f.gapOnly = in.gap_only != 0;
+                f.newestSeq = in.newest_seq;
                 f.functions = (in.flags & SE_LIVE_PROF_FUNCTIONS) != 0;
                 const uint32_t counters = std::min<uint32_t>(in.counter_count, SE_PERF_COUNT);
                 for (uint32_t k = 0; k < counters; ++k) f.c[k] = in.counters[k];

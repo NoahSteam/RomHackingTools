@@ -18,6 +18,7 @@
 #define SE_EXPORT_H
 
 #include <stddef.h>
+#include "SeLiveProtocol.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,8 +46,8 @@ int SeExportInit(void);
  *                      nothing can ask for capabilities or race the registrations.
  *   ... register every hook: SeExportSet*Hook, SeExportSetDebugCaps, SeExportSetPerfCapable ...
  *   SeExportStart()    admit listeners. The first reply already describes everything registered.
- * SeExportInit() is Prepare + Start. Prepare clears what a previous init/deinit cycle declared
- * (the profiler hook, the counter capability). */
+ * SeExportInit() is Prepare + Start. Prepare clears everything a previous init/deinit cycle left
+ * behind (profiler records and sequence, declared capabilities, the profiler hook). */
 int SeExportPrepare(void);
 int SeExportStart(void);
 
@@ -54,6 +55,32 @@ int SeExportStart(void);
  * SE_LIVE_CAP_PROFILER is advertised from the first reply instead of after the first sample.
  * Call between Prepare and Start. A build without counters never calls it. */
 void SeExportSetPerfCapable(int capable);
+
+/* The identity of the emulated frame now executing, for stamping its profiler record
+ * (SeExportPerfInfo.timelineId / frameNo, SE_PERF_VALID_IDENTITY). Emulate thread. The number is
+ * reserved at the top-of-frame gate, after any pending load was applied, and committed when
+ * SeExportEndFrame runs, so it is correct whether the frame took no snapshot, one, or several
+ * halts. Returns 1 (always available once initialized). */
+/* The sampleSeq of the newest profiler record published so far (0 = none). The reply header carries
+ * the same number as newestSeq; this is the producer-side view, for a test that publishes a known
+ * workload and drains the client until it has seen exactly this sequence. */
+unsigned long long SeExportPerfNewestSeq(void);
+
+/* One connection's position in the profiler ring, and the builder of its reply section (the
+ * server's own code path, exposed so a test can drive it without a socket). Zero-initialize a
+ * cursor per connection: 'started' stays 0 until the first reply is built, which is what decides
+ * "this connection starts at the newest record" (not a loss) even when that reply is empty. */
+typedef struct SeExportPerfCursor { unsigned long long sent; int started; } SeExportPerfCursor;
+#define SE_EXPORT_PERF_HEADER_LEN 28u
+#define SE_EXPORT_PERF_SECTION_MAX (SE_EXPORT_PERF_HEADER_LEN + SE_LIVE_PERF_MAX_PER_REPLY * (4u + SE_LIVE_PERF_MAX_LEN))
+size_t SeExportBuildPerfSection(SeExportPerfCursor* cursor, unsigned char* out);
+
+int SeExportFrameIdentity(unsigned int* timelineId, unsigned long long* frameNo);
+
+/* The emulator replaced its machine state by itself (a native savestate load, not one the server
+ * asked for): the next frame belongs to a new timeline. Call from the emulator's post-load path, on
+ * any thread. A load the server itself ordered (rewind, slot load) is recognized and counted once. */
+void SeExportNotifyStateLoaded(void);
 
 /* Non-zero while at least one client (Saturn Explorer) is attached. SeExportSnapshot already
  * skips everything when nothing is attached; this lets the emulator's frame hook also skip the

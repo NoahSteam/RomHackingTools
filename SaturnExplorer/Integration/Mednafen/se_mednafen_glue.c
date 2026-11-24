@@ -877,7 +877,9 @@ static void SeMdfnPerfEndFrame(void)
              * 'valid' stays 0 and a client shows them as "not available" rather than as zero. */
             SeExportPerfInfo info;
             memset(&info, 0, sizeof info);
-            /* v27 Step 0: filled by F3  (info.timelineId, info.frameNo; SE_PERF_VALID_IDENTITY) */
+            /* The frame's own identity, reserved at the gate and committed after this hook (F3). */
+            SeExportFrameIdentity(&info.timelineId, &info.frameNo);
+            info.valid |= SE_PERF_VALID_IDENTITY;
             /* v27 Step 0: filled by F6  (info.mode latched for the frame; SE_PERF_VALID_MODE) */
             /* v27 Step 0: filled by F7  (info.otherNotAdmitted / otherEvicted / satFlags; SE_PERF_VALID_OTHER) */
             /* v27 Step 0: filled by F8  (info.cacheMode; SE_PERF_VALID_CACHE) */

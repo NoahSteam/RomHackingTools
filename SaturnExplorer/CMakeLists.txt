@@ -1674,8 +1674,9 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         add_test(NAME SaturnExplorerLiveProfilerTests
                  COMMAND SaturnExplorerLiveProfilerTests)
 
-        # The capability bits of the very first reply (F14): hooks are registered before listeners are
-        # admitted. (Later also: frame identity and lost records, F3.) Own socket and port.
+        # Frame identity and lost records of the profiler stream (F3) and the first reply's capability
+        # bits (F14): the exporter's section builder without a socket, the driver against a scripted
+        # server, and the real pair end to end on a socket and port of their own.
         add_executable(SaturnExplorerLivePerfLossTests
             FrontEnd/tests/LivePerfLossTests.cpp
             Integration/Common/se_export.c)
