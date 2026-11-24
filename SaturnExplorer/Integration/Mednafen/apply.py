@@ -924,37 +924,56 @@ APPEND_EDITS = [
 PERF_DECL = (
     "#include \"SePerfCounters.h\"\n"
     "extern \"C\" unsigned long long SeSsPerfC[];\n"
+    "extern \"C\" unsigned int SeSsCacheMode;   /* SE_PERF_CACHE_*, set where the emulator picks its mode */\n"
 )
-# Which device an external-bus address belongs to, by its top 11 of 27 bits (64 KiB steps: the SCU
-# registers at 0x05FE0000 share a 512 KiB block with VDP2's). Filled once by a static constructor.
+# Which counter an external-bus address belongs to (F8); see the comment inside the helper.
 PERF_BUS_HELPER = """\
-static unsigned char SeSsBusDev[2048];
+/* Which counter pair an SH-2 external-bus address belongs to, by its top 11 of 27 bits (64 KiB
+   steps: every boundary of the SCU's own decode, scu.inc SCU_FromSH2_BusRW_DB, and of ss.cpp's CS0
+   decode, falls on one). The value is the index of the pair's READ counter; the write counter
+   follows it. Filled once by a static constructor. The windows are the SCU decoder's, not the
+   address map's round numbers:
+     A-bus   0x02000000-0x058FFFFF  (CS0, CS1, the dummy area 0x05000000-0x057FFFFF, CS2/CD)
+     B-bus   0x05A00000-0x05FBFFFF  (SCSP, VDP1 0x05C00000-0x05D7FFFF, VDP2 0x05E00000-0x05FBFFFF)
+     SCU     0x05FE0000-0x05FEFFFF
+   Everything else between 0x02000000 and 0x05FFFFFF is a hole the SCU answers with "unknown
+   access" and is counted as unmapped, not as the device next to it. */
+static unsigned short SeSsBusSlot[2048];
 static struct SeSsBusDevInit {
    SeSsBusDevInit() {
       for (unsigned i = 0; i < 2048; ++i) {
          const unsigned A = i << 16;
-         unsigned char d;
-         if      (A < 0x00100000u) d = SE_PERF_DEV_BIOS;
-         else if (A < 0x00180000u) d = SE_PERF_DEV_SMPC;
-         else if (A < 0x00200000u) d = SE_PERF_DEV_BACKUP;
-         else if (A < 0x00400000u) d = SE_PERF_DEV_WRAM_L;
-         else if (A < 0x02000000u) d = SE_PERF_DEV_CS0_OTHER;
-         else if (A < 0x04000000u) d = SE_PERF_DEV_ABUS_CS0;
-         else if (A < 0x05000000u) d = SE_PERF_DEV_ABUS_CS1;
-         else if (A < 0x05A00000u) d = SE_PERF_DEV_ABUS_CD;
-         else if (A < 0x05C00000u) d = SE_PERF_DEV_SCSP;
-         else if (A < 0x05E00000u) d = SE_PERF_DEV_VDP1;
-         else if (A < 0x05FE0000u) d = SE_PERF_DEV_VDP2;
-         else if (A < 0x06000000u) d = SE_PERF_DEV_SCU;
-         else                      d = SE_PERF_DEV_WRAM_H;
-         SeSsBusDev[i] = d;
+         unsigned short s;
+         if      (A < 0x00100000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_BIOS * 2;
+         else if (A < 0x00180000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_SMPC * 2;
+         else if (A < 0x00200000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_BACKUP * 2;
+         else if (A < 0x00400000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_L * 2;
+         else if (A < 0x02000000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_CS0_OTHER * 2;
+         else if (A < 0x04000000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_ABUS_CS0 * 2;
+         else if (A < 0x05000000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_ABUS_CS1 * 2;
+         else if (A < 0x05800000u) s = SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_ABUS_DUMMY * 2;
+         else if (A < 0x05900000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_ABUS_CD * 2;
+         else if (A < 0x05A00000u) s = SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2;
+         else if (A < 0x05C00000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_SCSP * 2;
+         else if (A < 0x05D80000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_VDP1 * 2;
+         else if (A < 0x05E00000u) s = SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2;
+         else if (A < 0x05FC0000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_VDP2 * 2;
+         else if (A < 0x05FE0000u) s = SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2;
+         else if (A < 0x05FF0000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_SCU * 2;
+         else if (A < 0x06000000u) s = SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2;
+         else                      s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2;
+         SeSsBusSlot[i] = s;
       }
    }
 } sSeSsBusDevInit;
-/* One SH-2 external-bus access (BSC_BusRead / BSC_BusWrite in sh7095.inc: the two places every
-   access that really reaches the bus goes through -- a cache hit does not). */
+/* One request to the SH-2's bus state controller (BSC_BusRead / BSC_BusWrite in sh7095.inc: the two
+   places every access that really reaches the bus goes through). The unit is the request, not the
+   bus cycle: a 32-bit access to a 16-bit CS0 region is split inside and is still ONE request; a
+   cache line fill is four (one first-word read and three burst reads); a cache hit and an
+   instruction fetch the fast map serves are none. Cache emulation therefore changes the counts,
+   which is why the mode travels with the sample (SeSsCacheMode). */
 static inline void SeSsPerfBus(unsigned int A, int isWrite) {
-   ++SeSsPerfC[SE_PERF_BUS_ACCESS + SeSsBusDev[(A >> 16) & 2047] * 2 + isWrite];
+   ++SeSsPerfC[SeSsBusSlot[(A >> 16) & 2047] + isWrite];
 }
 """
 
@@ -1090,6 +1109,13 @@ SOUND_PERF_POST_HOOK = (
     " (void)se_perf_ts0; (void)se_perf_idle0;\n"
     "#endif\n"
 )
+
+# ss.cpp: the instruction-cache emulation mode the emulator picked (F8). The bus request counts depend
+# on it, so it travels with the sample. SE_PERF_CACHE_ON = instruction fetches go through the emulated
+# cache (fills and hits); OFF = they are served from the fast map (the data cache is emulated in
+# every mode). The variable is defined in the glue.
+SS_CACHE_MODE_ANCHOR = r'(NeedEmuICache = \(cpucache_emumode == CPUCACHE_EMUMODE_FULL\);[ \t]*\n)'
+SS_CACHE_MODE_HOOK = " SeSsCacheMode = NeedEmuICache ? SE_PERF_CACHE_ON : SE_PERF_CACHE_OFF;   /* Saturn Explorer profiler (F8) */\n"
 
 # File-scope forward declarations (extern "C" is illegal inside a function body, so
 # the call sites below are plain calls that resolve to these). Prepended at BOF.
@@ -1455,6 +1481,9 @@ def process_profiler(src_dir, do_write):
     notes += process_anchored(m68k_dir, "m68k.cpp", "profiler: 68000 idle accumulator", [
         (M68K_IDLE_INIT_ANCHOR, M68K_IDLE_INIT, "IdleCycleCount = 0;"),
         (M68K_IDLE_STEP_ANCHOR, M68K_IDLE_STEP, "IdleCycleCount += 4;"),
+    ], do_write)
+    notes += process_anchored(src_dir, "ss.cpp", "profiler: cache mode", [
+        (SS_CACHE_MODE_ANCHOR, SS_CACHE_MODE_HOOK, "SeSsCacheMode ="),
     ], do_write)
     return notes
 

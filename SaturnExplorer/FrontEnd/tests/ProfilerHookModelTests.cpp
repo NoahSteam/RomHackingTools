@@ -42,6 +42,26 @@ int main()
         c[SE_PERF_M68K_CYCLES] = 100;       // = total - idle, as the emulator now produces it
         CHECK(Near(ComputePerfShares(c).m68k, 0.25));
     }
+    {   // F8: dummy and unmapped requests are counted apart and are in no bus total
+        uint64_t c[SE_PERF_COUNT] = {};
+        c[SE_PERF_BUS_ACCESS + SE_PERF_DEV_ABUS_CD * 2] = 7;
+        c[SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2 + 1] = 5;
+        c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_ABUS_DUMMY * 2] = 11;
+        c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_ABUS_DUMMY * 2 + 1] = 13;
+        c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2] = 17;
+        c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2 + 1] = 19;
+        const BusTotals t = ComputeBusTotals(c);
+        CHECK(t.reads[static_cast<int>(PerfBus::A)] == 7);
+        CHECK(t.writes[static_cast<int>(PerfBus::Cpu)] == 5);
+        CHECK(t.reads[static_cast<int>(PerfBus::Cpu)] == 0 && t.reads[static_cast<int>(PerfBus::B)] == 0);
+        CHECK(t.writes[static_cast<int>(PerfBus::A)] == 0 && t.writes[static_cast<int>(PerfBus::B)] == 0);
+        CHECK(t.dummyReads == 11 && t.dummyWrites == 13 && t.unmappedReads == 17 && t.unmappedWrites == 19);
+        CHECK(std::string(PerfXDeviceName(SE_PERF_XDEV_ABUS_DUMMY)) != std::string(PerfDeviceName(SE_PERF_DEV_ABUS_CD)));
+        CHECK(std::string(PerfXDeviceName(SE_PERF_XDEV_UNMAPPED)) == "Unmapped");
+        CHECK(std::string(PerfBusUnitLabel()) == "bus requests");
+        CHECK(std::string(PerfCacheModeName(SE_PERF_CACHE_ON)) != std::string(PerfCacheModeName(SE_PERF_CACHE_OFF)));
+        CHECK(std::string(PerfCacheModeName(SE_PERF_CACHE_UNKNOWN)) == "cache mode unknown");
+    }
     std::printf(gFailures ? "FAILED\n" : "PASSED\n");
     return gFailures ? 1 : 0;
 }

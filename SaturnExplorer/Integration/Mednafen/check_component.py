@@ -23,6 +23,25 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import check_migration as cm  # noqa: E402
+import bus_decode  # noqa: E402  (F8)
+
+
+def f8_decoder_checks(work):
+    """The windows the bus buckets rest on are still where bus_decode.py says (scu.inc, ss.cpp)."""
+    import re
+    bad = 0
+    scu = open(os.path.join(work, "src/ss/scu.inc"), errors="replace").read()
+    ss = open(os.path.join(work, "src/ss/ss.cpp"), errors="replace").read()
+    for lo, hi in bus_decode.SCU_DECODER_WINDOWS:
+        if not re.search(r"A >= 0x%08x && A <= 0x%08x" % (lo, hi), scu, re.I):
+            print("FAIL: scu.inc no longer decodes 0x%08x-0x%08x as the bus map assumes" % (lo, hi))
+            bad += 1
+    for lo, hi in ((0x00200000, 0x003FFFFF), (0x00000000, 0x000FFFFF), (0x00100000, 0x0017FFFF),
+                   (0x00180000, 0x001FFFFF), (0x01000000, 0x01FFFFFF)):
+        if not re.search(r"A >= 0x%08x && A <= 0x%08x" % (lo, hi), ss, re.I):
+            print("FAIL: ss.cpp no longer decodes CS0 0x%08x-0x%08x as the bus map assumes" % (lo, hi))
+            bad += 1
+    return bad
 
 
 def main():
@@ -43,6 +62,10 @@ def main():
     if rc != 0 or "ANCHOR MISS" in out:
         print("apply.py failed:\n" + out[-1000:])
         return 1
+    if not drops:
+        if f8_decoder_checks(work):
+            return 1
+        print("decoder checks: ok")
     apply_mod = cm.load_new()
     for key in drops:
         for rel in ("src/ss/vdp1.cpp", "src/ss/sound.cpp", "src/hw_cpu/m68k/m68k.cpp"):

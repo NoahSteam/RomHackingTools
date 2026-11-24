@@ -76,6 +76,28 @@ const char* PerfDeviceName(int device)
     }
 }
 
+const char* PerfXDeviceName(int xdev)
+{
+    switch (xdev)
+    {
+        case SE_PERF_XDEV_ABUS_DUMMY: return "A-bus dummy area";
+        case SE_PERF_XDEV_UNMAPPED:   return "Unmapped";
+        default:                      return "?";
+    }
+}
+
+const char* PerfBusUnitLabel() { return "bus requests"; }
+
+const char* PerfCacheModeName(uint32_t cacheMode)
+{
+    switch (cacheMode)
+    {
+        case SE_PERF_CACHE_ON:  return "instruction cache emulated";
+        case SE_PERF_CACHE_OFF: return "instruction cache not emulated";
+        default:                return "cache mode unknown";
+    }
+}
+
 PerfBus PerfDeviceBus(int device)
 {
     switch (device)
@@ -127,6 +149,11 @@ BusTotals ComputeBusTotals(const uint64_t c[SE_PERF_COUNT])
         t.reads[b]  += c[SE_PERF_BUS_ACCESS + d * 2];
         t.writes[b] += c[SE_PERF_BUS_ACCESS + d * 2 + 1];
     }
+    // F8: neither bucket is a CPU-bus (or any bus's) traffic.
+    t.dummyReads     = c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_ABUS_DUMMY * 2];
+    t.dummyWrites    = c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_ABUS_DUMMY * 2 + 1];
+    t.unmappedReads  = c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2];
+    t.unmappedWrites = c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2 + 1];
     for (int src = 0; src < SE_PERF_BUS_COUNT; ++src)
         for (int dst = 0; dst < SE_PERF_BUS_COUNT; ++dst)
         {

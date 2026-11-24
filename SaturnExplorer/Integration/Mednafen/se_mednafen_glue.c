@@ -41,6 +41,9 @@
  * zeroes them. Defined here, outside SE_MEDNAFEN_WIRED, because the injected code references it
  * in every build. Written by the emulate thread only. */
 unsigned long long SeSsPerfC[SE_PERF_COUNT];
+/* SE_PERF_CACHE_* the emulator was configured with; set by the code apply.py injects where Mednafen
+ * picks its cache emulation mode (F8), UNKNOWN until a game has loaded. */
+unsigned int SeSsCacheMode = SE_PERF_CACHE_UNKNOWN;
 
 /* ---- Accessors the patcher injects into Mednafen ss (C linkage). Each reaches a
  *      file-scope static the glue can't see directly. Pointer accessors return the
@@ -880,11 +883,16 @@ static void SeMdfnPerfEndFrame(void)
             /* v27 Step 0: filled by F3  (info.timelineId, info.frameNo; SE_PERF_VALID_IDENTITY) */
             /* v27 Step 0: filled by F6  (info.mode latched for the frame; SE_PERF_VALID_MODE) */
             /* v27 Step 0: filled by F7  (info.otherNotAdmitted / otherEvicted / satFlags; SE_PERF_VALID_OTHER) */
-            /* v27 Step 0: filled by F8  (info.cacheMode; SE_PERF_VALID_CACHE) */
+            /* F8: the instruction-cache emulation mode, once a game has set it. */
+            if (SeSsCacheMode != SE_PERF_CACHE_UNKNOWN)
+            {
+                info.cacheMode = SeSsCacheMode;
+                info.valid |= SE_PERF_VALID_CACHE;
+            }
             /* F4 (counters 55, 56), F5 (57) and F8 (58..61) are produced by the injected hooks in
              * every patched build (apply.py fails on a missing anchor), so their bits go up with
              * them. v27 Step 0: F2 (counter 54) sets SE_PERF_VALID_SSH2_INT with its producer. */
-            info.valid |= SE_PERF_VALID_VDP1_WORK | SE_PERF_VALID_M68K_IDLE;
+            info.valid |= SE_PERF_VALID_VDP1_WORK | SE_PERF_VALID_M68K_IDLE | SE_PERF_VALID_BUS_X;
             SeExportPublishPerf(SeSsPerfC, SE_PERF_COUNT, keys, cycles, n, other, &info);
         }
     }

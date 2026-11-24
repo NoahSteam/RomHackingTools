@@ -83,6 +83,12 @@ enum class PerfBus { Cpu, A, B };
 const char* PerfDeviceName(int device);       // "High work RAM", ...
 PerfBus     PerfDeviceBus(int device);
 const char* PerfBusName(PerfBus bus);         // "CPU bus", "A-bus", "B-bus"
+// Name of an SE_PERF_XDEV_* bucket (F8). The unit of every bus count is a request to the SH-2's
+// bus state controller (a split 32-bit CS0 access is one request, a cache line fill is four), so
+// the count depends on the cache emulation mode (SE_PERF_CACHE_*).
+const char* PerfXDeviceName(int xdev);
+const char* PerfBusUnitLabel();               // "bus requests"
+const char* PerfCacheModeName(uint32_t cacheMode);   // "instruction cache emulated", ...
 // Name of an SCU DMA bus index (SE_PERF_BUS_*), which orders the buses differently.
 const char* PerfDmaBusName(int dmaBus);
 
@@ -92,6 +98,9 @@ struct BusTotals
     uint64_t writes[3] = {};
     uint64_t dmaIn[3] = {};      // SCU DMA bytes written to the bus
     uint64_t dmaOut[3] = {};     // SCU DMA bytes read from the bus
+    // v27 (F8): requests that belong to no device -- the A-bus dummy area and the holes the SCU does not
+    // decode. Kept out of the three bus totals above.
+    uint64_t dummyReads = 0, dummyWrites = 0, unmappedReads = 0, unmappedWrites = 0;
 };
 BusTotals ComputeBusTotals(const uint64_t counters[SE_PERF_COUNT]);
 
