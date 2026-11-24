@@ -511,6 +511,14 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
   switch (`jmp @Rn`) or a `bra` tail call the function is likewise charged to its raw-PC bucket until a return proves
   ownership again.
 
+## Validation guest (V1)
+
+[Integration/Validation/V1](../../../Integration/Validation/V1/README.md) holds a purpose-built Saturn guest
+program with expected counter values derived from the definitions above (`EXPECTED.md`), a fill-in
+`CHECKLIST.md`, and a BIOS-free test (`SaturnExplorerV1Guest`: emitted code decoded by the repo's SH-2
+decoder, loop cycle arithmetic recomputed, the guest run on a fake machine). Expected values are
+predictions: the guest has not been run on the emulator.
+
 ## Related documentation
 
 [Knowledge-base index](../README.md), [State sources](StateSources.md),

@@ -1,0 +1,12 @@
+Windows (no wrapper needed; Python 3 only). Rename nothing; run from a Command Prompt:
+
+    python -I Integration\Validation\V1\build_v1.py --probe C:\path\to\IP.BIN
+    python -I Integration\Validation\V1\build_v1.py --ip-bin C:\path\to\IP.BIN --out Integration\Validation\V1\out
+
+Then start the patched Mednafen on out\v1.cue, exactly as run_v1.sh prints:
+
+    mednafen.exe -force_module ss out\v1.cue
+    mednafen.exe -force_module ss -ss.dbg_cem full out\v1.cue      (second pass: instruction cache emulated)
+
+and connect Saturn Explorer (SaturnExplorer.exe --live). Reading instructions: run_v1.sh output
+or README.md in this directory.

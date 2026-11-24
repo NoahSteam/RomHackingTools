@@ -192,6 +192,11 @@ Expected per bucket in a steady frame of this phase:
 * work RAM high (12): reads `K + (0..8)`, writes `12 + (4..16)` [range]. Not exact because the table
   walk, the loop code and the dispatcher also touch cached work RAM high; in `full` cache mode add up
   to 64 more reads per frame (line fills of resident code), unverified.
+* The "reads `K + (0..8)`" band assumes the guest's own cached data reads (the bus table words, the
+  state block, the exception vector) are data-cache **hits** in steady state, which is why they are not
+  requests; the BIOS-free test counts the 77 such reads the table walk makes per frame and does not
+  treat them as requests. If the cache model evicts them the reading will be higher by up to that
+  number: that is a finding about the cache, not about the profiler.
 * CPU/A/B bus totals follow from the buckets; dummy and unmapped (58..61) are kept out of the three
   totals (`BusTotals::dummy*`, `unmapped*`).
 * master busy is informational: bounded above by `15 * 150 * 40 + OV` = 90,600 cycles even if every

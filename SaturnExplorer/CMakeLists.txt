@@ -1605,6 +1605,16 @@ if(BUILD_TESTING)
                                      ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${SE_CXX_FOR_PADTEST_DIR}")
             endif()
         endif()
+        # V1 validation guest (Integration/Validation/V1): builds without an SH-2 toolchain, so what can be
+        # checked without a BIOS is checked here -- the emitted instructions decoded by the repository's own
+        # SH-2 decoder, the pure-loop cycle arithmetic of EXPECTED.md, and the guest run on a fake machine.
+        # Skipped when Python is missing (this whole block); it asserts nothing about profiler counters.
+        add_executable(SaturnExplorerV1Disasm Integration/Validation/V1/tests/v1_disasm.cpp
+                       FrontEnd/src/Debug/Sh2Disasm.cpp)
+        target_include_directories(SaturnExplorerV1Disasm PRIVATE FrontEnd/src)
+        add_test(NAME SaturnExplorerV1Guest
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Validation/V1/tests/check_v1.py
+                         $<TARGET_FILE:SaturnExplorerV1Disasm>)
     endif()
 endif()
 
