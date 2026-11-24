@@ -219,6 +219,7 @@ PerfFrame GapOnly(uint64_t first, uint64_t last, uint64_t newest, bool evict = f
     g.wireVersion = 27;
     (evict ? g.evictFirst : g.gapFirst) = first;
     (evict ? g.evictLast : g.gapLast) = last;
+    (evict ? g.evictCount : g.gapCount) = last - first + 1;
     g.newestSeq = newest;
     return g;
 }
@@ -241,7 +242,7 @@ void TestGaps()
     CHECK(m.TotalServerLost() == 4);                         // counted once, not again on attach
     // The driver's own eviction is a different cause and stays apart from the server's.
     PerfFrame f7 = Seq64(7);
-    f7.evictFirst = 1; f7.evictLast = 3;
+    f7.evictFirst = 1; f7.evictLast = 3; f7.evictCount = 3;
     m.Push(f7);
     CHECK(m.TotalDriverEvicted() == 3 && m.TotalServerLost() == 4);
     CHECK(m.Latest().evictFirst == 1 && m.Latest().evictLast == 3 && m.Latest().gapLast == 0);
@@ -262,6 +263,36 @@ void TestGaps()
     CHECK(srv == 0 && drv == 0);
     uint64_t sum[SE_PERF_COUNT];
     CHECK(m.Sum(100, sum) == 4);                             // the denominator is the frames really held
+
+    // Spans enclose, counts count. A frame whose eviction span 1..5 encloses a server gap 3..4 (the
+    // exact repro: records 1, 2 and 5 evicted, 3..4 lost by the server) is 3 evicted + 2 lost, not 5.
+    {
+        ProfilerModel e(8);
+        PerfFrame f = Seq64(6);
+        f.evictFirst = 1; f.evictLast = 5; f.evictCount = 3;
+        f.gapFirst = 3; f.gapLast = 4; f.gapCount = 2;
+        e.Push(f);
+        CHECK(e.TotalServerLost() == 2 && e.TotalDriverEvicted() == 3);
+        e.Push(Seq64(7));
+        e.Push(Seq64(8));
+        uint64_t s2 = 99, d2 = 99;
+        e.LostIn(8, &s2, &d2);                   // the first frame's own loss precedes the window
+        CHECK(s2 == 0 && d2 == 0);
+        e.Push(Seq64(9));
+        // Two separate server gaps reported header-only, with delivered records between them in the
+        // sequence space: the frame that receives them carries the sum, not the enclosing span.
+        ProfilerModel g(8);
+        g.Push(Seq64(1));
+        g.Push(GapOnly(2, 3, 12));
+        g.Push(GapOnly(10, 11, 12));
+        CHECK(g.PendingServerGap().first == 2 && g.PendingServerGap().last == 11 && g.PendingServerGap().Count() == 4);
+        g.Push(Seq64(12));
+        CHECK(g.Latest().gapFirst == 2 && g.Latest().gapLast == 11 && g.Latest().gapCount == 4);
+        CHECK(g.TotalServerLost() == 4);
+        uint64_t s3 = 99, d3 = 99;
+        g.LostIn(2, &s3, &d3);
+        CHECK(s3 == 4 && d3 == 0);
+    }
 
     // 64-bit ordering: crossing 2^32 is not a restart, an older record is not a new run's first.
     ProfilerModel w(8);

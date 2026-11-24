@@ -397,6 +397,71 @@ void TestDriverGaps()
             CHECK(at > 1 && got[at - 1].sample_seq == 309);
         }
     }
+    // Counts are exact and never derived from a span. Records 1 and 2 arrive, the server reports 3..4
+    // lost, then 5..605 arrive undrained: the queue (600) evicts 1, 2 and 5 -- the record that
+    // carried the server's gap among them. The survivor 6 spans 1..5 and 3..4, which overlap, and
+    // must still say 3 evicted + 2 lost.
+    {
+        std::vector<Reply> script;
+        { Reply r1; r1.perf = { Rec(1), Rec(2) }; r1.perfNewest = 2; script.push_back(r1); }
+        for (uint64_t base = 5; base <= 605; base += 8)   // replies carry at most 8 records
+        {
+            Reply r;
+            for (uint64_t k = base; k < base + 8 && k <= 605; ++k) r.perf.push_back(Rec(k));
+            r.perfNewest = r.perf.back().sampleSeq;
+            if (base == 5) { r.perfLostFirst = 3; r.perfLostLast = 4; }
+            script.push_back(r);
+        }
+        script.push_back(Idle(605));
+        const size_t n = script.size();
+        Scripted s(script);
+        CHECK(s.Open());
+        CHECK(s.WaitReplies(n));
+        const se_live_perf_status st = s.Status();
+        CHECK(st.server_lost == 2 && st.driver_evicted == 3);
+        const auto got = s.Drain();
+        CHECK(got.size() == 600);
+        if (got.size() == 600)
+        {
+            CHECK(got[0].sample_seq == 6);
+            CHECK(got[0].gap_count == 2 && got[0].evict_count == 3);
+            CHECK(got[0].evict_first == 1 && got[0].evict_last == 5 && got[0].gap_first == 3 && got[0].gap_last == 4);
+            CHECK(got[1].gap_count == 0 && got[1].evict_count == 0);
+        }
+    }
+    // Two separate server gaps (2..3 and 10..11) with delivered records (4..9) between them, both
+    // carried by records that the queue then evicts: the survivor spans 2..11 but lost exactly 4
+    // to the server (the 6 delivered records inside the span are not lost), and 8 were evicted
+    // (1, 4..9 and 12).
+    {
+        std::vector<Reply> script;
+        { Reply r1; r1.perf = { Rec(1) }; r1.perfNewest = 1; script.push_back(r1); }
+        { Reply r2; r2.perf = { Rec(4), Rec(5), Rec(6), Rec(7), Rec(8), Rec(9) }; r2.perfNewest = 9;
+          r2.perfLostFirst = 2; r2.perfLostLast = 3; script.push_back(r2); }
+        for (uint64_t base = 12; base <= 612; base += 8)
+        {
+            Reply r;
+            for (uint64_t k = base; k < base + 8 && k <= 612; ++k) r.perf.push_back(Rec(k));
+            r.perfNewest = r.perf.back().sampleSeq;
+            if (base == 12) { r.perfLostFirst = 10; r.perfLostLast = 11; }
+            script.push_back(r);
+        }
+        script.push_back(Idle(612));
+        const size_t n = script.size();
+        Scripted s(script);
+        CHECK(s.Open());
+        CHECK(s.WaitReplies(n));
+        const se_live_perf_status st = s.Status();
+        CHECK(st.server_lost == 4 && st.driver_evicted == 8);
+        const auto got = s.Drain();
+        CHECK(got.size() == 600);
+        if (got.size() == 600)
+        {
+            CHECK(got[0].sample_seq == 13);
+            CHECK(got[0].gap_first == 2 && got[0].gap_last == 11 && got[0].gap_count == 4);
+            CHECK(got[0].evict_first == 1 && got[0].evict_last == 12 && got[0].evict_count == 8);
+        }
+    }
     // A v27 sequence crossing 2^32 is delivered in order, with no gap and no restart.
     {
         Reply r1; r1.perf = { Rec(0xFFFFFFFEull), Rec(0xFFFFFFFFull), Rec(0x100000000ull), Rec(0x100000001ull) };

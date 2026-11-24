@@ -216,6 +216,7 @@ struct PerfIngest
     uint64_t* seen;          // newest sampleSeq queued (0 = none)
     uint64_t* pendFirst;     // server-reported lost range not yet attached to a queued entry
     uint64_t* pendLast;
+    uint64_t* pendCount;     // exact number of records the server lost that the range stands for
     uint64_t* newestReported;   // newest_seq already visible to the consumer through the queue
     uint64_t* serverLost;
     uint64_t* driverEvicted;
@@ -229,7 +230,12 @@ void IngestPerf(const PerfIngest& st, LivePerf& in, uint32_t deliveringFrame, si
 {
     std::deque<se_live_perf_frame>& q = *st.q;
     uint64_t& seen = *st.seen;
-    if (in.gapLast != 0 && in.gapLast >= in.gapFirst) *st.serverLost += in.gapLast - in.gapFirst + 1;
+    if (in.gapLast != 0 && in.gapLast >= in.gapFirst)
+    {
+        const uint64_t n = in.gapLast - in.gapFirst + 1;
+        *st.serverLost += n;
+        *st.pendCount += n;
+    }
     MergeGap(*st.pendFirst, *st.pendLast, in.gapFirst, in.gapLast);
     size_t queued = 0;
     for (se_live_perf_frame& f : in.frames)
@@ -257,11 +263,13 @@ void IngestPerf(const PerfIngest& st, LivePerf& in, uint32_t deliveringFrame, si
         if (seen != 0 && f.sample_seq > covered + 1)
         {
             *st.serverLost += f.sample_seq - covered - 1;
+            *st.pendCount += f.sample_seq - covered - 1;
             MergeGap(*st.pendFirst, *st.pendLast, covered + 1, f.sample_seq - 1);
         }
         f.gap_first = *st.pendFirst;
         f.gap_last = *st.pendLast;
-        *st.pendFirst = *st.pendLast = 0;
+        f.gap_count = *st.pendCount;
+        *st.pendFirst = *st.pendLast = *st.pendCount = 0;
         seen = f.sample_seq;
         f.frame = deliveringFrame;
         q.push_back(f);
@@ -280,11 +288,12 @@ void IngestPerf(const PerfIngest& st, LivePerf& in, uint32_t deliveringFrame, si
         g.gap_only = 1;
         g.gap_first = *st.pendFirst;
         g.gap_last = *st.pendLast;
+        g.gap_count = *st.pendCount;
         g.newest_seq = in.newest;
         g.frame = deliveringFrame;
         // The lost records will never arrive: the stream has moved past them.
         if (*st.pendLast > seen) seen = *st.pendLast;
-        *st.pendFirst = *st.pendLast = 0;
+        *st.pendFirst = *st.pendLast = *st.pendCount = 0;
         if (in.newest > *st.newestReported) *st.newestReported = in.newest;
         q.push_back(g);
     }
@@ -300,8 +309,11 @@ void IngestPerf(const PerfIngest& st, LivePerf& in, uint32_t deliveringFrame, si
         if (!gone.gap_only)
         {
             ++*st.driverEvicted;
+            ++next.evict_count;
             MergeGap(next.evict_first, next.evict_last, gone.sample_seq, gone.sample_seq);
         }
+        next.evict_count += gone.evict_count;
+        next.gap_count += gone.gap_count;
         if (gone.evict_last != 0)
             MergeGap(next.evict_first, next.evict_last, gone.evict_first, gone.evict_last);
         if (gone.gap_last != 0)
@@ -525,7 +537,7 @@ struct LiveState
     uint64_t              perfSeqSeen = 0;
     // A lost range reported (or inferred) and not yet attached to a record that was queued: it
     // rides on the next one, however many empty replies come first. Guarded by ctlMtx.
-    uint64_t              perfPendFirst = 0, perfPendLast = 0;
+    uint64_t              perfPendFirst = 0, perfPendLast = 0, perfPendCount = 0;
     // Totals and the newest sequence the server reported, for se_live_perf_status_get.
     uint64_t              perfNewest = 0, perfReplies = 0, perfServerLost = 0, perfDriverEvicted = 0;
     uint64_t              perfNewestReported = 0;   // newest_seq already reflected in the stream
@@ -1859,12 +1871,12 @@ void PollLoop(LiveState* st)
                 // range that was waiting for its next record, belong to it.
                 st->perf.clear();
                 st->perfSeqSeen = 0;
-                st->perfPendFirst = st->perfPendLast = 0;
+                st->perfPendFirst = st->perfPendLast = st->perfPendCount = 0;
                 st->perfNewest = st->perfNewestReported = 0;
                 st->perfReplies = st->perfServerLost = st->perfDriverEvicted = 0;
             }
             // Bounded: ten seconds nobody drained.
-            const PerfIngest pi = { &st->perf, &st->perfSeqSeen, &st->perfPendFirst, &st->perfPendLast,
+            const PerfIngest pi = { &st->perf, &st->perfSeqSeen, &st->perfPendFirst, &st->perfPendLast, &st->perfPendCount,
                                     &st->perfNewestReported, &st->perfServerLost, &st->perfDriverEvicted };
             IngestPerf(pi, perf, static_cast<uint32_t>(frame), 600);
             if (perf.newest > st->perfNewest) st->perfNewest = perf.newest;

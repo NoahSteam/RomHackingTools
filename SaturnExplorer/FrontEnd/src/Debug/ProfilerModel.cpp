@@ -183,14 +183,14 @@ const PerfFrame& ProfilerModel::At(size_t i) const
 
 namespace
 {
-void AddRange(ProfilerModel::SeqRange& r, uint64_t first, uint64_t last)
+void AddRange(ProfilerModel::SeqRange& r, uint64_t first, uint64_t last, uint64_t count)
 {
+    r.count += count;
     if (last == 0) return;
-    if (r.Empty()) { r.first = first; r.last = last; return; }
-    r.first = std::min(r.first, first);
-    r.last = std::max(r.last, last);
+    if (r.last == 0) { r.first = first; r.last = last; return; }
+    r.first = (std::min)(r.first, first);
+    r.last = (std::max)(r.last, last);
 }
-uint64_t RangeCount(uint64_t first, uint64_t last) { return last == 0 || last < first ? 0 : last - first + 1; }
 }  // namespace
 
 void ProfilerModel::Push(PerfFrame frame)
@@ -213,17 +213,29 @@ void ProfilerModel::Push(PerfFrame frame)
     }
     if (frame.newestSeq > mNewestSeq) mNewestSeq = frame.newestSeq;
     if (frame.sampleSeq > mNewestSeq) mNewestSeq = frame.sampleSeq;
-    mServerLost += RangeCount(frame.gapFirst, frame.gapLast);
-    mDriverEvicted += RangeCount(frame.evictFirst, frame.evictLast);
+    mServerLost += frame.gapCount;
+    mDriverEvicted += frame.evictCount;
     if (frame.gapOnly)
     {
-        AddRange(mPendServer, frame.gapFirst, frame.gapLast);
-        AddRange(mPendEvict, frame.evictFirst, frame.evictLast);
+        AddRange(mPendServer, frame.gapFirst, frame.gapLast, frame.gapCount);
+        AddRange(mPendEvict, frame.evictFirst, frame.evictLast, frame.evictCount);
         return;
     }
     // What a gap-only entry reported rides on this frame, so the plot breaks right before it.
-    if (!mPendServer.Empty()) { SeqRange r{ frame.gapFirst, frame.gapLast }; AddRange(r, mPendServer.first, mPendServer.last); frame.gapFirst = r.first; frame.gapLast = r.last; mPendServer = SeqRange(); }
-    if (!mPendEvict.Empty()) { SeqRange r{ frame.evictFirst, frame.evictLast }; AddRange(r, mPendEvict.first, mPendEvict.last); frame.evictFirst = r.first; frame.evictLast = r.last; mPendEvict = SeqRange(); }
+    if (!mPendServer.Empty())
+    {
+        SeqRange r{ frame.gapFirst, frame.gapLast, frame.gapCount };
+        AddRange(r, mPendServer.first, mPendServer.last, mPendServer.count);
+        frame.gapFirst = r.first; frame.gapLast = r.last; frame.gapCount = r.count;
+        mPendServer = SeqRange();
+    }
+    if (!mPendEvict.Empty())
+    {
+        SeqRange r{ frame.evictFirst, frame.evictLast, frame.evictCount };
+        AddRange(r, mPendEvict.first, mPendEvict.last, mPendEvict.count);
+        frame.evictFirst = r.first; frame.evictLast = r.last; frame.evictCount = r.count;
+        mPendEvict = SeqRange();
+    }
     const size_t cap = mFrames.size();
     if (mCount == cap)
     {
@@ -244,8 +256,8 @@ void ProfilerModel::LostIn(size_t window, uint64_t* serverLost, uint64_t* driver
     for (size_t k = 0; k + 1 < n; ++k)   // the oldest frame's own gap lies before the window
     {
         const PerfFrame& f = At(mCount - 1 - k);
-        srv += RangeCount(f.gapFirst, f.gapLast);
-        drv += RangeCount(f.evictFirst, f.evictLast);
+        srv += f.gapCount;
+        drv += f.evictCount;
     }
     if (serverLost) *serverLost = srv;
     if (driverEvicted) *driverEvicted = drv;
