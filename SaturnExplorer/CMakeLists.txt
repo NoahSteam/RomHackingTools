@@ -1705,6 +1705,29 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
                  COMMAND SaturnExplorerByteQueueTests)
     endif()
 
+    # V3 benchmark client (Docs/ProfilerFixPlan.md V3; Integration/Validation/V3/PROCEDURE.md): a headless
+    # client that records the profiler stream to CSV through the real driver. Native only; CPU-time columns
+    # are Linux-only, everything else is portable.
+    if(NOT EMSCRIPTEN)
+        add_library(SaturnExplorerV3Bench STATIC Integration/Validation/V3/BenchClient.cpp)
+        target_include_directories(SaturnExplorerV3Bench PUBLIC
+            Integration/Validation/V3
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        target_link_libraries(SaturnExplorerV3Bench PUBLIC SaturnExplorerLiveDriver SaturnExplorerCore)
+        add_executable(se-bench-client Integration/Validation/V3/bench_client_main.cpp)
+        target_link_libraries(se-bench-client PRIVATE SaturnExplorerV3Bench)
+    endif()
+
+    # V3 analyzer on synthetic runs with known answers (invalid-run, drift and overhead cases).
+    if(BUILD_TESTING AND Python3_FOUND)
+        add_test(NAME SaturnExplorerV3AnalyzeTests
+                 COMMAND ${Python3_EXECUTABLE} -I
+                         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Validation/V3/test_analyze_v3.py)
+        add_test(NAME SaturnExplorerV3CheckSettingsTests
+                 COMMAND ${Python3_EXECUTABLE} -I
+                         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Validation/V3/test_check_settings.py)
+    endif()
+
     # The driver's reconnect counter — how a client notices the emulator on the other end
     # was replaced. Stands up a loopback listener, so POSIX sockets only; the Windows
     # driver speaks a named pipe and would need its own harness.
@@ -1812,6 +1835,59 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         target_link_libraries(SaturnExplorerLiveProfilerRequestTests PRIVATE
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerLiveProfilerRequestTests COMMAND SaturnExplorerLiveProfilerRequestTests)
+
+        # V3 harness: se-bench-client against the real exporter and driver (own socket and port 6953), in
+        # process and through the executable. Measures nothing about the emulator; see PROCEDURE.md.
+        add_executable(SaturnExplorerV3BenchClientTests
+            Integration/Validation/V3/BenchClientTests.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerV3BenchClientTests PRIVATE
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_v3_bench_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6953)
+        target_include_directories(SaturnExplorerV3BenchClientTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerV3BenchClientTests PRIVATE
+            SaturnExplorerV3Bench SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_dependencies(SaturnExplorerV3BenchClientTests se-bench-client)
+        add_test(NAME SaturnExplorerV3BenchClientTests
+                 COMMAND SaturnExplorerV3BenchClientTests $<TARGET_FILE:se-bench-client>)
+        set_tests_properties(SaturnExplorerV3BenchClientTests PROPERTIES TIMEOUT 120)
+
+        # run_v3.sh end to end against a stand-in emulator built on the real exporter (own socket and port 6954).
+        add_executable(SaturnExplorerV3FakeEmulator
+            Integration/Validation/V3/FakeEmulator.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerV3FakeEmulator PRIVATE
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_v3_script_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6954)
+        target_include_directories(SaturnExplorerV3FakeEmulator PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerV3FakeEmulator PRIVATE Threads::Threads)
+
+        # Diagnostic (not a test): poll period and loss over the unix socket versus TCP (own socket, port 6955).
+        add_executable(se-v3-poll-probe
+            Integration/Validation/V3/PollPeriodProbe.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(se-v3-poll-probe PRIVATE
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_v3_poll_probe.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6955)
+        target_include_directories(se-v3-poll-probe PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(se-v3-poll-probe PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        find_program(SE_BASH bash)
+        if(SE_BASH AND Python3_FOUND)
+            add_test(NAME SaturnExplorerV3RunScriptTests
+                     COMMAND ${SE_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Validation/V3/test_run_v3.sh
+                             $<TARGET_FILE:SaturnExplorerV3FakeEmulator> $<TARGET_FILE:se-bench-client>
+                             /tmp/saturn_explorer_v3_script_test.sock)
+            set_tests_properties(SaturnExplorerV3RunScriptTests PROPERTIES TIMEOUT 180)
+        endif()
 
         # A1-7: a paused emulator that is captured every UI frame (a state load nobody confirms)
         # must not make the SH-2 Pseudocode panel ask again every frame. The real exporter withholds

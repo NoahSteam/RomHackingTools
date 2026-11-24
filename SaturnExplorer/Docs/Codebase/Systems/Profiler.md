@@ -570,6 +570,16 @@ program with expected counter values derived from the definitions above (`EXPECT
 decoder, loop cycle arithmetic recomputed, the guest run on a fake machine). Expected values are
 predictions: the guest has not been run on the emulator.
 
+## Measuring the cost (V3)
+
+[Integration/Validation/V3/](../../../Integration/Validation/V3/PROCEDURE.md) holds the benchmark harness for
+the plan's V3: `se-bench-client` (headless client on the real LiveDriver, CSV per frame, exact loss counts),
+`run_v3.sh` (interleaved no client / attribution off / attribution on), `analyze_v3.py` and the recording
+procedure. Its tests run without a BIOS (`SaturnExplorerV3BenchClientTests`, `SaturnExplorerV3AnalyzeTests`,
+`SaturnExplorerV3RunScriptTests`). Any connected client already makes the exporter capture a snapshot per frame,
+so "no client" is measured with two short connections at the window edges; the procedure states what that
+cannot show. No overhead figure has been measured yet.
+
 ## Related documentation
 
 [Knowledge-base index](../README.md), [State sources](StateSources.md),
