@@ -768,6 +768,51 @@ int main()
         }
         se_live_set_profiler(&ds, 0);
         Check(Until([&] { return gProfActive == 0; }), "profiler: switching attribution off disarms the hook");
+
+        // The lost-record race, made deterministic. This section used to tick frames freely and then
+        // assert that every one had arrived; the server keeps 16 records, so whenever the client was
+        // scheduled late the oldest were overwritten and the assertion failed -- intermittently. A
+        // section cursor of our own stands in for the client, so how far behind it is is a fact of
+        // the test rather than of the scheduler: left alone for 20 ticks it MUST lose exactly 4
+        // records (and be told which), and read after every tick it must lose none. The first half
+        // is the old logic's outcome (delivered != produced); the second is what lockstep guarantees.
+        {
+            static unsigned char sec[SE_EXPORT_PERF_SECTION_MAX];
+            auto rd32 = [](const unsigned char* q) { return uint32_t(q[0]) | (uint32_t(q[1]) << 8) | (uint32_t(q[2]) << 16) | (uint32_t(q[3]) << 24); };
+            auto rd64 = [&](const unsigned char* q) { return uint64_t(rd32(q)) | (uint64_t(rd32(q + 4)) << 32); };
+            struct Sec { uint32_t count = 0; uint64_t newest = 0, lostFirst = 0, lostLast = 0, firstSeq = 0; };
+            auto build = [&](SeExportPerfCursor& cur) -> Sec
+            {
+                Sec r;
+                const size_t len = SeExportBuildPerfSection(&cur, sec);
+                if (len < SE_EXPORT_PERF_HEADER_LEN) return r;
+                r.count = rd32(sec); r.newest = rd64(sec + 4); r.lostFirst = rd64(sec + 12); r.lostLast = rd64(sec + 20);
+                if (r.count) r.firstSeq = rd64(sec + SE_EXPORT_PERF_HEADER_LEN + 4);
+                return r;
+            };
+            SeExportPerfCursor stalled = {}, stepped = {};
+            const Sec s0 = build(stalled);          // starts at the newest record: not a loss
+            build(stepped);
+            const uint64_t base = SeExportPerfNewestSeq();
+            Check(s0.count == 1 && s0.newest == base && s0.lostLast == 0, "profiler: a connection starts at the newest record");
+            uint32_t deliveredStepped = 0;
+            for (int i = 0; i < 20; ++i)
+            {
+                EmulatorTick();
+                const Sec t = build(stepped);       // the lockstep client: reads after every tick
+                deliveredStepped += t.count;
+                if (t.lostLast != 0) Check(false, "profiler: a client that reads every tick loses nothing");
+            }
+            Check(deliveredStepped == 20, "profiler: lockstep: all 20 produced records delivered");
+            const Sec free1 = build(stalled);       // the free-running client: first look after 20 ticks
+            Check(free1.newest == base + 20, "profiler: 20 more frames were produced");
+            Check(free1.lostFirst == base + 1 && free1.lostLast == base + 4,
+                  "profiler: left behind by 20 ticks the client lost exactly the 4 the 16-slot ring overwrote");
+            Check(free1.count == 8 && free1.firstSeq == base + 5,
+                  "profiler: and its next record is the oldest one the ring still holds");
+            Check(free1.newest - free1.lostLast == 16 && 20 - 4 < 20,
+                  "profiler: so 'every produced frame arrived' is false for a free-running producer: 16 of 20 remain");
+        }
     }
 
     se_destroy(ctx);
