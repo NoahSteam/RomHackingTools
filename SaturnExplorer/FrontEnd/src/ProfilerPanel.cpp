@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
 #include <limits>
 #include <unordered_map>
@@ -118,6 +119,29 @@ std::string CoverageNote(const Coverage& c)
     char buf[48];
     std::snprintf(buf, sizeof(buf), " (%zu of %zu frame%s)", c.covered, c.frames, c.frames == 1 ? "" : "s");
     return buf;
+}
+
+// Long explanatory / detail lines wrap to the panel's width instead of running off its right edge
+// (the panel is often docked narrow). Same colours as Text / TextDisabled.
+void WrappedText(const char* fmt, ...) IM_FMTARGS(1);
+void WrappedText(const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextV(fmt, args);
+    ImGui::PopTextWrapPos();
+    va_end(args);
+}
+void WrappedDisabled(const char* fmt, ...) IM_FMTARGS(1);
+void WrappedDisabled(const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabledV(fmt, args);
+    ImGui::PopTextWrapPos();
+    va_end(args);
 }
 
 constexpr double kNoData = std::numeric_limits<double>::quiet_NaN();
@@ -299,18 +323,21 @@ void ProfilerPanel::DrawFrameTab(const ProfilerModel& model)
         // VDP1: a v26 server's elapsed figure and a v27 server's command work are different
         // quantities. A window holding both shows both, each over its own frames; neither is ever
         // added to the other. A v27 frame without the producer's bit is "not available", never 0%.
-        struct Single { const char* name; const char* id; double v; ImU32 col; const char* tip; Coverage cov; };
+        struct Single { const char* name; const char* id; double v; ImU32 col; const char* tip; Coverage cov; std::string note; };
         std::vector<Single> singles;
         if (w.vdp1Draw.Any())
             singles.push_back({ "VDP1 drawing", "##vdp1d", s.vdp1Draw, ColVdp1(),
-                                "VDP1 drawing its command table (a v26 emulator's elapsed figure)", w.vdp1Draw });
+                                "VDP1 drawing its command table (a v26 emulator's elapsed figure)", w.vdp1Draw, CoverageNote(w.vdp1Draw) });
         if (w.v27Frames > 0)
             singles.push_back({ "VDP1 command work", "##vdp1w", s.vdp1Work, ColVdp1(),
                                 "VDP1 command-work cycles as a share of the frame; above 100% in instant-draw mode",
-                                w.vdp1Work });
-        singles.push_back({ "SCU DSP", "##dsp", s.dsp, ColDsp(), "SCU DSP executing", Coverage{ w.frames, w.frames } });
+                                w.vdp1Work, CoverageNote(w.vdp1Work) });
+        singles.push_back({ "SCU DSP", "##dsp", s.dsp, ColDsp(), "SCU DSP executing", Coverage{ w.frames, w.frames }, std::string() });
         singles.push_back({ "68000 (sound)", "##m68k", s.m68k, ColM68k(), "68000 executing (share of its own clock)",
-                            Coverage{ w.frames, w.frames } });
+                            Coverage{ w.frames, w.frames },
+                            // The detail line below pairs idle with executing over the frames that carry the
+                            // idle bit; when that is a subset, this row says its own denominator.
+                            (w.m68kIdle.Any() && !w.m68kIdle.Full()) ? " (all " + std::to_string(w.frames) + " frames)" : std::string() });
         for (const Single& one : singles)
         {
             const bool known = one.cov.Any();
@@ -319,7 +346,7 @@ void ProfilerPanel::DrawFrameTab(const ProfilerModel& model)
             ImGui::TableNextColumn(); ImGui::TextUnformatted(one.name);
             ImGui::TableNextColumn(); StackedBar(one.id, seg, 1, barH);
             ImGui::TableNextColumn();
-            if (known) ImGui::Text("%s%s", Percent(one.v).c_str(), CoverageNote(one.cov).c_str());
+            if (known) ImGui::Text("%s%s", Percent(one.v).c_str(), one.note.c_str());
             else ImGui::TextDisabled("not available");
         }
         ImGui::EndTable();
@@ -344,24 +371,24 @@ void ProfilerPanel::DrawFrameTab(const ProfilerModel& model)
         if (w.vdp1Work.Any())
         {
             if (s.vdp1WorkOverFrame)
-                ImGui::Text("VDP1 command work exceeds the frame in %zu frame%s: instant-draw mode does a whole "
+                WrappedText("VDP1 command work exceeds the frame in %zu frame%s: instant-draw mode does a whole "
                             "table's work in no time, so this is work, not elapsed time.",
                             w.vdp1OverFrameFrames, w.vdp1OverFrameFrames == 1 ? "" : "s");
-            ImGui::Text("VDP1 draw budget discarded by DMA: %s of the frame%s (budget, not elapsed time)",
+            WrappedText("VDP1 draw budget discarded by DMA: %s of the frame%s (budget, not elapsed time)",
                         Percent(s.vdp1DmaDiscarded).c_str(), CoverageNote(w.vdp1Work).c_str());
         }
         else
-            ImGui::TextDisabled("VDP1 draw budget discarded by DMA: not available");
+            WrappedDisabled("VDP1 draw budget discarded by DMA: not available");
         if (w.m68kIdle.Any())
-            ImGui::Text("68000: %s idle (stopped), %s executing, of its own clock%s",
-                        Percent(w.m68kIdleShare).c_str(), Percent(s.m68k).c_str(), CoverageNote(w.m68kIdle).c_str());
+            WrappedText("68000: %s idle (stopped), %s executing, of its own clock%s",
+                        Percent(w.m68kIdleShare).c_str(), Percent(w.m68kIdleExecShare).c_str(), CoverageNote(w.m68kIdle).c_str());
         else
-            ImGui::TextDisabled("68000 idle: not available");
+            WrappedDisabled("68000 idle: not available");
         if (w.mode.Any())
-            ImGui::Text("Function attribution: on in %zu of %zu frame%s (the mode each frame ran in)",
+            WrappedText("Function attribution: on in %zu of %zu frame%s (the mode each frame ran in)",
                         w.modeFunctionsOn, w.mode.covered, w.mode.covered == 1 ? "" : "s");
         else
-            ImGui::TextDisabled("Function attribution mode per frame: not available");
+            WrappedDisabled("Function attribution mode per frame: not available");
     }
 
     // Records the emulator or the driver lost: a window averages the frames it really holds, and the
@@ -370,7 +397,7 @@ void ProfilerPanel::DrawFrameTab(const ProfilerModel& model)
         uint64_t winServer = 0, winDriver = 0;
         model.LostIn(WindowFrames(), &winServer, &winDriver);
         if (model.TotalServerLost() || model.TotalDriverEvicted())
-            ImGui::Text("Lost records: %llu dropped by the emulator's ring, %llu evicted by the driver's queue "
+            WrappedText("Lost records: %llu dropped by the emulator's ring, %llu evicted by the driver's queue "
                         "(in this window: %llu and %llu)",
                         static_cast<unsigned long long>(model.TotalServerLost()),
                         static_cast<unsigned long long>(model.TotalDriverEvicted()),
@@ -421,7 +448,7 @@ void ProfilerPanel::DrawBusTab(const ProfilerModel& model)
         maxDev = std::max(maxDev, sum[SE_PERF_BUS_ACCESS + d * 2] + sum[SE_PERF_BUS_ACCESS + d * 2 + 1]);
 
     const WindowShares w = model.Shares(WindowFrames());
-    ImGui::Text("SH-2 %s per frame", PerfBusUnitLabel());
+    WrappedText("SH-2 %s per frame", PerfBusUnitLabel());
     ImGui::SameLine(0.0f, 24.0f);
     Swatch(ColBusy(), "Reads");
     ImGui::SameLine(0.0f, 12.0f);
@@ -433,12 +460,12 @@ void ProfilerPanel::DrawBusTab(const ProfilerModel& model)
     if (w.cache.Any())
     {
         if (w.cacheMixed)
-            ImGui::TextDisabled("Cache mode: both emulated and not emulated in this window");
+            WrappedDisabled("Cache mode: both emulated and not emulated in this window");
         else
-            ImGui::TextDisabled("Cache mode: %s%s", PerfCacheModeName(w.cacheMode), CoverageNote(w.cache).c_str());
+            WrappedDisabled("Cache mode: %s%s", PerfCacheModeName(w.cacheMode), CoverageNote(w.cache).c_str());
     }
     else if (w.v27Frames > 0)
-        ImGui::TextDisabled("Cache mode: not available (the game has not set it yet)");
+        WrappedDisabled("Cache mode: not available (the game has not set it yet)");
 
     if (ImGui::BeginTable("##buses", 4, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg))
     {
@@ -483,14 +510,14 @@ void ProfilerPanel::DrawBusTab(const ProfilerModel& model)
         {
             const double bf = static_cast<double>(w.busX.covered);
             const BusTotals& x = w.busXTotals;
-            ImGui::Text("Not on any bus, per frame: %s %s reads, %s writes;  %s %s reads, %s writes%s",
+            WrappedText("Not on any bus, per frame: %s %s reads, %s writes;  %s %s reads, %s writes%s",
                         PerfXDeviceName(SE_PERF_XDEV_ABUS_DUMMY), Count(x.dummyReads / bf).c_str(),
                         Count(x.dummyWrites / bf).c_str(), PerfXDeviceName(SE_PERF_XDEV_UNMAPPED),
                         Count(x.unmappedReads / bf).c_str(), Count(x.unmappedWrites / bf).c_str(),
                         CoverageNote(w.busX).c_str());
         }
         else
-            ImGui::TextDisabled("A-bus dummy area and unmapped requests: not available");
+            WrappedDisabled("A-bus dummy area and unmapped requests: not available");
     }
 
     ImGui::SeparatorText("SCU DMA per frame");
@@ -564,7 +591,7 @@ void ProfilerPanel::DrawMemoryTab(const MemoryPoolTracker& pools, const Host& ho
         }
         ImGui::Text("%s", u.name.c_str());
         ImGui::SameLine();
-        ImGui::TextDisabled("%s at %08X  -  %s non-uniform, %s changed since sample", Bytes(u.size).c_str(), u.base,
+        WrappedDisabled("%s at %08X  -  %s non-uniform, %s changed since sample", Bytes(u.size).c_str(), u.base,
                             Percent(u.UsedFraction()).c_str(), Percent(u.ChangedFraction()).c_str());
 
         const float width = std::max(ImGui::GetContentRegionAvail().x, pitch * 8.0f);
@@ -661,17 +688,17 @@ void ProfilerPanel::DrawFunctionsTab(const ProfilerModel& model, const Host& hos
     const double denom = static_cast<double>(std::max<uint64_t>(fw.Attributed(), 1));
     const double perFrame = 1.0 / static_cast<double>(frames);
     ImGui::SameLine();
-    ImGui::TextDisabled("self time, callees excluded - %s cycles per frame attributed",
+    WrappedDisabled("self time, callees excluded - %s cycles per frame attributed",
                         Count(static_cast<double>(fw.Attributed()) * perFrame).c_str());
-    ImGui::TextDisabled("Listed rows are the retained keys: the emulator keeps the 64 hottest functions of each "
+    WrappedDisabled("Listed rows are the retained keys: the emulator keeps the 64 hottest functions of each "
                         "frame out of up to 3072 it tracks. Everything else it attributed is in Other.");
     if (mFnCpu != 0 && frames < fw.attributed)
-        ImGui::TextDisabled("%zu of %zu frames in this window carry the per-CPU split and are used.", frames, fw.attributed);
+        WrappedDisabled("%zu of %zu frames in this window carry the per-CPU split and are used.", frames, fw.attributed);
     if (fw.tableFullFrames)
-        ImGui::TextDisabled("The table filled in %zu of %zu frames: functions first seen after 3,072 were not "
+        WrappedDisabled("The table filled in %zu of %zu frames: functions first seen after 3,072 were not "
                             "tracked on their own, and their time is in Other.", fw.tableFullFrames, frames);
     if (fw.truncatedFrames)
-        ImGui::TextDisabled("More than 64 functions ran in %zu of %zu frames: the smallest were folded into Other.",
+        WrappedDisabled("More than 64 functions ran in %zu of %zu frames: the smallest were folded into Other.",
                             fw.truncatedFrames, frames);
 
     const float barH = ImGui::GetTextLineHeight();

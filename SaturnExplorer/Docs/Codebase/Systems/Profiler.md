@@ -344,7 +344,9 @@ has lost records (`SplitHistoryRuns`). A strip tooltip names the frame by its id
 snapshot number a batch arrived with.
 
 For a window with v27 frames the Frame tab also shows VDP1 command work above 100% with the number of
-instant-draw frames, the DMA-discarded draw budget (a budget, not time), 68000 idle versus executed, the
+instant-draw frames, the DMA-discarded draw budget (a budget, not time), 68000 idle versus executed (both over the
+frames that carry the idle bit, so they sum to 100% of that subset's clock; the bar row above it averages executing
+over every frame and says "(all N frames)" when that differs), the
 functions-on count of the latched mode, and the lost-record counts (`TotalServerLost`,
 `TotalDriverEvicted`, `LostIn(window)`). The Buses tab names its unit ("bus requests"), the cache mode and
 the A-bus dummy and unmapped buckets. "Busy" is labelled as including bus waits.

@@ -421,8 +421,12 @@ WindowShares ProfilerModel::Shares(size_t window) const
         out.shares.vdp1WorkOverFrame = w.vdp1WorkOverFrame || out.vdp1OverFrameFrames > 0;
     }
     if (idle.covered && idle.c[SE_PERF_M68K_TOTAL_CYCLES] > 0)
+    {
+        out.m68kIdleExecShare = Clamp01(static_cast<double>(idle.c[SE_PERF_M68K_CYCLES]) /
+                                        static_cast<double>(idle.c[SE_PERF_M68K_TOTAL_CYCLES]));
         out.m68kIdleShare = Clamp01(static_cast<double>(idle.c[SE_PERF_M68K_IDLE_CYCLES]) /
                                     static_cast<double>(idle.c[SE_PERF_M68K_TOTAL_CYCLES]));
+    }
     if (busx.covered) out.busXTotals = ComputeBusTotals(busx.c);
     return out;
 }

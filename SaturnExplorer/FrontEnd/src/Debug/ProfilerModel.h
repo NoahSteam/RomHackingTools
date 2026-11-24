@@ -167,6 +167,9 @@ struct WindowShares
     // 68000 stopped, as a share of its own clock (SE_PERF_VALID_M68K_IDLE).
     Coverage m68kIdle;
     double   m68kIdleShare = 0;
+    // The executing share of THE SAME frames (those carrying the idle bit), so idle + executing is one
+    // subset of the 68000 clock. shares.m68k is executing over every frame in the window.
+    double   m68kIdleExecShare = 0;
     // SE_PERF_VALID_BUS_X: dummy / unmapped request counts, SUMMED over the covered frames.
     Coverage busX;
     BusTotals busXTotals;

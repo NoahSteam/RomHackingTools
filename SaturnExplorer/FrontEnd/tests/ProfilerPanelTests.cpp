@@ -452,6 +452,39 @@ void TestFrameTabDetailsAndLabels()
 }
 
 // A v26 window has none of the v27 detail lines, and says nothing is available that v26 never had.
+// The paired 68000 detail line (idle and executing) comes from ONE frame subset: the frames that
+// carry SE_PERF_VALID_M68K_IDLE. Three frames without the bit (executed 100 of 100, idle unavailable)
+// and one with it (executed 0, idle 100 of 100): the measured subset is 100% idle and 0% executing;
+// the old line mixed that idle with the all-frame executing share and read "75% executing".
+void CheckIdleLine(bool validFirst)
+{
+    Rig rig;
+    rig.model.Clear();
+    for (uint64_t i = 1; i <= 4; ++i)
+    {
+        const bool v = validFirst ? i == 1 : i == 4;
+        PerfFrame f = V27(i, SE_PERF_VALID_SSH2_INT | (v ? SE_PERF_VALID_M68K_IDLE : 0u));
+        f.c[SE_PERF_M68K_TOTAL_CYCLES] = 100;
+        f.c[SE_PERF_M68K_CYCLES] = v ? 0 : 100;
+        f.c[SE_PERF_M68K_IDLE_CYCLES] = v ? 100 : 0;
+        rig.model.Push(f);
+    }
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    if (!Drawn("68000: 100% idle (stopped), 0% executing, of its own clock (1 of 4 frames)"))
+        std::printf("drawn: %s\n", Dump().c_str());
+    CHECK(Drawn("68000: 100% idle (stopped), 0% executing, of its own clock (1 of 4 frames)"));
+    CHECK(!Drawn("75% executing"));
+    // The bar row averages executing over every frame and says so, so it cannot contradict the line.
+    CHECK(Drawn("75% (all 4 frames)"));
+}
+
+void TestIdleLineMixedValidity()
+{
+    CheckIdleLine(false);
+    CheckIdleLine(true);
+}
+
 void TestFrameTabV26HasNoDetails()
 {
     Rig rig;   // v26 frames
@@ -607,6 +640,7 @@ int main()
     TestMixedWireBothOrders();
     TestFrameTabDetailsAndLabels();
     TestFrameTabV26HasNoDetails();
+    TestIdleLineMixedValidity();
     TestBusTabUnitCacheAndBuckets();
     TestHistoryStripNoDataAndIdentity();
     TestHistoryStripV26HasNoIdentity();

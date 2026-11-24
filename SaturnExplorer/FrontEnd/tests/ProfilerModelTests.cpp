@@ -421,6 +421,33 @@ void CheckOtherGated(bool validFirst)
     CHECK(!z.slave.Any() && !z.m68kIdle.Any() && !z.busX.Any() && !z.cache.Any() && !z.mode.Any() && !z.identity.Any());
 }
 
+// The paired 68000 figures are one subset: idle and executing over the frames that carry the idle
+// bit sum to 100% of that subset's clock; the all-frame executing share is a different quantity.
+void CheckIdlePair(bool validFirst)
+{
+    ProfilerModel m(8);
+    for (uint64_t i = 1; i <= 4; ++i)
+    {
+        const bool v = validFirst ? i == 1 : i == 4;
+        PerfFrame f = V27Frame(i, v ? SE_PERF_VALID_M68K_IDLE : 0u);
+        f.c[SE_PERF_M68K_TOTAL_CYCLES] = 100;
+        f.c[SE_PERF_M68K_CYCLES] = v ? 0 : 100;
+        f.c[SE_PERF_M68K_IDLE_CYCLES] = v ? 100 : 0;
+        m.Push(f);
+    }
+    const WindowShares w = m.Shares(4);
+    CHECK(w.m68kIdle.covered == 1 && w.m68kIdle.frames == 4);
+    CHECK(Near(w.m68kIdleShare, 1.0) && Near(w.m68kIdleExecShare, 0.0));
+    CHECK(Near(w.m68kIdleShare + w.m68kIdleExecShare, 1.0));
+    CHECK(Near(w.shares.m68k, 0.75));   // every frame: a separate figure, not the pair's partner
+}
+
+void TestIdlePairSubset()
+{
+    CheckIdlePair(false);
+    CheckIdlePair(true);
+}
+
 void TestWindowValidityOtherQuantities()
 {
     CheckOtherGated(false);
@@ -692,6 +719,7 @@ int main()
     TestWindowValidityVdp1();
     TestWindowValidityOtherQuantities();
     TestMixedV26V27Window();
+    TestIdlePairSubset();
     TestHistoryRuns();
     TestFrameLabel();
     TestFunctionShares();
