@@ -33,6 +33,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -3045,6 +3046,13 @@ static void* SeTcpServerThread(void* arg)
         int cl = accept(srv, NULL, NULL);
         if (cl < 0) break;   /* closed on deinit */
         SeQuietSocket(cl);
+        {
+            /* A reply goes out as many small sends; with Nagle's algorithm on, each waits for the
+             * peer's delayed ACK and the poll period more than doubles (measured 30 ms against
+             * 12 ms on the unix socket), which overruns the perf ring at high frame rates. */
+            int on = 1;
+            setsockopt(cl, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+        }
         SeRegisterClient(1, cl);
         SeServeClient(cl, snap);   /* releases the debugger state when it was the last */
         SeUnregisterClient(1);

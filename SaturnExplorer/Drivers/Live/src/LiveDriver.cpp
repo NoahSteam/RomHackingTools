@@ -30,6 +30,8 @@
 #include <cstdlib>
 #include <fcntl.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -867,7 +869,15 @@ bool ConnOpenTcp(Conn& c, const char* endpoint, int)
     {
         int fd = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
         if (fd < 0) { continue; }
-        if (::connect(fd, ai->ai_addr, ai->ai_addrlen) == 0) { c.fd = fd; break; }
+        if (::connect(fd, ai->ai_addr, ai->ai_addrlen) == 0)
+        {
+            // Requests are small and replies are acknowledged by the next request: without this,
+            // Nagle's algorithm and delayed ACKs stretch every poll (see the exporter's accept loop).
+            int on = 1;
+            ::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+            c.fd = fd;
+            break;
+        }
         ::close(fd);
     }
     ::freeaddrinfo(res);

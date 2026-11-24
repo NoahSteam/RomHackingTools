@@ -89,21 +89,16 @@ on": this harness records no guest counters, so that comparison is not covered h
   | transport | poll period | replies/s | ceiling (8 per reply) | frames lost at 226 fps |
   |---|---|---|---|---|
   | unix socket | 12.4 ms | 81 | about 650 fps | 0 |
-  | TCP (as shipped) | 30 ms | 33 | about 265 fps | 61 to 84 in 3 s |
-  | TCP with `TCP_NODELAY` forced on both ends (diagnostic shim, not in the repo) | 12.1 ms | 83 | about 660 fps | 0 |
+  | TCP before `TCP_NODELAY` was set | 30 ms | 33 | about 265 fps | 61 to 84 in 3 s |
+  | TCP now (`TCP_NODELAY` set by the exporter and the driver) | 11.9 ms | 84 | about 670 fps | 0 |
 
-  At 94 fps the TCP run loses nothing (its period is still 24 to 26 ms). So the loss over TCP is not the
-  stand-in bursting: it is the transport. The exporter writes each reply as roughly twenty `send()` calls, several
-  of them 4 bytes (`se_export.c` around lines 2668 to 2771), and neither side sets `TCP_NODELAY`; Nagle's
-  algorithm holds each small segment until the previous one is acknowledged and the peer's delayed ACK answers
-  late, which stretches every poll round trip. **Consequence:** over TCP (Windows users who cannot use the
-  pipe, or any remote setup) the measurable emulated frame rate in (b) and (c) tops out around 200 fps, far below
-  the unix-socket ceiling; above it the runs are invalid and only `--throttle on` (CPU per frame) works. Prefer the
-  unix socket on Linux and macOS. The named pipe used by default on Windows has **not** been measured.
-  Product-side fix, not made here (v27 and the exporter and driver are frozen for this work): set `TCP_NODELAY`
-  on accepted sockets in `se_export.c` and on the connected socket in `LiveDriver.cpp`, or gather each reply into
-  one buffer and send it with one call. An unthrottled emulator faster than the transport's ceiling makes (b) and
-  (c) lose records and the run is flagged invalid.
+  The exporter writes each reply as roughly twenty `send()` calls, several of them 4 bytes; with Nagle's
+  algorithm on, each small segment waited for the peer's delayed ACK, which stretched every poll round trip
+  over TCP. Both ends now set `TCP_NODELAY` (the exporter's TCP accept loop in `se_export.c`, the TCP connect in
+  `LiveDriver.cpp`), and the probe measures the same period on both transports. An emulator patched before
+  that change still has the 30 ms period. The named pipe used by default on Windows has **not** been measured.
+  An unthrottled emulator faster than the transport's ceiling makes (b) and (c) lose records and the run is
+  flagged invalid; only `--throttle on` (CPU per frame) works then.
 * **Attribution on is meant to be several times slower** (it runs the per-instruction loop). That is the
   designed cost of the opt-in, not an F12 finding.
 * **F13 (UI caching)** is about the panel's timing. There is no UI here; V3 yields nothing for F13 except
