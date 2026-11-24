@@ -781,10 +781,11 @@ void ProfilerPanel::DrawFunctionsTab(const ProfilerModel& model, const Host& hos
             ImGui::PushID("unobserved");
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::TextDisabled("Not observed");
-            ImGui::SetItemTooltip("Busy time (from the frame counters) that no sampled instruction was charged for,\n"
-                                  "for example the stretch after a reset or after attribution was switched on.\n"
-                                  "It is not in Other and not in the percentages above.");
+            ImGui::TextDisabled("Not observed (estimate)");
+            ImGui::SetItemTooltip("An ESTIMATE, not a measured counter: busy time (frame cycles minus sleep and stall)\n"
+                                  "minus the cycles attributed above, clamped at zero. It stands for time no sampled\n"
+                                  "instruction was charged for, for example the stretch after a reset or after\n"
+                                  "attribution was switched on. It is not in Other and not in the percentages above.");
             ImGui::TableNextColumn(); ImGui::TextDisabled("%s", mFnCpu == 1 ? "Master" : (mFnCpu == 2 ? "Slave" : "Both"));
             ImGui::TableNextColumn(); ImGui::TextDisabled("%s", Count(static_cast<double>(fw.Unobserved()) * perFrame).c_str());
             ImGui::TableNextColumn(); ImGui::TextDisabled("-");

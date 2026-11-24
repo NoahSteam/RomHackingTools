@@ -363,7 +363,7 @@ the four words. `ProfilerModel::Functions(window, cpu)` returns the retained row
 so a share does not grow because rows were dropped. A CPU filter uses only frames that carry the split (a
 v26 remainder cannot be assigned to a CPU) and says how many; "Both" also adds the unsplit remainder.
 The tab states that listed rows are retained keys, flags frames where the table filled or was truncated,
-and shows a separate "Not observed" row: busy time from the frame counters (frame - sleep - stall; the
+and shows a separate "Not observed (estimate)" row, labelled as an estimate in the row and its tooltip: busy time from the frame counters (frame - sleep - stall; the
 slave from its on-time) that nothing was charged for. It is an estimate, is not part of Other, and is not
 in the percentages.
 

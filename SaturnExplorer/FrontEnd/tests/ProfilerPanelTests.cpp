@@ -594,7 +594,7 @@ void TestFunctionsOtherAndDenominators()
         CHECK(Drawn("Listed rows are the retained keys"));
         CHECK(Drawn("The table filled in 2 of 2 frames"));
         CHECK(Drawn("More than 64 functions ran in 2 of 2 frames"));
-        CHECK(Drawn("Not observed"));         // busy time nobody was charged for, apart from Other
+        CHECK(Drawn("Not observed (estimate)"));   // busy time nobody was charged for, apart from Other; labelled as an estimate
     }
     // Master and slave filters, each against that CPU's own attributed total.
     for (int filter = 0; filter < 3; ++filter)
