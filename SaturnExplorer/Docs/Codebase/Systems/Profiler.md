@@ -116,11 +116,38 @@ empty first reply does not later skip the early publications.
   debugger halts still reports its own number, and a record is never labelled with the snapshot
   frame of the reply that happened to carry it (`se_live_perf_frame.frame` is kept only for old
   callers). Ring/snapshot numbering is unchanged for ordinary execution; halt snapshots keep the
-  last completed frame's number (a GET that has seen it must still receive the finished frame). A
-  halt's ring number is a *delivery* number, never an identity: it does not reserve, rename or commit
-  the frame it happens in. The first halt of a run (slot 0 means "empty") is delivered as 1, the
-  number its frame will commit, so the frame's identity is the same before the halt, after it and in
-  its record.
+  last completed frame's number. A halt never reserves, renames or commits the frame it happens in;
+  the first halt of a run (slot 0 means "empty") shows 1, the number its frame will commit, so the
+  frame's identity is the same before the halt, after it and in its record.
+- **Three different numbers.**
+  1. The *reserved perf identity* (`SeIdReserve`, `SeExportFrameIdentity`, committed once in
+     `SeExportEndFrame`): the frame under execution; halts never touch it.
+  2. The *committed* `sFrameNo` (0 before the first frame completes). It is what the reply header's
+     frame field shows for a normal snapshot, and what event / call-frame / trace stamps
+     (`sEvQ[].frame`, `SeCallFrame.frameNo`) read at the moment they are produced. So those stamps
+     are 0, or the previous frame's number, for anything produced before the frame in progress
+     commits -- notably everything before the first normal snapshot or end of frame, which includes
+     a first halt. They are display hints, never keys. Audited consumers: the Log panel shows 0 as
+     "-", the Call Stack panel prints "recorded: cycle, frame" only when the cycle or frame is
+     nonzero, a tracepoint's `frame` format/condition variable (`App.cpp` ContextFormat) just reads 0; none treats 0 as an error.
+  3. The snapshot *delivery sequence* (`sRingSeq`, `sDeliverySeq`): every snapshot written to the
+     ring, halt or normal, takes the next number of one strictly monotonic 64-bit counter (reset only
+     by `SeExportInit`, not by a restore). A GET is served the OLDEST slot whose delivery number is
+     newer than the one this connection was last served. The server keeps that cursor per connection
+     (last served delivery number, the frame number it showed, the ring epoch). The cursor is trusted
+     when the GET's arg equals the frame number the connection was last served (which is what the
+     driver sends), or when a restore has emptied the ring since (the arg is then a resync to the
+     load's frame, and everything in the ring is newer). Otherwise (a client naming some other frame,
+     a fresh connection) the old rule applies: a slot is unseen when its frame number exceeds the arg,
+     served oldest first by delivery order.
+  The reply header carries only the emulated frame number (the wire layout is unchanged, no version
+  bump): the delivery sequence is server-side. Mapping: each ring slot holds (delivery number, frame
+  number); a normal snapshot's frame is the frame it was reserved, a halt's is the last committed
+  frame (1 before any). Rewind targets, step completion, the recorder and the on-screen frame number
+  therefore keep meaning the emulated frame; a rewind to N still makes N+1 the next frame. Two
+  snapshots may show the same frame number (a halt and the frame it is inside) and are still two
+  deliveries. Consequence: every halt snapshot is now delivered in order to a client that polls,
+  instead of only the latest being re-served.
 - **Timeline** changes on every replaced machine state, through one owner: an SE rewind or slot
   load (`SeStateAfterRestore`) and a native Mednafen load (`SeExportNotifyStateLoaded`, injected
   by `apply.py` after `CPU[1].PostStateLoad` in `StateAction`). A load the server ordered sets
