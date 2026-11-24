@@ -23,30 +23,32 @@ as derived, and every profiler number.
 
 ## How it boots, and the limits
 
-The guest is machine code emitted directly (no cross toolchain). To be loaded it needs a bootable
-Saturn disc, and a bootable disc needs Sega's licensing block (bytes `0x100..0xDFF` of the first sector
-area), which is Sega-copyrighted and must not be embedded or downloaded. So `build_v1.py --ip-bin PATH`
-takes a file *you* own (an `IP.BIN` or any Saturn disc image), checks that its block is the one
-Mednafen recognises (SHA-256 of `0x100..0xDFF`, the same test as `IsSaturnDisc()` in `ss.cpp`), copies that
-block and the area/peripheral header bytes, replaces the product number and title (so Mednafen's game
-database cannot attach another game's settings), puts the guest at IP offset `0xE00`, and writes a
-32-sector image with an empty ISO 9660 volume and a `.cue`. Mednafen recognises it as a Saturn disc;
-the BIOS runs the initial program.
+The guest is machine code emitted directly (no cross toolchain). A bootable disc needs Sega's licensing
+block (bytes `0x100..0xDFF` of the first sector area), which is Sega-copyrighted and must not be embedded
+or downloaded. So `build_v1.py --ip-bin PATH` takes a file *you* own (an `IP.BIN` or any Saturn disc image)
+and checks that its block is the one Mednafen recognises (SHA-256 of `0x100..0xDFF`, the test in
+`IsSaturnDisc()`, `ss.cpp`).
 
-Assumptions that could not be checked (labelled `A1`, `A2` in `build_v1.py`):
+Layout, from the documented Saturn system ID format (**not yet run against a BIOS**):
 
-* **A1** the BIOS loads the initial program at `0x06002000`, so the code at offset `0xE00` runs at
-  `0x06002E00`. The code at that address is position independent (a trampoline that copies the payload
-  to `0x06010000` and jumps there), so only the entry address matters.
-* **A2** the header words at `0xF0` (master start) and `0xF4` (slave start) are what the boot path uses.
-  The script writes the master word, and points the slave word at a `sleep` loop inside the trampoline so
-  that a slave started through it can never re-run the copy.
+| IP offset | What | What the builder does |
+|---|---|---|
+| `0x000..0x0FF` | system ID | kept; product number, version, date and title replaced (so Mednafen's game database cannot attach another game's settings); `+0xE0` IP size set to cover the code (rounded up to `0x800`, at most `0x8000`); `+0xE8`/`+0xEC` stacks kept unless zero; `+0xF0` (1st read address) `0x06010000`, `+0xF4` (1st read size) `0` |
+| `0x100..0xDFF` | security code (the BIOS runs it at `0x06002100` after loading the IP to `0x06002000`) | byte-identical copy |
+| `0xE00 + 0x20*i` | one area-code block per region letter in `+0x40` (`n` letters) | byte-identical copy; each must contain `For ` or the build refuses |
+| `0xE00 + 0x20*n` | the application's initial code | the guest: a trampoline that copies the payload to `0x06010000` and jumps there. It never returns, so the BIOS never looks for a first-read file |
 
-`build_v1.py --probe PATH` prints the header words of your file; a real master-start word in
-`0x06000000..0x060FFFFF` supports A2. If the disc does not boot, adjust `--ip-load`, `--master-field`,
-`--slave-field`. An alternative that was investigated and not implemented: Mednafen's bootable
-cartridge ROM loader (`.ss`, `cart/bootrom.cpp`) maps a raw image at `0x02000000`, but how the BIOS
-chooses to run it is not documented in the pinned source and could not be tested.
+Everything after the guest in the 32 KB system area is zeroed, followed by an empty ISO 9660 volume
+and a `.cue` (32 sectors total). With the IP at `0x06002000` the entry is `0x06002E00 + 0x20*n`; the
+trampoline is position independent. The payload always runs at `0x06010000`, so `func_a` / `func_b` and
+every other label sit at the same addresses whatever `n` is (`v1_symbols.json` lists them).
+
+`build_v1.py --probe PATH` prints the system ID fields under their documented names, `n` and the detected
+area blocks. Not verified: that the BIOS accepts the result and runs the code. If it does not boot, the
+first things to look at are the probe output (is `n` what you expect for your image?) and `--ip-load`.
+An alternative that was investigated and not implemented: Mednafen's bootable cartridge ROM loader (`.ss`,
+`cart/bootrom.cpp`) maps a raw image at `0x02000000`, but how the BIOS chooses to run it is not
+documented in the pinned source and could not be tested.
 
 ## Other limits
 

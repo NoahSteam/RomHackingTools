@@ -153,18 +153,20 @@ for label, key, row in (("fb_l", "BUSY_L", "busy phase"), ("fa_l", "FUNC_A_N", "
     print("%s: N=%d -> %d cycles (static, simulated, EXPECTED.md agree)" % (row, n, want))
 
 # ------------------------------------------------------------------ 5a. trampoline copies the payload
-m = sh2sim.Machine()
-IPLOAD = 0x06002E00
-m.load(IPLOAD, tramp + payload)
-m.PC = IPLOAD
-steps = 0
-while m.PC != vp.BASE and steps < 200000:
-    m.step()
-    steps += 1
-check(m.PC == vp.BASE, "trampoline did not jump to the payload base (pc=%08X)" % m.PC)
-copied = bytes(m.mem.get(vp.BASE + i, 0) for i in range(len(payload)))
-check(copied == payload, "trampoline copy differs from the payload")
-print("trampoline: ran at 0x%08X, copied %d bytes, jumped to 0x%08X" % (IPLOAD, len(payload), m.PC))
+import build_v1  # noqa: E402
+for nblk in (1, 3):
+    m = sh2sim.Machine()
+    IPLOAD = build_v1.DEFAULT_IP_LOAD + build_v1.code_offset(nblk)
+    m.load(IPLOAD, tramp + payload)
+    m.PC = IPLOAD
+    steps = 0
+    while m.PC != vp.BASE and steps < 200000:
+        m.step()
+        steps += 1
+    check(m.PC == vp.BASE, "n=%d: trampoline did not jump to the payload base (pc=%08X)" % (nblk, m.PC))
+    copied = bytes(m.mem.get(vp.BASE + i, 0) for i in range(len(payload)))
+    check(copied == payload, "n=%d: trampoline copy differs from the payload" % nblk)
+    print("trampoline (n=%d): ran at 0x%08X, copied %d bytes, jumped to 0x%08X" % (nblk, IPLOAD, len(payload), m.PC))
 
 # ------------------------------------------------------------------ 4. run the whole guest
 small = dict(params)
@@ -339,37 +341,85 @@ for a_, c, k in vp.BUS_TABLE:
     check(bucket(a_ & 0x07FFFFFF) == want, "table address 0x%08X is in bucket %s, not %s" % (a_, bucket(a_ & 0x07FFFFFF), want))
     check(a_ & 0x20000000, "table address 0x%08X is not an uncached alias" % a_)
 
-# ------------------------------------------------------------------ 5b. disc builder refusals
-import build_v1  # noqa: E402
+# ------------------------------------------------------------------ 5b. disc builder
+AREA_TEXT = {"J": b"For JAPAN.", "T": b"For TAIWAN and PHILIPINES.", "U": b"For USA and CANADA.",
+             "B": b"For BRAZIL and LATIN AMERICA.", "E": b"For EUROPE.", "A": b"For ASIA PAL."}
+
+
+def synthetic_sysarea(letters):
+    """A fake system area: random-looking security block (NOT Sega's), real-looking area blocks."""
+    img = bytearray(build_v1.SYS_AREA)
+    img[0:16] = b"SEGA SEGASATURN "
+    img[0x20:0x2A] = b"T-000000  "
+    img[0x40:0x4A] = letters.ljust(10).encode()
+    struct.pack_into(">I", img, 0xE0, 0x1234)
+    struct.pack_into(">I", img, 0xF0, 0x06004000)
+    struct.pack_into(">I", img, 0xF4, 0x00000999)     # a bogus 1st-read size the builder must zero
+    for i in range(0x100, 0xE00):
+        img[i] = (i * 31 + 7) & 0xFF
+    for i, ch in enumerate(letters):
+        blk = bytearray(32)
+        blk[0:2] = b"\xA0\x0E"                         # a short branch, as in a real block
+        blk[8:8 + len(AREA_TEXT[ch])] = AREA_TEXT[ch]
+        img[0xE00 + 32 * i:0xE00 + 32 * i + 32] = blk
+    for i in range(0xE00 + 32 * len(letters), build_v1.SYS_AREA):
+        img[i] = 0xEE                                   # leftover original IP code: must be replaced
+    return bytes(img)
+
+
 with tempfile.TemporaryDirectory() as td:
+    # the real check path refuses an image without Sega's block
     bogus = os.path.join(td, "ip.bin")
-    open(bogus, "wb").write(b"SEGA SEGASATURN " + b"\0" * (build_v1.SYS_AREA - 16))
+    open(bogus, "wb").write(synthetic_sysarea("U"))
     r = subprocess.run([sys.executable, "-I", os.path.join(V1, "build_v1.py"), "--ip-bin", bogus, "--out", td],
                        capture_output=True, text=True)
     check(r.returncode != 0 and "IsSaturnDisc" in (r.stderr + r.stdout), "builder accepted an image without the expected security block")
-    # a synthetic image whose security block hashes right is impossible without the real block, so the
-    # builder's layout is exercised through its helper with the hash check bypassed
-    img = bytearray(build_v1.SYS_AREA)
-    img[0:16] = b"SEGA SEGASATURN "
-    struct.pack_into(">I", img, 0xF0, 0x06004000)
-    struct.pack_into(">I", img, 0xF4, 0x06004000)
-    saved = build_v1.check_security
-    build_v1.check_security = lambda s: None
-    try:
-        open(bogus, "wb").write(bytes(img))
-        build_v1.build_disc(bogus, td, build_v1.DEFAULT_IP_LOAD, 0xF0, 0xF4)
-    finally:
-        build_v1.check_security = saved
-    iso = open(os.path.join(td, "v1.iso"), "rb").read()
-    check(len(iso) == 32 * 2048, "iso size %d" % len(iso))
-    check(struct.unpack(">I", iso[0xF0:0xF4])[0] == 0x06002E00, "master PC field not patched to IP load + 0xE00")
-    park = struct.unpack(">I", iso[0xF4:0xF8])[0]
-    check(0x06002E00 < park < 0x06002E00 + len(tramp), "slave PC field is not the parking loop")
-    check(iso[0xE00:0xE00 + len(tramp)] == tramp and iso[0xE00 + len(tramp):0xE00 + len(tramp) + len(payload)] == payload,
-          "code not at IP offset 0xE00")
-    check(iso[16 * 2048 + 1:16 * 2048 + 6] == b"CD001", "no ISO 9660 primary volume descriptor at sector 16")
-    check(open(os.path.join(td, "v1.cue")).read().count("MODE1/2048") == 1, "cue")
-    check(hashlib.sha256(iso[0x100:0xE00]).hexdigest() != build_v1.SECURITY_SHA256, "synthetic image must not carry the real block")
+    r = subprocess.run([sys.executable, "-I", os.path.join(V1, "build_v1.py"), "--probe", bogus], capture_output=True, text=True)
+    check(r.returncode == 0 and "area blocks n=1" in r.stdout and "IP size" in r.stdout, "probe output: %s" % r.stdout[-300:])
+
+    for letters in ("U", "JTU"):
+        n = len(letters)
+        sysarea = synthetic_sysarea(letters)
+        open(bogus, "wb").write(sysarea)
+        want_sha = hashlib.sha256(sysarea[0x100:0xE00]).hexdigest()
+        out = os.path.join(td, "o%d" % n)
+        build_v1.build_disc(bogus, out, build_v1.DEFAULT_IP_LOAD, security_sha=want_sha)   # test-injected hash only
+        iso = open(os.path.join(out, "v1.iso"), "rb").read()
+        off = 0xE00 + 0x20 * n
+        check(len(iso) == 32 * 2048, "n=%d: iso size %d" % (n, len(iso)))
+        check(iso[0x100:off] == sysarea[0x100:off], "n=%d: security block / area blocks not byte-identical" % n)
+        check(iso[0x40:0x4A] == sysarea[0x40:0x4A] and iso[0:0x20] == sysarea[0:0x20], "n=%d: header start changed" % n)
+        check(iso[off:off + len(tramp) + len(payload)] == tramp + payload, "n=%d: code not right after the last area block (+0x%X)" % (n, off))
+        check(struct.unpack(">I", iso[0xF4:0xF8])[0] == 0, "n=%d: +0xF4 (1st read size) not 0" % n)
+        check(struct.unpack(">I", iso[0xF0:0xF4])[0] == 0x06010000, "n=%d: +0xF0 not 0x06010000" % n)
+        ipsz = struct.unpack(">I", iso[0xE0:0xE4])[0]
+        check(ipsz >= off + len(tramp) + len(payload) and ipsz % 0x800 == 0 and ipsz <= 0x8000, "n=%d: IP size 0x%X" % (n, ipsz))
+        check(struct.unpack(">I", iso[0xE8:0xEC])[0] != 0 and struct.unpack(">I", iso[0xEC:0xF0])[0] != 0, "n=%d: stacks zero" % n)
+        check(set(iso[off + len(tramp) + len(payload):0x8000]) <= {0}, "n=%d: leftover original code after the guest" % n)
+        check(iso[0x20:0x2A] == b"V1VALID".ljust(10), "n=%d: product number not replaced" % n)
+        check(iso[16 * 2048 + 1:16 * 2048 + 6] == b"CD001", "no ISO 9660 primary volume descriptor at sector 16")
+        check(open(os.path.join(out, "v1.cue")).read().count("MODE1/2048") == 1, "cue")
+        # the code at its real entry address still copies and jumps
+        mm = sh2sim.Machine()
+        entry = build_v1.DEFAULT_IP_LOAD + off
+        mm.load(entry, iso[off:off + len(tramp) + len(payload)])
+        mm.PC = entry
+        k = 0
+        while mm.PC != vp.BASE and k < 200000:
+            mm.step()
+            k += 1
+        check(mm.PC == vp.BASE and bytes(mm.mem.get(vp.BASE + i, 0) for i in range(len(payload))) == payload,
+              "n=%d: built disc's trampoline does not copy+jump at 0x%08X" % (n, entry))
+        print("disc n=%d (%s): blocks and security block untouched, code at +0x%X (0x%08X), IP size 0x%X, +0xF4 = 0" % (n, letters, off, entry, ipsz))
+        # func addresses do not depend on n: the payload runs at 0x06010000 whatever the disc layout
+        check(a.syms["func_a"] == 0x06010444 or a.syms["func_a"] >= vp.BASE, "func_a moved out of the payload")
+
+    # a layout that is not a system ID is refused rather than overwritten
+    bad = bytearray(synthetic_sysarea("U"))
+    bad[0xE00:0xE20] = b"\0" * 32
+    open(bogus, "wb").write(bytes(bad))
+    r = subprocess.run([sys.executable, "-I", os.path.join(V1, "build_v1.py"), "--probe", bogus], capture_output=True, text=True)
+    check(r.returncode != 0 and "For " in (r.stderr + r.stdout), "an image with no area block text was not refused")
 
 print()
 if fails:

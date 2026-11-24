@@ -11,8 +11,8 @@ sector area). That block is Sega-copyrighted and is NOT in this repository and i
 sectors, first sector at offset 0) -- and copies only that block (after proving it is the block
 Mednafen recognises, by SHA-256) and the area/peripheral header bytes from it.
 
-Everything about HOW the BIOS boots the result is an assumption listed in README-style form in
-EXPECTED/CHECKLIST and run_v1.sh; it could not be checked here (no BIOS). See ASSUMPTIONS below.
+The layout follows the documented system ID format (see "Layout" below) but has not been run against a
+BIOS: none was available where this was written.
 """
 import argparse
 import hashlib
@@ -29,13 +29,33 @@ import v1_program  # noqa: E402
 SECURITY_SHA256 = "96b8ea48819cfa589f24c40aa149c224c420dccf38b730f00156efe25c9bbc8f"
 SYS_AREA = 16 * 2048
 
-# ASSUMPTIONS (unverified here, no BIOS available; see run_v1.sh "if it does not boot"):
-#  A1 the BIOS loads the initial program (IP) to 0x06002000 and the code at IP offset 0xE00 runs
-#     at 0x06002E00;
-#  A2 the header words at 0xF0 / 0xF4 are the master / slave start addresses.
-# Both are overridable; --probe prints what a real IP.BIN says so the user can judge.
+# Layout, from the documented Saturn system ID format (still NOT run against a BIOS):
+#   0x000..0x0FF  system ID (+0x40 area symbols, +0xE0 IP size, +0xE8/+0xEC stacks, +0xF0/+0xF4 1st read addr/size)
+#   0x100..0xDFF  security code and its tables (the BIOS runs it at 0x06002100 after loading the IP to 0x06002000)
+#   0xE00..       one 0x20-byte area-code block per region letter in +0x40; the BIOS validates them and
+#                 execution falls through them
+#   0xE00+0x20*n  the application's initial code (this guest); it never returns, so no 1st-read file exists
 DEFAULT_IP_LOAD = 0x06002000
-CODE_OFFSET = 0xE00
+AREA_BLOCK = 0x20
+AREA_BASE = 0xE00
+GUEST_BASE = 0x06010000     # where the trampoline copies the payload (v1_program.BASE); header "1st read address"
+DEFAULT_STACK_M = 0x06004000
+DEFAULT_STACK_S = 0x06001E00
+
+
+def area_blocks(sysarea):
+    """(n, [offsets]) -- one block per non-space letter of the area-symbols field; each must look like one."""
+    letters = [c for c in sysarea[0x40:0x4A] if c not in (0x20, 0x00)]
+    n = len(letters)
+    if n == 0:
+        raise SystemExit("area-symbols field (+0x40) is empty: not a usable system ID")
+    offs = [AREA_BASE + AREA_BLOCK * i for i in range(n)]
+    for o in offs:
+        if b"For " not in sysarea[o:o + AREA_BLOCK]:
+            raise SystemExit("area block at +0x%X does not contain 'For ' (area symbols %r, n=%d): the "
+                             "image is not laid out like a system ID, refusing to overwrite code after it"
+                             % (o, bytes(sysarea[0x40:0x4A]), n))
+    return n, offs
 
 
 def read_sys_area(path):
@@ -51,9 +71,9 @@ def read_sys_area(path):
     raise SystemExit("%s: no 'SEGA SEGASATURN ' header at offset 0, 16 or 24" % path)
 
 
-def check_security(sys_area):
+def check_security(sys_area, want=SECURITY_SHA256):
     h = hashlib.sha256(sys_area[0x100:0xE00]).hexdigest()
-    if h != SECURITY_SHA256:
+    if h != want:
         raise SystemExit("bytes 0x100..0xDFF of the supplied image are not the block Mednafen's "
                          "IsSaturnDisc() accepts (sha256 %s); the result would not be recognised as a "
                          "Saturn disc. Use an unmodified IP.BIN / disc image." % h)
@@ -61,12 +81,18 @@ def check_security(sys_area):
 
 def probe(path):
     s = read_sys_area(path)
-    print("security block sha256 matches Mednafen:", hashlib.sha256(s[0x100:0xE00]).hexdigest() == SECURITY_SHA256)
+    print("security block (0x100..0xDFF) sha256 matches Mednafen:",
+          hashlib.sha256(s[0x100:0xE00]).hexdigest() == SECURITY_SHA256)
+    names = {0xE0: "IP size", 0xE8: "master stack", 0xEC: "slave stack", 0xF0: "1st read address", 0xF4: "1st read size"}
     for off in range(0xD0, 0x100, 4):
-        print("  +0x%02X = 0x%08X" % (off, struct.unpack(">I", s[off:off + 4])[0]))
-    print("  product %r  version %r  date %r  area %r" % (s[0x20:0x2A], s[0x2A:0x30], s[0x30:0x38], s[0x40:0x4A]))
-    print("Assumed: master PC at +0xF0, slave PC at +0xF4, code runs at 0x%08X + 0x%X." % (DEFAULT_IP_LOAD, CODE_OFFSET))
-    print("If +0xF0 above is not an address in 0x06000000..0x060FFFFF the layout assumption is suspect.")
+        print("  +0x%02X %-17s = 0x%08X" % (off, names.get(off, ""), struct.unpack(">I", s[off:off + 4])[0]))
+    print("  product %r  version %r  date %r  area symbols %r" % (s[0x20:0x2A], s[0x2A:0x30], s[0x30:0x38], s[0x40:0x4A]))
+    n, offs = area_blocks(s)
+    print("  area blocks n=%d:" % n)
+    for o in offs:
+        print("    +0x%X %r" % (o, bytes(s[o:o + AREA_BLOCK]).rstrip(b"\0")))
+    print("  application code would start at IP offset 0x%X (runs at 0x%08X with the IP at 0x%08X)"
+          % (AREA_BASE + AREA_BLOCK * n, DEFAULT_IP_LOAD + AREA_BASE + AREA_BLOCK * n, DEFAULT_IP_LOAD))
 
 
 def iso9660(total_sectors):
@@ -112,32 +138,34 @@ def iso9660(total_sectors):
     return bytes(pvd) + bytes(term) + bytes(ptl) + bytes(ptm) + bytes(rd)
 
 
-def build_disc(ip_path, outdir, ip_load, master_field, slave_field):
+def code_offset(n):
+    return AREA_BASE + AREA_BLOCK * n
+
+
+def build_disc(ip_path, outdir, ip_load, security_sha=SECURITY_SHA256):
     s = bytearray(read_sys_area(ip_path))
-    check_security(bytes(s))
+    check_security(bytes(s), security_sha)
+    n, offs = area_blocks(bytes(s))
     tramp, payload, syms = v1_program.build()
     code = tramp + payload
-    if CODE_OFFSET + len(code) > SYS_AREA:
-        raise SystemExit("guest does not fit the system area")
-    entry = ip_load + CODE_OFFSET
-    # the trampoline's slave_park label: re-assemble just to learn its offset
-    from sh2asm import Asm
-    t = Asm(0)
-    t.parse(".equ PAYLOAD_WORDS, %d\n" % (len(payload) // 4) + v1_program.TRAMP % (v1_program.BASE + 0x20000000, v1_program.BASE))
-    t.assemble()
-    park = entry + t.syms["slave_park"]
-    old = [struct.unpack(">I", s[f:f + 4])[0] for f in (master_field, slave_field)]
-    if not 0x06000000 <= old[0] <= 0x060FFFFF:
-        print("WARNING: the supplied header's master-PC word at +0x%X is 0x%08X, not a work-RAM-high "
-              "address: the header-layout assumption (A2) is suspect." % (master_field, old[0]), file=sys.stderr)
+    off = code_offset(n)
+    ip_size = (off + len(code) + 0x7FF) & ~0x7FF
+    if ip_size > 0x8000:
+        raise SystemExit("guest (%d bytes at +0x%X) does not fit the 32 KB initial program" % (len(code), off))
+    entry = ip_load + off
     s[0x20:0x2A] = b"V1VALID".ljust(10)
     s[0x2A:0x30] = b"V1.000"
     s[0x30:0x38] = b"20260101"
     s[0x60:0xD0] = b"SATURN EXPLORER V1 PROFILER VALIDATION".ljust(0x70)
-    s[master_field:master_field + 4] = struct.pack(">I", entry)
-    s[slave_field:slave_field + 4] = struct.pack(">I", park)
-    s[CODE_OFFSET:] = b"\0" * (SYS_AREA - CODE_OFFSET)
-    s[CODE_OFFSET:CODE_OFFSET + len(code)] = code
+    struct.pack_into(">I", s, 0xE0, ip_size)
+    if struct.unpack(">I", s[0xE8:0xEC])[0] == 0:
+        struct.pack_into(">I", s, 0xE8, DEFAULT_STACK_M)
+    if struct.unpack(">I", s[0xEC:0xF0])[0] == 0:
+        struct.pack_into(">I", s, 0xEC, DEFAULT_STACK_S)
+    struct.pack_into(">I", s, 0xF0, GUEST_BASE)     # harmless: the code never returns, no file is read
+    struct.pack_into(">I", s, 0xF4, 0)
+    s[off:] = b"\0" * (SYS_AREA - off)             # bytes 0..off (system ID, security code, area blocks) stay the user's
+    s[off:off + len(code)] = code
     vol = iso9660(32)
     img = bytes(s) + vol
     img += b"\0" * (32 * 2048 - len(img))
@@ -146,9 +174,9 @@ def build_disc(ip_path, outdir, ip_load, master_field, slave_field):
     open(iso, "wb").write(img)
     open(os.path.join(outdir, "v1.cue"), "w").write(
         'FILE "v1.iso" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n')
-    info = {"entry": hex(entry), "slave_park": hex(park), "master_field_before": hex(old[0]),
-            "slave_field_before": hex(old[1]), "symbols": {k: hex(v) for k, v in syms.items()
-                                                           if k in ("start", "func_a", "func_b", "f_busy", "f_bus", "vbin")}}
+    info = {"entry": hex(entry), "area_blocks": n, "code_offset": hex(off), "ip_size": hex(ip_size),
+            "symbols": {k: hex(v) for k, v in syms.items()
+                        if k in ("start", "func_a", "func_b", "f_busy", "f_bus", "vbin")}}
     json.dump(info, open(os.path.join(outdir, "v1_symbols.json"), "w"), indent=1)
     print(json.dumps(info, indent=1))
     print("wrote", iso, "and v1.cue")
@@ -161,8 +189,6 @@ def main():
     ap.add_argument("--out", default=".")
     ap.add_argument("--probe", metavar="PATH")
     ap.add_argument("--ip-load", type=lambda x: int(x, 0), default=DEFAULT_IP_LOAD)
-    ap.add_argument("--master-field", type=lambda x: int(x, 0), default=0xF0)
-    ap.add_argument("--slave-field", type=lambda x: int(x, 0), default=0xF4)
     a = ap.parse_args()
     if a.probe:
         probe(a.probe)
@@ -174,7 +200,7 @@ def main():
                   open(a.raw + ".json", "w"), indent=1)
         print("wrote %s (%d bytes: trampoline %d + payload %d)" % (a.raw, len(tramp) + len(payload), len(tramp), len(payload)))
     elif a.ip_bin:
-        build_disc(a.ip_bin, a.out, a.ip_load, a.master_field, a.slave_field)
+        build_disc(a.ip_bin, a.out, a.ip_load)
     else:
         ap.print_help()
         return 2

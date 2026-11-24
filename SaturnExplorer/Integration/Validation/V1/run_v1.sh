@@ -55,7 +55,7 @@ Built: $out/v1.cue  (and v1.iso, v1_symbols.json: func_a / func_b entry addresse
 
 4. Record every reading in CHECKLIST.md next to the expected value; EXPECTED.md has the derivations.
 
-If it does not boot (black screen, BIOS menu, "not a Saturn disc"): see "Boot limits" in README.md
-in this directory. Re-run with --ip-load / --master-field / --slave-field after looking at the
---probe output above.
+The disc layout comes from the documented system ID format and has not been run against a BIOS.
+If it does not boot (black screen, BIOS menu, "not a Saturn disc"): see "How it boots, and the
+limits" in README.md in this directory, and check the --probe output above (area blocks, n).
 EOF

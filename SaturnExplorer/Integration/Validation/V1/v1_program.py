@@ -241,10 +241,6 @@ cp:
     ldl r0, 0x%08X
     jmp @r0
     nop
-slave_park:
-    sleep
-    bra slave_park
-    nop
     .pool
 payload:
 """
