@@ -44,6 +44,42 @@ def f8_decoder_checks(work):
     return bad
 
 
+def f11_checks(work):
+    """The DMA / DSP counters sit on the definitions documented in Docs/Codebase/Systems/Profiler.md."""
+    import re
+    bad = 0
+    scu = open(os.path.join(work, "src/ss/scu.inc"), errors="replace").read()
+    # F11. DMA: counted once per transfer that STARTED -- after StartDMATransfer's three refusals
+    # (illegal source, illegal destination, same-bus) -- with the byte count it was started with; an
+    # indirect chain reaches it once per table entry (NextIndirect calls StartDMATransfer).
+    a = scu.index("static bool StartDMATransfer")
+    b = scu.index("static bool NextIndirect")
+    body = scu[a:b]
+    hook = body.find("SE_PERF_DMA_TRANSFERS")
+    refusals = [m.start() for m in re.finditer(r"return false;", body)]
+    if body.count("SE_PERF_DMA_TRANSFERS") != 1 or len(refusals) != 3 or hook < max(refusals):
+        print("FAIL: the DMA counters are not after StartDMATransfer's three refusals")
+        bad += 1
+    if "SE_PERF_DMA_LEVEL_BYTES" not in body or "+= bc" not in body:
+        print("FAIL: DMA bytes are not the requested byte count")
+        bad += 1
+    # DSP: two SH-2 clocks per dispatch of the scheduled loop in SCU_UpdateDSP; the control-register
+    # Step bypasses it and is not counted.
+    u = scu.index("sscpu_timestamp_t SCU_UpdateDSP")
+    upd = scu[u:scu.index("static void DSP_Reset", u)]
+    loop = upd.find("while(MDFN_LIKELY(DSP.CycleCounter > 0))")
+    if (upd.count("SE_PERF_DSP_CYCLES") != 1 or loop < 0 or not
+            loop < upd.find("DSP.CycleCounter -= 2;") < upd.find("SE_PERF_DSP_CYCLES] += 2")):
+        print("FAIL: the DSP counter is not on the scheduled dispatch loop")
+        bad += 1
+    s0 = scu.index("(1U << 17)")
+    step = scu[s0:s0 + 700]
+    if "SeSsPerfC" in step:
+        print("FAIL: the manual DSP step is counted (the documented definition excludes it)")
+        bad += 1
+    return bad
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
@@ -63,7 +99,7 @@ def main():
         print("apply.py failed:\n" + out[-1000:])
         return 1
     if not drops:
-        if f8_decoder_checks(work):
+        if f8_decoder_checks(work) or f11_checks(work):
             return 1
         print("decoder checks: ok")
     apply_mod = cm.load_new()

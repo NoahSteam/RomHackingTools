@@ -679,17 +679,45 @@ changed define, `--disable-*` set or Homebrew prefix all re-trigger it with noth
 The tuning constants (keyframe threshold, max keyframe interval, raw-queue depth, client state
 budget) live in `se_export.c` / `FrameRecorder.*` and can be measured/adjusted on-emulator.
 
-## Profiler counters (v26)
+## Profiler counters (v27)
 
 `apply.py` (`process_profiler`) inserts counter increments into `sh7095.inc` (external-bus
-accesses), `sh7095_ops.inc` (SH-2 sleep / standby / bus-stall cycles), `scu.inc` (SCU DMA
-transfers and bytes, DSP cycles), `vdp1.cpp` (draw cycles, commands, unfinished draws) and
-`sound.cpp` (68000 cycles), plus the frame length at the end of `Emulate()`. They add to one
-array, `SeSsPerfC`, defined in the glue and indexed by `SePerfCounters.h` (copied into the tree
-with the other shared files). The glue hands the array to the server at the end of every frame
-(`SeMdfnPerfEndFrame`) and zeroes it. The increments are unconditional and cheap; every hook is
-an insertion after an anchor, so `--revert` removes them cleanly. An `ANCHOR MISS` here costs one
-figure in the Profiler panel (it reads zero) and is reported like any other miss.
+requests), `sh7095_ops.inc` (SH-2 sleep / standby / bus-stall cycles), `scu.inc` (SCU DMA
+transfers and bytes, DSP cycles), `vdp1.cpp` (commands, starts, unfinished draws, command-work
+cycles, budget discarded by a DMA), `sound.cpp` and the shared 68000 core `hw_cpu/m68k` (68000
+total / idle / executed cycles), `ss.cpp` (cache emulation mode) plus the frame length at the end of
+`Emulate()`. They add to one array, `SeSsPerfC`, defined in the glue and indexed by
+`SePerfCounters.h` (copied into the tree with the other shared files). The glue hands the array to
+the server at the end of every frame (`SeMdfnPerfEndFrame`), sets the `SE_PERF_VALID_*` bit for each
+v27 counter the hooks produce, and zeroes it. The increments are unconditional and cheap; every hook
+is an insertion after an anchor, so `--revert` removes them cleanly (appended blocks keep their
+separating blank line inside the fence, so the file comes back byte for byte; `smpc.cpp` is the
+exception, since one hook there replaces a line). An `ANCHOR MISS` here costs one figure in the
+Profiler panel (it reads zero) and is reported like any other miss. What each counter means is in
+`Docs/Codebase/Systems/Profiler.md`.
+
+**Re-applying over a tree an older `apply.py` patched.** `upsert` leaves a fence whose key is
+already present alone, so a hook this version drops or renames has to be deleted explicitly:
+`RETIRED_FENCES` in `apply.py` lists them and `process_retired` removes them before anything else
+is applied. Currently the v26 elapsed-VDP1 hook (`SE_PERF_VDP1_DRAW_CYCLES`, which no longer
+compiles: index 6 is retired and is never aliased) and the v26 per-slice 68000 hooks (`se_perf_t0`).
+Any future rename needs a new entry there. Checks:
+
+* `Integration/tests/check_apply_hooks.py` (ctest `SaturnExplorerMednafenProfilerHooks`, no
+  Mednafen source needed): the retirement on synthetic fences, exact revert, the F4 debit macro
+  compiled around a copy of Mednafen's, and the F8 address table compiled and checked at both ends of
+  every range.
+* `Integration/Mednafen/check_migration.py <checkout> <scratch> <old apply.py>...` (needs the
+  checkout; `git show 4b6cd9e:SaturnExplorer/Integration/Mednafen/apply.py > old.py`): patches
+  pristine copies with each old `apply.py`, then with this one, and asserts the retired text is gone,
+  every hook is present exactly once, a third apply changes nothing, `vdp1.cpp` / `sound.cpp` /
+  `m68k.cpp` / `ss.cpp` still parse, and `--revert` restores the files.
+* `Integration/Mednafen/check_component.py <checkout> <scratch>` (needs the checkout): builds the
+  *real* patched `vdp1.cpp` (F4: `VDP1::Update` / `DoDrawing` over a tiny VRAM command list), the
+  patched 68000 core and `sound.cpp` (F5: real STOP / interrupt wake / external halt, and a real
+  faulting sound-bus read whose `MDFN_longjmp` lands in `SOUND_Update`) into small harnesses with
+  only the surrounding devices stubbed, and checks the SCU / CS0 decode windows and the DMA / DSP hook
+  placement in `scu.inc`. `--drop KEY` removes one hook and must make it fail.
 
 Function attribution is separate and opt-in: the client's `PRF` verb makes `SeSyncCpuHook` keep
 the continuous per-instruction callback installed (`SsDbgSetProfileActive`), and

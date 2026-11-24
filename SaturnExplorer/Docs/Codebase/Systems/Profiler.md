@@ -64,10 +64,29 @@ The patch adds one 64-bit array, `SeSsPerfC`, and increments it where the work h
 | SH-2 sleep | The `SLEEP` op's idle step and `PSEUDO_STANDBY`, per CPU (`which`) |
 | SH-2 bus stall | `PSEUDO_DMABURST` (DMA burst or external halt), per CPU |
 | SH-2 bus accesses per device | `BSC_BusRead` / `BSC_BusWrite`, classified by a 64 KiB lookup table |
-| VDP1 commands / starts / unfinished draws | the command fetch, `StartDrawing`, the frame-buffer-swap abort. The elapsed draw-cycle increment (index 6) is gone in v27; command-work cycles are added by F4 |
-| SCU DSP cycles | The instruction loop of `SCU_UpdateDSP` |
-| 68000 cycles (executed / total) | Around `SoundCPU.Run` in `SOUND_Update`; a slice that starts stopped or halted is not "executed" |
-| SCU DMA transfers and bytes per level and route | `StartDMATransfer`, with the byte count the transfer was started with |
+| VDP1 commands / starts / unfinished draws | the command fetch, `StartDrawing`, the frame-buffer-swap abort. The elapsed draw-cycle increment (index 6) is gone in v27 |
+| VDP1 command-work cycles (55) | **F4.** `SeSsVdp1Debit(n)`, reached through a re-definition of `VDP1_EAT_CLOCKS(n)` inserted right after Mednafen's own: the debit `CycleCounter -= (n)` is where the command budget is spent, so this is work, not elapsed time. `n` is evaluated once (one use is the call that draws), and the counter moves before the resumable `case`, so a phase that yields and resumes is charged once. Excluded: the `HORRIBLEHACK_VDP1RWDRAWSLOWDOWN` debits `Write_CheckDrawSlowdown` / `Read_CheckDrawSlowdown` make for CPU access during a draw, and the budget a software `ENDR` leaves unspent. May exceed the frame (instant-draw mode); the model does not clamp it |
+| VDP1 budget discarded by DMA (56) | **F4.** In `VDP1::Update`, the branch where `SCU_CheckVDP1HaltKludge()` says a DMA is writing VDP1 and the positive `CycleCounter` is zeroed: that value, only while `DrawingActive`. A budget quantity, not the elapsed time the DMA held VDP1 |
+| SCU DSP cycles | **F11.** Two SH-2 clocks per dispatch of the scheduled loop in `SCU_UpdateDSP`. A manual control-register Step (`DSP.State == 0`, bit 17) runs one instruction outside the loop and is **excluded** |
+| 68000 cycles (executed / total / idle) | **F5.** Idle: `M68K::InternalStep()` bumps a per-instance `IdleCycleCount` by the same 4 as `timestamp += 4` in the stopped / halted fall-through, after the reset, bus-error and interrupt branches have returned (so an interrupt-taking step is not idle). `SOUND_Update` takes the entry timestamp and idle baseline as `const` locals before `MDFN_setjmp` and both deltas once on its normal exit, so the four `MDFN_longjmp` paths in the sound bus handlers no longer skip them. Executed = total - idle |
+| SCU DMA transfers and bytes per level and route | **F11.** `StartDMATransfer`, after its three refusals (illegal source, illegal destination, same bus): one count per transfer that started (an indirect chain starts one per table entry) and `bc`, the byte count it was started with ("requested", not moved: an aborted transfer is counted in full) |
+| Bus accesses, dummy / unmapped (58..61) | **F8.** Same hook as the device buckets; see the bus table below |
+| Cache mode | **F8.** `NeedEmuICache` -> `SeSsCacheMode` in `InitCommon`: `SE_PERF_CACHE_ON` when instruction fetches go through the emulated cache, `OFF` when the fast map serves them (the data cache is emulated in every mode) |
+
+**Bus classification (F8).** The unit is a *request to the SH-2 bus state controller*: a 32-bit
+access to a 16-bit CS0 region is split inside and is one request, a cache line fill is four
+(one non-burst, three burst), a cache hit and a fast-map instruction fetch are none, and each
+transfer unit of an SH-2 DMA channel is one read and one write. Counts therefore depend on the
+cache mode, which travels with the sample. Address buckets (64 KiB steps, from the SCU decoder in
+`scu.inc` and the CS0 decode in `ss.cpp`; `Integration/Mednafen/bus_decode.py` holds the table and
+`check_component.py` checks the windows are still in the pinned source): A-bus CS0
+`0x02000000-0x03FFFFFF`, CS1 `0x04000000-0x04FFFFFF`, **dummy** `0x05000000-0x057FFFFF`, CD
+`0x05800000-0x058FFFFF`, **unmapped** `0x05900000-0x059FFFFF`, SCSP `0x05A00000-0x05BFFFFF`, VDP1
+`0x05C00000-0x05D7FFFF`, **unmapped** `0x05D80000-0x05DFFFFF`, VDP2 `0x05E00000-0x05FBFFFF`,
+**unmapped** `0x05FC0000-0x05FDFFFF`, SCU registers `0x05FE0000-0x05FEFFFF`, **unmapped**
+`0x05FF0000-0x05FFFFFF`. The dummy and unmapped buckets are counters 58..61, kept out of the CPU /
+A / B bus totals (`BusTotals::dummy*`, `unmapped*`). `CS0_OTHER` still lumps MINIT/SINIT with the
+unmapped part of CS0.
 
 The increments are unconditional: each sits on a path that already does far more work.
 Every hook is an insertion (never a replacement), so `apply.py --revert` restores the files.
@@ -203,10 +222,14 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
   absolute numbers.
 - "Busy" includes time an SH-2 spends waiting on slow bus cycles; only SLEEP/standby and
   DMA-burst/external-halt stalls are separated out.
-- Bus accesses are the ones the emulator models as reaching the external bus: cache hits
-  and fast-map instruction fetches are not counted.
+- Bus accesses are bus-controller requests (see "Bus classification"): cache hits and
+  fast-map instruction fetches are not counted, and the number depends on the cache mode.
 - DMA bytes are the counts transfers were *started* with; an aborted transfer is counted
-  in full.
+  in full. A manual DSP step is not in the DSP figure.
+- VDP1 command work leaves out the draw slowdown the `VDP1RWDRAWSLOWDOWN` hack charges for CPU
+  access to VDP1 memory during a draw, and what a software `ENDR` leaves unspent. The F4/F5
+  component tests drive the real patched `vdp1.cpp`, `m68k.cpp` and `sound.cpp`, but the counter
+  magnitudes on a real game are still unverified (V1/V2 need a BIOS).
 - Function time is self time only, and the raw-PC buckets are not folded into functions
   (`ProfilerPanel::Host::functionContaining` is an unfilled hook for the function finder).
 - VDP2 has no time figure: its raster is fixed-length.

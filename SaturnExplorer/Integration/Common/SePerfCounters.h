@@ -57,11 +57,11 @@ enum
     SE_PERF_DEV_CS0_OTHER,    /* CPU bus: the rest of CS0 (MINIT/SINIT, unmapped)     */
     SE_PERF_DEV_ABUS_CS0,     /* A-bus:   0x02000000 cartridge                        */
     SE_PERF_DEV_ABUS_CS1,     /* A-bus:   0x04000000 cartridge (ID / second select)   */
-    SE_PERF_DEV_ABUS_CD,      /* A-bus:   0x05800000 CD block (CS2), and the dummy area below it */
+    SE_PERF_DEV_ABUS_CD,      /* A-bus:   0x05800000-0x058FFFFF CD block (CS2); the dummy area below it is SE_PERF_XDEV_ABUS_DUMMY */
     SE_PERF_DEV_SCSP,         /* B-bus:   0x05A00000 sound RAM + SCSP registers       */
-    SE_PERF_DEV_VDP1,         /* B-bus:   0x05C00000 VDP1 VRAM, frame buffer, registers */
-    SE_PERF_DEV_VDP2,         /* B-bus:   0x05E00000 VDP2 VRAM, CRAM, registers       */
-    SE_PERF_DEV_SCU,          /* CPU bus: 0x05FE0000 SCU registers                    */
+    SE_PERF_DEV_VDP1,         /* B-bus:   0x05C00000-0x05D7FFFF VDP1 VRAM, frame buffer, registers */
+    SE_PERF_DEV_VDP2,         /* B-bus:   0x05E00000-0x05FBFFFF VDP2 VRAM, CRAM, registers */
+    SE_PERF_DEV_SCU,          /* CPU bus: 0x05FE0000-0x05FEFFFF SCU registers          */
     SE_PERF_DEV_WRAM_H,       /* CPU bus: 0x06000000 high work RAM (SDRAM)            */
     SE_PERF_DEV_COUNT
 };
@@ -85,16 +85,22 @@ enum
     SE_PERF_VDP1_DRAW_STARTS = 8,   /* times drawing was started                                 */
     SE_PERF_VDP1_OVERRUNS = 9,      /* draws cut short: a frame-buffer swap or a new start arrived
                                      * before the command table was finished                     */
-    SE_PERF_DSP_CYCLES = 10,        /* cycles the SCU DSP was executing                          */
-    SE_PERF_M68K_CYCLES = 11,       /* 68000 clock cycles the sound CPU executed (not stopped)   */
+    SE_PERF_DSP_CYCLES = 10,        /* SH-2 clocks of the SCU DSP's scheduled loop, 2 per dispatch
+                                     * (a manual control-register Step is not counted)           */
+    SE_PERF_M68K_CYCLES = 11,       /* 68000 clock cycles the sound CPU executed: total - idle   */
     SE_PERF_M68K_TOTAL_CYCLES = 12, /* 68000 clock cycles in the frame                           */
-    SE_PERF_DMA_TRANSFERS = 13,     /* [3] SCU DMA transfers started, per level 0..2             */
-    SE_PERF_DMA_LEVEL_BYTES = 16,   /* [3] SCU DMA bytes requested, per level 0..2               */
+    SE_PERF_DMA_TRANSFERS = 13,     /* [3] SCU DMA transfers (descriptors) started, per level 0..2:
+                                     * an indirect chain is one per table entry; a refused start
+                                     * (illegal address, same bus) is not counted               */
+    SE_PERF_DMA_LEVEL_BYTES = 16,   /* [3] SCU DMA bytes REQUESTED (the count a transfer was
+                                     * started with), per level 0..2                             */
     SE_PERF_DMA_ROUTE_BYTES = 19,   /* [9] SCU DMA bytes by route: source bus * 3 + destination  */
-    SE_PERF_BUS_ACCESS = 28,        /* [SE_PERF_DEV_COUNT * 2] SH-2 external-bus accesses:
-                                     * device * 2 + (1 for a write). A cache hit is not a bus
-                                     * access, and neither is an instruction fetch the emulator
-                                     * serves from its fast map.                                  */
+    SE_PERF_BUS_ACCESS = 28,        /* [SE_PERF_DEV_COUNT * 2] SH-2 bus-controller REQUESTS:
+                                     * device * 2 + (1 for a write). The unit is the request: a
+                                     * split 32-bit CS0 access is one, a cache line fill is four,
+                                     * a cache hit and an instruction fetch the emulator serves
+                                     * from its fast map are none -- so the counts depend on the
+                                     * cache mode (cacheMode in the record).                      */
     SE_PERF_V26_COUNT = SE_PERF_BUS_ACCESS + SE_PERF_DEV_COUNT * 2, /* 54: what a v26 server sends */
 
     /* ---- appended in v27 ---- */
@@ -102,8 +108,9 @@ enum
                                        * edges inside the frame. Written with the same value as
                                        * index 5; index 5 stays so a v26 comparison still works.   */
     SE_PERF_VDP1_WORK_CYCLES = 55,    /* F4: VDP1 command-work cycles, counted where the command
-                                       * budget is debited (not elapsed time). May exceed the
-                                       * frame in instant-draw mode.                               */
+                                       * budget is debited (VDP1_EAT_CLOCKS), not elapsed time.
+                                       * May exceed the frame in instant-draw mode. Excludes the
+                                       * read/write slowdown hack and a software ENDR.            */
     SE_PERF_VDP1_DMA_DISCARDED = 56,  /* F4: positive active-draw budget thrown away when a DMA
                                        * held VDP1. A budget quantity, not elapsed hold time.      */
     SE_PERF_M68K_IDLE_CYCLES = 57,    /* F5: 68000 clock cycles stopped/halted in the frame.
