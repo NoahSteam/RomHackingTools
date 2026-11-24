@@ -236,5 +236,60 @@ for bit in bits:
 if HAS_F8 and not re.search(r"info\.cacheMode\s*=\s*SeSsCacheMode", glue):
     fail("the glue does not publish the cache mode")
 
+# ---- F2 + F6 + F9 -----------------------------------------------------------------------------------------
+HAS_LIFECYCLE = hasattr(mod, "FRAME_CLOSE_HOOK")
+if HAS_LIFECYCLE:
+    for bit in ("SE_PERF_VALID_SSH2_INT", "SE_PERF_VALID_MODE"):
+        if not re.search(r"info\.valid\s*\|=[^;]*\b" + bit + r"\b", glue):
+            fail("the glue never sets " + bit)
+    if not re.search(r"info\.mode\s*=\s*sFrameMode", glue):
+        fail("the glue does not publish the latched mode")
+    if "SE_PERF_RESERVED_54" in glue or any("SE_PERF_RESERVED_54" in h for h in (mod.END_FRAME_HOOK, mod.FRAME_CLOSE_HOOK)):
+        fail("index 54 is reserved and must never be produced")
+    # the old end-of-frame fence (3269140 and before) counted the slave all-or-nothing after the rebase; the
+    # retirement step must remove exactly that fence, and the current end-of-frame fence must not be touched
+    old_end = mod.fence(" /* Saturn Explorer profiler: this frame's length, and whether the slave SH-2 was on for it */\n"
+                        " SeSsPerfC[SE_PERF_FRAME_CYCLES] += end_ts;\n"
+                        " if(CPU[1].timestamp != SS_EVENT_DISABLED_TS) SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] += end_ts;\n"
+                        " SeMednafenEndFrameHook();\n")
+    with tempfile.TemporaryDirectory(dir=work) as d:
+        open(os.path.join(d, "ss.cpp"), "w").write("a;\n" + old_end + "\nb;\n" + mod.fence(mod.END_FRAME_HOOK) + "\nc;\n")
+        mod.process_retired(d, True)
+        t = open(os.path.join(d, "ss.cpp")).read()
+        if "SE_PERF_SSH2_ON_CYCLES" in t or t.count("SeMednafenEndFrameHook();") != 1:
+            fail("the all-or-nothing end-of-frame fence was not retired cleanly:\n" + t)
+    for hook in (mod.END_FRAME_HOOK, mod.FRAME_CLOSE_HOOK, mod.STATE_LOADED_HOOK, mod.SH2_SETACTIVE_ON_HOOK,
+                 mod.SH2_SETACTIVE_OFF_HOOK, mod.SH2_RESET_HOOK):
+        for fname, key in mod.RETIRED_FENCES:
+            if key in hook:
+                fail("a current F2 hook contains the retired key %r" % key)
+    # keys must not collide with another fence's text (a key found in the wrong fence is "updated" forever)
+    keys = ["SE_FRAME_CLOSE_HOOK", "SE_SLAVE_ON_EDGE", "SE_SLAVE_OFF_EDGE", "SE_CPU_RESET_HOOK"] + \
+           ["SE_OWN_EXC_" + k for k in mod.SH2_EXCEPTIONS]
+    fence_texts = [mod.FWD_DECLS, mod.END_FRAME_HOOK, mod.FRAME_CLOSE_HOOK, mod.STATE_LOADED_HOOK, mod.SH2_SETACTIVE_ON_HOOK,
+                   mod.SH2_SETACTIVE_OFF_HOOK, mod.SH2_RESET_HOOK] + [mod.sh2_exception_edit(k)[1] for k in mod.SH2_EXCEPTIONS]
+    for key in keys:
+        if sum(key in t for t in fence_texts) != 1:
+            fail("key %r is not unique to its own fence" % key)
+    # every hook the glue defines is declared where the injected code calls it
+    for fn in ("SeMednafenSlaveActive", "SeMednafenCpuReset", "SeMednafenExceptionEntry", "SeMednafenStateLoaded",
+               "SeMednafenFrameClose"):
+        if "void " + fn + "(" not in mod.FWD_DECLS:
+            fail(fn + " is not forward-declared for the injected code")
+        if not re.search(r"^void " + fn + r"\(", glue, re.M):
+            fail(fn + " is not defined by the glue")
+    # the SetActive hooks are guarded to the slave; TRAPA is not hooked (its flow is observed); each anchor matches one place
+    if "CPU[1]" not in mod.SH2_SETACTIVE_ON_HOOK + mod.SH2_SETACTIVE_OFF_HOOK:
+        fail("the SetActive hooks are not restricted to the slave")
+    if "TRAP" in "".join(mod.SH2_EXCEPTIONS):
+        fail("TRAPA must not withdraw ownership: its flow is observed")
+    sample = "void SH7095::SetActive(bool active)\n{\n if(active && timestamp == SS_EVENT_DISABLED_TS)\n {\n  timestamp = SH7095_mem_timestamp;\n  FRT.lastts = timestamp;\n }\n else if(!active && timestamp != SS_EVENT_DISABLED_TS)\n {\n  Reset(true);\n  timestamp = SS_EVENT_DISABLED_TS;\n }\n}\n"
+    t, _ = mod.apply_anchored(sample, mod.SH2_SETACTIVE_ON_ANCHOR, mod.SH2_SETACTIVE_ON_HOOK, "SE_SLAVE_ON_EDGE")
+    t, _ = mod.apply_anchored(t, mod.SH2_SETACTIVE_OFF_ANCHOR, mod.SH2_SETACTIVE_OFF_HOOK, "SE_SLAVE_OFF_EDGE")
+    on_at, off_at = t.index("SE_SLAVE_ON_EDGE"), t.index("SE_SLAVE_OFF_EDGE")
+    if not (t.index("timestamp = SH7095_mem_timestamp;") < on_at < t.index("FRT.lastts")) or not \
+            (t.index("else if(!active") < off_at < t.index("Reset(true);")):
+        fail("the SetActive hooks are not on the right sides of the power transition:\n" + t)
+
 print("OK" if not bad else "%d check(s) failed" % bad)
 sys.exit(1 if bad else 0)

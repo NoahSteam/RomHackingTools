@@ -95,7 +95,8 @@ void TestBuses()
     CHECK(PerfDeviceBus(SE_PERF_DEV_SCSP) == PerfBus::B && PerfDeviceBus(SE_PERF_DEV_ABUS_CS0) == PerfBus::A);
     // v26 layout kept in place, v27 counters appended after it.
     CHECK(SE_PERF_V26_COUNT == SE_PERF_BUS_ACCESS + SE_PERF_DEV_COUNT * 2 && SE_PERF_V26_COUNT == 54);
-    CHECK(SE_PERF_SSH2_ON_INTEGRATED == SE_PERF_V26_COUNT);
+    CHECK(SE_PERF_RESERVED_54 == SE_PERF_V26_COUNT);   // reserved, never produced: index 5 carries the integrated figure
+    CHECK(SE_PERF_VDP1_WORK_CYCLES == 55 && SE_PERF_VDP1_DMA_DISCARDED == 56 && SE_PERF_M68K_IDLE_CYCLES == 57 && SE_PERF_BUS_ACCESS_X == 58);
     CHECK(SE_PERF_COUNT == SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_COUNT * 2 && SE_PERF_COUNT == 62);
     CHECK(SE_PERF_SSH2_ON_CYCLES == 5 && SE_PERF_RETIRED_6 == 6 && SE_PERF_VDP1_COMMANDS == 7);
 }

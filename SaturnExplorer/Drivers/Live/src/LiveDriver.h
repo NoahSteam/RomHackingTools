@@ -192,7 +192,7 @@ void se_live_set_rewind_enabled(const se_data_source* ds, int enabled);
  *                 drawing figure (retired in v27, where counters[6] is always 0). Counter
  *                 indices >= counter_count are not available
  *                 whatever 'valid' says. A counter index added in v27 is "not available" unless its
- *                 own bit is set: 54 SSH2_INT, 55+56 VDP1_WORK, 57 M68K_IDLE, 58..61 BUS_X.
+ *                 own bit is set: SSH2_INT says counter 5 is the integrated figure (54 is reserved), 55+56 VDP1_WORK, 57 M68K_IDLE, 58..61 BUS_X.
  *   Always valid: seq/sample_seq, flags, counters 0..53 (except 6 as above), the function list. */
 #define SE_LIVE_PERF_COUNTERS 64u   /* room for SePerfCounters.h's SE_PERF_COUNT, with headroom */
 #define SE_LIVE_PERF_FUNCTIONS 64u  /* == SE_LIVE_PERF_FN_MAX */

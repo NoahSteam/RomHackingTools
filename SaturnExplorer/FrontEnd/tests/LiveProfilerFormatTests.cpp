@@ -159,7 +159,7 @@ int main()
             CHECK(f.counter_count == SE_PERF_COUNT);
             for (unsigned i = 0; i < SE_PERF_COUNT; ++i)
                 CHECK(f.counters[i] == (i == SE_PERF_RETIRED_6 ? 0ull : 0x800000000ull + i * 1000003u + 1u));
-            CHECK(f.counters[SE_PERF_SSH2_ON_INTEGRATED] != 0 && f.counters[SE_PERF_VDP1_WORK_CYCLES] != 0 &&
+            CHECK(f.counters[SE_PERF_SSH2_ON_CYCLES] != 0 && f.counters[SE_PERF_RESERVED_54] != 0 /* carried as sent, but never produced */ && f.counters[SE_PERF_VDP1_WORK_CYCLES] != 0 &&
                   f.counters[SE_PERF_VDP1_DMA_DISCARDED] != 0 && f.counters[SE_PERF_M68K_IDLE_CYCLES] != 0 &&
                   f.counters[SE_PERF_BUS_ACCESS_X + 3] != 0);
             CHECK(f.fn_count == 2 && f.fn_key[1] == (SE_PERF_FN_RAW_PC | 0x06020040u) && f.fn_cycles[1] == 77u);
@@ -190,8 +190,27 @@ int main()
         if (!gs.empty())
         {
             CHECK(gs[0].counter_count == SE_PERF_V26_COUNT);
-            CHECK(gs[0].valid == (SE_PERF_VALID_ALL & ~(SE_PERF_VALID_SSH2_INT | SE_PERF_VALID_VDP1_WORK |
+            // Index 5 is present in a 54-counter record, so the integrated-slave bit survives: it depends on
+            // index 5 and nothing else.
+            CHECK(gs[0].valid == (SE_PERF_VALID_ALL & ~(SE_PERF_VALID_VDP1_WORK |
                                                         SE_PERF_VALID_M68K_IDLE | SE_PERF_VALID_BUS_X)));
+        }
+
+        // A record too short to carry index 5 cannot claim the integrated figure; one that carries it can.
+        for (const unsigned n : {5u, 6u})
+        {
+            Reply t;
+            t.version = 27;
+            PerfRec tiny = V27Record();
+            tiny.counters.resize(n);
+            t.perf.push_back(tiny);
+            const auto gt = Collect(t, 1);
+            CHECK(gt.size() >= 1);
+            if (!gt.empty())
+            {
+                CHECK(gt[0].counter_count == n);
+                CHECK(((gt[0].valid & SE_PERF_VALID_SSH2_INT) != 0) == (n > SE_PERF_SSH2_ON_CYCLES));
+            }
         }
     }
 

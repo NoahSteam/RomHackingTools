@@ -1117,12 +1117,38 @@ SOUND_PERF_POST_HOOK = (
 SS_CACHE_MODE_ANCHOR = r'(NeedEmuICache = \(cpucache_emumode == CPUCACHE_EMUMODE_FULL\);[ \t]*\n)'
 SS_CACHE_MODE_HOOK = " SeSsCacheMode = NeedEmuICache ? SE_PERF_CACHE_ON : SE_PERF_CACHE_OFF;   /* Saturn Explorer profiler (F8) */\n"
 
+# F2 / F9: power edges and resets of the SH-2s, and exception entries. SetActive's two real transitions
+# (a redundant call changes nothing and is no edge), the top of Reset on a powered CPU (watchdog or
+# SetActive's own), and every exception the core takes that the shadow stack cannot see as an
+# instruction. TRAPA is deliberately not hooked: the glue records it as the call it is.
+SH2_SETACTIVE_ON_ANCHOR = (r'(void SH7095::SetActive\(bool active\)\s*\{\s*\n if\(active && timestamp == SS_EVENT_DISABLED_TS\)\s*\{\s*\n'
+                           r'  timestamp = SH7095_mem_timestamp;[ \t]*\n)')
+SH2_SETACTIVE_ON_HOOK = "  if(this == &CPU[1]) SeMednafenSlaveActive(1, (int)timestamp);   /* SE_SLAVE_ON_EDGE */\n"
+SH2_SETACTIVE_OFF_ANCHOR = r'(else if\(!active && timestamp != SS_EVENT_DISABLED_TS\)\s*\{[ \t]*\n)'
+SH2_SETACTIVE_OFF_HOOK = "  if(this == &CPU[1]) SeMednafenSlaveActive(0, (int)timestamp);   /* SE_SLAVE_OFF_EDGE */\n"
+SH2_RESET_ANCHOR = r'(void NO_INLINE SH7095::Reset\(bool power_on_reset, bool from_internal_wdt\)\s*\{\s*\n if\(timestamp == SS_EVENT_DISABLED_TS\)\s*\n  return;[ \t]*\n)'
+SH2_RESET_HOOK = " SeMednafenCpuReset((int)(this - CPU), (int)timestamp);   /* SE_CPU_RESET_HOOK */\n"
+SH2_EXCEPTIONS = ("INT", "NMI", "CPUADDR", "DMAADDR", "ILLINSTR", "ILLSLOT")
+
+
+def sh2_exception_edit(kind):
+    return (r'(\bException\(EXCEPTION_%s, [^;\n]*;[ \t]*\n)' % kind,
+            "\t SeMednafenExceptionEntry((int)(this - CPU));   /* SE_OWN_EXC_%s */\n" % kind,
+            "SE_OWN_EXC_%s" % kind)
+
+
 # File-scope forward declarations (extern "C" is illegal inside a function body, so
 # the call sites below are plain calls that resolve to these). Prepended at BOF.
 FWD_DECLS = (
     "extern \"C\" void SeMednafenFrameHook(void);\n"
     "extern \"C\" void SeMednafenEndFrameHook(void);\n"
     "extern \"C\" void SeExportNotifyStateLoaded(void);\n"
+    # F2 + F6 + F9 lifecycle (se_mednafen_glue.c): slave power edges, CPU resets, exception entries, loads, frame close.
+    "extern \"C\" void SeMednafenSlaveActive(int on, int ts);\n"
+    "extern \"C\" void SeMednafenCpuReset(int cpu, int ts);\n"
+    "extern \"C\" void SeMednafenExceptionEntry(int cpu);\n"
+    "extern \"C\" void SeMednafenStateLoaded(int slaveOn);\n"
+    "extern \"C\" void SeMednafenFrameClose(int end_ts, int ts0, int ts1, int slaveOn);\n"
     "extern \"C\" int  SeExportGateFrame(void);\n"
     "extern \"C\" int  SeExportGateHalt(void);\n"
     "extern \"C\" void SeExportNotifyStop(int cpu, unsigned int pc);\n"
@@ -1197,20 +1223,30 @@ FRAME_ANCHOR = r'(espec->MasterCycles\s*=\s*[^;]*;\s*\n)'
 # them, apply.py reports ANCHOR MISS and the build would record pictures but no savestates, so a
 # miss must be treated as a failed install, not a warning.
 END_FRAME_HOOK = (
-    " /* Saturn Explorer profiler: this frame's length, and whether the slave SH-2 was on for it\n"
-    "    (its timestamp reads SS_EVENT_DISABLED_TS while SMPC holds it off). */\n"
+    " /* Saturn Explorer profiler: this frame's length. (The slave SH-2's on-time is integrated over its\n"
+    "    real power edges and closed by SeMednafenFrameClose before the rebase.) */\n"
     " SeSsPerfC[SE_PERF_FRAME_CYCLES] += end_ts;\n"
-    " if(CPU[1].timestamp != SS_EVENT_DISABLED_TS) SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] += end_ts;\n"
     " /* Saturn Explorer live tap: the frame is over; take its savestate here (rewind). */\n"
     " SeMednafenEndFrameHook();\n"
 )
 END_FRAME_ANCHOR = r'(\n)\}\n\nstatic void OutputMIDI\(uint8 v\)'
+
+# F2 + F6: the frame's emulation is over and its timestamps are NOT yet rebased. Closes the slave's open
+# on-interval at end_ts and charges each CPU's final sampled interval, both of which the post-rebase end
+# hook above could no longer do exactly. After SMPC_EndFrame (which can still change the slave's power).
+FRAME_CLOSE_HOOK = (
+    " /* Saturn Explorer profiler: close the frame on the pre-rebase clock (slave on-time, last function interval). */\n"
+    " SeMednafenFrameClose(end_ts, (int)CPU[0].timestamp, (int)CPU[1].timestamp, CPU[1].timestamp != SS_EVENT_DISABLED_TS);   /* SE_FRAME_CLOSE_HOOK */\n"
+)
+FRAME_CLOSE_ANCHOR = r'( SMPC_EndFrame\(espec, end_ts\);[ \t]*\n)'
 
 # A native (emulator-initiated) state load replaces the machine: the profiler's frame identity moves
 # to a new timeline. Anchored inside StateAction's `if(load)` block, on the last PostStateLoad. A load
 # the server itself ordered reaches this too and is recognized there (SeExportNotifyStateLoaded).
 STATE_LOADED_HOOK = (
     "  SeExportNotifyStateLoaded();   /* Saturn Explorer: a new profiler timeline begins */\n"
+    # PostStateLoad does not call SetActive: the slave's on/off state is whatever the file held (F2).
+    "  SeMednafenStateLoaded(CPU[1].timestamp != SS_EVENT_DISABLED_TS);   /* Saturn Explorer: reseed profiler accounting */\n"
 )
 STATE_LOADED_ANCHOR = r'(CPU\[1\]\.PostStateLoad\([^;]*\);\s*\n)'
 
@@ -1362,6 +1398,8 @@ def process_ss(src_dir, do_write, with_pause):
     notes.append(n)
     text, n = apply_anchored(text, END_FRAME_ANCHOR, END_FRAME_HOOK, "SeMednafenEndFrameHook();")
     notes.append(n)
+    text, n = apply_anchored(text, FRAME_CLOSE_ANCHOR, FRAME_CLOSE_HOOK, "SE_FRAME_CLOSE_HOOK")
+    notes.append(n)
     text, n = apply_anchored(text, STATE_LOADED_ANCHOR, STATE_LOADED_HOOK, "SeExportNotifyStateLoaded();")
     notes.append(n)
     if with_pause:
@@ -1423,9 +1461,13 @@ def process_anchored(src_dir, fname, title, edits, do_write, prepend=None):
 #   vdp1.cpp  SE_PERF_VDP1_DRAW_CYCLES  index 6, elapsed drawing -- retired in v27, never aliased
 #   sound.cpp se_perf_t0                the v26 per-slice 68000 hooks (baseline taken after the setjmp,
 #                                       so a longjmp skipped the increments); v27 uses se_perf_ts0
+#   ss.cpp    SSH2_ON_CYCLES += end_ts  the all-or-nothing slave on-time in the end-of-frame fence
 RETIRED_FENCES = [
     ("vdp1.cpp", "SE_PERF_VDP1_DRAW_CYCLES"),
     ("sound.cpp", "se_perf_t0"),
+    # The end-of-frame fence of 3269140 and earlier counted the slave all-or-nothing after the rebase
+    # (F2 replaces it with SeMednafenFrameClose before the rebase); same key, different text.
+    ("ss.cpp", "SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] += end_ts"),
 ]
 
 
@@ -1470,6 +1512,13 @@ def process_profiler(src_dir, do_write):
         (SH2_STANDBY_ANCHOR, SH2_STANDBY_HOOK, "SE_PERF_STANDBY_HOOK"),
         (SH2_STALL_ANCHOR, SH2_STALL_HOOK, "SE_PERF_STALL_HOOK"),
     ], do_write)
+    notes += process_anchored(src_dir, "sh7095.inc", "profiler: slave power + CPU reset", [
+        (SH2_SETACTIVE_ON_ANCHOR, SH2_SETACTIVE_ON_HOOK, "SE_SLAVE_ON_EDGE"),
+        (SH2_SETACTIVE_OFF_ANCHOR, SH2_SETACTIVE_OFF_HOOK, "SE_SLAVE_OFF_EDGE"),
+        (SH2_RESET_ANCHOR, SH2_RESET_HOOK, "SE_CPU_RESET_HOOK"),
+    ], do_write)
+    notes += process_anchored(src_dir, "sh7095_ops.inc", "profiler: exception entries (function ownership)",
+                              [sh2_exception_edit(k) for k in SH2_EXCEPTIONS], do_write)
     notes += process_anchored(src_dir, "scu.inc", "profiler: DMA + DSP", [
         (SCU_DMA_PERF_ANCHOR, SCU_DMA_PERF_HOOK, "SE_PERF_DMA_ROUTE_BYTES"),
         (SCU_DSP_PERF_ANCHOR, SCU_DSP_PERF_HOOK, "SE_PERF_DSP_CYCLES"),

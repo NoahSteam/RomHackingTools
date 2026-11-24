@@ -20,9 +20,11 @@
  *   1,2        SH-2 sleep, master/slave         unchanged
  *   3,4        SH-2 stall, master/slave         unchanged
  *   5          slave on-cycles                  SAME INDEX, SAME MEANING. Only its producer is
- *                                               corrected (F2: integrated over real on/off edges
- *                                               instead of all-or-nothing per frame). A v26
- *                                               server's value is the all-or-nothing one.
+ *                                               corrected (F2: integrated over the real on/off
+ *                                               edges inside the frame instead of all-or-nothing
+ *                                               per frame). A v27 record says so with
+ *                                               SE_PERF_VALID_SSH2_INT; a v26 server's value is
+ *                                               the all-or-nothing one.
  *   6          elapsed VDP1 drawing cycles      RETIRED. A v27 producer writes 0 here and a v27
  *                                               reader ignores it. It is never redefined or reused:
  *                                               the new VDP1 figure is index 55. A v26 server's
@@ -32,7 +34,8 @@
  *                                               unchanged (13 is the base of a [3] array)
  *   16..53     DMA bytes per level, per route, bus accesses per device
  *                                               unchanged; the device list does not grow (see 58)
- *   54         -                                SE_PERF_SSH2_ON_INTEGRATED (F2)
+ *   54         -                                SE_PERF_RESERVED_54: never produced (it would have
+ *                                               duplicated index 5); always 0, never reused
  *   55         -                                SE_PERF_VDP1_WORK_CYCLES (F4)
  *   56         -                                SE_PERF_VDP1_DMA_DISCARDED (F4)
  *   57         -                                SE_PERF_M68K_IDLE_CYCLES (F5)
@@ -76,7 +79,9 @@ enum
      * frame - sleep - stall for the master; on-cycles - sleep - stall for the slave. */
     SE_PERF_SH2_SLEEP = 1,          /* [2] cycles in SLEEP (waiting for an interrupt) or standby  */
     SE_PERF_SH2_STALL = 3,          /* [2] cycles held off the bus (DMA burst, external halt)     */
-    SE_PERF_SSH2_ON_CYCLES = 5,     /* cycles of the frame the slave SH-2 was switched on        */
+    SE_PERF_SSH2_ON_CYCLES = 5,     /* cycles of the frame the slave SH-2 was switched on, integrated
+                                     * over the real power on/off edges inside the frame (v27, F2);
+                                     * all-or-nothing per frame in a v26 record                   */
     SE_PERF_RETIRED_6 = 6,          /* v27: RETIRED, always 0, never reused. In a v26 record this
                                      * is SE_PERF_V26_VDP1_ELAPSED: cycles VDP1 spent drawing its
                                      * command table, charged whenever a draw was active          */
@@ -104,9 +109,10 @@ enum
     SE_PERF_V26_COUNT = SE_PERF_BUS_ACCESS + SE_PERF_DEV_COUNT * 2, /* 54: what a v26 server sends */
 
     /* ---- appended in v27 ---- */
-    SE_PERF_SSH2_ON_INTEGRATED = 54,  /* F2: slave SH-2 on-cycles integrated over the real on/off
-                                       * edges inside the frame. Written with the same value as
-                                       * index 5; index 5 stays so a v26 comparison still works.   */
+    SE_PERF_RESERVED_54 = 54,         /* RESERVED, never produced, always 0, never reused. It was the
+                                       * slot of a second "integrated slave on-time"; the corrected
+                                       * figure is written to index 5 (SE_PERF_SSH2_ON_CYCLES), so
+                                       * a second copy would only be able to disagree with it.     */
     SE_PERF_VDP1_WORK_CYCLES = 55,    /* F4: VDP1 command-work cycles, counted where the command
                                        * budget is debited (VDP1_EAT_CLOCKS), not elapsed time.
                                        * May exceed the frame in instant-draw mode. Excludes the
@@ -136,7 +142,7 @@ enum { SE_PERF_XDEV_ABUS_DUMMY = 0,   /* 0x05000000.. A-bus dummy space (not the
                                          * clear: it is only what was in force at publication      */
 #define SE_PERF_VALID_OTHER      0x04u  /* the per-CPU Other split and satFlags (F7)               */
 #define SE_PERF_VALID_CACHE      0x08u  /* cacheMode (F8)                                          */
-#define SE_PERF_VALID_SSH2_INT   0x10u  /* counter 54 (F2)                                         */
+#define SE_PERF_VALID_SSH2_INT   0x10u  /* counter 5 (SE_PERF_SSH2_ON_CYCLES) is the integrated figure (F2); index 54 is reserved */
 #define SE_PERF_VALID_VDP1_WORK  0x20u  /* counters 55 and 56 (F4)                                 */
 #define SE_PERF_VALID_M68K_IDLE  0x40u  /* counter 57 (F5)                                         */
 #define SE_PERF_VALID_BUS_X      0x80u  /* counters 58..61 (F8)                                    */

@@ -1,0 +1,529 @@
+/* The profiler's frame-lifecycle contract (F2 + F6) and function ownership (F9), driven without an
+ * emulator: the real glue's accounting (se_mednafen_glue.c, included because it has no header) against
+ * the real shadow call stack (se_export.c), on a clock the test controls. The glue entry points the
+ * emulator calls at a power edge, a CPU reset, an exception entry, a state load and the end of a frame
+ * (SeMednafenSlaveActive / CpuReset / ExceptionEntry / StateLoaded / FrameClose) are called here exactly
+ * as apply.py's injected hooks call them; Integration/Mednafen/check_component.py checks that those
+ * hooks sit where this file assumes.
+ *
+ * Every check asserts CYCLES -- exact on-time, exact cycles charged to a named key or to a raw-PC
+ * bucket -- never just a flag. Timestamps are SH-2 clocks, frame-relative. */
+#include "se_mednafen_glue.c"
+
+#include <stdio.h>
+#include <string.h>
+
+static int gFailures;
+
+static void Check(int condition, const char* expression, int line)
+{
+    if (condition) return;
+    fprintf(stderr, "CHECK failed at line %d: %s\n", line, expression);
+    ++gFailures;
+}
+#define CHECK(expr) Check((expr) ? 1 : 0, #expr, __LINE__)
+#define CHECK_EQ(got, want) do { const unsigned long long g_ = (unsigned long long)(got), w_ = (unsigned long long)(want); \
+    if (g_ != w_) { fprintf(stderr, "CHECK failed at line %d: %s == %llu, want %llu\n", __LINE__, #got, g_, w_); ++gFailures; } } while (0)
+
+#define OP_NOP      0x0009u
+#define OP_RTS      0x000Bu
+#define OP_RTE      0x002Bu
+#define OP_JMP_R0   0x402Bu
+#define OP_BSR(d)   ((unsigned short)(0xB000u | ((d) & 0x0FFFu)))
+#define OP_TRAPA(i) ((unsigned short)(0xC300u | ((i) & 0xFFu)))
+
+/* BSR displacement that reaches 'target' from the instruction at 'pc'. */
+static unsigned short BsrTo(unsigned int pc, unsigned int target)
+{
+    return OP_BSR(((int)(target - (pc + 4u)) / 2) & 0x0FFF);
+}
+
+static unsigned int RawKey(unsigned int pc, int cpu)
+{
+    return (SE_PERF_FN_RAW_PC | (pc & SE_PERF_FN_ADDR_MASK & ~(SE_PERF_FN_PC_BUCKET - 1u))) | (cpu ? SE_PERF_FN_SLAVE : 0u);
+}
+static unsigned int FnKey(unsigned int entry, int cpu)
+{
+    return (entry & SE_PERF_FN_ADDR_MASK) | (cpu ? SE_PERF_FN_SLAVE : 0u);
+}
+
+/* Cycles the per-frame table holds for one key, and for a CPU as a whole. */
+static unsigned long long Cycles(unsigned int key)
+{
+    unsigned int i;
+    for (i = 0; i < SE_PROF_SLOTS; ++i)
+        if (sProfTab[i].key == key) return sProfTab[i].cycles;
+    return 0;
+}
+static unsigned long long CpuTotal(int cpu)
+{
+    unsigned long long t = 0;
+    unsigned int i;
+    for (i = 0; i < SE_PROF_SLOTS; ++i)
+        if (sProfTab[i].key && ((sProfTab[i].key & SE_PERF_FN_SLAVE) != 0) == (cpu != 0)) t += sProfTab[i].cycles;
+    return t + (unsigned long long)0;
+}
+
+static void Fresh(int profiling)
+{
+    memset(SeSsPerfC, 0, sizeof SeSsPerfC);
+    memset(sProfTab, 0, sizeof sProfTab);
+    sProfUsed = 0;
+    sProfOther = 0;
+    memset(sProfSynced, 0, sizeof sProfSynced);
+    memset(sProfLastTs, 0, sizeof sProfLastTs);
+    memset(sProfLastIdle, 0, sizeof sProfLastIdle);
+    memset(sFlowPending, 0, sizeof sFlowPending);
+    sSlaveOn = -1;
+    sSlaveSince = 0;
+    SeMdfnApplyMode(profiling ? SE_LIVE_PROF_FUNCTIONS : 0u);
+    SeExportResetCallStack(0);
+    SeExportResetCallStack(1);
+}
+
+/* One presentation of the per-instruction hook as the emulator makes it: the flow tracker (what
+ * SeMdfnTrackFlow does minus its register reads), then the sampler, which sees the clock. */
+static void Insn(int cpu, unsigned int pc, unsigned short op, unsigned int rn, unsigned int sp, int ts)
+{
+    if (!SeMdfnFlowAdvance(cpu, pc))
+    {
+        const SeFlowKind kind = SeMdfnClassifyFlow(op);
+        if (kind != SeFlowNone) SeMdfnFlowDefer(cpu, pc, kind, op, rn, sp, 0);
+    }
+    if (sProfOn) SeMdfnProfSampleAt(cpu, pc, ts);
+}
+static void Nop(int cpu, unsigned int pc, int ts) { Insn(cpu, pc, OP_NOP, 0, 0, ts); }
+
+/* ================================ F2: slave on-time ================================ */
+
+/* The plan's case: in a 1,000-cycle frame a slave on during [0,200) and [800,1000) reports exactly 400
+ * on-cycles, and the 600-cycle gap contributes zero function cycles. */
+static void TestSlaveOnTimeAndGap(void)
+{
+    Fresh(1);
+    SeMednafenStateLoaded(1);                       /* the frame starts with the slave on */
+    /* slave runs a function at 0x06004000 (an observed call) */
+    Insn(1, 0x06003000, BsrTo(0x06003000, 0x06004000), 0, 0x060F0000, 0);
+    Nop(1, 0x06003002, 4);
+    Nop(1, 0x06004000, 8);                          /* the call lands: the callee is now named */
+    Nop(1, 0x06004002, 100);
+    Nop(1, 0x06004004, 150);
+    SeMednafenSlaveActive(0, 200);                  /* SetActive(false): the slave had run to 200 */
+    SeMednafenCpuReset(1, 200);                     /* ... and SetActive's own Reset(true) */
+    Nop(1, 0x06009000, 800);                        /* SetActive(true) at 800, fresh code */
+    SeMednafenSlaveActive(1, 800);
+    SeMednafenCpuReset(1, 800);
+    Nop(1, 0x06009000, 800);
+    Nop(1, 0x06009002, 900);
+    SeMednafenFrameClose(1000, 0, 1000, 1);
+
+    CHECK_EQ(SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 400);
+    CHECK_EQ(SeSsPerfC[SE_PERF_RESERVED_54], 0);
+    /* Function cycles: [0,200) and [800,1000) only. Nothing for the 600 cycles between. */
+    CHECK_EQ(CpuTotal(1), 400);
+    CHECK_EQ(Cycles(FnKey(0x06004000, 1)), 200 - 8);   /* the call itself ran [0,8) under the (unknown) caller */
+    CHECK_EQ(Cycles(RawKey(0x06003000, 1)), 8);
+    CHECK_EQ(Cycles(RawKey(0x06009000, 1)), 200);       /* [800,1000) */
+}
+
+/* The same across a frame rebase, a redundant SetActive, and a reopened interval. */
+static void TestRebaseRedundantAndReopen(void)
+{
+    Fresh(0);
+    SeMednafenStateLoaded(0);
+    SeMednafenSlaveActive(1, 300);                  /* on at 300 */
+    SeMednafenSlaveActive(1, 450);                  /* redundant: no edge, the interval is not restarted */
+    SeMednafenFrameClose(1000, 0, 1000, 1);
+    CHECK_EQ(SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 700);
+
+    /* next frame: still on, the interval reopens at 0 (the clocks were rebased) */
+    SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] = 0;
+    SeMednafenSlaveActive(1, 10);                   /* a redundant call right after the rebase */
+    SeMednafenSlaveActive(0, 400);
+    SeMednafenFrameClose(1000, 0, 0, 0);
+    CHECK_EQ(SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 400);
+
+    /* third frame: off for all of it, then on at the very end */
+    SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] = 0;
+    SeMednafenSlaveActive(1, 1000);
+    SeMednafenFrameClose(1000, 0, 1000, 1);
+    CHECK_EQ(SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 0);
+    /* and it is on from 0 in the fourth */
+    SeMednafenFrameClose(1000, 0, 1000, 1);
+    CHECK_EQ(SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 1000);
+}
+
+/* A state load never calls SetActive: the on/off state comes from the loaded CPU, and what was
+ * accumulated for the frame on the abandoned timeline is discarded. */
+static void TestStateRestore(void)
+{
+    /* on -> off: the slave was on and had accumulated time; the loaded state has it off */
+    Fresh(0);
+    SeMednafenStateLoaded(1);
+    SeMednafenSlaveActive(0, 700);                  /* 700 cycles banked ... */
+    SeMednafenSlaveActive(1, 710);
+    SeMednafenStateLoaded(0);                       /* ... then a rewind to a state where it is off */
+    CHECK_EQ(SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 0); /* partial accounting discarded */
+    SeMednafenFrameClose(1000, 0, 0, 0);
+    CHECK_EQ(SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 0);
+
+    /* off -> on: our record says off, the loaded CPU is on (no SetActive ran): the whole frame counts */
+    Fresh(0);
+    SeMednafenStateLoaded(0);
+    SeMednafenSlaveActive(0, 0);                    /* record: off */
+    SeMednafenStateLoaded(1);                       /* loaded state: on */
+    SeMednafenFrameClose(1000, 0, 1000, 1);
+    CHECK_EQ(SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 1000);
+
+    /* The record and the CPU disagree at the frame end (an edge nobody told us about): never over-claim. */
+    Fresh(0);
+    SeMednafenStateLoaded(1);
+    SeMednafenFrameClose(1000, 0, 0, 0);            /* the CPU turned out to be off */
+    CHECK_EQ(SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 0);
+    SeMednafenFrameClose(1000, 0, 1000, 1);         /* and then on, from 0 */
+    SeMednafenFrameClose(1000, 0, 1000, 1);
+    CHECK_EQ(SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 1000);
+}
+
+/* A watchdog reset with the power left on: the final valid interval is charged, then the recorded
+ * stack, the pending flow and the baseline are dropped, so what runs after it is not the old function. */
+static void TestWatchdogReset(void)
+{
+    Fresh(1);
+    SeMednafenStateLoaded(1);
+    Insn(1, 0x06003000, BsrTo(0x06003000, 0x06004000), 0, 0, 0);
+    Nop(1, 0x06003002, 4);
+    Nop(1, 0x06004000, 8);
+    Nop(1, 0x06004002, 40);                         /* the callee, named */
+    SeMednafenCpuReset(1, 100);                     /* the watchdog fires: [40,100) is the callee's last */
+    CHECK_EQ(Cycles(FnKey(0x06004000, 1)), 100 - 8);
+    CHECK_EQ(SeExportCurrentFunction(1), 0u);       /* ownership gone with the stack */
+    Nop(1, 0x00000200, 140);                        /* the reset vector's code, 40 cycles after: the first sample has no baseline */
+    Nop(1, 0x00000202, 150);
+    CHECK_EQ(Cycles(FnKey(0x06004000, 1)), 100 - 8);   /* nothing more reached the old function */
+    CHECK_EQ(Cycles(RawKey(0x00000200, 1)), 10);
+    SeMednafenFrameClose(1000, 0, 1000, 1);
+    CHECK_EQ(SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 1000);   /* the power never changed */
+}
+
+/* A last instruction with a 37-cycle interval of which 7 are idle puts exactly 30 on its prior key; the
+ * frame's final interval is charged before the rebase and the next frame carries on from the frame start. */
+static void TestIdleAndFrameBoundary(void)
+{
+    Fresh(1);
+    Nop(0, 0x06001000, 0);
+    SeSsPerfC[SE_PERF_SH2_SLEEP] += 7;              /* 7 of the next 37 cycles were sleep */
+    Nop(0, 0x06001002, 37);
+    CHECK_EQ(Cycles(RawKey(0x06001000, 0)), 30);
+
+    /* the frame's last instruction ran [37, 1003): it is charged at the close, with its idle removed */
+    SeSsPerfC[SE_PERF_SH2_STALL] += 6;
+    SeMednafenFrameClose(1000, 1003, 0, 0);
+    CHECK_EQ(Cycles(RawKey(0x06001000, 0)), 30 + (1003 - 37 - 6));
+    /* publication zeroes the counters and so the idle copies; the baseline is now frame-relative */
+    memset(SeSsPerfC, 0, sizeof SeSsPerfC);
+    sProfLastIdle[0] = sProfLastIdle[1] = 0;
+    Nop(0, 0x06001004, 10);                         /* 10 cycles into the next frame: 3 (rebased 1003 -> 3) .. 10 */
+    CHECK_EQ(Cycles(RawKey(0x06001000, 0)), 30 + (1003 - 37 - 6) + (10 - 3));
+}
+
+/* ============================== F9: function ownership ============================== */
+
+#define U_PC  0x06001000u   /* the unknown parent */
+#define K_PC  0x06002000u   /* the observed callee */
+
+/* The positive oracle from the plan's Step 0 additions: an unknown parent calls K. The call and its
+ * delay slot charge the parent's raw bucket; K's body and its return delay slot charge K's named key;
+ * after the return, charging resumes in the raw bucket. */
+static void TestPositiveOracle(void)
+{
+    Fresh(1);
+    Nop(0, U_PC, 0);
+    Insn(0, U_PC + 2, BsrTo(U_PC + 2, K_PC), 0, 0x060F0000, 4);    /* bsr K */
+    Nop(0, U_PC + 4, 8);                                           /* its delay slot */
+    Nop(0, K_PC, 12);                                              /* K's first instruction */
+    Nop(0, K_PC + 2, 16);
+    Insn(0, K_PC + 4, OP_RTS, 0, 0x060F0000, 20);                  /* K's rts */
+    Nop(0, K_PC + 6, 24);                                          /* its delay slot */
+    Nop(0, U_PC + 6, 28);                                          /* back in the parent (the frame's return address) */
+    Nop(0, U_PC + 8, 32);
+    Nop(0, U_PC + 10, 36);
+
+    CHECK_EQ(Cycles(FnKey(K_PC, 0)), 16);            /* body [12,20) + rts [20,24) + its slot [24,28) */
+    CHECK_EQ(Cycles(RawKey(U_PC, 0)), 12 + 8);       /* call + slot [0,12), then the parent after the return [28,36) */
+    CHECK_EQ(CpuTotal(0), 36);
+    CHECK_EQ(SeExportCurrentFunction(0), 0u);        /* unknown parent: raw again */
+}
+
+/* Known parent: main (unknown) -> A (observed) -> B (observed). B's return goes back to A, which is known,
+ * so A is named again, and A's own return goes back to the unknown main. */
+static void TestKnownParentReturn(void)
+{
+    const unsigned int A = 0x06001800u, B = 0x06002000u;
+    Fresh(1);
+    Nop(0, U_PC, 0);
+    Insn(0, U_PC + 2, BsrTo(U_PC + 2, A), 0, 0x060F0000, 4);
+    Nop(0, U_PC + 4, 8);
+    Insn(0, A, BsrTo(A, B), 0, 0x060EFFF0, 12);                    /* A calls B */
+    Nop(0, A + 2, 16);
+    Insn(0, B, OP_RTS, 0, 0x060EFFE0, 20);                         /* B returns at once */
+    Nop(0, B + 2, 24);
+    Nop(0, A + 4, 28);                                             /* back in A */
+    Nop(0, A + 6, 32);
+    Insn(0, A + 8, OP_RTS, 0, 0x060EFFF0, 36);                     /* A returns to main */
+    Nop(0, A + 10, 40);
+    Nop(0, U_PC + 6, 44);
+    Nop(0, U_PC + 8, 48);
+
+    /* main [0,12): the call, its slot and the first look at A; A [12,20) its call to B and the slot; B [20,28) its
+     * rts and slot; A again [28,44) after B's return landed on the frame's return address (A was known when it called
+     * B), through its own rts and slot; main [44,48) after A's return into the unknown parent. */
+    CHECK_EQ(Cycles(FnKey(B, 0)), 8);
+    CHECK_EQ(Cycles(FnKey(A, 0)), (20 - 12) + (44 - 28));
+    CHECK_EQ(Cycles(RawKey(U_PC, 0)), 12 + (48 - 44));
+    CHECK_EQ(CpuTotal(0), 48);
+}
+
+/* An asynchronous interrupt: the handler's cycles go to the raw bucket, not to the function it
+ * interrupted; once the interrupted function's own return proves ownership again, naming resumes. */
+static void TestInterrupt(void)
+{
+    const unsigned int A = 0x06001800u, B = 0x06002000u, H = 0x06008000u;
+    Fresh(1);
+    Insn(0, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);
+    Nop(0, U_PC + 2, 4);
+    Insn(0, A, BsrTo(A, B), 0, 0x060EFFF0, 8);
+    Nop(0, A + 2, 12);
+    Nop(0, B, 16);                                   /* B, named */
+    Nop(0, B + 2, 20);
+    SeMednafenExceptionEntry(0);                     /* the interrupt is taken between B+2 and B+4 */
+    Nop(0, H, 50);                                   /* the handler: 30 cycles of entry stacking + first insn; charged to B's last key */
+    Nop(0, H + 2, 54);
+    Insn(0, H + 4, OP_RTE, 0, 0x060EFF00, 58);
+    Nop(0, H + 6, 62);
+    Nop(0, B + 4, 66);                               /* interrupted code again (the rte landed) */
+    Insn(0, B + 6, OP_RTS, 0, 0x060EFFE0, 70);
+    Nop(0, B + 8, 74);
+    Nop(0, A + 4, 78);                               /* B returned to A: A was known when it called B */
+    Nop(0, A + 6, 82);
+
+    /* B is named [16,50): its own two instructions and the interval in which the interrupt was taken (the entry
+     * stacking is not separable from them). From the handler's first presentation on nothing is named: the
+     * handler's bucket [50,66), then B's own bucket for the interrupted code after the unobserved rte [66,78),
+     * until B's rts lands on the frame's return address: A was known when it called B, so A is named again. */
+    CHECK_EQ(Cycles(FnKey(B, 0)), 50 - 16);
+    CHECK_EQ(Cycles(RawKey(H, 0)), 66 - 50);
+    CHECK_EQ(Cycles(RawKey(B, 0)), 78 - 66);
+    CHECK_EQ(Cycles(FnKey(A, 0)), (16 - 8) + (82 - 78));
+    CHECK_EQ(Cycles(RawKey(U_PC, 0)), 8);
+    CHECK_EQ(CpuTotal(0), 82);
+}
+
+/* A computed jump (switch or tail call): the stack is kept, but the body that follows is not charged to
+ * the function that was running; the tail callee's own return proves ownership of the original caller. */
+static void TestTailJump(void)
+{
+    const unsigned int A = 0x06001800u, G = 0x06005000u, M = 0x06001000u;
+    Fresh(1);
+    Insn(0, M, BsrTo(M, A), 0, 0x060F0000, 0);       /* main calls A (parent unknown) */
+    Nop(0, M + 2, 4);
+    Nop(0, A, 8);                                    /* A named */
+    Insn(0, A + 2, OP_JMP_R0, G, 0x060EFFF0, 12);    /* A tail-jumps to G */
+    Nop(0, A + 4, 16);                               /* its delay slot: still A's */
+    Nop(0, G, 20);                                   /* the tail callee's body: raw, NOT A */
+    Nop(0, G + 2, 28);
+    Insn(0, G + 4, OP_RTS, 0, 0x060EFFF0, 36);       /* G returns to main through A's frame */
+    Nop(0, G + 6, 40);
+    Nop(0, M + 6, 44);
+    Nop(0, M + 8, 48);
+
+    CHECK_EQ(Cycles(FnKey(A, 0)), (20 - 8));         /* [8,12) jmp prefix, the jmp, its slot -> [8,20) */
+    CHECK_EQ(Cycles(RawKey(G, 0)), (44 - 20));       /* G's body, its return and its slot -- all raw */
+    CHECK_EQ(Cycles(FnKey(G, 0)), 0);
+}
+
+/* A call whose target is not where execution arrived (an interrupt came between the call completing
+ * and the callee's first instruction) must not name the callee. */
+static void TestInterruptedCall(void)
+{
+    const unsigned int A = 0x06001800u, H = 0x06008000u;
+    Fresh(1);
+    Insn(0, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);
+    Nop(0, U_PC + 2, 4);
+    SeMednafenExceptionEntry(0);                     /* taken before A's first instruction ran */
+    Nop(0, H, 40);                                   /* the handler's first presentation completes the call */
+    Nop(0, H + 2, 44);
+    CHECK_EQ(Cycles(FnKey(A, 0)), 0);                /* A was never entered, so not named */
+    CHECK_EQ(Cycles(RawKey(H, 0)), 4);
+}
+
+/* A trapa is the exception that IS observed: its handler is named, and its rte restores the parent. */
+static void TestTrapa(void)
+{
+    const unsigned int H = 0x06008000u, A = 0x06001800u;
+    Fresh(1);
+    Insn(0, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);
+    Nop(0, U_PC + 2, 4);
+    Nop(0, A, 8);
+    {
+        /* trapa at A+2: the handler address is VBR-vectored (the glue reads it; here it is passed in) */
+        SeMdfnFlowDefer(0, A + 2, SeFlowTrap, OP_TRAPA(5), 0, 0x060EFFF0, H);
+        SeMdfnProfSampleAt(0, A + 2, 12);
+        SeMednafenExceptionEntry(0);                 /* the core's Exception() macro ran: not an ownership loss */
+    }
+    Nop(0, H, 16);
+    Nop(0, H + 2, 20);
+    CHECK_EQ(SeExportCurrentFunction(0), FnKey(H, 0));
+    Insn(0, H + 4, OP_RTE, 0, 0x060EFFF0 - 8, 24);
+    Nop(0, H + 6, 28);
+    Nop(0, A + 4, 32);                               /* the saved PC: trapa's PC + 2 */
+    CHECK_EQ(Cycles(FnKey(H, 0)), 28 - 12 + 0);
+    CHECK_EQ(SeExportCurrentFunction(0), FnKey(A, 0) & SE_PERF_FN_ADDR_MASK);   /* A is named again: it was known at the trap */
+}
+
+/* Observation lost: disabling and re-enabling profiling while a callee returns unseen leaves a stale
+ * frame; nothing is charged to it afterwards. Likewise a hook that stops being continuous. */
+static void TestLostObservation(void)
+{
+    const unsigned int A = 0x06001800u;
+    Fresh(1);
+    Insn(0, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);
+    Nop(0, U_PC + 2, 4);
+    Nop(0, A, 8);
+    Nop(0, A + 2, 12);
+    CHECK_EQ(SeExportCurrentFunction(0), FnKey(A, 0));
+    /* the client turns attribution off; A returns unseen; the client turns it on again */
+    SeMdfnApplyMode(0);
+    SeMdfnApplyMode(SE_LIVE_PROF_FUNCTIONS);
+    Nop(0, U_PC + 6, 100);                           /* long since back in the parent; no baseline yet */
+    Nop(0, U_PC + 8, 110);
+    CHECK_EQ(SeExportCurrentFunction(0), 0u);        /* the stale frame names nothing */
+    CHECK_EQ(Cycles(FnKey(A, 0)), 12 - 8);           /* only what was seen */
+    CHECK_EQ(Cycles(RawKey(U_PC, 0)), 8 + 10);       /* the call and its slot [0,8) before A, then [100,110) after the re-enable */
+}
+
+/* The hook stops presenting every instruction (a breakpoint-only callback): same loss, no profiler toggle. */
+static void TestHookModeLoss(void)
+{
+    const unsigned int A = 0x06001800u;
+    Fresh(1);
+    Insn(0, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);
+    Nop(0, U_PC + 2, 4);
+    Nop(0, A, 8);
+    CHECK_EQ(SeExportCurrentFunction(0), FnKey(A, 0));
+    SeMednafenHookMode(0);
+    CHECK_EQ(SeExportCurrentFunction(0), 0u);
+    SeMednafenHookMode(1);
+    Nop(0, A + 2, 20);
+    CHECK_EQ(SeExportCurrentFunction(0), 0u);
+}
+
+/* A nested call from unknown code on top of a STALE frame. main calls A (A is named), an interrupt is taken
+ * inside A, and the handler (unknown code, running on top of A's recorded frame) calls K. K's body is named; its
+ * return lands in the handler, whose owner is unknown -- it must NOT fall back to naming A, the stale top. */
+static void TestNestedCallFromUnknown(void)
+{
+    const unsigned int A = 0x06001800u, H = 0x06008000u, K = 0x06009000u;
+    Fresh(1);
+    Insn(0, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);
+    Nop(0, U_PC + 2, 4);
+    Nop(0, A, 8);
+    Nop(0, A + 2, 12);
+    SeMednafenExceptionEntry(0);
+    Nop(0, H, 40);                                   /* handler: raw */
+    Insn(0, H + 2, BsrTo(H + 2, K), 0, 0x060EFF00, 44);   /* the handler calls K */
+    Nop(0, H + 4, 48);
+    Nop(0, K, 52);                                   /* K: named */
+    Insn(0, K + 2, OP_RTS, 0, 0x060EFEF0, 56);
+    Nop(0, K + 4, 60);
+    Nop(0, H + 6, 64);                               /* back in the handler: the owner is unknown */
+    Nop(0, H + 8, 68);
+    Nop(0, H + 10, 72);
+    CHECK_EQ(SeExportCurrentFunction(0), 0u);
+    CHECK_EQ(Cycles(FnKey(K, 0)), 12);               /* K's first insn [52,56), its rts and slot [56,64) */
+    CHECK_EQ(Cycles(RawKey(H, 0)), (52 - 40) + (72 - 64));   /* the handler before K ran, and after it returned */
+    CHECK_EQ(Cycles(FnKey(A, 0)), 40 - 8);           /* A is charged up to the handler's first presentation, never after */
+}
+
+/* A return that does not land where its frame said (a manipulated return address, a longjmp-like unwind)
+ * proves nothing about the parent. */
+static void TestReturnToTheWrongAddress(void)
+{
+    const unsigned int A = 0x06001800u, B = 0x06002000u, ELSEWHERE = 0x06004000u;
+    Fresh(1);
+    Insn(0, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);
+    Nop(0, U_PC + 2, 4);
+    Insn(0, A, BsrTo(A, B), 0, 0x060EFFF0, 8);       /* A (called from unknown main) calls B: B's parent A is known */
+    Nop(0, A + 2, 12);
+    Insn(0, B, OP_RTS, 0, 0x060EFFE0, 16);
+    Nop(0, B + 2, 20);
+    Nop(0, ELSEWHERE, 24);                           /* ... but B returned somewhere else entirely */
+    Nop(0, ELSEWHERE + 2, 28);
+    CHECK_EQ(SeExportCurrentFunction(0), 0u);        /* not A: the frame's return address was not honoured */
+    CHECK_EQ(Cycles(RawKey(ELSEWHERE, 0)), 4);
+}
+
+/* A frame recorded before observation was lost cannot restore ownership later, even when a return happens
+ * to land on its return address (the call it describes may have returned unseen long ago). */
+static void TestStaleFrameCannotRestoreOwnership(void)
+{
+    const unsigned int A = 0x06001800u, B = 0x06002000u;
+    Fresh(1);
+    Insn(0, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);
+    Nop(0, U_PC + 2, 4);
+    Insn(0, A, BsrTo(A, B), 0, 0x060EFFF0, 8);       /* stack [A, B]: B's parent A is known */
+    Nop(0, A + 2, 12);
+    Nop(0, B, 16);
+    SeMdfnApplyMode(0);                              /* observation is lost ... */
+    SeMdfnApplyMode(SE_LIVE_PROF_FUNCTIONS);         /* ... and resumes */
+    Insn(0, B + 2, OP_RTS, 0, 0x060EFFE0, 100);      /* some rts (B's, or the next invocation's: unprovable) */
+    Nop(0, B + 4, 104);
+    Nop(0, A + 4, 108);                              /* lands exactly on B's recorded return address */
+    Nop(0, A + 6, 112);
+    CHECK_EQ(SeExportCurrentFunction(0), 0u);
+    CHECK_EQ(Cycles(FnKey(A, 0)), 16 - 8);           /* only what was seen */
+    CHECK_EQ(Cycles(FnKey(B, 0)), 0);
+    CHECK_EQ(Cycles(RawKey(B, 0)), 108 - 100);       /* the rts and its slot, unnamed */
+    CHECK_EQ(Cycles(RawKey(A, 0)), 112 - 108);       /* back on the recorded return address: still unproven */
+}
+
+/* ================================ F6: the latched mode ================================ */
+
+static void TestModeLatch(void)
+{
+    Fresh(0);
+    CHECK_EQ(sFrameMode, 0u);
+    SeMdfnApplyMode(SE_LIVE_PROF_FUNCTIONS);
+    CHECK_EQ(sFrameMode, SE_LIVE_PROF_FUNCTIONS);
+    CHECK(sProfOn == 1);
+    Nop(0, U_PC, 0);
+    Nop(0, U_PC + 2, 10);
+    SeMdfnApplyMode(0);                              /* applied between frames only: the table of the frame that ran attributed stays whole */
+    CHECK_EQ(sFrameMode, 0u);
+    CHECK(sProfOn == 0);
+    CHECK_EQ(Cycles(RawKey(U_PC, 0)), 10);
+}
+
+int main(void)
+{
+    TestSlaveOnTimeAndGap();
+    TestRebaseRedundantAndReopen();
+    TestStateRestore();
+    TestWatchdogReset();
+    TestIdleAndFrameBoundary();
+    TestPositiveOracle();
+    TestKnownParentReturn();
+    TestInterrupt();
+    TestTailJump();
+    TestInterruptedCall();
+    TestTrapa();
+    TestNestedCallFromUnknown();
+    TestReturnToTheWrongAddress();
+    TestStaleFrameCannotRestoreOwnership();
+    TestLostObservation();
+    TestHookModeLoss();
+    TestModeLatch();
+    if (gFailures) { fprintf(stderr, "%d failure(s)\n", gFailures); return 1; }
+    printf("ProfilerLifecycleTests: all passed\n");
+    return 0;
+}
