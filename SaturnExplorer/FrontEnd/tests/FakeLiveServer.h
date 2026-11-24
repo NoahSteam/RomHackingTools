@@ -238,6 +238,7 @@ public:
             {
                 const int client = ::accept(listenFd, nullptr, nullptr);
                 if (client < 0) continue;
+                if (!mRunning.load()) { ::close(client); break; }   // Stop()'s wake-up connection
                 const int index = mAccepted.fetch_add(1);
                 mActive.store(client);
                 mHandler(client, index);
@@ -255,6 +256,24 @@ public:
         // the very behaviour the test is exercising.
         const int a = mActive.load();
         if (a >= 0) ::shutdown(a, SHUT_RDWR);
+        // The thread may be parked in accept(). shutdown() on a LISTENING socket wakes it on Linux
+        // but not on macOS / BSD, and closing the descriptor from another thread does not either,
+        // so the join below could wait forever (seen as a 1500 s ctest timeout on the macOS runner
+        // whenever the client's close was handled before Stop() ran). Connect to ourselves first:
+        // accept() returns on every platform, and the loop sees mRunning == false and leaves.
+        if (mFd >= 0)
+        {
+            const int wake = ::socket(AF_INET, SOCK_STREAM, 0);
+            if (wake >= 0)
+            {
+                sockaddr_in addr = {};
+                addr.sin_family = AF_INET;
+                addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                addr.sin_port = htons(static_cast<uint16_t>(mPort));
+                (void)::connect(wake, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+                ::close(wake);
+            }
+        }
         if (mFd >= 0) { ::shutdown(mFd, SHUT_RDWR); ::close(mFd); mFd = -1; }
         if (mThread.joinable()) mThread.join();
     }
