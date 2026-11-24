@@ -327,7 +327,7 @@ int SeExportGateHalt(void);
  * build whose hooks compile to stubs passes 0. Call once after SeExportInit. Defaults to 0. */
 void SeExportSetDebugCaps(unsigned int caps);
 
-/* ---- Profiler (v26). See SePerfCounters.h for the counters and the function key. ----
+/* ---- Profiler (v26, record v27). See SePerfCounters.h for the counters and the function key. ----
  *
  * SeExportPublishPerf: call once per emulated frame, on the emulate thread, with that frame's
  * totals. It is what makes the server advertise SE_LIVE_CAP_PROFILER.
@@ -339,9 +339,27 @@ void SeExportSetDebugCaps(unsigned int caps);
  *
  * SeExportProfilerFlags: the flags in force. SeExportCurrentFunction: entry address of the
  * function the shadow call stack says 'cpu' is in, or 0 when it cannot say; emulate thread only. */
+/* The v27 per-record fields beyond the counters and the function list (layout: SeLiveProtocol.h,
+ * "Perf section"). 'valid' (SE_PERF_VALID_*) says which of the others are real; a producer that
+ * has not implemented one leaves its bit clear and the field zero. sampleSeq is assigned by the
+ * server, not here. */
+typedef struct SeExportPerfInfo
+{
+    unsigned int       valid;            /* SE_PERF_VALID_* */
+    unsigned int       timelineId;       /* SE_PERF_VALID_IDENTITY */
+    unsigned long long frameNo;          /* SE_PERF_VALID_IDENTITY */
+    unsigned int       mode;             /* SE_PERF_VALID_MODE: SE_LIVE_PROF_* latched for the frame */
+    unsigned int       cacheMode;        /* SE_PERF_VALID_CACHE: SE_PERF_CACHE_* */
+    unsigned int       satFlags;         /* SE_PERF_VALID_OTHER: SE_PERF_SAT_* */
+    unsigned long long otherNotAdmitted[2];   /* SE_PERF_VALID_OTHER: master, slave */
+    unsigned long long otherEvicted[2];       /* SE_PERF_VALID_OTHER: master, slave */
+} SeExportPerfInfo;
+
+/* 'info' may be NULL: nothing beyond the counters is available (valid = 0). */
 void SeExportPublishPerf(const unsigned long long* counters, unsigned int count,
                          const unsigned int* fnKeys, const unsigned int* fnCycles,
-                         unsigned int fnCount, unsigned int fnOtherCycles);
+                         unsigned int fnCount, unsigned int fnOtherCycles,
+                         const SeExportPerfInfo* info);
 void SeExportSetProfilerHook(void (*set)(unsigned int flags));
 unsigned int SeExportProfilerFlags(void);
 unsigned int SeExportCurrentFunction(int cpu);

@@ -34,7 +34,7 @@ void TestShares()
     c[SE_PERF_SSH2_ON_CYCLES] = 500;     // slave on for half the frame
     c[SE_PERF_SH2_SLEEP + 1] = 200;
     c[SE_PERF_SH2_STALL + 1] = 50;       // -> 25% busy
-    c[SE_PERF_VDP1_DRAW_CYCLES] = 250;
+    c[SE_PERF_V26_VDP1_ELAPSED] = 250;
     c[SE_PERF_DSP_CYCLES] = 10;
     c[SE_PERF_M68K_CYCLES] = 40;
     c[SE_PERF_M68K_TOTAL_CYCLES] = 400;  // the 68000's own clock, not the SH-2's
@@ -93,7 +93,11 @@ void TestBuses()
     // Every device has a name and belongs to a bus.
     for (int d = 0; d < SE_PERF_DEV_COUNT; ++d) CHECK(std::strcmp(PerfDeviceName(d), "?") != 0);
     CHECK(PerfDeviceBus(SE_PERF_DEV_SCSP) == PerfBus::B && PerfDeviceBus(SE_PERF_DEV_ABUS_CS0) == PerfBus::A);
-    CHECK(SE_PERF_COUNT == SE_PERF_BUS_ACCESS + SE_PERF_DEV_COUNT * 2);
+    // v26 layout kept in place, v27 counters appended after it.
+    CHECK(SE_PERF_V26_COUNT == SE_PERF_BUS_ACCESS + SE_PERF_DEV_COUNT * 2 && SE_PERF_V26_COUNT == 54);
+    CHECK(SE_PERF_SSH2_ON_INTEGRATED == SE_PERF_V26_COUNT);
+    CHECK(SE_PERF_COUNT == SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_COUNT * 2 && SE_PERF_COUNT == 62);
+    CHECK(SE_PERF_SSH2_ON_CYCLES == 5 && SE_PERF_RETIRED_6 == 6 && SE_PERF_VDP1_COMMANDS == 7);
 }
 
 void TestHistory()

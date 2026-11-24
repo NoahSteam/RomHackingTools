@@ -158,7 +158,7 @@ int se_live_emu_save_slot(const se_data_source* ds, uint32_t slot);
  * ignored against a pre-v18 server, which always captures. No-op if 'ds' isn't a live source. */
 void se_live_set_rewind_enabled(const se_data_source* ds, int enabled);
 
-/* ---- Profiler (v26+) ----
+/* ---- Profiler (v26+, record v27) ----
  *
  * The emulator counts, for every emulated frame, where the Saturn's time went (SH-2 sleep and
  * bus-stall cycles, VDP1 drawing, the SCU DSP, the 68000), what crossed its buses (SH-2 accesses
@@ -169,20 +169,49 @@ void se_live_set_rewind_enabled(const se_data_source* ds, int enabled);
  * One record per completed emulated frame; a frame is never reported twice. 'frame' is the
  * snapshot frame number of the reply that delivered it (the counters are those of the frame
  * that finished just before that snapshot was taken). 'counter_count' is how many leading
- * entries of 'counters' the server filled; the rest are zero. */
+ * entries of 'counters' the server filled; the rest are zero.
+ *
+ * A v27 client also reads a v26 server. The struct says which fields are real:
+ *   wire_version  26 or 27, the protocol form the record arrived in.
+ *   valid         bitmask of what this record can be trusted for. Every field marked below with
+ *                 a SE_PERF_VALID_* bit (SePerfCounters.h) is "not available" -- present as zero,
+ *                 but not a measurement -- unless that bit is set. A v26 record sets no
+ *                 SE_PERF_VALID_* bit, and sets SE_LIVE_PERF_V26_VDP1_ELAPSED: counters[6] is then
+ *                 the elapsed VDP1 drawing figure (retired in v27, where counters[6] is always 0
+ *                 and the bit is clear). Counter indices >= counter_count are not available
+ *                 whatever 'valid' says. A counter index added in v27 is "not available" unless its
+ *                 own bit is set: 54 SSH2_INT, 55+56 VDP1_WORK, 57 M68K_IDLE, 58..61 BUS_X.
+ *   Always valid: seq/sample_seq, flags, counters 0..53 (except 6 as above), the function list. */
 #define SE_LIVE_PERF_COUNTERS 64u   /* room for SePerfCounters.h's SE_PERF_COUNT, with headroom */
 #define SE_LIVE_PERF_FUNCTIONS 64u  /* == SE_LIVE_PERF_FN_MAX */
+#define SE_LIVE_PERF_V26_VDP1_ELAPSED 0x80000000u   /* 'valid' bit: counters[6] is v26 elapsed VDP1 */
 typedef struct se_live_perf_frame
 {
-    uint32_t seq;               /* the server's count of completed frames */
-    uint32_t flags;             /* SE_LIVE_PROF_* in force for the frame */
-    uint32_t frame;
+    uint32_t seq;               /* low 32 bits of sample_seq (the whole v26 sequence) */
+    uint32_t flags;             /* SE_LIVE_PROF_* in force for the frame (v27: == mode) */
+    uint32_t frame;             /* snapshot frame of the delivering reply; superseded by frame_no (F3) */
     uint32_t counter_count;
     uint64_t counters[SE_LIVE_PERF_COUNTERS];
     uint32_t fn_count;          /* hottest functions, hottest first (see SE_PERF_FN_* for the key) */
     uint32_t fn_other_cycles;   /* attributed cycles beyond those fn_count entries */
     uint32_t fn_key[SE_LIVE_PERF_FUNCTIONS];
     uint32_t fn_cycles[SE_LIVE_PERF_FUNCTIONS];
+    /* ---- v27 ---- */
+    uint32_t wire_version;      /* 26 or 27 */
+    uint32_t valid;             /* SE_PERF_VALID_* | SE_LIVE_PERF_V26_VDP1_ELAPSED, see above */
+    uint64_t sample_seq;        /* 64-bit; == seq for a v26 record. Always valid */
+    uint32_t timeline_id;       /* SE_PERF_VALID_IDENTITY */
+    uint32_t pad0;
+    uint64_t frame_no;          /* SE_PERF_VALID_IDENTITY: the emulated frame within the timeline */
+    uint32_t mode;              /* SE_PERF_VALID_MODE: attribution mode latched for the frame */
+    uint32_t cache_mode;        /* SE_PERF_VALID_CACHE: SE_PERF_CACHE_* */
+    uint32_t sat_flags;         /* SE_PERF_VALID_OTHER: SE_PERF_SAT_* */
+    uint32_t pad1;
+    uint64_t other_not_admitted[2];   /* SE_PERF_VALID_OTHER: master, slave */
+    uint64_t other_evicted[2];        /* SE_PERF_VALID_OTHER: master, slave */
+    uint64_t newest_seq;        /* the server's newest published sample_seq when this was sent (0 unknown / v26) */
+    uint64_t gap_first;         /* v27: sample_seq range the server dropped for this connection just */
+    uint64_t gap_last;          /*      before this record; both 0 = none (always 0 from a v26 server) */
 } se_live_perf_frame;
 
 /* Move up to 'max' queued records into 'out', oldest first; returns how many. The queue is

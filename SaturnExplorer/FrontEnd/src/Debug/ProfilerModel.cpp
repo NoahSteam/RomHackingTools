@@ -40,7 +40,9 @@ PerfShares ComputePerfShares(const uint64_t c[SE_PERF_COUNT], double frames)
     out.cpu[1] = ShareOf(frame, static_cast<double>(c[SE_PERF_SSH2_ON_CYCLES]),
                          static_cast<double>(c[SE_PERF_SH2_SLEEP + 1]),
                          static_cast<double>(c[SE_PERF_SH2_STALL + 1]));
-    out.vdp1Draw = Clamp01(static_cast<double>(c[SE_PERF_VDP1_DRAW_CYCLES]) / frame);
+    out.vdp1Draw = Clamp01(static_cast<double>(c[SE_PERF_V26_VDP1_ELAPSED]) / frame);
+    // v27 Step 0: clamp and presentation filled by F4 (values above 100% are allowed there)
+    out.vdp1Work = Clamp01(static_cast<double>(c[SE_PERF_VDP1_WORK_CYCLES]) / frame);
     out.dsp = Clamp01(static_cast<double>(c[SE_PERF_DSP_CYCLES]) / frame);
     const double m68kTotal = static_cast<double>(c[SE_PERF_M68K_TOTAL_CYCLES]);
     out.m68k = m68kTotal > 0.0 ? Clamp01(static_cast<double>(c[SE_PERF_M68K_CYCLES]) / m68kTotal) : 0.0;

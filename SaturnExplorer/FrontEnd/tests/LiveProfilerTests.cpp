@@ -1,4 +1,4 @@
-// The profiler's wire path (protocol v26), end to end: the real exporter (se_export.c) on one
+// The profiler's wire path (protocol v27), end to end: the real exporter (se_export.c) on one
 // side of a unix socket, the real live driver on the other. The emulator hands over one frame's
 // counters at a time; the client must receive each frame exactly once, with every counter intact
 // (they are 64-bit and the block states its own length), and the opt-in function attribution must
@@ -42,6 +42,7 @@ unsigned long long CounterValue(unsigned frame, unsigned index)
 }
 
 unsigned gEmuFrame = 0;   // frames the fake emulator has completed
+const SeExportPerfInfo* gInfo = nullptr;   // v27 fields to publish with each frame (null = none)
 
 // One emulated frame: the gate, the end-of-frame hand-over of its counters, the snapshot.
 void EmulatorFrame(bool withPerf = true)
@@ -55,7 +56,7 @@ void EmulatorFrame(bool withPerf = true)
         const unsigned keys[3] = { 0x06004000u, 0x06010000u | SE_PERF_FN_SLAVE, SE_PERF_FN_RAW_PC | 0x06020040u };
         const unsigned cyc[3] = { 9000u + gEmuFrame, 3000u, 12u };
         const bool fns = (SeExportProfilerFlags() & SE_LIVE_PROF_FUNCTIONS) != 0;
-        SeExportPublishPerf(c, SE_PERF_COUNT, keys, cyc, fns ? 3u : 0u, fns ? 77u : 0u);
+        SeExportPublishPerf(c, SE_PERF_COUNT, keys, cyc, fns ? 3u : 0u, fns ? 77u : 0u, gInfo);
     }
     SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
                      nullptr, nullptr, nullptr, nullptr, nullptr);
@@ -112,7 +113,7 @@ int main()
 
     // Counters arrive without anything being asked for.
     Check(Until([] { return gGot.size() >= 20; }, ds), "perf frames arrive");
-    Check(se_live_server_version(&ds) >= SE_LIVE_MINVER_PROFILE, "the server speaks v26");
+    Check(se_live_server_version(&ds) == SE_LIVE_VERSION, "the server speaks v27");
     Check((Caps(ds) & SE_LIVE_CAP_PROFILER) != 0, "the server advertises the counters");
     Check((Caps(ds) & SE_LIVE_CAP_PROF_FUNCTIONS) != 0, "and function attribution, with a hook registered");
     Check(gHookCalls.load() == 0, "the emulator is not asked to attribute until the client wants it");
@@ -126,6 +127,10 @@ int main()
         for (unsigned k = 0; k < SE_PERF_COUNT && intact; ++k)
             if (f.counters[k] != CounterValue(f.seq, k)) intact = false;
         if (f.fn_count != 0 || f.flags != 0 || f.fn_other_cycles != 0) noFns = false;
+        // No producer filled any v27 field: all of them are "not available".
+        if (f.wire_version != 27 || f.valid != 0 || f.sample_seq != f.seq || f.timeline_id != 0 || f.frame_no != 0 ||
+            f.newest_seq < f.sample_seq || f.gap_first != 0 || f.gap_last != 0)
+            noFns = false;
     }
     Check(ordered, "each frame is delivered once, in order");
     Check(intact, "every 64-bit counter survives the wire");
@@ -139,6 +144,30 @@ int main()
     const size_t before = gGot.size();
     for (int i = 0; i < 40; ++i) { EmulatorFrame(false); Sleep(5); Drain(ds); }
     Check(gGot.size() == before, "a repeated frame is not delivered twice");
+
+    // The v27 fields a producer does fill reach the client, every one distinct and non-zero.
+    {
+        SeExportPerfInfo info;
+        std::memset(&info, 0, sizeof info);
+        info.valid = SE_PERF_VALID_ALL & ~SE_PERF_VALID_MODE;
+        info.timelineId = 0xABCDEu;
+        info.frameNo = 0x500000007ull;
+        info.cacheMode = SE_PERF_CACHE_ON;
+        info.satFlags = SE_PERF_SAT_TABLE_FULL;
+        info.otherNotAdmitted[0] = 11; info.otherNotAdmitted[1] = 0x100000012ull;
+        info.otherEvicted[0] = 13;     info.otherEvicted[1] = 14;
+        gInfo = &info;
+        const size_t had = gGot.size();
+        Check(Until([&] { return gGot.size() >= had + 3 && gGot.back().timeline_id != 0; }, ds), "v27 frames arrive");
+        gInfo = nullptr;
+        const se_live_perf_frame& f = gGot.back();
+        Check(f.valid == info.valid, "the valid word is carried");
+        Check(f.timeline_id == 0xABCDEu && f.frame_no == 0x500000007ull, "identity round-trips");
+        Check(f.cache_mode == SE_PERF_CACHE_ON && f.sat_flags == SE_PERF_SAT_TABLE_FULL, "cache mode and saturation");
+        Check(f.other_not_admitted[0] == 11 && f.other_not_admitted[1] == 0x100000012ull &&
+              f.other_evicted[0] == 13 && f.other_evicted[1] == 14, "the per-CPU Other split round-trips");
+        Check(f.mode == f.flags, "the mode word is the flags word");
+    }
 
     // Ask for function attribution: the hook runs on the emulate thread, the frames say so.
     se_live_set_profiler(&ds, SE_LIVE_PROF_FUNCTIONS);

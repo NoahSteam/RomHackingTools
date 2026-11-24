@@ -140,7 +140,7 @@ private:
         n = Rd32(b);
         return true;
     }
-    // The trailing blocks, in the order the server sends them (v8..v26).
+    // The trailing blocks, in the order the server sends them (v8..v27).
     bool SkipTrailer()
     {
         uint32_t n;
@@ -158,7 +158,7 @@ private:
             if (!RecvAll(mFd, h, sizeof(h)) || !SkipBytes(mFd, Rd32(h + 12))) return false;
         }
         if (!Count(n) || !SkipBytes(mFd, size_t(n) * SE_LIVE_EMU_SLOT_LEN)) return false;        // slots
-        if (!Count(n)) return false;                                                             // perf records (v26)
+        if (!Count(n) || !SkipBytes(mFd, 24)) return false;                                      // perf header (v27): count, newestSeq, lostFirst, lostLast
         for (uint32_t i = 0; i < n; ++i)
         {
             uint32_t len;

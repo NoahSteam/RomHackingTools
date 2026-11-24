@@ -1646,7 +1646,20 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         add_test(NAME SaturnExplorerLiveRestoreSignalTests
                  COMMAND SaturnExplorerLiveRestoreSignalTests)
 
-        # The profiler's wire path (v26): the real exporter hands over per-frame counters, the
+        # The profiler's wire record in both forms (v26 and v27) against a scripted server on an
+        # ephemeral loopback port: a v26 section still parses, a v27 record round-trips every field.
+        add_executable(SaturnExplorerLiveProfilerFormatTests
+            FrontEnd/tests/LiveProfilerFormatTests.cpp)
+        target_include_directories(SaturnExplorerLiveProfilerFormatTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveProfilerFormatTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveProfilerFormatTests
+                 COMMAND SaturnExplorerLiveProfilerFormatTests)
+
+        # The profiler's wire path (v27 record): the real exporter hands over per-frame counters, the
         # real driver must deliver each frame once and intact, and function attribution must be
         # armed on request and disarmed on disconnect. Shares the default socket.
         add_executable(SaturnExplorerLiveProfilerTests

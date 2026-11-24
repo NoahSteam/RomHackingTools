@@ -990,7 +990,10 @@ SCU_DSP_PERF_HOOK = "  SeSsPerfC[SE_PERF_DSP_CYCLES] += 2;   /* Saturn Explorer 
 # those are drawing cycles.
 VDP1_PERF_FWD = "/* SE_VDP1_PERF_FWD */\n" + PERF_DECL
 VDP1_PERF_UPDATE_ANCHOR = r'(int32 cycles = timestamp - lastts;\s*\n\s*lastts = timestamp;[ \t]*\n)'
-VDP1_PERF_UPDATE_HOOK = " if(DrawingActive) SeSsPerfC[SE_PERF_VDP1_DRAW_CYCLES] += cycles;\n"
+# v27 Step 0: index 6 (elapsed VDP1 drawing) is retired and no longer incremented, so this hook
+# is gone from process_profiler (VDP1_PERF_UPDATE_ANCHOR is kept only so F4 can reuse it).
+# v27 Step 0: filled by F4 -- the command-work counter SE_PERF_VDP1_WORK_CYCLES goes at the
+# command-budget debit, and the DMA-discarded budget counter beside it.
 VDP1_PERF_CMD_ANCHOR = r'(memcpy\(CommandData, &VRAM\[CurCommandAddr\], sizeof\(CommandData\)\);[ \t]*\n)'
 VDP1_PERF_CMD_HOOK = "   ++SeSsPerfC[SE_PERF_VDP1_COMMANDS];\n"
 VDP1_PERF_START_ANCHOR = r'(static void StartDrawing\(void\)\s*\{[ \t]*\n)'
@@ -1298,7 +1301,7 @@ def process_anchored(src_dir, fname, title, edits, do_write, prepend=None):
 
 
 def process_profiler(src_dir, do_write):
-    """The profiler's counters (v26): see PERF_DECL. A miss here costs one figure in the Profiler
+    """The profiler's counters (v26 hooks; v27 layout, see SePerfCounters.h): see PERF_DECL. A miss here costs one figure in the Profiler
     panel, which then reads zero -- it is reported like any other miss so it is not shipped unnoticed."""
     notes = []
     notes += process_anchored(src_dir, "sh7095.inc", "profiler: bus accesses", [
@@ -1315,7 +1318,6 @@ def process_profiler(src_dir, do_write):
         (SCU_DSP_PERF_ANCHOR, SCU_DSP_PERF_HOOK, "SE_PERF_DSP_CYCLES"),
     ], do_write)
     notes += process_anchored(src_dir, "vdp1.cpp", "profiler: draw time", [
-        (VDP1_PERF_UPDATE_ANCHOR, VDP1_PERF_UPDATE_HOOK, "SE_PERF_VDP1_DRAW_CYCLES"),
         (VDP1_PERF_CMD_ANCHOR, VDP1_PERF_CMD_HOOK, "SE_PERF_VDP1_COMMANDS"),
         (VDP1_PERF_START_ANCHOR, VDP1_PERF_START_HOOK, "SE_PERF_VDP1_DRAW_STARTS"),
         (VDP1_PERF_ABORT_ANCHOR, VDP1_PERF_ABORT_HOOK, "SE_PERF_FBSWAP_ABORT"),

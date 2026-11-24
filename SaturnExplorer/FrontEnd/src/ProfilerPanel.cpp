@@ -253,18 +253,27 @@ void ProfilerPanel::DrawFrameTab(const ProfilerModel& model)
             if (cs.off >= 0.999) ImGui::TextDisabled("off");
             else ImGui::Text("%s busy", Percent(cs.busy).c_str());
         }
-        struct Single { const char* name; const char* id; double v; ImU32 col; const char* tip; };
+        // v26 server: the old elapsed figure under its old label. v27: command work (F4 fills the
+        // producer; until its bit is set the value is "not available", never a measured 0%).
+        const PerfFrame& newest = model.Latest();
+        const bool legacyVdp1 = newest.LegacyVdp1();
+        const bool vdp1Known = legacyVdp1 || newest.Has(SE_PERF_VALID_VDP1_WORK);
+        struct Single { const char* name; const char* id; double v; ImU32 col; const char* tip; bool known; };
         const Single singles[3] = {
-            { "VDP1 drawing", "##vdp1", s.vdp1Draw, ColVdp1(), "VDP1 drawing its command table" },
-            { "SCU DSP", "##dsp", s.dsp, ColDsp(), "SCU DSP executing" },
-            { "68000 (sound)", "##m68k", s.m68k, ColM68k(), "68000 executing (share of its own clock)" } };
+            legacyVdp1
+                ? Single{ "VDP1 drawing", "##vdp1", s.vdp1Draw, ColVdp1(), "VDP1 drawing its command table", true }
+                : Single{ "VDP1 command work", "##vdp1", s.vdp1Work, ColVdp1(), "VDP1 command-work cycles", vdp1Known },
+            { "SCU DSP", "##dsp", s.dsp, ColDsp(), "SCU DSP executing", true },
+            { "68000 (sound)", "##m68k", s.m68k, ColM68k(), "68000 executing (share of its own clock)", true } };
         for (const Single& one : singles)
         {
-            const Segment seg[1] = { { one.v, one.col, one.tip } };
+            const Segment seg[1] = { { one.known ? one.v : 0.0, one.col, one.tip } };
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::TextUnformatted(one.name);
             ImGui::TableNextColumn(); StackedBar(one.id, seg, 1, barH);
-            ImGui::TableNextColumn(); ImGui::TextUnformatted(Percent(one.v).c_str());
+            ImGui::TableNextColumn();
+            if (one.known) ImGui::TextUnformatted(Percent(one.v).c_str());
+            else ImGui::TextDisabled("not available");
         }
         ImGui::EndTable();
     }
@@ -297,10 +306,13 @@ void ProfilerPanel::DrawFrameTab(const ProfilerModel& model)
         HistoryStrip("##h-ssh2", model, ColBusy(), stripH,
                      [](const PerfFrame& f) { return ComputePerfShares(f.c).cpu[1].busy; });
         ImGui::TableNextRow();
-        ImGui::TableNextColumn(); ImGui::TextUnformatted("VDP1 drawing");
+        ImGui::TableNextColumn(); ImGui::TextUnformatted(model.Latest().LegacyVdp1() ? "VDP1 drawing" : "VDP1 command work");
         ImGui::TableNextColumn();
         HistoryStrip("##h-vdp1", model, ColVdp1(), stripH,
-                     [](const PerfFrame& f) { return ComputePerfShares(f.c).vdp1Draw; });
+                     [](const PerfFrame& f) {
+                         const PerfShares sh = ComputePerfShares(f.c);
+                         return f.LegacyVdp1() ? sh.vdp1Draw : (f.Has(SE_PERF_VALID_VDP1_WORK) ? sh.vdp1Work : 0.0);
+                     });
         ImGui::EndTable();
     }
 }

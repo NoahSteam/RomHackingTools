@@ -16,6 +16,7 @@
 
 #include "se_export.h"
 #include "SeLiveProtocol.h"
+#include "SePerfCounters.h"
 #include "SeStateCodec.h"   /* XOR + RLE savestate delta codec (v16 rewind) */
 
 #include <stdint.h>
@@ -900,7 +901,7 @@ static void SeLogPortDevices(void)
  * flag: on POSIX the local socket and the web-bridge TCP port are served by two threads. */
 static volatile int sClients;
 
-/* ---- Profiler (v26). Two halves with different costs.
+/* ---- Profiler (v26, record v27). Two halves with different costs.
  *
  * The hardware counters are kept by the emulator all the time (a handful of adds on paths that
  * already do far more work) and handed over once per frame by SeExportPublishPerf, already
@@ -1639,13 +1640,23 @@ unsigned int SeExportCurrentFunction(int cpu)
 
 /* Hand over one completed frame's profile (emulate thread, once per frame). 'counters' are in
  * SePerfCounters.h order; the function arrays are parallel, hottest first. Serialized here into
- * the body of the v26 perf block so a reply only copies it. */
+ * the body of the v27 perf record so a reply only copies it. */
+static void SeWr64(unsigned char* p, unsigned long long v)
+{
+    SeWr32(p, (unsigned int)(v & 0xFFFFFFFFu));
+    SeWr32(p + 4, (unsigned int)((v >> 32) & 0xFFFFFFFFu));
+}
+
 void SeExportPublishPerf(const unsigned long long* counters, unsigned int count,
                          const unsigned int* fnKeys, const unsigned int* fnCycles,
-                         unsigned int fnCount, unsigned int fnOtherCycles)
+                         unsigned int fnCount, unsigned int fnOtherCycles,
+                         const SeExportPerfInfo* info)
 {
     unsigned char* p;
     unsigned int i, slot;
+    SeExportPerfInfo none;
+    memset(&none, 0, sizeof none);
+    if (!info) info = &none;
     if (count > SE_LIVE_PERF_MAX_COUNTERS) count = SE_LIVE_PERF_MAX_COUNTERS;
     if (fnCount > SE_LIVE_PERF_FN_MAX) fnCount = SE_LIVE_PERF_FN_MAX;
     if (!counters) count = 0;
@@ -1655,15 +1666,19 @@ void SeExportPublishPerf(const unsigned long long* counters, unsigned int count,
     if (sPerfSeq == 0) sPerfSeq = 1;   /* 0 means "no frame yet" on the wire */
     slot = sPerfSeq % SE_PERF_RING;
     p = sPerfBlk[slot];
-    SeWr32(p, sPerfSeq);                                  p += 4;
-    SeWr32(p, (unsigned int)SeAtLoad(&sProfApplied));     p += 4;
+    /* v27 record, field order frozen in SeLiveProtocol.h. */
+    SeWr64(p, sPerfSeq);                                  p += 8;   /* v27 Step 0: filled by F3 (64-bit server sequence) */
+    SeWr32(p, info->timelineId);                          p += 4;
+    SeWr64(p, info->frameNo);                             p += 8;
+    SeWr32(p, (info->valid & SE_PERF_VALID_MODE) ? info->mode
+                                                 : (unsigned int)SeAtLoad(&sProfApplied)); p += 4;
+    SeWr32(p, info->cacheMode);                           p += 4;
+    SeWr32(p, info->valid & SE_PERF_VALID_ALL);           p += 4;
+    SeWr32(p, info->satFlags);                            p += 4;
+    for (i = 0; i < 2; ++i) { SeWr64(p, info->otherNotAdmitted[i]); p += 8; }
+    for (i = 0; i < 2; ++i) { SeWr64(p, info->otherEvicted[i]);     p += 8; }
     SeWr32(p, count);                                     p += 4;
-    for (i = 0; i < count; ++i)
-    {
-        SeWr32(p, (unsigned int)(counters[i] & 0xFFFFFFFFu));
-        SeWr32(p + 4, (unsigned int)((counters[i] >> 32) & 0xFFFFFFFFu));
-        p += 8;
-    }
+    for (i = 0; i < count; ++i) { SeWr64(p, counters[i]); p += 8; }
     SeWr32(p, fnCount);                                   p += 4;
     for (i = 0; i < fnCount; ++i)
     {
@@ -2274,7 +2289,7 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, unsigned int* perfSe
             if (sWriteVdpByte)       caps |= SE_LIVE_CAP_VDP_POKE;
             if (SeAtLoad(&sGateSeen)) caps |= SE_LIVE_CAP_FRAME_GATE;
             if (sEmuSlotSave)        caps |= SE_LIVE_CAP_EMU_SAVE;
-            if (SeAtLoad(&sPerfWired)) caps |= SE_LIVE_CAP_PROFILER;
+            if (SeAtLoad(&sPerfWired)) caps |= SE_LIVE_CAP_PROFILER;   /* v27 Step 0: filled by F14 (from the first reply, before any sample) */
             if (sSetProfiler)        caps |= SE_LIVE_CAP_PROF_FUNCTIONS;
             SE_SLOCK();
             if (sStateCap && sLoadState) caps |= SE_LIVE_CAP_STATE_REWIND;   /* the worker sized a real state */
@@ -2476,13 +2491,13 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, unsigned int* perfSe
             }
         }
 
-        /* v26 trailing section: the profiler records this connection has not been sent yet,
+        /* v26/v27 trailing section: the profiler records this connection has not been sent yet,
          * oldest first. u32 count, then per record u32 length + the body SeExportPublishPerf
          * serialized. Copied out under the lock, sent outside it. */
         {
             unsigned char* out = perfOut;
-            unsigned char cntb[4];
-            unsigned int cnt = 0, k;
+            unsigned char cntb[28];
+            unsigned int cnt = 0, k, newest;
             SE_LOCK();
             /* A connection made mid-run starts with the newest frame only, not a stale backlog. */
             if (perfSent == 0 && sPerfSeq > 1) perfSent = sPerfSeq - 1;
@@ -2499,9 +2514,14 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, unsigned int* perfSe
                 ++cnt;
                 perfSent = k;
             }
+            newest = sPerfSeq;
             SE_UNLOCK();
+            /* v27 section header: count, newestSeq, lostFirst, lostLast. */
             SeWr32(cntb, cnt);
-            if (SeSend(cl, cntb, 4) != 0) return;
+            SeWr64(cntb + 4, newest);
+            SeWr64(cntb + 12, 0);   /* v27 Step 0: filled by F3 (lostFirst: the dropped range for this connection) */
+            SeWr64(cntb + 20, 0);   /* v27 Step 0: filled by F3 (lostLast) */
+            if (SeSend(cl, cntb, 28) != 0) return;
             if (out != perfOut && SeSend(cl, perfOut, (size_t)(out - perfOut)) != 0) return;
         }
     }

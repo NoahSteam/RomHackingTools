@@ -20,6 +20,7 @@
 #include "ByteQueue.h"
 #include "SaturnStateShared.h"
 #include "SeLiveProtocol.h"
+#include "SePerfCounters.h"
 #include "saturnexplorer/SeGuard.h"
 
 #if defined(_WIN32)
@@ -399,7 +400,7 @@ struct LiveState
     uint32_t              profFlags = 0;
     bool                  profDirty = false;
     std::deque<se_live_perf_frame> perf;
-    uint32_t              perfSeqSeen = 0;
+    uint64_t              perfSeqSeen = 0;
 };
 
 // The snapshot a capture on this thread is pinned to (between begin_capture and end_capture),
@@ -1208,17 +1209,22 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         outEmuSlots.valid = count != 0u;
     }
 
-    // v26: the profiler records of the emulated frames completed since this connection's last
-    // reply. Each record states its own length, so a newer server's extra counters or trailing
-    // fields are read and ignored rather than desynchronizing the stream; a count or length this
-    // protocol could never produce is a broken stream.
+    // v26 / v27: the profiler records of the emulated frames completed since this connection's
+    // last reply (layout: SeLiveProtocol.h, "Perf section"). Each record states its own length, so
+    // a newer server's extra counters or trailing fields are read and ignored rather than
+    // desynchronizing the stream; a count or length this protocol could never produce is a broken
+    // stream. A v26 server's records are presented with every v27-only field "not available".
     outPerf.clear();
     if (version >= SE_LIVE_MINVER_PROFILE)
     {
-        uint8_t cntb[4];
-        if (!ConnReadFull(c, cntb, 4)) return false;
-        const uint32_t records = Rd32LE(cntb);
+        const bool v27 = version >= SE_LIVE_MINVER_PERF27;
+        uint8_t hdrb[28];
+        if (!ConnReadFull(c, hdrb, v27 ? 28 : 4)) return false;
+        const uint32_t records = Rd32LE(hdrb);
         if (records > SE_LIVE_PERF_MAX_PER_REPLY) return false;
+        const uint64_t newestSeq = v27 ? Rd64LE(hdrb + 4) : 0;
+        const uint64_t gapFirst = v27 ? Rd64LE(hdrb + 12) : 0;
+        const uint64_t gapLast = v27 ? Rd64LE(hdrb + 20) : 0;
         std::vector<uint8_t> blk;
         for (uint32_t rec = 0; rec < records; ++rec)
         {
@@ -1234,11 +1240,38 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                 if (blk.size() - off < 4) return false;
                 v = Rd32LE(blk.data() + off); off += 4; return true;
             };
+            auto u64 = [&](uint64_t& v) -> bool
+            {
+                if (blk.size() - off < 8) return false;
+                v = Rd64LE(blk.data() + off); off += 8; return true;
+            };
             se_live_perf_frame f = {};
             uint32_t counters = 0, fns = 0;
-            if (!(u32(f.seq) && u32(f.flags) && u32(counters) &&
-                  counters <= SE_LIVE_PERF_MAX_COUNTERS && (blk.size() - off) / 8 >= counters))
-                continue;   // a record this client cannot read: skipped, the stream stays aligned
+            if (v27)
+            {
+                f.wire_version = 27;
+                if (!(u64(f.sample_seq) && u32(f.timeline_id) && u64(f.frame_no) && u32(f.mode) &&
+                      u32(f.cache_mode) && u32(f.valid) && u32(f.sat_flags) &&
+                      u64(f.other_not_admitted[0]) && u64(f.other_not_admitted[1]) &&
+                      u64(f.other_evicted[0]) && u64(f.other_evicted[1])))
+                    continue;   // a record this client cannot read: skipped, the stream stays aligned
+                f.valid &= SE_PERF_VALID_ALL;
+                f.seq = static_cast<uint32_t>(f.sample_seq);
+                f.flags = f.mode;
+                f.newest_seq = newestSeq;
+                // v27 Step 0: filled by F3 (a gap on a reply with no record to carry it is not kept yet)
+                if (rec == 0) { f.gap_first = gapFirst; f.gap_last = gapLast; }
+            }
+            else
+            {
+                f.wire_version = 26;
+                f.valid = SE_LIVE_PERF_V26_VDP1_ELAPSED;
+                if (!u32(f.seq) || !u32(f.flags)) continue;
+                f.sample_seq = f.seq;
+                f.mode = f.flags;
+            }
+            if (!(u32(counters) && counters <= SE_LIVE_PERF_MAX_COUNTERS && (blk.size() - off) / 8 >= counters))
+                continue;
             for (uint32_t i = 0; i < counters; ++i, off += 8)
                 if (i < SE_LIVE_PERF_COUNTERS) f.counters[i] = Rd64LE(blk.data() + off);
             f.counter_count = counters < SE_LIVE_PERF_COUNTERS ? counters : SE_LIVE_PERF_COUNTERS;
@@ -1251,7 +1284,12 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                 f.fn_cycles[i] = Rd32LE(blk.data() + off + 4);
             }
             f.fn_count = fns;
-            if (!u32(f.fn_other_cycles) || f.seq == 0u) continue;
+            if (!u32(f.fn_other_cycles) || f.sample_seq == 0u) continue;
+            // A counter the record is too short to carry is "not available" whatever the bits say.
+            if (f.counter_count <= SE_PERF_SSH2_ON_INTEGRATED) f.valid &= ~SE_PERF_VALID_SSH2_INT;
+            if (f.counter_count <= SE_PERF_VDP1_DMA_DISCARDED) f.valid &= ~SE_PERF_VALID_VDP1_WORK;
+            if (f.counter_count <= SE_PERF_M68K_IDLE_CYCLES)   f.valid &= ~SE_PERF_VALID_M68K_IDLE;
+            if (f.counter_count < SE_PERF_COUNT)               f.valid &= ~SE_PERF_VALID_BUS_X;
             outPerf.push_back(f);
         }
     }
@@ -1690,8 +1728,8 @@ void PollLoop(LiveState* st)
             if (firstOnConnection) st->perf.clear();   // the previous emulator's frames
             for (se_live_perf_frame& f : perf)
             {
-                if (f.seq == st->perfSeqSeen) continue;
-                st->perfSeqSeen = f.seq;
+                if (f.sample_seq == st->perfSeqSeen) continue;   // v27 Step 0: filled by F3 (wrap-aware ordering, gap ranges)
+                st->perfSeqSeen = f.sample_seq;
                 f.frame = static_cast<uint32_t>(frame);
                 st->perf.push_back(f);
             }

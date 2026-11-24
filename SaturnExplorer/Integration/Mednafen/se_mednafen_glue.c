@@ -36,7 +36,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-/* The profiler's per-frame totals (v26), in SePerfCounters.h order. The code apply.py injects
+/* The profiler's per-frame totals (v26, v27 layout), in SePerfCounters.h order. The code apply.py injects
  * into the ss core adds to these where the work happens; SeMdfnPerfEndFrame hands them over and
  * zeroes them. Defined here, outside SE_MEDNAFEN_WIRED, because the injected code references it
  * in every build. Written by the emulate thread only. */
@@ -872,7 +872,19 @@ static void SeMdfnPerfEndFrame(void)
                 ++n;
             }
         }
-        SeExportPublishPerf(SeSsPerfC, SE_PERF_COUNT, keys, cycles, n, other);
+        {
+            /* v27 Step 0: the record carries these fields but nothing produces them yet, so
+             * 'valid' stays 0 and a client shows them as "not available" rather than as zero. */
+            SeExportPerfInfo info;
+            memset(&info, 0, sizeof info);
+            /* v27 Step 0: filled by F3  (info.timelineId, info.frameNo; SE_PERF_VALID_IDENTITY) */
+            /* v27 Step 0: filled by F6  (info.mode latched for the frame; SE_PERF_VALID_MODE) */
+            /* v27 Step 0: filled by F7  (info.otherNotAdmitted / otherEvicted / satFlags; SE_PERF_VALID_OTHER) */
+            /* v27 Step 0: filled by F8  (info.cacheMode; SE_PERF_VALID_CACHE) */
+            /* v27 Step 0: filled by F2 (counter 54), F4 (55, 56), F5 (57), F8 (58..61): set the
+             * matching SE_PERF_VALID_* bit together with the producer */
+            SeExportPublishPerf(SeSsPerfC, SE_PERF_COUNT, keys, cycles, n, other, &info);
+        }
     }
     /* The idle totals restart from zero with the counters, so the samplers' copies must too. */
     sProfLastIdle[0] = sProfLastIdle[1] = 0;

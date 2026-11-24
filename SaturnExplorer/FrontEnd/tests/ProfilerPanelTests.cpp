@@ -103,11 +103,12 @@ struct Rig
             PerfFrame f;
             f.seq = i;
             f.frame = 1000 + i;
+            f.wireVersion = 26;   // the old elapsed VDP1 figure, under its old label
             f.c[SE_PERF_FRAME_CYCLES] = 400000;
             f.c[SE_PERF_SH2_SLEEP] = 160000;                 // master 60% busy
             f.c[SE_PERF_SSH2_ON_CYCLES] = 400000;
             f.c[SE_PERF_SH2_SLEEP + 1] = 300000;             // slave 25% busy
-            f.c[SE_PERF_VDP1_DRAW_CYCLES] = 120000;          // 30%
+            f.c[SE_PERF_V26_VDP1_ELAPSED] = 120000;      // 30%
             f.c[SE_PERF_VDP1_COMMANDS] = 250;
             f.c[SE_PERF_VDP1_DRAW_STARTS] = 1;
             f.c[SE_PERF_M68K_TOTAL_CYCLES] = 1000;
@@ -153,6 +154,56 @@ void TestFrameTab()
 
     ClickAt(harness, Where("Clear"));
     CHECK(rig.clears == 1);
+}
+
+// What the user sees for a v26 server (old figure, old label) against a v27 one whose producer has
+// not filled the VDP1 command-work counter yet (a label of its own, and "not available" rather
+// than a measured 0%), and then once the producer sets its bit.
+void TestVdp1Presentation()
+{
+    {
+        Rig rig;   // its frames are v26
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        CHECK(Drawn("VDP1 drawing"));
+        CHECK(!Drawn("VDP1 command work"));
+        CHECK(!Drawn("not available"));
+    }
+    {
+        Rig rig;
+        rig.model.Clear();
+        for (uint32_t i = 1; i <= 3; ++i)
+        {
+            PerfFrame f;
+            f.seq = i; f.sampleSeq = i; f.wireVersion = 27; f.valid = 0;
+            f.c[SE_PERF_FRAME_CYCLES] = 400000;
+            f.c[SE_PERF_SSH2_ON_CYCLES] = 400000;
+            rig.model.Push(f);
+        }
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        CHECK(Drawn("VDP1 command work"));
+        CHECK(Drawn("not available"));
+        CHECK(!Drawn("VDP1 drawing"));
+    }
+    {
+        Rig rig;
+        rig.model.Clear();
+        for (uint32_t i = 1; i <= 3; ++i)
+        {
+            PerfFrame f;
+            f.seq = i; f.sampleSeq = i; f.wireVersion = 27; f.valid = SE_PERF_VALID_VDP1_WORK;
+            f.c[SE_PERF_FRAME_CYCLES] = 400000;
+            f.c[SE_PERF_SSH2_ON_CYCLES] = 400000;
+            f.c[SE_PERF_VDP1_WORK_CYCLES] = 100000;   // 25%
+            rig.model.Push(f);
+        }
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        CHECK(Drawn("VDP1 command work"));
+        CHECK(Drawn("25%"));
+        CHECK(!Drawn("not available"));
+    }
 }
 
 void TestBusTab()
@@ -248,6 +299,7 @@ void TestFunctionsTab()
 int main()
 {
     TestFrameTab();
+    TestVdp1Presentation();
     TestBusTab();
     TestMemoryTab();
     TestFunctionsTab();

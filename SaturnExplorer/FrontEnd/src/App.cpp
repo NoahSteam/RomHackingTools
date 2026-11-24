@@ -4396,6 +4396,17 @@ void App::UpdateProfiler()
                 PerfFrame f;
                 f.seq = in.seq;
                 f.frame = in.frame;
+                f.wireVersion = in.wire_version;
+                f.valid = in.valid;
+                f.sampleSeq = in.sample_seq;
+                f.timelineId = in.timeline_id;
+                f.frameNo = in.frame_no;
+                f.mode = in.mode;
+                f.cacheMode = in.cache_mode;
+                f.satFlags = in.sat_flags;
+                for (int k = 0; k < 2; ++k) { f.otherNotAdmitted[k] = in.other_not_admitted[k]; f.otherEvicted[k] = in.other_evicted[k]; }
+                f.gapFirst = in.gap_first;
+                f.gapLast = in.gap_last;
                 f.functions = (in.flags & SE_LIVE_PROF_FUNCTIONS) != 0;
                 const uint32_t counters = std::min<uint32_t>(in.counter_count, SE_PERF_COUNT);
                 for (uint32_t k = 0; k < counters; ++k) f.c[k] = in.counters[k];

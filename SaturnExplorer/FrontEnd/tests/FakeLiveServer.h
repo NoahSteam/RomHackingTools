@@ -13,6 +13,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <arpa/inet.h>
@@ -21,9 +22,29 @@
 #include <unistd.h>
 
 #include "SeLiveProtocol.h"
+#include "SePerfCounters.h"
 
 namespace fakelive
 {
+
+// One profiler record the scripted server puts in a reply. Emitted in the v26 form when the reply's
+// version is 26 (only seq, flags, counters, functions, remainder are used) and in the v27 form
+// otherwise (SeLiveProtocol.h, "Perf section").
+struct PerfRec
+{
+    uint64_t sampleSeq = 1;       // v26: the low 32 bits go on the wire
+    uint32_t flags = 0;           // v26 flags / v27 mode
+    uint32_t timelineId = 0;
+    uint64_t frameNo = 0;
+    uint32_t cacheMode = 0;
+    uint32_t valid = 0;           // SE_PERF_VALID_*
+    uint32_t satFlags = 0;
+    uint64_t otherNotAdmitted[2] = {};
+    uint64_t otherEvicted[2] = {};
+    std::vector<uint64_t> counters;                          // SePerfCounters.h order
+    std::vector<std::pair<uint32_t, uint32_t>> fns;          // key, cycles
+    uint32_t fnOther = 0;
+};
 
 // What one reply says. Everything not listed is zero-filled (the driver accepts empty regions).
 struct Reply
@@ -45,11 +66,50 @@ struct Reply
     uint32_t vdp2StructLen = SE_LIVE_VDP2_STRUCT_LEN;   // 0 = section unavailable
     uint32_t vdp1RegsLen = SE_LIVE_VDP1_REGS_LEN;
     std::vector<uint8_t> cram;   // CRAM section bytes (empty = none)
+    std::vector<PerfRec> perf;   // profiler records (v26+)
+    uint64_t perfNewest = 0;     // v27 section header: newestSeq
+    uint64_t perfLostFirst = 0;  // v27 section header: lost range
+    uint64_t perfLostLast = 0;
 };
 
 inline void Put32(std::vector<uint8_t>& o, uint32_t v)
 {
     for (int i = 0; i < 4; ++i) o.push_back(static_cast<uint8_t>((v >> (8 * i)) & 0xFF));
+}
+
+inline void Put64(std::vector<uint8_t>& o, uint64_t v)
+{
+    Put32(o, static_cast<uint32_t>(v & 0xFFFFFFFFu));
+    Put32(o, static_cast<uint32_t>(v >> 32));
+}
+
+inline void BuildPerf(std::vector<uint8_t>& o, const Reply& r)
+{
+    const bool v27 = r.version >= 27;
+    Put32(o, static_cast<uint32_t>(r.perf.size()));
+    if (v27) { Put64(o, r.perfNewest); Put64(o, r.perfLostFirst); Put64(o, r.perfLostLast); }
+    for (const PerfRec& p : r.perf)
+    {
+        std::vector<uint8_t> b;
+        if (v27)
+        {
+            Put64(b, p.sampleSeq); Put32(b, p.timelineId); Put64(b, p.frameNo);
+            Put32(b, p.flags); Put32(b, p.cacheMode); Put32(b, p.valid); Put32(b, p.satFlags);
+            for (int i = 0; i < 2; ++i) Put64(b, p.otherNotAdmitted[i]);
+            for (int i = 0; i < 2; ++i) Put64(b, p.otherEvicted[i]);
+        }
+        else
+        {
+            Put32(b, static_cast<uint32_t>(p.sampleSeq)); Put32(b, p.flags);
+        }
+        Put32(b, static_cast<uint32_t>(p.counters.size()));
+        for (uint64_t c : p.counters) Put64(b, c);
+        Put32(b, static_cast<uint32_t>(p.fns.size()));
+        for (const auto& fn : p.fns) { Put32(b, fn.first); Put32(b, fn.second); }
+        Put32(b, p.fnOther);
+        Put32(o, static_cast<uint32_t>(b.size()));
+        o.insert(o.end(), b.begin(), b.end());
+    }
 }
 
 inline std::vector<uint8_t> Build(const Reply& r)
@@ -98,7 +158,7 @@ inline std::vector<uint8_t> Build(const Reply& r)
     if (r.version >= 15) Put32(o, 0);                            // CD block
     if (r.version >= 16) Put32(o, 0);                            // savestate blocks
     if (r.version >= 17) Put32(o, 0);                            // emulator slots
-    if (r.version >= 26) Put32(o, 0);                            // perf block (none)
+    if (r.version >= 26) BuildPerf(o, r);                        // perf section
     return o;
 }
 

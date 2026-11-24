@@ -1,7 +1,10 @@
 # Profiler
 
 Inspected revision: the change that introduced it (protocol v26), on top of
-`6491e73`. Behavior below is verified from source and from the tests listed; the
+`6491e73`, plus the v27 wire/counter freeze (Step 0 of [ProfilerFixPlan](../../ProfilerFixPlan.md)).
+**v27 status:** the record layout and counter indices below are frozen; most of the new fields are
+declared and carried but not yet produced (each is marked "not available" on the wire by a clear
+bit in the record's `valid` word) until the plan items F2 to F8 fill them. Behavior below is verified from source and from the tests listed; the
 emulator-side numbers have **not** been checked against a running game (see Coverage limits).
 
 ## Purpose and responsibilities
@@ -29,9 +32,9 @@ transport (see [State sources](StateSources.md)).
 | Counter indices and the function key (single source of truth for emulator, wire and client) | [SePerfCounters.h](../../../Integration/Common/SePerfCounters.h): `SE_PERF_*`, `SE_PERF_DEV_*`, `SE_PERF_FN_*` |
 | Emulator instrumentation | [apply.py](../../../Integration/Mednafen/apply.py): `PERF_DECL`, `PERF_BUS_HELPER`, the `*_PERF_*` / `SH2_*` anchors, `process_profiler`; `SsDbgCpuTimestamp`, `SsDbgSetProfileActive` in `SS_ACCESSORS` |
 | Frame hand-over and function sampling | [se_mednafen_glue.c](../../../Integration/Mednafen/se_mednafen_glue.c): `SeSsPerfC`, `SeMdfnPerfEndFrame`, `SeMdfnProfSample`, `SeMdfnSetProfiler` |
-| Server | [se_export.c](../../../Integration/Common/se_export.c): `SeExportPublishPerf`, `SeExportSetProfilerHook`, `SeExportCurrentFunction`, `SePublishProfiler`, the v26 trailing block |
-| Wire contract | [SeLiveProtocol.h](../../../Integration/Common/SeLiveProtocol.h): `SE_LIVE_VERB_PROFILE`, `SE_LIVE_PROF_FUNCTIONS`, `SE_LIVE_CAP_PROFILER`, `SE_LIVE_CAP_PROF_FUNCTIONS`, "Perf block (v26+)" |
-| Client | [LiveDriver.cpp](../../../Drivers/Live/src/LiveDriver.cpp): `LivePerf`, the v26 parse in `ReadSnapshot`; [LiveDriver.h](../../../Drivers/Live/src/LiveDriver.h): `se_live_perf_frame`, `se_live_drain_perf`, `se_live_set_profiler` |
+| Server | [se_export.c](../../../Integration/Common/se_export.c): `SeExportPublishPerf`, `SeExportSetProfilerHook`, `SeExportCurrentFunction`, `SePublishProfiler`, the v27 perf record |
+| Wire contract | [SeLiveProtocol.h](../../../Integration/Common/SeLiveProtocol.h): `SE_LIVE_VERB_PROFILE`, `SE_LIVE_PROF_FUNCTIONS`, `SE_LIVE_CAP_PROFILER`, `SE_LIVE_CAP_PROF_FUNCTIONS`, "Perf section" |
+| Client | [LiveDriver.cpp](../../../Drivers/Live/src/LiveDriver.cpp): `LivePerf`, the v26 and v27 parse in `ReadSnapshot`; [LiveDriver.h](../../../Drivers/Live/src/LiveDriver.h): `se_live_perf_frame`, `se_live_drain_perf`, `se_live_set_profiler` |
 | Model (UI-free) | [ProfilerModel.h](../../../FrontEnd/src/Debug/ProfilerModel.h): `PerfFrame`, `ComputePerfShares`, `ComputeBusTotals`, `ProfilerModel`, `MemoryPoolTracker` |
 | Panel | [ProfilerPanel.cpp](../../../FrontEnd/src/ProfilerPanel.cpp): `ProfilerPanel::Draw`, `Host` |
 | App glue | [App.cpp](../../../FrontEnd/src/App.cpp): `App::UpdateProfiler`, `App::DrawProfiler`; registered in `App::PanelList` (Windows → Debugger → Profiler, hidden by default) |
@@ -57,11 +60,11 @@ The patch adds one 64-bit array, `SeSsPerfC`, and increments it where the work h
 
 | Counter | Where it is counted |
 |---|---|
-| Frame length, slave-on time | End of `Emulate()` (`end_ts`; the slave's timestamp reads `SS_EVENT_DISABLED_TS` while SMPC holds it off) |
+| Frame length, slave-on time (v26 semantics; F2 integrates real on/off edges) | End of `Emulate()` (`end_ts`; the slave's timestamp reads `SS_EVENT_DISABLED_TS` while SMPC holds it off) |
 | SH-2 sleep | The `SLEEP` op's idle step and `PSEUDO_STANDBY`, per CPU (`which`) |
 | SH-2 bus stall | `PSEUDO_DMABURST` (DMA burst or external halt), per CPU |
 | SH-2 bus accesses per device | `BSC_BusRead` / `BSC_BusWrite`, classified by a 64 KiB lookup table |
-| VDP1 draw cycles / commands / starts / unfinished draws | `VDP1::Update`, the command fetch, `StartDrawing`, the frame-buffer-swap abort |
+| VDP1 commands / starts / unfinished draws | the command fetch, `StartDrawing`, the frame-buffer-swap abort. The elapsed draw-cycle increment (index 6) is gone in v27; command-work cycles are added by F4 |
 | SCU DSP cycles | The instruction loop of `SCU_UpdateDSP` |
 | 68000 cycles (executed / total) | Around `SoundCPU.Run` in `SOUND_Update`; a slice that starts stopped or halted is not "executed" |
 | SCU DMA transfers and bytes per level and route | `StartDMATransfer`, with the byte count the transfer was started with |
@@ -76,6 +79,48 @@ been sent yet, oldest first (at most `SE_LIVE_PERF_MAX_PER_REPLY`). The records 
 beside the snapshot, not part of it: a client that is served a newer snapshot and skips one
 still receives every frame's counters, and a paused or halted emulator sends none. The
 driver additionally drops a `seq` it has already queued.
+
+### Wire record and counter layout (v27, frozen)
+
+The authoritative text is the comment at "Perf section" in
+[SeLiveProtocol.h](../../../Integration/Common/SeLiveProtocol.h) and the v26 to v27 table in
+[SePerfCounters.h](../../../Integration/Common/SePerfCounters.h); this is the summary.
+
+Section (all little-endian): `u32 count, u64 newestSeq, u64 lostFirst, u64 lostLast`, then per
+record `u32 length` and
+
+| Field | Notes |
+|---|---|
+| `u64 sampleSeq` | orders publications in one exporter run, never 0 |
+| `u32 timelineId`, `u64 frameNo` | frame identity (F3); valid with `SE_PERF_VALID_IDENTITY` |
+| `u32 mode` | attribution mode latched for the frame (F6); `SE_PERF_VALID_MODE` |
+| `u32 cacheMode` | `SE_PERF_CACHE_*` (F8); `SE_PERF_VALID_CACHE` |
+| `u32 valid` | `SE_PERF_VALID_*`: which v27-only fields the producer really filled |
+| `u32 satFlags`, `u64 otherNotAdmitted[2]`, `u64 otherEvicted[2]` | per-CPU Other split (F7); `SE_PERF_VALID_OTHER` |
+| `u32 counterCount`, `u64 counters[]` | 62 from a v27 server |
+| `u32 fnCount`, `{u32 key, u32 cycles}[]`, `u32 fnOtherCycles` | as in v26 |
+
+The lost range is the `sampleSeq` span the server dropped for this connection just before the
+first record of the reply (`lostLast + 1` equals that record's `sampleSeq`); 0, 0 means none.
+
+Counters: indices 0 to 53 keep their v26 meaning. Index 5 (slave on-cycles) keeps its index and
+meaning (only its producer is corrected, F2). **Index 6 (v26: elapsed VDP1 drawing) is retired:
+a v27 producer writes 0 and it is never reused.** Appended: 54 slave on-cycles integrated (F2),
+55 VDP1 command-work cycles, 56 VDP1 budget discarded by DMA (F4), 57 68000 idle cycles (F5),
+58 to 61 A-bus dummy and unmapped bus buckets, `[xdev * 2 + write]` (F8).
+
+Version handling: the driver reads both forms by the negotiated server version. A v26 record is
+presented with `se_live_perf_frame.valid == SE_LIVE_PERF_V26_VDP1_ELAPSED` only: counter 6 is
+the old figure, shown under its old label ("VDP1 drawing"), and identity, mode, cache mode, the
+Other split and every v27-only counter are "not available". A v27 record is shown as "VDP1
+command work", and as "not available" until `SE_PERF_VALID_VDP1_WORK` is set. A v26 client
+rejects a v27 server at its version check (a v25 client already rejects v26): update emulator and
+app together.
+
+Capability bits (documented in `SeLiveProtocol.h`; the first-reply guarantee is F14):
+`SE_LIVE_CAP_PROFILER` means counters are produced, and a counter-capable build advertises it
+before its first sample; `SE_LIVE_CAP_PROF_FUNCTIONS` means the per-instruction hook exists, so a
+build without debugger support advertises only the first.
 
 ### Function attribution (opt-in)
 

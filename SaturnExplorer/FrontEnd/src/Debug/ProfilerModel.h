@@ -22,6 +22,23 @@ struct PerfFrame
 {
     uint32_t seq = 0;          // the emulator's own frame count (see se_live_perf_frame)
     uint32_t frame = 0;        // snapshot frame number it arrived with
+    // ---- v27 (Step 0). 'valid' is SE_PERF_VALID_* | SE_LIVE_PERF_V26_VDP1_ELAPSED (0x80000000):
+    // a field whose bit is clear is "not available", not a measured zero. wireVersion 0 (a
+    // hand-built frame) is treated like a v26 record.
+    uint32_t wireVersion = 0;
+    uint32_t valid = 0;
+    uint64_t sampleSeq = 0;
+    uint32_t timelineId = 0;   // SE_PERF_VALID_IDENTITY
+    uint64_t frameNo = 0;      // SE_PERF_VALID_IDENTITY
+    uint32_t mode = 0;         // SE_PERF_VALID_MODE
+    uint32_t cacheMode = 0;    // SE_PERF_VALID_CACHE
+    uint32_t satFlags = 0;     // SE_PERF_VALID_OTHER
+    uint64_t otherNotAdmitted[2] = {};   // SE_PERF_VALID_OTHER
+    uint64_t otherEvicted[2] = {};       // SE_PERF_VALID_OTHER
+    uint64_t gapFirst = 0, gapLast = 0;  // lost sampleSeq range before this record (0, 0 = none)
+    bool Has(uint32_t bit) const { return (valid & bit) != 0; }
+    // True for a v26 server's record: counters[6] is the old elapsed VDP1 figure.
+    bool LegacyVdp1() const { return wireVersion < 27; }
     bool     functions = false;   // function attribution was on for this frame
     uint64_t c[SE_PERF_COUNT] = {};
     struct Fn { uint32_t key; uint32_t cycles; };
@@ -42,7 +59,8 @@ struct PerfShares
 {
     double   frameCycles = 0;     // SH-2 clock cycles in the frame; 0 = no data
     CpuShare cpu[2];              // master, slave
-    double   vdp1Draw = 0;        // fraction of the frame VDP1 was drawing
+    double   vdp1Draw = 0;        // v26 servers only: fraction of the frame VDP1 was drawing (elapsed)
+    double   vdp1Work = 0;        // v27: fraction of the frame in VDP1 command work (needs SE_PERF_VALID_VDP1_WORK)
     double   dsp = 0;             // fraction of the frame the SCU DSP was executing
     double   m68k = 0;            // fraction of ITS OWN clock the 68000 was executing
     double   vdp1DrawsPerFrame = 0;
