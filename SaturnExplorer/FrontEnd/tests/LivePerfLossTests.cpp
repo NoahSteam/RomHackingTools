@@ -546,7 +546,11 @@ uint32_t FirstReplyCaps(bool counters, bool debugger)
         se_data_source ds = {};
         while (!stop.load() && se_live_open(kSock, &ds) != SE_OK) std::this_thread::yield();
         if (stop.load()) return;
-        for (int i = 0; i < 100000 && !stop.load() && samples.load() < 100; ++i)
+        // Bounded by time, not by a count of yields: a slow transport (TCP) can need longer than any
+        // fixed number of spins before its first reply exists, and a run with no first-reply sample
+        // would assert nothing. The first sample is still taken the instant the version is known.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+        while (!stop.load() && samples.load() < 100 && std::chrono::steady_clock::now() < deadline)
         {
             if (se_live_server_version(&ds) != 0)
             {
@@ -563,7 +567,7 @@ uint32_t FirstReplyCaps(bool counters, bool debugger)
     if (debugger) SeExportSetProfilerHook(FakeSetProfiler);
     if (counters) SeExportSetPerfCapable(1);
     CHECK(SeExportStart() == 0);
-    for (int i = 0; i < 4000 && samples.load() < 100; ++i) SleepMs(2);
+    for (int i = 0; i < 10000 && samples.load() < 100; ++i) SleepMs(2);   // up to 20 s, as the racer
     stop = true;
     racer.join();
     SeExportDeinit();
@@ -790,6 +794,57 @@ void TestIdentityEndToEnd()
     for (int i = 0; i < 200; ++i) { SeExportApplyInstalls(); SleepMs(2); }
     SeExportDeinit();
 }
+// F3 review (B): a halt delivers a snapshot; it never consumes the identity of the frame it is in.
+void TestFirstHaltKeepsIdentity()
+{
+    CHECK(SeExportPrepare() == 0);
+    SeExportSetPerfCapable(1);
+    CHECK(SeExportStart() == 0);
+    se_data_source ds = {};
+    CHECK(OpenRetry(&ds));
+    for (int i = 0; i < 2000 && se_live_server_version(&ds) == 0; ++i) SleepMs(5);   // a client is attached
+
+    // The very first frame of the run (sFrameNo == 0), halted three times before any normal snapshot.
+    SeExportGateFrame();
+    unsigned tl0 = 0, tl1 = 0, tl2 = 0;
+    unsigned long long before = 0, afterHalt = 0, perHalt[3] = {};
+    SeExportFrameIdentity(&tl0, &before);
+    CHECK(before == 1);
+    for (unsigned h = 0; h < 3; ++h)
+    {
+        SeExportNotifyStop(0, 0x06001000u + h * 2);
+        SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, nullptr, nullptr);
+        SeExportFrameIdentity(&tl1, &perHalt[h]);
+    }
+    afterHalt = perHalt[2];
+    CHECK(perHalt[0] == 1 && perHalt[1] == 1 && perHalt[2] == 1);   // unchanged by each halt
+    CHECK(tl1 == tl0);
+    {
+        SeExportPerfInfo info;
+        std::memset(&info, 0, sizeof info);
+        SeExportFrameIdentity(&info.timelineId, &info.frameNo);
+        info.valid = SE_PERF_VALID_IDENTITY;
+        unsigned long long c[SE_PERF_COUNT] = {};
+        SeExportPublishPerf(c, SE_PERF_COUNT, nullptr, nullptr, 0, 0, &info);
+        CHECK(info.frameNo == 1);
+    }
+    SeExportEndFrame();   // commits the frame: 1, once
+    unsigned long long next = 0;
+    SeExportFrameIdentity(&tl2, &next);
+    CHECK(afterHalt == before && next == 2);   // only one frame completed: the next one is 2, not 3
+    SeExportGateFrame();
+    unsigned long long reserved = 0;
+    SeExportFrameIdentity(&tl2, &reserved);
+    CHECK(reserved == 2);
+    SeExportEndFrame();
+    SeExportFrameIdentity(&tl2, &next);
+    CHECK(next == 3);
+
+    ds.close(ds.user);
+    for (int i = 0; i < 200; ++i) { SeExportApplyInstalls(); SleepMs(2); }
+    SeExportDeinit();
+}
 }  // namespace
 
 int main()
@@ -798,6 +853,7 @@ int main()
     TestDriverGaps();
     TestFirstReplyCapabilities();
     TestIdentityEndToEnd();
+    TestFirstHaltKeepsIdentity();
     if (gFailures) { std::printf("%d check(s) failed\n", gFailures); return 1; }
     std::printf("LivePerfLossTests passed\n");
     return 0;

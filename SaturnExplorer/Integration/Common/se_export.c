@@ -1986,15 +1986,13 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
      * GET with nothing newer serves the latest slot, which is this one. */
     if (SeAtLoad(&sPaused) && SE_STOP_REASON(dst->stop) != SE_LIVE_STOP_NONE)
     {
-        if (sFrameNo != 0)
-            sRingFrame[sRingWrite] = sFrameNo;   /* a halt: a moment inside the current frame */
-        else
-        {
-            /* The very first halt: slot 0 means "empty", so it takes number 1 and the frame now
-             * running is renamed 2, as the halt consumed the number before the frame completed. */
-            sRingFrame[sRingWrite] = ++sFrameNo;
-            SeIdReserve();
-        }
+        /* The ring number of a halt snapshot is a DELIVERY number, not a frame identity: it never
+         * reserves, renames or commits the emulated frame (sIdFrame / sFrameNo), so the frame the
+         * halt happened in reports the same identity before the halt, after it and in its record.
+         * Slot value 0 means "empty", so a halt before any frame has completed (sFrameNo == 0) is
+         * delivered as 1, the number the frame it is inside will commit; a client that has been
+         * served that halt is later re-served the latest slot (nothing newer), not skipped. */
+        sRingFrame[sRingWrite] = sFrameNo != 0 ? sFrameNo : 1;
     }
     else
     {
