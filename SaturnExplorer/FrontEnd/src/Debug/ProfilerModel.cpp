@@ -522,6 +522,7 @@ FunctionWindow ProfilerModel::Functions(size_t window, FnCpu cpu) const
 void MemoryPoolTracker::Reset()
 {
     mPools.clear();
+    ++mRun;
 }
 
 void MemoryPoolTracker::SetSource(uint64_t sourceId, uint64_t instance, uint32_t timelineId, uint64_t frame)
@@ -536,6 +537,34 @@ void MemoryPoolTracker::SetSource(uint64_t sourceId, uint64_t instance, uint32_t
     mInstance = instance;
     mTimeline = timelineId;
     mFrame = frame;
+}
+
+bool MemoryPoolTracker::BeginSample(const PoolCaptureSource& s)
+{
+    const bool verified = s.captureTimeline != 0;
+    const uint32_t timeline = verified ? s.captureTimeline : s.streamTimeline;
+    const bool changedTimeline = mHaveSource && timeline != mTimeline;
+    SetSource(s.sourceId, s.instance, timeline, s.frame);
+    if (s.live && !verified)
+    {
+        if (changedTimeline)
+        {
+            // The perf stream moved to another timeline; this capture's own is not stated, so it can
+            // still be a slot of the old one. Wait the ring out rather than guess.
+            mSettleLeft = kUnverifiedSettleCaptures;
+            mLastRevision = s.captureRevision;
+        }
+        else if (mSettleLeft > 0 && s.captureRevision != 0 && s.captureRevision != mLastRevision)
+        {
+            --mSettleLeft;
+            mLastRevision = s.captureRevision;
+        }
+    }
+    else
+    {
+        mSettleLeft = 0;   // a capture that states its own timeline, or a file / scrub, needs no waiting
+    }
+    return mSettleLeft == 0;
 }
 
 MemoryPoolTracker::Tracked& MemoryPoolTracker::Slot(size_t index)

@@ -390,12 +390,36 @@ allocator, which the hardware knows nothing about. Sampling runs only while the 
 every tenth UI frame.
 
 A sample only means something against the previous sample of the **same capture**, so
-`App::UpdateProfiler` calls `MemoryPoolTracker::SetSource(sourceId, emulator instance, timelineId, frame)`
-before each sample, and the tracker re-primes (forgets every pool, so the first sample afterwards reports
+`App::UpdateProfiler` calls `MemoryPoolTracker::BeginSample(PoolCaptureSource)` before each sample (which
+wraps the older `SetSource(sourceId, emulator instance, timelineId, frame)`), and the tracker re-primes (forgets every pool, so the first sample afterwards reports
 zero changed blocks) when the displayed source moves (another file or savestate, or a scrubbed frame:
 `SourceId` moves on every scrub step), the emulator process changes (`AdoptNewEmulatorInstance` also
-resets it), the machine-state timeline changes (taken from the newest profiler frame that has an
-identity), or a scrubbed frame number goes **backwards**. Scrubbing back therefore shows what the older
+resets it), the machine-state timeline **of the capture** changes, or a scrubbed frame number goes
+**backwards**. Each change starts a new run (`Run()`, the Frame tab's `SplitHistoryRuns` counterpart): the
+pools are forgotten and the first sample of the run reports nothing changed, so there is never a delta
+across timelines.
+
+*Whose timeline.* The bytes sampled are the snapshot the UI thread last captured; the perf records are
+drained from a separate queue into the same replies, and a GET serves the oldest slot the connection has not
+been served. So after a load a lagging client holds old-timeline bytes next to new-timeline perf records (and
+a native load, `SeExportNotifyStateLoaded`, leaves the old timeline's slots in the ring), and the stream's
+timeline is not the capture's. The exporter therefore stamps each ring slot with `sTimelineId` when it is
+written (`SeFrame.timeline`) and every reply carries its served slot's stamp in the control block at +56
+(`SE_LIVE_CONTROL_TIMELINE_OFFSET`, length 56 -> 60). The driver keeps it on the snapshot
+(`LiveSnapshot.timeline`, part of `SameContent`); `se_live_captured_identity` reports it for the snapshot the
+calling thread captured, and `LivePoolSource` (LiveCapture.h) builds the tracker's input from it. **No version
+bump**: the control block's length is in the header and a v27 client accepts up to 64 bytes and reads the first
+56, so an old client still works with a new server (a bump would make it refuse the server), and a new client
+reading a 56-byte block reports the timeline as unknown. Reusing what was already on the wire was not
+possible: the frame number is reused across timelines, the restore counters only cover SE loads (a native load
+keeps the ring), and the perf section is a separate queue.
+
+*Unknown timeline (an emulator without the field).* The tracker falls back to the stream's timeline; a change
+of it re-primes and then nothing is sampled (the tab says so) until `kUnverifiedSettleCaptures` = 5 distinct
+captures (by content revision) have followed -- the ring holds 4 slots, so no more than 4 old ones can still be
+delivered. Nothing is guessed, at the cost of an empty tab while a paused emulator republishes one capture.
+
+Scrubbing back shows what the older
 frame holds with nothing flagged, not a "change" the machine never made; any scrub step is a source change
 and re-primes too. VDP1 VRAM in a capture is the copy taken when VDP1 last finished drawing (the draw-end
 latch, `SsDbgVdp1Latch`), and live VRAM only until the first draw-end after boot or a state load, so a
@@ -492,6 +516,13 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
   does not; A leaves (and is reset abruptly) while B stays; both request and one leaves; repeated
   connect-enable-leave; the TCP listener's lifetime. Plus the driver against a scripted server:
   the setting, "off" included, is restated on every reconnect.
+- [MemoryTimelineTests.cpp](../../../FrontEnd/tests/MemoryTimelineTests.cpp) (the real exporter and driver
+  with native loads between two polls; every ingested sample is judged against the timeline its bytes really
+  are of; `SE_TEST_LEGACY_WIRING=1` runs the pre-fix wiring and must fail),
+  [LiveCaptureTimelineCompatTests.cpp](../../../FrontEnd/tests/LiveCaptureTimelineCompatTests.cpp) (a 60-, 56-
+  and 64-byte control block), and the tracker cases in `ProfilerModelTests.cpp`. An old (previous-revision)
+  driver was also run against this exporter: `LiveProfilerTests`, `LiveProfilerModeTests` and
+  `LiveSnapshotDeliveryTests` pass.
 - [MemoryRoundTripTests.cpp](../../../FrontEnd/tests/MemoryRoundTripTests.cpp) (profiler
   section): the real glue, in lockstep with the client; counters handed over and zeroed per
   frame with consecutive producer-stamped frame numbers, a rewind starting a new timeline, and

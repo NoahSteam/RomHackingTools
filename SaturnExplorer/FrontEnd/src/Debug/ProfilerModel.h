@@ -322,9 +322,33 @@ struct PoolUsage
     double ChangedFraction() const { return cells.empty() ? 0.0 : (double)changedBlocks / cells.size(); }
 };
 
+// Where one Memory-tab sample's bytes come from, and what is known about the machine-state
+// timeline they were captured on. The bytes of a live capture and the profiler's perf stream reach
+// the client by different routes (the perf records are drained from their own queue; the capture
+// is a ring slot a lagging GET may still be serving), so the stream's newest timeline is NOT the
+// capture's: after a state load the stream can already be on the new timeline while the capture is
+// still an old one.
+struct PoolCaptureSource
+{
+    uint64_t sourceId = 0;        // the displayed capture (ContextBackend::SourceId)
+    uint64_t instance = 0;        // the emulator process
+    uint64_t frame = 0;           // displayed frame number of a scrub, 0 = unknown
+    bool     live = false;        // the bytes are the live emulator's newest capture (not a file or a scrub)
+    uint32_t captureTimeline = 0; // timeline the SERVER stamped on the capture's bytes, 0 = not stated
+    uint64_t captureRevision = 0; // content revision of the capture (moves when a different snapshot is shown)
+    uint32_t streamTimeline = 0;  // newest perf record's timeline (a different route: only a fallback)
+};
+
 class MemoryPoolTracker
 {
 public:
+    // A live capture whose timeline the server does not state (an emulator older than the field)
+    // may be a slot of the timeline a load abandoned: the server's ring holds this many slots, so
+    // after a timeline change seen on the perf stream, the capture is trustworthy only once
+    // kRingDepth + 1 DISTINCT captures have followed -- a ring of kRingDepth slots cannot hold more
+    // old ones than that. Until then nothing is sampled (and nothing is guessed).
+    static constexpr uint32_t kUnverifiedSettleCaptures = 5;
+
     // Blocks per pool are capped so every pool draws as a map of comparable resolution.
     static constexpr uint32_t kMaxBlocks = 1024;
     static constexpr uint32_t kMinBlockSize = 16;
@@ -339,6 +363,20 @@ public:
     // instance: the emulator process; timelineId: the machine-state timeline (rewind, load);
     // frame: the displayed frame number, 0 = unknown.
     void SetSource(uint64_t sourceId, uint64_t instance, uint32_t timelineId, uint64_t frame);
+    // The live-capture-aware form of SetSource. Re-primes on a change of the CAPTURE's own timeline
+    // when the server states one, so the tracker never compares bytes of one timeline with bytes of
+    // another and never files a capture under an identity that is not its own. When the capture does
+    // not state its timeline it falls back to the perf stream's, and a change of that timeline
+    // re-primes and then withholds sampling until the capture is provably past it (see
+    // kUnverifiedSettleCaptures). Returns whether the caller may Sample now.
+    bool BeginSample(const PoolCaptureSource& source);
+    // Captures still to wait out after a timeline change the capture could not confirm (0 = sampling).
+    uint32_t SettlingCaptures() const { return mSettleLeft; }
+    // How many times the tracker has started over: the Memory tab's "run" of consecutive samples,
+    // the counterpart of the Frame tab's history runs (SplitHistoryRuns). Moves on every re-prime.
+    uint32_t Run() const { return mRun; }
+    // The timeline the samples since the last re-prime are filed under.
+    uint32_t Timeline() const { return mTimeline; }
     // Feed one pool's current bytes. 'index' is the caller's stable slot for the pool. The first
     // sample of a pool has nothing to compare with, so it reports no changed blocks.
     void Sample(size_t index, const char* name, uint32_t base, const uint8_t* data, uint32_t size);
@@ -360,6 +398,9 @@ private:
     bool     mHaveSource = false;
     uint64_t mSourceId = 0, mInstance = 0, mFrame = 0;
     uint32_t mTimeline = 0;
+    uint32_t mRun = 0;
+    uint32_t mSettleLeft = 0;       // distinct captures to wait for after an unconfirmed timeline change
+    uint64_t mLastRevision = 0;     // the capture last counted toward mSettleLeft
 };
 
 }  // namespace sfe

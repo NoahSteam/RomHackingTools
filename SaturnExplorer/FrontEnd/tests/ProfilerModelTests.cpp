@@ -687,6 +687,62 @@ void TestPoolRePrime()
     CHECK(t.Pool(0).changedBlocks == 256);
 }
 
+// F10 follow-up: a live capture that states its own timeline is judged by THAT, not by the perf stream.
+void TestPoolCaptureTimeline()
+{
+    std::vector<uint8_t> a(4096, 1), b(4096, 2);
+    for (size_t i = 0; i < a.size(); ++i) { a[i] = static_cast<uint8_t>(i * 3); b[i] = static_cast<uint8_t>(i * 5 + 9); }
+    MemoryPoolTracker t;
+    PoolCaptureSource s;
+    s.sourceId = 1; s.instance = 1; s.live = true; s.captureTimeline = 1; s.streamTimeline = 1; s.captureRevision = 1;
+    CHECK(t.BeginSample(s));
+    t.Sample(0, "High work RAM", 0x06000000u, a.data(), 4096);
+    const uint32_t run1 = t.Run();
+    // The stream is already on timeline 2, the capture still timeline 1: same capture, no re-prime.
+    s.streamTimeline = 2; s.captureRevision = 2;
+    CHECK(t.BeginSample(s) && t.Timeline() == 1 && t.Run() == run1);
+    t.Sample(0, "High work RAM", 0x06000000u, a.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 0);
+    // The capture reaches timeline 2: a new run, nothing changed against the other timeline's bytes.
+    s.captureTimeline = 2; s.captureRevision = 3;
+    CHECK(t.BeginSample(s) && t.Timeline() == 2 && t.Run() == run1 + 1 && t.Count() == 0);
+    t.Sample(0, "High work RAM", 0x06000000u, b.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 0);
+    // And back to a change within the timeline being reported as one.
+    s.captureRevision = 4;
+    CHECK(t.BeginSample(s));
+    t.Sample(0, "High work RAM", 0x06000000u, a.data(), 4096);
+    CHECK(t.Pool(0).changedBlocks == 256);
+}
+
+// A server that does not stamp its captures: a timeline change seen on the stream re-primes and then
+// nothing is sampled until the capture is provably past the server's ring.
+void TestPoolUnstampedCapture()
+{
+    MemoryPoolTracker t;
+    PoolCaptureSource s;
+    s.sourceId = 1; s.instance = 1; s.live = true; s.captureTimeline = 0; s.streamTimeline = 1; s.captureRevision = 10;
+    CHECK(t.BeginSample(s) && t.SettlingCaptures() == 0);
+    std::vector<uint8_t> a(4096, 7);
+    t.Sample(0, "High work RAM", 0x06000000u, a.data(), 4096);
+    s.streamTimeline = 2;   // a load, seen on the stream
+    CHECK(!t.BeginSample(s) && t.Count() == 0 && t.SettlingCaptures() == MemoryPoolTracker::kUnverifiedSettleCaptures);
+    CHECK(!t.BeginSample(s) && t.SettlingCaptures() == MemoryPoolTracker::kUnverifiedSettleCaptures);   // the same capture again counts for nothing
+    for (uint32_t i = 1; i <= MemoryPoolTracker::kUnverifiedSettleCaptures; ++i)
+    {
+        s.captureRevision = 10 + i;
+        const bool ok = t.BeginSample(s);
+        CHECK(ok == (i == MemoryPoolTracker::kUnverifiedSettleCaptures));
+    }
+    CHECK(t.SettlingCaptures() == 0);
+    // Another change while settled starts the wait again; a file or scrub never waits.
+    s.streamTimeline = 3;
+    CHECK(!t.BeginSample(s));
+    PoolCaptureSource f;
+    f.sourceId = 9; f.instance = 1; f.live = false; f.streamTimeline = 4;
+    CHECK(t.BeginSample(f) && t.SettlingCaptures() == 0);
+}
+
 // Scrubbing: forward steps within one source keep comparing (frame 10 -> 11), scrubbing backward
 // is a jump (11 -> 5) and re-primes; an unknown frame (0) never counts as backward.
 void TestPoolScrubBackward()
@@ -727,6 +783,8 @@ int main()
     TestUnobserved();
     TestPoolRePrime();
     TestPoolScrubBackward();
+    TestPoolCaptureTimeline();
+    TestPoolUnstampedCapture();
     if (gFailures) { std::printf("%d check(s) failed\n", gFailures); return 1; }
     std::printf("ProfilerModelTests passed\n");
     return 0;

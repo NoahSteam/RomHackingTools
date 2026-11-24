@@ -60,6 +60,8 @@ struct Reply
     uint32_t paused = 0;
     uint32_t restoreDone = 0;
     uint32_t restoreFailed = 0;
+    uint32_t ctlLen = 0;         // control block length; 0 = the length of the reply's version (44 from v21)
+    uint32_t snapshotTimeline = 0;   // control block +56 (present only when ctlLen >= 60)
     uint8_t  fill = 0;           // every byte of VDP1 and VDP2 VRAM carries this value
     uint32_t vramLen = 16;
     uint32_t events = 0;         // tracepoint events to attach (zero-filled records)
@@ -118,7 +120,7 @@ inline std::vector<uint8_t> Build(const Reply& r)
     o.push_back(SE_LIVE_MAGIC0); o.push_back(SE_LIVE_MAGIC1);
     o.push_back(SE_LIVE_MAGIC2); o.push_back(SE_LIVE_MAGIC3);
     Put32(o, r.version);
-    const uint32_t ct = r.version >= 21 ? 44u : (r.version >= 20 ? 40u : (r.version >= 19 ? 32u : 24u));
+    const uint32_t ct = r.ctlLen ? r.ctlLen : r.version >= 21 ? 44u : (r.version >= 20 ? 40u : (r.version >= 19 ? 32u : 24u));
     const uint32_t vs = r.vdp2StructLen;
     const uint32_t vr = r.vdp1RegsLen;
     // Section lengths: v1 v2 cram vdp2struct vdp1regs wramLow wramHigh [fb] ctl [sh2]
@@ -145,6 +147,8 @@ inline std::vector<uint8_t> Build(const Reply& r)
         Put32(o, r.stepPending);
     }
     if (ct >= 44) Put32(o, r.stopSeq);
+    for (uint32_t at = 44; at < ct; at += 4)   // pokes applied/dropped, caps (zero), then the timeline at +56
+        Put32(o, at == SE_LIVE_CONTROL_TIMELINE_OFFSET ? r.snapshotTimeline : 0u);
     if (r.version >= 8)
     {
         Put32(o, r.events);

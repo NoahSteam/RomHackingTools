@@ -90,6 +90,10 @@ struct LiveSnapshot
     // that belong to the VRAM it read -- rather than whatever the emulator reached since.
     uint32_t             generation = 0;     // the connection generation this frame belongs to
     uint64_t             frame = 0;          // frame number of the frame served
+    // The machine-state timeline the memory above was captured on, as the SERVER stamped the slot
+    // (control block +56). 0 = the server did not say (it predates the field, or sent 0). A load
+    // starts a new timeline and reuses frame numbers, so (frame) alone does not identify a capture.
+    uint32_t             timeline = 0;
     bool                 paused = false;
     StopInfo             stop;
     LiveCallStacks       callStacks;         // v9+; empty on an older server
@@ -128,7 +132,7 @@ static bool SameContent(const LiveSnapshot& a, const LiveSnapshot& b)
     if (!(a.valid == b.valid && a.generation == b.generation && a.frame == b.frame &&
           a.paused == b.paused && a.latestFrame == b.latestFrame &&
           a.stepPending == b.stepPending && a.hasStepInfo == b.hasStepInfo &&
-          a.hasCdStatus == b.hasCdStatus && a.restoreDone == b.restoreDone &&
+          a.hasCdStatus == b.hasCdStatus && a.timeline == b.timeline && a.restoreDone == b.restoreDone &&
           a.restoreFailed == b.restoreFailed && a.hasRestoreInfo == b.hasRestoreInfo &&
           a.stop.reason == b.stop.reason && a.stop.cpu == b.stop.cpu && a.stop.pc == b.stop.pc &&
           a.stop.seq == b.stop.seq && a.stop.hasSeq == b.stop.hasSeq &&
@@ -1477,6 +1481,8 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         snap.serverCaps   = Rd32LE(ctl.data() + 52);
         snap.hasPokeInfo  = true;
     }
+    if (ct >= SE_LIVE_CONTROL_TIMELINE_OFFSET + 4u)
+        snap.timeline = Rd32LE(ctl.data() + SE_LIVE_CONTROL_TIMELINE_OFFSET);   // 0 stays "unknown"
 
     // SH-2 state (v5+): master then slave, each a 92-byte sh2regs_struct.
     for (int cpu = 0; cpu < 2; ++cpu)
@@ -2387,6 +2393,24 @@ extern "C" uint32_t se_live_captured_generation(const se_data_source* ds)
         }
         if (gLastCaptured.id == st->id && gLastCaptured.snap) { return gLastCaptured.snap->generation; }
         return 0u;
+    });
+}
+
+extern "C" int se_live_captured_identity(const se_data_source* ds, uint32_t* timeline, uint64_t* frame)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return 0; }
+    return se::Guard(0, [&]() -> int
+    {
+        LiveState* st = St(ds->user);
+        // The snapshot the calling thread is capturing or last captured: the one whose memory the
+        // caller is reading, never the newest publish.
+        const LiveSnapshot* snap = nullptr;
+        if (gPinned.id == st->id && gPinned.depth > 0) { snap = gPinned.snap.get(); }
+        else if (gLastCaptured.id == st->id) { snap = gLastCaptured.snap.get(); }
+        if (!snap || !snap->valid) { return 0; }
+        if (frame) *frame = snap->frame;
+        if (timeline) *timeline = snap->timeline;
+        return snap->timeline != 0 ? 1 : 0;
     });
 }
 

@@ -52,6 +52,17 @@ uint32_t se_live_connection_generation(const se_data_source* ds);
  * accepted only while this equals the connection generation. */
 uint32_t se_live_captured_generation(const se_data_source* ds);
 
+/* The identity the SERVER stamped on the snapshot the CALLING THREAD last captured (or is
+ * capturing): the machine-state timeline its memory belongs to, and its frame number. Returns 1
+ * and fills both when the server states a timeline for that snapshot (control block +56, sent by
+ * servers built after the field was added; the field is within the v27 control block's tolerated
+ * length, so no version bump). Returns 0 when the capture's timeline is unknown -- an older
+ * server, no capture yet, or a source that is not live -- and then 'frame' is still filled when
+ * a capture exists, 'timeline' is 0. A client that pairs the capture's bytes with an identity must
+ * use THIS one: the perf stream's identity is delivered separately and can belong to a newer
+ * timeline than a lagging capture. */
+int se_live_captured_identity(const se_data_source* ds, uint32_t* timeline, uint64_t* frame);
+
 /* The content revision of the snapshot the CALLING THREAD last captured (the one being captured,
  * inside a begin/end capture pair), or 0 before its first capture or for a source that is not
  * live. Two captures of the same source that report the same non-zero value hold byte-identical
