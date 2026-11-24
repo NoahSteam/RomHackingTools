@@ -842,6 +842,16 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
     add_test(NAME SaturnExplorerProfilerModelTests COMMAND SaturnExplorerProfilerModelTests)
 
+    # The F4 / F5 / F8 counters as the model presents them (unclamped command work, idle-based 68000
+    # share, bus buckets that are no device).
+    add_executable(SaturnExplorerProfilerHookModelTests
+        FrontEnd/tests/ProfilerHookModelTests.cpp
+        FrontEnd/src/Debug/ProfilerModel.cpp
+    )
+    target_include_directories(SaturnExplorerProfilerHookModelTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    add_test(NAME SaturnExplorerProfilerHookModelTests COMMAND SaturnExplorerProfilerHookModelTests)
+
     add_executable(SaturnExplorerProfilerPanelTests
         FrontEnd/tests/ProfilerPanelTests.cpp
         FrontEnd/src/ProfilerPanel.cpp
@@ -1531,6 +1541,17 @@ if(BUILD_TESTING)
         add_test(NAME SaturnExplorerBuildInfo
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_build_info.py
                          ${CMAKE_COMMAND} ${CMAKE_CURRENT_SOURCE_DIR})
+        # The profiler hooks apply.py injects, as far as they can be checked without a Mednafen tree:
+        # retirement of an older apply.py's fences, exact revert of appended blocks, the F4 debit macro
+        # and the F8 address table compiled. check_migration.py / check_component.py (Integration/Mednafen)
+        # run the same hooks against the real source and need the checkout, so they are scripts.
+        find_program(SE_CXX_FOR_HOOKTEST NAMES g++ c++ clang++)
+        if(SE_CXX_FOR_HOOKTEST)
+            add_test(NAME SaturnExplorerMednafenProfilerHooks
+                     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_apply_hooks.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
+                             ${CMAKE_CURRENT_BINARY_DIR}/profiler_hooks_test ${SE_CXX_FOR_HOOKTEST})
+        endif()
         add_test(NAME SaturnExplorerMednafenHaltOrdering
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_halt_ordering.py
                          ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py)

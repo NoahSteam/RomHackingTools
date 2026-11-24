@@ -60,7 +60,10 @@ struct PerfShares
     double   frameCycles = 0;     // SH-2 clock cycles in the frame; 0 = no data
     CpuShare cpu[2];              // master, slave
     double   vdp1Draw = 0;        // v26 servers only: fraction of the frame VDP1 was drawing (elapsed)
-    double   vdp1Work = 0;        // v27: fraction of the frame in VDP1 command work (needs SE_PERF_VALID_VDP1_WORK)
+    double   vdp1Work = 0;        // v27: fraction of the frame in VDP1 command work (needs SE_PERF_VALID_VDP1_WORK).
+                                  // NOT clamped: instant-draw mode does a whole table's work in no time, so it can pass 1.
+    bool     vdp1WorkOverFrame = false;   // vdp1Work > 1: more command work than the frame held (instant draw)
+    double   vdp1DmaDiscarded = 0;        // v27: draw budget a DMA discarded, as a fraction of the frame (budget, not time)
     double   dsp = 0;             // fraction of the frame the SCU DSP was executing
     double   m68k = 0;            // fraction of ITS OWN clock the 68000 was executing
     double   vdp1DrawsPerFrame = 0;

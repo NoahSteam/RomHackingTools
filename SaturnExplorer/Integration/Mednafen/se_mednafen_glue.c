@@ -881,8 +881,10 @@ static void SeMdfnPerfEndFrame(void)
             /* v27 Step 0: filled by F6  (info.mode latched for the frame; SE_PERF_VALID_MODE) */
             /* v27 Step 0: filled by F7  (info.otherNotAdmitted / otherEvicted / satFlags; SE_PERF_VALID_OTHER) */
             /* v27 Step 0: filled by F8  (info.cacheMode; SE_PERF_VALID_CACHE) */
-            /* v27 Step 0: filled by F2 (counter 54), F4 (55, 56), F5 (57), F8 (58..61): set the
-             * matching SE_PERF_VALID_* bit together with the producer */
+            /* F4 (counters 55, 56), F5 (57) and F8 (58..61) are produced by the injected hooks in
+             * every patched build (apply.py fails on a missing anchor), so their bits go up with
+             * them. v27 Step 0: F2 (counter 54) sets SE_PERF_VALID_SSH2_INT with its producer. */
+            info.valid |= SE_PERF_VALID_VDP1_WORK;
             SeExportPublishPerf(SeSsPerfC, SE_PERF_COUNT, keys, cycles, n, other, &info);
         }
     }

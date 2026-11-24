@@ -989,11 +989,47 @@ SCU_DSP_PERF_HOOK = "  SeSsPerfC[SE_PERF_DSP_CYCLES] += 2;   /* Saturn Explorer 
 # vdp1.cpp. Update() advances VDP1 by the cycles since it last ran; while a draw is in progress
 # those are drawing cycles.
 VDP1_PERF_FWD = "/* SE_VDP1_PERF_FWD */\n" + PERF_DECL
-VDP1_PERF_UPDATE_ANCHOR = r'(int32 cycles = timestamp - lastts;\s*\n\s*lastts = timestamp;[ \t]*\n)'
-# v27 Step 0: index 6 (elapsed VDP1 drawing) is retired and no longer incremented, so this hook
-# is gone from process_profiler (VDP1_PERF_UPDATE_ANCHOR is kept only so F4 can reuse it).
-# v27 Step 0: filled by F4 -- the command-work counter SE_PERF_VDP1_WORK_CYCLES goes at the
-# command-budget debit, and the DMA-discarded budget counter beside it.
+# Index 6 (elapsed VDP1 drawing, v26) is retired: Update() no longer adds the elapsed interval
+# anywhere; the VDP1 figure is the command-work counter below.
+# F4 (v27): VDP1 command work, counted where the command budget is DEBITED (VDP1_EAT_CLOCKS), not
+# as elapsed time. The original macro is
+#     CycleCounter -= (n);  case __COUNTER__:  if(CycleCounter <= 0) { ...; goto Breakout; }
+# and a resumed draw re-enters at the `case` AFTER the debit, so the debit runs once per command phase
+# however many Update() calls the phase spans. We re-define the macro right after the original (an
+# insertion; revert deletes it and the original is back) with the debit routed through a function so
+# `n` -- which at one use is a call that draws -- is still evaluated exactly once. The counter is
+# bumped inside that function, i.e. before the `case` label. A local would be wrong: the label sits
+# inside the macro's block, and jumping past an initialised local into it is ill-formed.
+VDP1_EAT_ANCHOR = (r'(#define VDP1_EAT_CLOCKS\(n\)[ \t]*\\\n'
+                   r'[ \t]*\{[ \t]*\\\n'
+                   r'[ \t]*CycleCounter -= \(n\);[ \t]*\\\n'
+                   r'[ \t]*case __COUNTER__:[ \t]*\\\n'
+                   r'[ \t]*if\(CycleCounter <= 0\)[ \t]*\\\n'
+                   r'[ \t]*\{[ \t]*\\\n'
+                   r'[ \t]*CommandPhase = __COUNTER__ - CommandPhaseBias - 1;[ \t]*\\\n'
+                   r'[ \t]*goto Breakout;[ \t]*\\\n'
+                   r'[ \t]*\}[ \t]*\\\n'
+                   r'[ \t]*\}[ \t]*\\\n[ \t]*\n)')
+VDP1_EAT_HOOK = (
+    "/* Saturn Explorer profiler (F4): the same macro, with the debit counted as command work. */\n"
+    "static INLINE int32 SeSsVdp1Debit(int32 n) { SeSsPerfC[SE_PERF_VDP1_WORK_CYCLES] += (unsigned long long)(n > 0 ? n : 0); return n; }\n"
+    "#undef VDP1_EAT_CLOCKS\n"
+    "#define VDP1_EAT_CLOCKS(n)\t\t\t\t\t\t\t\t\\\n"
+    "\t\t{\t\t\t\t\t\t\t\t\\\n"
+    "\t\t CycleCounter -= SeSsVdp1Debit(n);\t\t\t\t\t\\\n"
+    "\t\t case __COUNTER__:\t\t\t\t\t\t\t\\\n"
+    "\t\t if(CycleCounter <= 0)\t\t\t\t\t\t\\\n"
+    "\t\t {\t\t\t\t\t\t\t\t\\\n"
+    "\t\t  CommandPhase = __COUNTER__ - CommandPhaseBias - 1;\t\t\t\t\\\n"
+    "\t\t  goto Breakout;\t\t\t\t\t\t\\\n"
+    "\t\t }\t\t\t\t\t\t\t\t\\\n"
+    "\t\t}\n"
+)
+# The active draw budget a DMA discards: SCU_CheckVDP1HaltKludge() says a DMA is writing VDP1, and
+# Update() then throws the positive budget away instead of spending it. Counted only while a draw is
+# active (an idle VDP1 has nothing to lose), and as budget, not as elapsed hold time.
+VDP1_PERF_DMA_ANCHOR = r'(//puts\("Kludge"\);[ \t]*\n)'
+VDP1_PERF_DMA_HOOK = "  if(DrawingActive) SeSsPerfC[SE_PERF_VDP1_DMA_DISCARDED] += (unsigned long long)CycleCounter;   /* > 0 here */\n"
 VDP1_PERF_CMD_ANCHOR = r'(memcpy\(CommandData, &VRAM\[CurCommandAddr\], sizeof\(CommandData\)\);[ \t]*\n)'
 VDP1_PERF_CMD_HOOK = "   ++SeSsPerfC[SE_PERF_VDP1_COMMANDS];\n"
 VDP1_PERF_START_ANCHOR = r'(static void StartDrawing\(void\)\s*\{[ \t]*\n)'
@@ -1220,9 +1256,18 @@ def apply_anchored(text, anchor, code, key):
 
 
 def apply_append(text, code, key):
-    """Append fenced `code` at EOF."""
-    return upsert(text, code, key,
-                  lambda t, block: t + ("" if t.endswith("\n") else "\n") + "\n" + block + "\n")
+    """Append fenced `code` at EOF. The blank line that separates it from the file's own last line
+    is INSIDE the fence (the block starts with an empty line), so --revert, which deletes whole
+    fences, restores the file byte for byte instead of leaving a stray blank line behind."""
+    # A block an older apply.py appended has its separator OUTSIDE the fence; move it inside so this
+    # tree reverts exactly too.
+    for m in FENCE_RE.finditer(text):
+        if key in m.group(0):
+            if not m.group(0).startswith(BEGIN + "\n\n") and text[max(0, m.start() - 2):m.start()] == "\n\n":
+                text = text[:m.start() - 1] + text[m.start():]
+            break
+    return upsert(text, "\n" + code, key,
+                  lambda t, block: t + ("" if t.endswith("\n") else "\n") + block + "\n")
 
 
 def apply_prepend(text, code, key):
@@ -1300,10 +1345,50 @@ def process_anchored(src_dir, fname, title, edits, do_write, prepend=None):
     return notes
 
 
+# Fences an EARLIER apply.py (v26, 4b6cd9e) inserted that this one no longer wants. upsert() finds a
+# fence by key and leaves it alone ("ok (already)"), so a tree that was patched once and is patched
+# again incrementally (Integration/install.py keeps the checkout) would keep the stale text; for the
+# VDP1 one that is a compile error (SE_PERF_VDP1_DRAW_CYCLES no longer exists). Each entry is
+# (file, substring that identifies the fence and no fence we still write). Removed before any hook is
+# applied. A rename of a key is a retirement of the old key plus a new key.
+#   vdp1.cpp  SE_PERF_VDP1_DRAW_CYCLES  index 6, elapsed drawing -- retired in v27, never aliased
+RETIRED_FENCES = [
+    ("vdp1.cpp", "SE_PERF_VDP1_DRAW_CYCLES"),
+]
+
+
+def retire_fences_text(text, key):
+    """Remove every fenced block containing `key`. Returns (text, count)."""
+    pat = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
+    n = 0
+    def drop(m):
+        nonlocal n
+        if key in m.group(0):
+            n += 1
+            return ""
+        return m.group(0)
+    return pat.sub(drop, text), n
+
+
+def process_retired(src_dir, do_write):
+    notes = []
+    for fname, key in RETIRED_FENCES:
+        path = os.path.join(src_dir, fname)
+        if not os.path.isfile(path):
+            continue
+        text = open(path, encoding="utf-8", errors="surrogateescape").read()
+        new, n = retire_fences_text(text, key)
+        if n:
+            notes.append(f"  - retired     {fname}: {n} obsolete block(s) containing {key}")
+            if do_write:
+                open(path, "w", encoding="utf-8", errors="surrogateescape").write(new)
+    return ["retired v26 hooks:"] + notes if notes else []
+
+
 def process_profiler(src_dir, do_write):
     """The profiler's counters (v26 hooks; v27 layout, see SePerfCounters.h): see PERF_DECL. A miss here costs one figure in the Profiler
     panel, which then reads zero -- it is reported like any other miss so it is not shipped unnoticed."""
-    notes = []
+    notes = process_retired(src_dir, do_write)
     notes += process_anchored(src_dir, "sh7095.inc", "profiler: bus accesses", [
         (SH2_BUSWRITE_ANCHOR, SH2_BUSWRITE_HOOK, "SE_PERF_BUS_WRITE"),
         (SH2_BUSREAD_ANCHOR, SH2_BUSREAD_HOOK, "SE_PERF_BUS_READ"),
@@ -1321,6 +1406,8 @@ def process_profiler(src_dir, do_write):
         (VDP1_PERF_CMD_ANCHOR, VDP1_PERF_CMD_HOOK, "SE_PERF_VDP1_COMMANDS"),
         (VDP1_PERF_START_ANCHOR, VDP1_PERF_START_HOOK, "SE_PERF_VDP1_DRAW_STARTS"),
         (VDP1_PERF_ABORT_ANCHOR, VDP1_PERF_ABORT_HOOK, "SE_PERF_FBSWAP_ABORT"),
+        (VDP1_EAT_ANCHOR, VDP1_EAT_HOOK, "SeSsVdp1Debit"),
+        (VDP1_PERF_DMA_ANCHOR, VDP1_PERF_DMA_HOOK, "SE_PERF_VDP1_DMA_DISCARDED"),
     ], do_write, prepend=(VDP1_PERF_FWD, "SE_VDP1_PERF_FWD"))
     notes += process_anchored(src_dir, "sound.cpp", "profiler: 68000 time", [
         (SOUND_PERF_PRE_ANCHOR, SOUND_PERF_PRE_HOOK, "se_perf_idle ="),

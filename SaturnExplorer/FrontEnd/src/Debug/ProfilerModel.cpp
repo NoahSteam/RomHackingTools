@@ -41,8 +41,11 @@ PerfShares ComputePerfShares(const uint64_t c[SE_PERF_COUNT], double frames)
                          static_cast<double>(c[SE_PERF_SH2_SLEEP + 1]),
                          static_cast<double>(c[SE_PERF_SH2_STALL + 1]));
     out.vdp1Draw = Clamp01(static_cast<double>(c[SE_PERF_V26_VDP1_ELAPSED]) / frame);
-    // v27 Step 0: clamp and presentation filled by F4 (values above 100% are allowed there)
-    out.vdp1Work = Clamp01(static_cast<double>(c[SE_PERF_VDP1_WORK_CYCLES]) / frame);
+    // F4: command work is not a share of elapsed time. Instant-draw mode (and a table the VDP1 was
+    // slowed down on) can exceed the frame, and clamping would hide exactly that.
+    out.vdp1Work = static_cast<double>(c[SE_PERF_VDP1_WORK_CYCLES]) / frame;
+    out.vdp1WorkOverFrame = out.vdp1Work > 1.0;
+    out.vdp1DmaDiscarded = static_cast<double>(c[SE_PERF_VDP1_DMA_DISCARDED]) / frame;
     out.dsp = Clamp01(static_cast<double>(c[SE_PERF_DSP_CYCLES]) / frame);
     const double m68kTotal = static_cast<double>(c[SE_PERF_M68K_TOTAL_CYCLES]);
     out.m68k = m68kTotal > 0.0 ? Clamp01(static_cast<double>(c[SE_PERF_M68K_CYCLES]) / m68kTotal) : 0.0;
