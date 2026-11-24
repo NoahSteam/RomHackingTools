@@ -434,6 +434,77 @@ static unsigned int sCallOverflow[2];
 static unsigned char sOwnKnown[2];
 static unsigned int sOwnTrust[2];
 
+/* Function extents for unconditional jumps (F9 follow-up). Per CPU, from OBSERVED evidence only:
+ *   entries   every address a call (bsr / bsrf / jsr) was seen to enter, sorted; an entry is never
+ *             evicted, and when the table is full a new one is simply not recorded (a jump to it is
+ *             then raw, never named);
+ *   hi        per entry, the furthest PC executed while that function was the owner, kept across
+ *             invocations. It starts at the entry and only grows, one instruction presentation at a time
+ *             (a larger step is not a function's straight-line code and extends nothing).
+ * Both are dropped with the stack (reset / load / disable), because they describe the code that ran there.
+ * The current owner's hi is cached (sHiFn / sHi) and written back when the owner changes. */
+#define SE_OWN_ENTRY_CAP   1024u
+#define SE_OWN_HI_STEP     0x400u    /* the largest forward step in the PC that still extends the extent */
+#define SE_OWN_FWD_WINDOW  0x1000u   /* how far past hi a jump out of a still-live function is believed (bra's own reach) */
+static unsigned int sEntryAddr[2][SE_OWN_ENTRY_CAP];
+static unsigned int sEntryHi[2][SE_OWN_ENTRY_CAP];
+static unsigned int sEntryCount[2];
+static unsigned int sHiFn[2], sHi[2];
+
+/* Index of the first entry >= addr (binary search). */
+static unsigned int SeEntryLower(int c, unsigned int addr)
+{
+    unsigned int lo = 0, hi = sEntryCount[c];
+    while (lo < hi)
+    {
+        const unsigned int mid = lo + (hi - lo) / 2u;
+        if (sEntryAddr[c][mid] < addr) lo = mid + 1u; else hi = mid;
+    }
+    return lo;
+}
+static int SeEntryIsKnown(int c, unsigned int addr)
+{
+    const unsigned int i = SeEntryLower(c, addr);
+    return i < sEntryCount[c] && sEntryAddr[c][i] == addr;
+}
+static void SeEntryAdd(int c, unsigned int addr)
+{
+    unsigned int i;
+    if (!addr || sEntryCount[c] >= SE_OWN_ENTRY_CAP) return;
+    i = SeEntryLower(c, addr);
+    if (i < sEntryCount[c] && sEntryAddr[c][i] == addr) return;
+    memmove(&sEntryAddr[c][i + 1], &sEntryAddr[c][i], (sEntryCount[c] - i) * sizeof sEntryAddr[c][0]);
+    memmove(&sEntryHi[c][i + 1], &sEntryHi[c][i], (sEntryCount[c] - i) * sizeof sEntryHi[c][0]);
+    sEntryAddr[c][i] = addr;
+    sEntryHi[c][i] = addr;
+    ++sEntryCount[c];
+}
+static void SeHiFlush(int c)
+{
+    if (sHiFn[c])
+    {
+        const unsigned int i = SeEntryLower(c, sHiFn[c]);
+        if (i < sEntryCount[c] && sEntryAddr[c][i] == sHiFn[c] && sHi[c] > sEntryHi[c][i]) sEntryHi[c][i] = sHi[c];
+    }
+}
+static void SeHiSelect(int c, unsigned int fn)
+{
+    unsigned int i;
+    SeHiFlush(c);
+    sHiFn[c] = fn;
+    sHi[c] = fn;
+    i = SeEntryLower(c, fn);
+    if (i < sEntryCount[c] && sEntryAddr[c][i] == fn) sHi[c] = sEntryHi[c][i];
+}
+/* The furthest PC executed under 'fn' as owner (fn itself when nothing more is known). */
+static unsigned int SeHiOf(int c, unsigned int fn)
+{
+    unsigned int i;
+    if (sHiFn[c] == fn) return sHi[c];
+    i = SeEntryLower(c, fn);
+    return (i < sEntryCount[c] && sEntryAddr[c][i] == fn) ? sEntryHi[c][i] : fn;
+}
+
 /* ---- Breakpoint hooks (v5+). se_export stays free of Yabause headers: apply.py
  * wires these to Yabause's SH2 breakpoint API. SeAddExecBp(cpu, addr) installs one
  * execution breakpoint; SeClearBps() removes all. Both may be NULL (breakpoints
@@ -1743,6 +1814,7 @@ static void SePushCallFrame(int cpu, unsigned int kind, unsigned int callSite,
 {
     int c = cpu ? 1 : 0;
     SE_LOCK();
+    if (kind == SE_FRAME_CALL) SeEntryAdd(c, func);   /* an observed call: func is where a function starts */
     if (sCallDepth[c] < SE_CALLSTACK_CAP)
     {
         SeCallFrame* f = &sCallStack[c][sCallDepth[c]];
@@ -1853,6 +1925,72 @@ void SeExportOwnershipInvalidate(int cpu, int lostObservation)
     sOwnKnown[c] = 0;
     if (lostObservation) ++sOwnTrust[c];
     SE_UNLOCK();
+}
+
+/* One instruction of 'cpu' at 'pc' is about to run (emulate thread only, like SeExportCurrentFunction, and
+ * only while attribution is on): while ownership is known it was executed by the owner, so the owner's
+ * extent grows to include it. */
+void SeExportNoteExecuted(int cpu, unsigned int pc)
+{
+    const int c = cpu ? 1 : 0;
+    const unsigned int depth = sCallDepth[c];
+    unsigned int fn;
+    if (!depth || sCallOverflow[c] || !sOwnKnown[c]) return;
+    fn = sCallStack[c][depth - 1].func;
+    if (!fn) return;
+    if (fn != sHiFn[c]) SeHiSelect(c, fn);
+    if (pc > sHi[c] && pc - sHi[c] <= SE_OWN_HI_STEP) sHi[c] = pc;
+}
+
+/* An unconditional jump (bra, jmp @Rn, braf Rn) has COMPLETED: 'landing' is the first PC presented after
+ * its delay slot, which was charged to the jumper like any delay slot. What it says about ownership, only
+ * while ownership is known and the innermost frame is a call frame whose function is E:
+ *   1. landing == E, or E < landing <= hi(E) (the furthest PC already executed while E was the owner):
+ *      the function's own code. Ownership kept.
+ *   2. landing is a KNOWN ENTRY (an address an observed call entered on this CPU): a tail call. The frame
+ *      is not pushed and not popped; its function becomes the landing. Its return address, SP and the
+ *      frames below stay, so the callee's rts is matched against the same frame and lands on the original
+ *      caller exactly as the callee of a call from that caller would. Nothing is guessed: the landing is
+ *      where a function was observed to begin.
+ *   3. otherwise the jump leaves ground that has never been shown to be E's. It is believed to stay inside
+ *      E only when the registers at the landing show E still in its body (SP is not the SP the call saw, or
+ *      PR is not the call's return address: a tail call is made after the epilogue has restored both), the
+ *      landing is a forward move of at most SE_OWN_FWD_WINDOW past hi(E), and no known entry lies in
+ *      (E, landing] (another function begins there). That is the one rule here that is not proof: its
+ *      failure is a control transfer out of a live frame (a longjmp-like jump, shared tail code) to an
+ *      address no call ever entered, which keeps the old name until a return; a frameless function looks
+ *      exactly like a tail call and gets no benefit of the doubt.
+ *   4. anything else: unknown. The stack is kept; a call or a matching return proves ownership again.
+ * Returns SE_JUMP_NEED_REGS, having changed nothing, when only the registers can decide (the caller reads
+ * SP / PR at the landing and asks again with haveRegs). */
+int SeExportUncondJumpLanded(int cpu, unsigned int landing, int haveRegs, unsigned int sp, unsigned int pr)
+{
+    const int c = cpu ? 1 : 0;
+    int result = SE_JUMP_DONE;
+    SE_LOCK();
+    if (sOwnKnown[c])
+    {
+        const unsigned int depth = sCallDepth[c];
+        SeCallFrame* f = (depth && !sCallOverflow[c]) ? &sCallStack[c][depth - 1] : 0;
+        if (!f || f->kind != SE_FRAME_CALL || !f->func) sOwnKnown[c] = 0;
+        else
+        {
+            const unsigned int E = f->func;
+            const unsigned int hi = SeHiOf(c, E);
+            if (landing == E || (landing > E && landing <= hi)) { /* kept */ }
+            else if (SeEntryIsKnown(c, landing)) f->func = landing;
+            else if (landing > hi && landing - hi <= SE_OWN_FWD_WINDOW &&
+                     SeEntryIsKnown(c, E) && sEntryAddr[c][SeEntryLower(c, landing) - 1u] == E)
+            {
+                if (!haveRegs) result = SE_JUMP_NEED_REGS;
+                else if (sp == f->sp && pr == f->ret) sOwnKnown[c] = 0;   /* in the state a tail call is made in */
+                /* else: still in its body, kept */
+            }
+            else sOwnKnown[c] = 0;
+        }
+    }
+    SE_UNLOCK();
+    return result;
 }
 
 /* The function the CPU is in, by the recorded stack: the innermost frame's entry address, or 0
@@ -2016,6 +2154,8 @@ void SeExportResetCallStack(int cpu)
     sCallOverflow[c] = 0;
     sOwnKnown[c] = 0;     /* F9: a reset / load / disable replaced the code the frames described */
     ++sOwnTrust[c];
+    sEntryCount[c] = 0;   /* ... and the entries / extents observed in it */
+    sHiFn[c] = sHi[c] = 0;
     SeAtAdd((volatile int*)&sCallStackEpoch[c], 1);
     SE_UNLOCK();
 }

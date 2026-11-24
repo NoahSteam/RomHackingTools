@@ -494,9 +494,11 @@ static int SeMdfnTpFires(unsigned int i)
  * invisible from here. se_export.h has the why — in particular why an rte must not be
  * allowed to unwind a call frame.
  *
- * Deliberately not tracked: `jmp @Rn` — a tail call after restoring PR — pushes nothing,
- * and the callee's rts unwinds the original caller's frame, which is the right depth;
- * `braf Rn`, `bra`, `bt`, `bf` and friends never create or destroy a frame. */
+ * Unconditional jumps (`bra disp`, `jmp @Rn`, `braf Rn`) never create or destroy a frame -- a tail
+ * call pushes nothing and the callee's rts unwinds the original caller's frame, which is the right
+ * depth -- but they are held and completed like a call (delay slot first), because where they LAND
+ * says whether the function that is running changed (se_export.c, SeExportUncondJumpLanded).
+ * `bt`, `bf` and friends neither create nor destroy a frame and are not tracked. */
 typedef enum
 {
     SeFlowNone = 0,
@@ -506,7 +508,7 @@ typedef enum
     SeFlowReturn,       /* rts        */
     SeFlowTrap,         /* trapa #imm */
     SeFlowExcReturn,    /* rte        */
-    SeFlowComputed      /* jmp @Rn, braf Rn: a computed transfer that may be a tail call (F9) */
+    SeFlowJump          /* bra disp, jmp @Rn, braf Rn: an unconditional jump, a switch or a tail call (F9) */
 } SeFlowKind;
 
 static SeFlowKind SeMdfnClassifyFlow(unsigned short op)
@@ -517,8 +519,30 @@ static SeFlowKind SeMdfnClassifyFlow(unsigned short op)
     if ((op & 0xFF00u) == 0xC300u) return SeFlowTrap;
     if (op == 0x000Bu)             return SeFlowReturn;
     if (op == 0x002Bu)             return SeFlowExcReturn;
-    if ((op & 0xF0FFu) == 0x402Bu || (op & 0xF0FFu) == 0x0023u) return SeFlowComputed;
+    if ((op & 0xF000u) == 0xA000u || (op & 0xF0FFu) == 0x402Bu || (op & 0xF0FFu) == 0x0023u) return SeFlowJump;
     return SeFlowNone;
+}
+
+#if !defined(SE_MEDNAFEN_WIRED)
+/* Test seam: the registers the wired build reads from the CPU at the moment an unconditional jump lands
+ * (SeMdfnLandingRegs). A host test sets them with the instruction stream it presents. */
+static unsigned int sSeMdfnTestSp[2], sSeMdfnTestPr[2];
+#endif
+
+/* R15 and PR as they are NOW on 'cpu' -- read when an unconditional jump lands, so the delay slot's own
+ * effect (the usual `add #n, r15` of a tail call's epilogue) is included. The wired build asks the CPU;
+ * a host test sets the seam. Only asked when se_export cannot decide without it. */
+static void SeMdfnLandingRegs(int cpu, unsigned int* sp, unsigned int* pr)
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    unsigned int raw[23];
+    SsDbgSh2Regs(cpu, raw);
+    *sp = raw[15];
+    *pr = raw[21];   /* SsDbgSh2Regs order: R[16], SR, GBR, VBR, MACH, MACL, PR, PC */
+#else
+    *sp = sSeMdfnTestSp[cpu ? 1 : 0];
+    *pr = sSeMdfnTestPr[cpu ? 1 : 0];
+#endif
 }
 
 /* Apply one instruction's effect on the shadow stack. Split from SeMdfnTrackFlow — which
@@ -567,13 +591,37 @@ static void SeMdfnApplyFlow(int cpu, SeFlowKind kind, unsigned int pc, unsigned 
             isCall = 0;
             if (haveLanding) SeExportPopExceptionFrameAt(cpu, sp, landing); else SeExportPopExceptionFrame(cpu, sp);
             break;
-        case SeFlowComputed:
-            /* jmp @Rn / braf Rn, now complete: a switch inside the function or a tail call into
-             * another one, and nothing here can tell which. The stack stays (a tail callee's rts
-             * still returns through it); only the claim "the innermost frame's function is running"
-             * is withdrawn, until a call or a matching return proves it again. */
+        case SeFlowJump:
+            /* bra / jmp @Rn / braf Rn, now complete: a switch or skip inside the function, or a tail call
+             * into another one. Only where it landed can say which, and se_export decides from observed
+             * evidence (a known entry, the function's executed extent, SP / PR at the landing); anything it
+             * cannot prove is unknown. The stack never changes shape here: a tail callee's rts returns
+             * through the same frame. A landing other than the jump's own target means something ran in
+             * between (an interrupt was taken after the slot): nothing is claimed. */
             isCall = 0;
-            SeExportOwnershipInvalidate(cpu, 0);
+            if (!haveLanding)
+            {
+                SeExportOwnershipInvalidate(cpu, 0);
+            }
+            else
+            {
+                unsigned int jt;
+                if ((op & 0xF000u) == 0xA000u)
+                {
+                    int disp = (int)(op & 0x0FFFu);
+                    if (disp & 0x0800) disp -= 0x1000;
+                    jt = pc + 4 + (unsigned int)(disp << 1);                  /* bra */
+                }
+                else if ((op & 0xF0FFu) == 0x0023u) jt = pc + 4 + rn;           /* braf Rn */
+                else jt = rn;                                                   /* jmp @Rn */
+                if (jt != landing) SeExportOwnershipInvalidate(cpu, 0);
+                else if (SeExportUncondJumpLanded(cpu, landing, 0, 0, 0) == SE_JUMP_NEED_REGS)
+                {
+                    unsigned int lsp = 0, lpr = 0;
+                    SeMdfnLandingRegs(cpu, &lsp, &lpr);                         /* post-delay-slot SP / PR */
+                    SeExportUncondJumpLanded(cpu, landing, 1, lsp, lpr);
+                }
+            }
             break;
         case SeFlowNone:
             isCall = 0;
@@ -695,8 +743,8 @@ static void SeMdfnTrackFlow(int cpu, unsigned int pc)
     op = SsDbgReadOpcode(pc);
     kind = SeMdfnClassifyFlow(op);
     if (kind == SeFlowNone) return;     /* the overwhelmingly common case */
-    if (kind != SeFlowReturn)           /* rts needs no register read; everything else does */
-    {
+    if (kind != SeFlowReturn && !(kind == SeFlowJump && (op & 0xF000u) == 0xA000u))
+    {   /* rts and bra (its target is in the opcode) need no register read; everything else does */
         unsigned int raw[23];
         SsDbgSh2Regs(cpu, raw);
         sp = raw[15];
@@ -875,6 +923,7 @@ static void SeMdfnProfSampleAt(int cpu, unsigned int pc, int ts)
     sProfLastTs[c] = ts;
     sProfLastIdle[c] = SeMdfnProfIdle(c);
     sProfSynced[c] = 1;
+    SeExportNoteExecuted(c, pc);   /* the owner ran this instruction: its extent (evidence for jumps) grows */
     /* The function the shadow stack says is running, which it says only while it knows (F9); otherwise
      * a 16-byte bucket of the raw PC. Key 0 marks an empty slot; a raw-PC key always has its top bit
      * set, and a recorded function at address 0 cannot be told from "none", so it falls to the raw-PC
