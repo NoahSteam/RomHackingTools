@@ -61,6 +61,22 @@ Compatibility tests: new client with old server; old client with new server is r
 at the version check; matching versions over consecutive replies. Document that a v25 client
 already rejects a v26 server at its version check, so emulator and app must be updated together.
 
+### Step 0 additions from the third review
+
+- **v26 to v27 field mapping is explicit.** Index 5 (slave on-cycles) keeps its index; only its
+  producer is corrected. Index 6 means *elapsed VDP1 drawing* in v26, so v27 command work gets a
+  new index and index 6 is retired, not redefined. The panel defines what it shows for a v26
+  server's sample: the old VDP1 figure under its old label, and "not available" for frame
+  identity, per-CPU Other and every v27-only counter. The compatibility test checks the labels
+  and unavailable values the user sees, not only stream alignment.
+- **Both capability bits on the first reply (exercises F14).** A counter-capable build without
+  debugger support advertises `SE_LIVE_CAP_PROFILER` before its first sample and leaves
+  `SE_LIVE_CAP_PROF_FUNCTIONS` clear; a debugger-enabled build advertises both.
+- **F9 gets a positive oracle.** In the nested-call fixture: the unknown parent's call and delay
+  slot charge its raw-PC bucket, the observed callee's body and return slot charge its named
+  key, and execution after the return charges raw again. "Zero on the stale owner" alone would
+  pass if everything fell back to raw PC.
+
 ## Phase 1: identity, ownership and frame lifecycle
 
 ### F3. Frame identity and lost records
@@ -328,3 +344,28 @@ reconstruction, elapsed DMA-hold duration for VDP1.
 3. F7, F10, labels.
 4. T1, T2 and remaining tests; V2 and V3.
 5. F12 and F13 only if V3 calls for them.
+
+## How the work is carried out
+
+Agreed with the project owner; recorded here so it survives a context reset.
+
+- The coordinator (the main Claude session) does not implement. It briefs implementation agents
+  running the Sonnet model, **two at a time**, each in its own git worktree, on tasks that touch
+  disjoint files. It waits for both, then reviews the code itself before anything is published.
+- After review the coordinator opens a pull request from `claude/laughing-hypatia-tagh4r` and
+  posts its review as PR comments, written for ChatGPT to pick up and answer. It subscribes to
+  the PR's activity so it sees the replies.
+- Every agent brief points at this document and at `Docs/Codebase/Systems/Profiler.md`, names the
+  exact "Done when" it must meet, and forbids weakening a test to make it pass.
+
+Batches (each pair is file-disjoint):
+
+| Batch | Agent A | Agent B |
+|---|---|---|
+| 0 | Step 0: freeze the v27 record in `SePerfCounters.h` and `SeLiveProtocol.h`, with the v26 mapping | T4 baseline of the decompiler fault test on both commits; T2 diagnosis |
+| 1 | F14 then F3 (`se_export.c`, `LiveDriver.*`, model gap handling) | F4, F5, F8, F11 (`apply.py` hooks and their component tests) |
+| 2 | F1 (`se_export.c`, driver restate) | F2 + F6 lifecycle contract and F9 (`se_mednafen_glue.c`, `apply.py` accessors) |
+| 3 | F7, labels, v26 presentation (`ProfilerPanel.*`, `ProfilerModel.*`) | F10 and T1 / remaining tests |
+
+Batch 1B and 2B both edit `apply.py`; they are in different batches for that reason. V1 to V3
+need a BIOS and are handed back to the project owner.
