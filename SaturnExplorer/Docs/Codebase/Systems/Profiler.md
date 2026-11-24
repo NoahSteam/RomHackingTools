@@ -286,13 +286,50 @@ bucket, while ownership is unknown.
 | Any other return: the parent was unknown (a call made from unknown code), the landing address is not the recorded one, the frame predates a loss of observation, or there was no frame | Unknown |
 | Actual exception entry (interrupt, NMI, address error, illegal instruction: hooks in `sh7095_ops.inc`; **not** `trapa`, which is observed) | Unknown. The stack is kept, since a balanced handler returns through it |
 | A call whose target is not where execution arrived (an interrupt came between the call and the callee's first instruction) | Unknown |
-| Completed computed transfer (`jmp @Rn`, `braf Rn`: a switch or a tail call, indistinguishable) | Unknown until a call or a matching return proves it |
+| Completed unconditional jump (`bra`, `jmp @Rn`, `braf Rn`), owner known, innermost frame a call frame | By where it landed, see "Unconditional jumps" below: a known entry transfers the frame to that function (tail call), an address the owner already ran or a forward move out of a function still inside its body keeps it, anything else is unknown until a call or a matching return proves it. Owner unknown, or the landing is not the jump's own target (an interrupt came between): unknown |
 | Loss of continuous observation (profiler toggled, `SeMednafenHookMode(0)`) | Unknown, and every frame recorded so far is distrusted (it may have returned unseen) |
 | CPU reset (watchdog, `SetActive`), state load | Stack dropped, ownership unknown |
 
 Not done (deferred, as in the plan): reconstructing the exception stack. An interrupt therefore
-costs the interrupted function its naming until its own `rts` lands back on its caller; and a plain
-`bra` / `bt` / `bf` used as a tail call is not recognised (only `jmp` / `braf` are).
+costs the interrupted function its naming until its own `rts` lands back on its caller; and a
+conditional `bt` / `bf` used as a tail call is not recognised (it keeps the caller's name, and the
+caller's observed extent grows into the callee).
+
+#### Unconditional jumps (`bra`, `jmp @Rn`, `braf Rn`)
+
+The glue holds these like a call and completes them at the first PC after the delay slot, so the
+slot's cycles stay with the jumper (the sample at the landing charges the previous instruction's key,
+chosen before the landing was known). `bra`'s target is in the opcode; `jmp` / `braf` read Rn, and a
+landing that is not that target (an interrupt was taken after the slot) claims nothing. The flow tracker
+needs no hook beyond the existing per-instruction one; `apply.py` is unchanged, and the per-instruction
+work (classification, the extent note) only runs while attribution is on. `SeExportUncondJumpLanded`
+(se_export.c) decides, only while ownership is known and the innermost frame is a call frame whose function
+is E, from evidence it observed itself, per CPU:
+
+- **Known entries.** Every target of an observed call is recorded (sorted, at most 1,024 per CPU, never
+  evicted; when full a new one is not recorded, which only ever makes a jump to it raw). Cleared with the
+  stack (reset, state load, disable).
+- **Extent.** hi(E) is the furthest PC executed while E was the owner, kept across invocations; it grows by
+  forward steps of at most 0x400 bytes, one presented instruction at a time.
+
+| Landing | Result |
+|---|---|
+| E itself, or in (E, hi(E)] | Kept: code E has already run. Proof, no registers needed |
+| A known entry other than E | **Tail call.** The frame is neither pushed nor popped: its function becomes the landing, its return address, SP, trust and the frames below are unchanged, so the callee's `rts` is matched against the same frame and restores the ORIGINAL caller (named again when that caller was known). Stack depth is unchanged; the recursion case works the same |
+| In (hi(E), hi(E)+0x1000] with no known entry in (E, landing], and SP at the landing is not the SP the call saw or PR is not the call's return address | Kept: the function is still in its body (a tail call is made after the epilogue restored both, and SP / PR are read at the landing so the delay slot's `add #n, r15` is included). (the one rule that is not proof, see below) |
+| Anything else (backward below E, further than the window, past a known entry, or the tail-call register state with an unproven target: a frameless function looks exactly like a tail call) | Unknown (raw-PC bucket) |
+
+Failure modes. A wrong NAME needs the third row's evidence to be misleading: a control transfer out of a
+live stack frame (a longjmp-like unwind, shared hand-written tail code) to an address no call has ever
+entered, within 4 KB after the highest executed PC and below the next known function. It keeps the old
+name until the next return. A target a call has not entered yet, jumped to in the tail-call register state
+(the usual way a never-called helper is tail-called) is raw until the first call to it is seen, never named
+early. Because an extent only grows from instructions executed while the owner was known, a frameless
+function's first forward jump to unrun code leaves it raw for that invocation and the extent does not grow,
+so it stays raw on later invocations too; that costs coverage (small leaf functions), never a name. A
+switch whose case was run before keeps ownership, and so does every switch in a function with a stack
+frame. Entries are by address: code replaced at a known entry (an overlay loaded by DMA, invisible to the
+tap) is named as the old function until the stack is reset.
 
 ### Frame lifecycle: slave on-time and the latched mode (F2 + F6)
 
@@ -454,7 +491,14 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
   parent's call and delay slot raw, callee body and return slot named, raw after the return), known-parent
   return, interrupt, tail `jmp`, an interrupted call, `trapa`, nested call on a stale frame, wrong return
   address, stale frame after lost observation, disable/re-enable. Each was mutation-checked (21
-  mutations of the glue and the stack, all caught).
+  mutations of the glue and the stack, all caught). Unconditional jumps: tail call to a known entry by
+  `bra` / `jmp` / `braf` (delay slot with the jumper, depth unchanged, the callee's `rts` restores the
+  original caller, both CPUs), recursion plus tail call, a tail call to a never-called function (raw),
+  a switch inside a function with a live frame, a frameless forward jump (raw), loops back into run
+  code, out-of-window / below-entry / past-a-known-entry targets (raw), an interrupt before the slot
+  and before the target, per-CPU entry tables, entries dropped on reset and state load, a jump from a
+  `trapa` handler, from an unknown owner, a landing that is not the target, a full entry table (15
+  mutations of the new rules, all caught).
 - [LiveProfilerModeTests.cpp](../../../FrontEnd/tests/LiveProfilerModeTests.cpp): F6 on the real exporter
   and driver: a request that arrives during a frame (halt gate, snapshot) is not applied there, the
   old frame is published in its old mode, the next in the new one, in both directions, and a
@@ -558,9 +602,10 @@ the Windows named-pipe path (`SeWinJoinThread` etc.) and macOS.
   call establishes a new known callee or its own matching `rts` proves the known caller again (returning from a
   handler's nested call into the unknown handler also stays unknown). An OBSERVED `trapa` is different: its exception
   frame records parent, return address and SP, so a matching `rte` may restore the parent when `parentKnown` is true,
-  the trust epoch is current and the landing matches -- observed evidence, not a reconstructed exception stack. After a
-  switch (`jmp @Rn`) or a `bra` tail call the function is likewise charged to its raw-PC bucket until a return proves
-  ownership again.
+  the trust epoch is current and the landing matches -- observed evidence, not a reconstructed exception stack. A
+  tail call (`bra`, `jmp @Rn`, `braf`) to a function no observed call has entered yet, and a frameless function's
+  jump to code it has not run, are charged to the raw-PC bucket until a return proves ownership again; a `bt` / `bf`
+  tail call is not recognised.
 
 ## Validation guest (V1)
 

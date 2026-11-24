@@ -352,6 +352,15 @@ void SeExportPopExceptionFrameAt(int cpu, unsigned int sp, unsigned int landing)
  * since any of them may have returned unseen. A call pushed while ownership is unknown names the
  * callee, and a return to that unknown parent makes ownership unknown again. */
 void SeExportOwnershipInvalidate(int cpu, int lostObservation);
+/* F9 follow-up: unconditional jumps (bra / jmp @Rn / braf). SeExportNoteExecuted is called for every
+ * instruction presented while attribution is on (it extends the owner's observed extent);
+ * SeExportUncondJumpLanded when a jump completes at 'landing' (rules in se_export.c). It returns
+ * SE_JUMP_NEED_REGS, with nothing changed, when only SP / PR at the landing can decide: ask again with
+ * haveRegs = 1 and those values. */
+#define SE_JUMP_DONE       0
+#define SE_JUMP_NEED_REGS  1
+void SeExportNoteExecuted(int cpu, unsigned int pc);
+int SeExportUncondJumpLanded(int cpu, unsigned int landing, int haveRegs, unsigned int sp, unsigned int pr);
 void SeExportResetCallStack(int cpu);
 
 /* A number that changes every time a stack is reset. A glue that keeps control flow in flight
