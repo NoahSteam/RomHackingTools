@@ -1674,6 +1674,24 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         add_test(NAME SaturnExplorerLiveProfilerTests
                  COMMAND SaturnExplorerLiveProfilerTests)
 
+        # The capability bits of the very first reply (F14): hooks are registered before listeners are
+        # admitted. (Later also: frame identity and lost records, F3.) Own socket and port.
+        add_executable(SaturnExplorerLivePerfLossTests
+            FrontEnd/tests/LivePerfLossTests.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerLivePerfLossTests PRIVATE
+            SE_EXPORT_TEST_HOOKS=1
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_perf_loss_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6951)
+        target_include_directories(SaturnExplorerLivePerfLossTests PRIVATE
+            Drivers/Live/src
+            FrontEnd/tests
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLivePerfLossTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLivePerfLossTests COMMAND SaturnExplorerLivePerfLossTests)
+
         # A1-7: a paused emulator that is captured every UI frame (a state load nobody confirms)
         # must not make the SH-2 Pseudocode panel ask again every frame. The real exporter withholds
         # the confirmation, the real driver and context capture it through CaptureLiveFrame, and
@@ -1822,7 +1840,7 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
         target_link_libraries(SaturnExplorerLiveHaltRaceTests PRIVATE Threads::Threads)
         add_test(NAME SaturnExplorerLiveHaltRaceTests COMMAND SaturnExplorerLiveHaltRaceTests)
-        set_tests_properties(SaturnExplorerLiveRestoreSignalTests SaturnExplorerLiveProfilerTests SaturnExplorerExportAttachTests
+        set_tests_properties(SaturnExplorerLiveRestoreSignalTests SaturnExplorerLiveProfilerTests SaturnExplorerLivePerfLossTests SaturnExplorerExportAttachTests
                              SaturnExplorerLiveExporterRobustnessTests SaturnExplorerLiveHaltRaceTests
                              PROPERTIES RESOURCE_LOCK live_tap_socket)
     endif()

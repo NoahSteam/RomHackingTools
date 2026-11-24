@@ -920,6 +920,7 @@ static volatile int sProfWanted;      /* SE_LIVE_PROF_* the client asked for */
 static volatile int sProfPending;     /* sProfWanted changed and has not been applied */
 static volatile int sProfApplied;     /* what the emulator is running with (emulate thread writes) */
 static volatile int sPerfWired;       /* the emulator has handed over counters at least once */
+static volatile int sPerfCapable;     /* the build produces counters (declared up front, F14) */
 #define SE_PERF_RING 16u
 static unsigned char sPerfBlk[SE_PERF_RING][SE_LIVE_PERF_MAX_LEN];   /* guarded by SE_LOCK */
 static unsigned int  sPerfLen[SE_PERF_RING];
@@ -929,6 +930,13 @@ static unsigned int  sPerfSeq;                   /* frames handed over so far */
 void SeExportSetProfilerHook(void (*set)(unsigned int flags))
 {
     sSetProfiler = set;
+}
+
+/* The build produces counters. Declared at startup, before listeners are admitted, so the first
+ * reply already advertises SE_LIVE_CAP_PROFILER instead of waiting for the first publication. */
+void SeExportSetPerfCapable(int capable)
+{
+    SeAtStore(&sPerfCapable, capable ? 1 : 0);
 }
 
 unsigned int SeExportProfilerFlags(void)
@@ -2289,7 +2297,9 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, unsigned int* perfSe
             if (sWriteVdpByte)       caps |= SE_LIVE_CAP_VDP_POKE;
             if (SeAtLoad(&sGateSeen)) caps |= SE_LIVE_CAP_FRAME_GATE;
             if (sEmuSlotSave)        caps |= SE_LIVE_CAP_EMU_SAVE;
-            if (SeAtLoad(&sPerfWired)) caps |= SE_LIVE_CAP_PROFILER;   /* v27 Step 0: filled by F14 (from the first reply, before any sample) */
+            /* From the first reply: a counter-capable build declares itself at startup (F14), so this
+             * does not wait for the first publication. */
+            if (SeAtLoad(&sPerfCapable) || SeAtLoad(&sPerfWired)) caps |= SE_LIVE_CAP_PROFILER;
             if (sSetProfiler)        caps |= SE_LIVE_CAP_PROF_FUNCTIONS;
             SE_SLOCK();
             if (sStateCap && sLoadState) caps |= SE_LIVE_CAP_STATE_REWIND;   /* the worker sized a real state */
@@ -2720,7 +2730,16 @@ const char* SeExportTitleSuffix(const char* emu_name, const char* emu_rev)
     return buf;
 }
 
-int SeExportInit(void)
+/* Initialization is two steps so hooks can be installed BEFORE a listener exists (F14). The listener
+ * threads read the hook pointers (the capability word of the very first reply, the profiler setter)
+ * with no lock, so a hook registered after SeExportInit could be seen half-published, or not at all
+ * by a client that asks at the first instant. Prepare brings up locks and state with sRunning set --
+ * the savestate worker needs it, which is why registration cannot simply move BEFORE init -- and
+ * Start admits listeners. SeExportInit is both, for callers with nothing to register in between. */
+static int sPrepared;     /* SeExportPrepare ran and SeExportDeinit has not */
+static int sStarted;      /* the listener threads exist */
+
+int SeExportPrepare(void)
 {
     if (sShutdownIncomplete)
     {
@@ -2728,6 +2747,11 @@ int SeExportInit(void)
          * over them would give the survivor a frame ring that two threads write. */
         fprintf(stderr, "[SaturnExplorer] live tap: not restarting -- a thread from the previous "
                         "session never exited\n");
+        return -1;
+    }
+    if (sPrepared)
+    {
+        fprintf(stderr, "[SaturnExplorer] live tap: already initialized\n");
         return -1;
     }
     {
@@ -2742,6 +2766,9 @@ int SeExportInit(void)
     sRingWrite = 0;
     SeAtStore(&sPaused, 0); SeCancelSteps(); sFrameNo = 0; SeAtStore(&sClients, 0); SeAtStore(&sRewindWanted, 1);
     SeAtStore(&sProfWanted, 0); SeAtStore(&sProfPending, 0); SeAtStore(&sProfApplied, 0);
+    /* Nothing a previous run declared survives into this one. */
+    sSetProfiler = 0;
+    SeAtStore(&sPerfWired, 0); SeAtStore(&sPerfCapable, 0);
     SeAtStore64(&sStopWord, 0);
     /* Savestate rewind (v16): the worker + buffer pool are created lazily when a save hook is
      * wired (SeExportSetSaveStateHook); here we only reset the bookkeeping for a fresh session. */
@@ -2755,6 +2782,15 @@ int SeExportInit(void)
     InitializeCriticalSection(&sLock);
     InitializeCriticalSection(&sStateLock);
     sLocksReady = 1;   /* both CSes are now real -- enable locking BEFORE any locking thread starts */
+#endif
+    sPrepared = 1;
+    return 0;
+}
+
+int SeExportStart(void)
+{
+    if (!sPrepared || sStarted) return -1;
+#if defined(_WIN32)
     sThread = CreateThread(NULL, 0, SeServerThread, NULL, 0, NULL);
     if (!sThread) { SeAtStore(&sRunning, 0); return -1; }
 #else
@@ -2763,11 +2799,18 @@ int SeExportInit(void)
      * local socket, which is the primary path for native clients. */
     sTcpThreadStarted = (pthread_create(&sTcpThread, NULL, SeTcpServerThread, NULL) == 0);
 #endif
+    sStarted = 1;
     /* Surface the protocol version so a client/emulator mismatch is diagnosable
      * (Saturn Explorer must be built for the same SE_LIVE_VERSION to capture). */
     fprintf(stderr, "[SaturnExplorer] live tap ready: protocol v%u\n",
             (unsigned)SE_LIVE_VERSION);
     return 0;
+}
+
+int SeExportInit(void)
+{
+    if (SeExportPrepare() != 0) return -1;
+    return SeExportStart();
 }
 
 void SeExportDeinit(void)
@@ -2781,7 +2824,7 @@ void SeExportDeinit(void)
         /* The state worker only ever sleeps between queue polls, so clearing its flag is enough
          * and it needs no nudge. The server does (see SeWinWakeServer). */
         int joined = SeWinJoinThread(&sStateWorker, 0);
-        if (!SeWinJoinThread(&sThread, 1))
+        if (sStarted && !SeWinJoinThread(&sThread, 1))
         {
             joined = 0;
         }
@@ -2810,7 +2853,7 @@ void SeExportDeinit(void)
     if (sListenFd >= 0) { shutdown(sListenFd, SHUT_RDWR); close(sListenFd); sListenFd = -1; }
     if (sTcpListenFd >= 0) { shutdown(sTcpListenFd, SHUT_RDWR); close(sTcpListenFd); sTcpListenFd = -1; }
     SeInterruptClients();   /* a client that stopped answering would otherwise pin the joins below */
-    pthread_join(sThread, NULL);
+    if (sStarted) pthread_join(sThread, NULL);   /* Prepare without Start has no thread to join */
     if (sTcpThreadStarted) { pthread_join(sTcpThread, NULL); sTcpThreadStarted = 0; }
     SeStateShutdown();
 #endif
@@ -2827,4 +2870,6 @@ void SeExportDeinit(void)
         sPokeBoxBytes = 0;
         SeAtStore(&sPokePending, 0);
     }
+    sStarted = 0;
+    sPrepared = 0;
 }

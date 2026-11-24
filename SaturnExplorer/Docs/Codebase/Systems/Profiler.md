@@ -32,7 +32,7 @@ transport (see [State sources](StateSources.md)).
 | Counter indices and the function key (single source of truth for emulator, wire and client) | [SePerfCounters.h](../../../Integration/Common/SePerfCounters.h): `SE_PERF_*`, `SE_PERF_DEV_*`, `SE_PERF_FN_*` |
 | Emulator instrumentation | [apply.py](../../../Integration/Mednafen/apply.py): `PERF_DECL`, `PERF_BUS_HELPER`, the `*_PERF_*` / `SH2_*` anchors, `process_profiler`; `SsDbgCpuTimestamp`, `SsDbgSetProfileActive` in `SS_ACCESSORS` |
 | Frame hand-over and function sampling | [se_mednafen_glue.c](../../../Integration/Mednafen/se_mednafen_glue.c): `SeSsPerfC`, `SeMdfnPerfEndFrame`, `SeMdfnProfSample`, `SeMdfnSetProfiler` |
-| Server | [se_export.c](../../../Integration/Common/se_export.c): `SeExportPublishPerf`, `SeExportSetProfilerHook`, `SeExportCurrentFunction`, `SePublishProfiler`, the v27 perf record |
+| Server | [se_export.c](../../../Integration/Common/se_export.c): `SeExportPublishPerf`, `SeExportPrepare` / `SeExportStart` (startup), `SeExportSetProfilerHook`, `SeExportSetPerfCapable`, `SeExportCurrentFunction`, `SePublishProfiler`, the v27 perf record |
 | Wire contract | [SeLiveProtocol.h](../../../Integration/Common/SeLiveProtocol.h): `SE_LIVE_VERB_PROFILE`, `SE_LIVE_PROF_FUNCTIONS`, `SE_LIVE_CAP_PROFILER`, `SE_LIVE_CAP_PROF_FUNCTIONS`, "Perf section" |
 | Client | [LiveDriver.cpp](../../../Drivers/Live/src/LiveDriver.cpp): `LivePerf`, the v26 and v27 parse in `ReadSnapshot`; [LiveDriver.h](../../../Drivers/Live/src/LiveDriver.h): `se_live_perf_frame`, `se_live_drain_perf`, `se_live_set_profiler` |
 | Model (UI-free) | [ProfilerModel.h](../../../FrontEnd/src/Debug/ProfilerModel.h): `PerfFrame`, `ComputePerfShares`, `ComputeBusTotals`, `ProfilerModel`, `MemoryPoolTracker` |
@@ -117,10 +117,18 @@ command work", and as "not available" until `SE_PERF_VALID_VDP1_WORK` is set. A 
 rejects a v27 server at its version check (a v25 client already rejects v26): update emulator and
 app together.
 
-Capability bits (documented in `SeLiveProtocol.h`; the first-reply guarantee is F14):
-`SE_LIVE_CAP_PROFILER` means counters are produced, and a counter-capable build advertises it
-before its first sample; `SE_LIVE_CAP_PROF_FUNCTIONS` means the per-instruction hook exists, so a
-build without debugger support advertises only the first.
+Capability bits (documented in `SeLiveProtocol.h`), both correct in the very first reply (F14):
+`SE_LIVE_CAP_PROFILER` means counters are produced, declared at startup with
+`SeExportSetPerfCapable` (not inferred from the first publication); `SE_LIVE_CAP_PROF_FUNCTIONS`
+means the per-instruction hook exists, so a build without debugger support advertises only the
+first.
+
+Startup order (F14): `SeMednafenFrameHook` calls `SeExportPrepare` (locks and state, server marked
+running so the savestate worker can start), registers every hook and the counter capability, and
+only then `SeExportStart` admits listeners. Moving registration before init would not work:
+`SeStateStartWorker` returns while `sRunning` is false, silently disabling rewind. `SeExportInit` is
+Prepare + Start for callers with nothing to register; a deinit/init cycle clears the declared
+capabilities and the profiler hook.
 
 ### Function attribution (opt-in)
 

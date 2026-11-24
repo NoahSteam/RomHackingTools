@@ -920,7 +920,10 @@ void SeMednafenFrameHook(void)
     if (!inited)
     {
         inited = 1;
-        SeExportInit();
+        /* Hooks first, listeners last (F14): nothing can ask for capabilities, or read a hook
+         * pointer, while it is being registered. Prepare (not "register, then init") because the
+         * save hook starts the rewind worker, which needs the server running. */
+        const int prepared = (SeExportPrepare() == 0);
         SeExportSetMemWriteHook(SeMdfnWriteByte);
         SeExportSetSoundWriteHook(SeMdfnWriteSoundByte);   /* Sound RAM pokes (v13) */
         SeExportSetVdpWriteHook(SeMdfnWriteVdpByte);       /* CRAM / VDP1 FB pokes (v23) */
@@ -942,6 +945,11 @@ void SeMednafenFrameHook(void)
                                  ? (SE_LIVE_CAP_EXEC_BP | SE_LIVE_CAP_MEM_WATCH |
                                     SE_LIVE_CAP_INSN_STEP | SE_LIVE_CAP_TRACEPOINTS)
                                  : 0u);
+        /* Counters exist in every build this glue is part of: say so before the first sample, so
+         * the very first reply advertises SE_LIVE_CAP_PROFILER (a build without a debugger then
+         * advertises only that, never SE_LIVE_CAP_PROF_FUNCTIONS). */
+        SeExportSetPerfCapable(1);
+        if (prepared) SeExportStart();
     }
     SeMednafenSnapshot();
 }

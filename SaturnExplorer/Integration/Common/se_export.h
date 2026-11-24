@@ -39,6 +39,22 @@ const char* SeExportTitleSuffix(const char* emu_name, const char* emu_rev);
  * success, non-zero on failure (Yabause keeps running either way). */
 int SeExportInit(void);
 
+/* The same startup in two steps, for an emulator that has hooks to install (F14).
+ *   SeExportPrepare()  locks, state and the savestate machinery, with the server marked running (a
+ *                      save hook registered now can start its worker). No listener exists yet, so
+ *                      nothing can ask for capabilities or race the registrations.
+ *   ... register every hook: SeExportSet*Hook, SeExportSetDebugCaps, SeExportSetPerfCapable ...
+ *   SeExportStart()    admit listeners. The first reply already describes everything registered.
+ * SeExportInit() is Prepare + Start. Prepare clears what a previous init/deinit cycle declared
+ * (the profiler hook, the counter capability). */
+int SeExportPrepare(void);
+int SeExportStart(void);
+
+/* Declare that this build produces profiler counters (SeExportPublishPerf), so
+ * SE_LIVE_CAP_PROFILER is advertised from the first reply instead of after the first sample.
+ * Call between Prepare and Start. A build without counters never calls it. */
+void SeExportSetPerfCapable(int capable);
+
 /* Non-zero while at least one client (Saturn Explorer) is attached. SeExportSnapshot already
  * skips everything when nothing is attached; this lets the emulator's frame hook also skip the
  * work it does to BUILD the arguments (byte-swapping VRAM into big-endian scratch, serializing
