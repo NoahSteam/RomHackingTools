@@ -12,6 +12,7 @@
 #include "DrawnText.h"
 #include "ImGuiHarness.h"
 #include "ProfilerPanel.h"
+#include "SeLiveProtocol.h"
 
 using namespace sfe;
 
@@ -21,14 +22,16 @@ int gFailures;
 #define CHECK(cond) do { if (!(cond)) { std::printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); ++gFailures; } } while (0)
 
 // Every text run of the Profiler window and of its child windows (the function table scrolls).
-std::vector<drawn::Run> AllRuns()
+std::vector<drawn::Run> AllRuns(bool tooltips = false)
 {
     std::vector<drawn::Run> all;
     ImGuiContext& g = *ImGui::GetCurrentContext();
     for (ImGuiWindow* w : g.Windows)
     {
         if (!w || !w->Active) continue;
-        if (std::string(w->Name).find("Profiler") != 0) continue;
+        // The Profiler window and its children; or, when asked, only the tooltip windows.
+        const bool tip = std::string(w->Name).find("##Tooltip") == 0;
+        if (tooltips ? !tip : std::string(w->Name).find("Profiler") != 0) continue;
         for (const drawn::Run& r : drawn::Runs(w->DrawList)) all.push_back(r);
     }
     return all;
@@ -41,6 +44,20 @@ bool Drawn(const std::string& text)
     std::string all;
     for (const drawn::Run& r : AllRuns()) all += drawn::Squash(r.text);
     return all.find(drawn::Squash(text)) != std::string::npos;
+}
+
+// The same, over the tooltip windows only: what a hover says, apart from what the panel always shows.
+bool Tip(const std::string& text)
+{
+    std::string all;
+    for (const drawn::Run& r : AllRuns(true)) all += drawn::Squash(r.text);
+    return all.find(drawn::Squash(text)) != std::string::npos;
+}
+std::string TipDump()
+{
+    std::string s;
+    for (const drawn::Run& r : AllRuns(true)) s += "[" + r.text + "] ";
+    return s;
 }
 
 // Centre of the first run of the first place the consecutive runs spell 'text', or (-1,-1).
@@ -192,7 +209,7 @@ void TestVdp1Presentation()
         for (uint32_t i = 1; i <= 3; ++i)
         {
             PerfFrame f;
-            f.seq = i; f.sampleSeq = i; f.wireVersion = 27; f.valid = SE_PERF_VALID_VDP1_WORK;
+            f.seq = i; f.sampleSeq = i; f.wireVersion = 27; f.valid = SE_PERF_VALID_ALL;   // every producer bit: nothing else is "not available"
             f.c[SE_PERF_FRAME_CYCLES] = 400000;
             f.c[SE_PERF_SSH2_ON_CYCLES] = 400000;
             f.c[SE_PERF_VDP1_WORK_CYCLES] = 100000;   // 25%
@@ -232,6 +249,9 @@ void TestMemoryTab()
     CHECK(rig.panel.WantsPools());
     CHECK(Drawn("Colour RAM"));
     CHECK(Drawn("not in this capture"));     // a missing region says so; it is not drawn as empty
+    CHECK(Drawn("Uniform") && Drawn("Non-uniform") && Drawn("Changed since sample"));
+    CHECK(Drawn("non-uniform, 0% changed since sample"));
+    CHECK(!Drawn("Holds data") && !Drawn("rewritten"));
     rig.panel.NotDrawn();
     CHECK(!rig.panel.WantsPools());
     }
@@ -294,6 +314,285 @@ void TestFunctionsTab()
     CHECK(!plain.panel.WantsFunctions());
     CHECK(Drawn("--enable-debugger"));
 }
+
+// ---- window validity, labels, history, functions (review finding P2, F7, F10, Labels) ----
+
+PerfFrame V27(uint64_t seq, uint32_t valid)
+{
+    PerfFrame f;
+    f.seq = static_cast<uint32_t>(seq);
+    f.sampleSeq = seq;
+    f.wireVersion = 27;
+    f.valid = valid;
+    f.c[SE_PERF_FRAME_CYCLES] = 400000;
+    f.c[SE_PERF_SSH2_ON_CYCLES] = 400000;
+    return f;
+}
+
+// Four equal 400,000-cycle frames; only one carries the VDP1 work counter (120,000 = 30%). The old
+// panel summed all four against the whole window and drew 7.5% with no sign that three frames had
+// not measured it.
+void CheckWindowCoverage(bool validFirst)
+{
+    Rig rig;
+    rig.model.Clear();
+    for (uint64_t i = 1; i <= 4; ++i)
+    {
+        const bool v = validFirst ? i == 1 : i == 4;
+        PerfFrame f = V27(i, SE_PERF_VALID_SSH2_INT | (v ? SE_PERF_VALID_VDP1_WORK : 0u));
+        if (v) f.c[SE_PERF_VDP1_WORK_CYCLES] = 120000;
+        rig.model.Push(f);
+    }
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    if (!Drawn("30% (1 of 4 frames)")) std::printf("drawn: %s\n", Dump().c_str());
+    CHECK(Drawn("30% (1 of 4 frames)"));
+    CHECK(!Drawn("7.5%"));
+}
+
+void TestWindowCoverageBothOrders()
+{
+    CheckWindowCoverage(false);   // the valid frame is the newest (the review's repro)
+    CheckWindowCoverage(true);    // the valid frame is the oldest
+    {
+        Rig rig;   // none valid: "not available", and no figure at all
+        rig.model.Clear();
+        for (uint64_t i = 1; i <= 4; ++i) rig.model.Push(V27(i, SE_PERF_VALID_SSH2_INT));
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        CHECK(Drawn("VDP1 command work"));
+        CHECK(Drawn("not available"));
+        CHECK(!Drawn("of 4 frames"));
+    }
+}
+
+// The slave's integrated on-time is gated the same way: frames without SE_PERF_VALID_SSH2_INT claim
+// the slave was on all frame, and averaging them in would read 81% instead of the one measurement.
+void CheckSlaveCoverage(bool validFirst)
+{
+    Rig rig;
+    rig.model.Clear();
+    for (uint64_t i = 1; i <= 4; ++i)
+    {
+        const bool v = validFirst ? i == 1 : i == 4;
+        PerfFrame f = V27(i, v ? SE_PERF_VALID_SSH2_INT : 0u);
+        if (v) f.c[SE_PERF_SH2_SLEEP + 1] = 300000;   // 25% busy
+        rig.model.Push(f);
+    }
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    CHECK(Drawn("25% busy (1 of 4 frames)"));
+    CHECK(!Drawn("81%"));
+}
+
+void TestSlaveCoverageBothOrders()
+{
+    CheckSlaveCoverage(false);
+    CheckSlaveCoverage(true);
+}
+
+// A window holding a v26 server's frames and a v27 server's shows both VDP1 figures under their own
+// labels, each over its own frames; it never adds one to the other.
+void CheckMixedWire(bool v26First)
+{
+    Rig rig;
+    rig.model.Clear();
+    for (uint64_t i = 1; i <= 4; ++i)
+    {
+        const bool legacy = v26First ? i <= 2 : i > 2;
+        PerfFrame f = V27(i, legacy ? 0u : (SE_PERF_VALID_VDP1_WORK | SE_PERF_VALID_SSH2_INT));
+        if (legacy) { f.wireVersion = 26; f.c[SE_PERF_V26_VDP1_ELAPSED] = 100000; }       // 25%
+        else f.c[SE_PERF_VDP1_WORK_CYCLES] = 200000;                                       // 50%
+        rig.model.Push(f);
+    }
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    CHECK(Drawn("VDP1 drawing"));
+    CHECK(Drawn("VDP1 command work"));
+    CHECK(Drawn("25% (2 of 4 frames)"));
+    CHECK(Drawn("50% (2 of 4 frames)"));
+    CHECK(!Drawn("37%") && !Drawn("38%"));     // the blend of the two
+}
+
+void TestMixedWireBothOrders()
+{
+    CheckMixedWire(true);
+    CheckMixedWire(false);
+}
+
+// What the v27 server adds, and the labels.
+void TestFrameTabDetailsAndLabels()
+{
+    Rig rig;
+    rig.model.Clear();
+    for (uint64_t i = 1; i <= 4; ++i)
+    {
+        PerfFrame f = V27(i, SE_PERF_VALID_ALL);
+        f.c[SE_PERF_VDP1_WORK_CYCLES] = 600000;          // 150%: instant draw
+        f.c[SE_PERF_VDP1_DMA_DISCARDED] = 40000;         // 10%
+        f.c[SE_PERF_M68K_TOTAL_CYCLES] = 1000;
+        f.c[SE_PERF_M68K_IDLE_CYCLES] = 700;
+        f.c[SE_PERF_M68K_CYCLES] = 300;
+        f.mode = SE_LIVE_PROF_FUNCTIONS;
+        f.cacheMode = SE_PERF_CACHE_ON;
+        if (i == 4) { f.gapCount = 3; f.gapFirst = 10; f.gapLast = 12; }
+        rig.model.Push(f);
+    }
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    if (!Drawn("150%")) std::printf("drawn: %s\n", Dump().c_str());
+    CHECK(Drawn("Busy (includes bus waits)"));
+    CHECK(Drawn("150%"));                                         // above 100%, not clamped
+    CHECK(Drawn("VDP1 command work exceeds the frame in 4 frames"));
+    CHECK(Drawn("discarded by DMA: 10% of the frame"));
+    CHECK(Drawn("70% idle (stopped)"));
+    CHECK(Drawn("Function attribution: on in 4 of 4 frames"));
+    CHECK(Drawn("Lost records: 3 dropped by the emulator's ring"));
+    CHECK(!Drawn("not available"));
+}
+
+// A v26 window has none of the v27 detail lines, and says nothing is available that v26 never had.
+void TestFrameTabV26HasNoDetails()
+{
+    Rig rig;   // v26 frames
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    CHECK(!Drawn("discarded by DMA"));
+    CHECK(!Drawn("Function attribution:"));
+    CHECK(!Drawn("Lost records"));
+    CHECK(Drawn("Busy (includes bus waits)"));
+}
+
+void TestBusTabUnitCacheAndBuckets()
+{
+    Rig rig;
+    rig.model.Clear();
+    for (uint64_t i = 1; i <= 2; ++i)
+    {
+        PerfFrame f = V27(i, SE_PERF_VALID_ALL);
+        f.cacheMode = SE_PERF_CACHE_ON;
+        f.c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_ABUS_DUMMY * 2] = 12;
+        f.c[SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2 + 1] = 5;
+        rig.model.Push(f);
+    }
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    ClickAt(harness, Where("Buses"));
+    harness.Settle();
+    CHECK(Drawn("SH-2 bus requests per frame"));
+    CHECK(Drawn("Cache mode: instruction cache emulated"));
+    CHECK(Drawn("A-bus dummy area 12 reads"));
+    CHECK(Drawn("Unmapped 0 reads, 5 writes"));
+}
+
+// The history strip: a frame that did not measure the value is "no data", not 0%; the tooltip names
+// the frame by its real identity, or says it has none.
+ImVec2 StripNewest(const std::string& rowLabel)
+{
+    const ImVec2 label = Where(rowLabel);
+    return ImVec2(885.0f, label.y + ImGui::GetTextLineHeight() * 0.9f);
+}
+
+void TestHistoryStripNoDataAndIdentity()
+{
+    Rig rig;
+    rig.model.Clear();
+    for (uint64_t i = 1; i <= 6; ++i)
+    {
+        // Slave integrated on-time only in the first five; the newest frame did not measure it.
+        PerfFrame f = V27(i, SE_PERF_VALID_IDENTITY | (i < 6 ? SE_PERF_VALID_SSH2_INT : 0u));
+        f.timelineId = 2;
+        f.frameNo = 5000 + i;
+        f.frame = 77;   // the snapshot number of the batch: never shown
+        rig.model.Push(f);
+    }
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    harness.Hover(StripNewest("Slave SH-2 busy"));
+    const bool shown = Tip("Frame 5006 (timeline 2)");
+    if (!shown) std::printf("tooltip: %s\n", TipDump().c_str());
+    CHECK(shown);
+    CHECK(Tip("no data"));
+    CHECK(!Tip("Frame 77"));
+    CHECK(!Tip("0%"));                 // not drawn as a measured zero
+    // The previous frame did measure it (all on, nothing asleep: 100%).
+    harness.Hover(ImVec2(885.0f - 58.0f, StripNewest("Slave SH-2 busy").y));
+    CHECK(Tip("Frame 5005 (timeline 2)"));
+    CHECK(Tip("100%"));
+    CHECK(!Tip("no data"));
+}
+
+void TestHistoryStripV26HasNoIdentity()
+{
+    Rig rig;   // v26 frames: frame = 1000 + i is the snapshot number they arrived with
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    harness.Hover(StripNewest("Master SH-2 busy"));
+    CHECK(Tip("Frame: not available"));
+    CHECK(!Tip("1004"));
+    CHECK(Tip("60%"));
+}
+
+// F7 in the panel.
+void TestFunctionsOtherAndDenominators()
+{
+    {
+        Rig rig;
+        rig.model.Clear();
+        for (uint64_t i = 1; i <= 2; ++i)
+        {
+            PerfFrame f = V27(i, SE_PERF_VALID_OTHER | SE_PERF_VALID_SSH2_INT);
+            f.functions = true;
+            f.fns = { { 0x06004000u, 30000 }, { 0x06005000u, 30000 } };
+            f.otherNotAdmitted[0] = 25000; f.otherEvicted[0] = 15000;
+            f.fnOther = 40000;
+            f.satFlags = SE_PERF_SAT_TABLE_FULL | SE_PERF_SAT_TRUNCATED;
+            rig.model.Push(f);
+        }
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        ClickAt(harness, Where("Functions"));
+        harness.Settle();
+        if (!Drawn("Other (not listed)")) std::printf("drawn: %s\n", Dump().c_str());
+        CHECK(Drawn("Other (not listed)"));
+        CHECK(Drawn("30%"));                  // 30,000 of 100,000 attributed, not of the 60,000 listed
+        CHECK(Drawn("40%"));                  // Other
+        CHECK(!Drawn("50%"));
+        CHECK(Drawn("Listed rows are the retained keys"));
+        CHECK(Drawn("The table filled in 2 of 2 frames"));
+        CHECK(Drawn("More than 64 functions ran in 2 of 2 frames"));
+        CHECK(Drawn("Not observed"));         // busy time nobody was charged for, apart from Other
+    }
+    // Master and slave filters, each against that CPU's own attributed total.
+    for (int filter = 0; filter < 3; ++filter)
+    {
+        Rig rig;
+        rig.model.Clear();
+        PerfFrame f = V27(1, SE_PERF_VALID_OTHER | SE_PERF_VALID_SSH2_INT);
+        f.functions = true;
+        f.fns = { { 0x06004000u, 30000 }, { 0x06010000u | SE_PERF_FN_SLAVE, 10000 } };
+        f.otherNotAdmitted[0] = 10000;     // master attributed 40,000
+        f.otherEvicted[1] = 5000;          // slave attributed 15,000
+        f.fnOther = 15000;
+        rig.model.Push(f);
+        rig.panel.SetFnCpuFilter(filter);
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        ClickAt(harness, Where("Functions"));
+        harness.Settle();
+        if (filter == 0) { CHECK(Drawn("55%")); CHECK(Drawn("18%")); CHECK(Drawn("27%")); }   // of 55,000: 30k, 10k, Other 15k
+        if (filter == 1) { CHECK(Drawn("75%")); CHECK(Drawn("25%")); CHECK(!Drawn("sub_06010000")); }   // of 40,000
+        if (filter == 2) { CHECK(Drawn("67%")); CHECK(Drawn("33%")); CHECK(!Drawn("sub_06004000")); }   // of 15,000
+    }
+    // A CPU filter over frames with no split says so rather than inventing a split.
+    Rig old;   // v26 frames: functions on, no per-CPU Other
+    old.panel.SetFnCpuFilter(1);
+    ImGuiHarness h2([&] { old.Draw(); });
+    h2.Settle();
+    ClickAt(h2, Where("Functions"));
+    h2.Settle();
+    CHECK(Drawn("per-CPU split"));
+}
 }  // namespace
 
 int main()
@@ -303,6 +602,15 @@ int main()
     TestBusTab();
     TestMemoryTab();
     TestFunctionsTab();
+    TestWindowCoverageBothOrders();
+    TestSlaveCoverageBothOrders();
+    TestMixedWireBothOrders();
+    TestFrameTabDetailsAndLabels();
+    TestFrameTabV26HasNoDetails();
+    TestBusTabUnitCacheAndBuckets();
+    TestHistoryStripNoDataAndIdentity();
+    TestHistoryStripV26HasNoIdentity();
+    TestFunctionsOtherAndDenominators();
     if (gFailures) { std::printf("%d check(s) failed\n", gFailures); return 1; }
     std::printf("ProfilerPanelTests passed\n");
     return 0;
