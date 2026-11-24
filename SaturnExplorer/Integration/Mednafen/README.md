@@ -732,7 +732,12 @@ Any future rename needs a new entry there. Checks:
   placement in `scu.inc`. F2 / F9: the **real** `SH7095::SetActive` / `SH7095::Reset` (whole patched `ss.cpp`
   included, hidden-visibility data stubbed) calling the real glue, plus where the frame-close, state-load
   and exception hooks sit. `--drop KEY` removes one hook and must make it fail (`SE_SLAVE_ON_EDGE`,
-  `SE_SLAVE_OFF_EDGE`, `SE_CPU_RESET_HOOK` among them).
+  `SE_SLAVE_OFF_EDGE`, `SE_CPU_RESET_HOOK` among them). F8: `component/perf_bus_harness.cpp` drives the
+  real patched SH-2 core (cache fills in both instruction-cache modes, CCR.CE / ID / OD, purge and refill,
+  uncached mirror, the on-chip DMAC for each unit size, burst and cycle-steal, cross-device and the
+  dummy / unmapped buckets) and asserts the exact request counts of `component/BUS_EXPECTED.md`;
+  `--only f8_bus` runs just it (also registered as ctest `SaturnExplorerMednafenBusComponent`, skipped when
+  there is no checkout: exit status 77) and `--mutate bus-burst|bus-dma-read|bus-dma-write` must make it fail.
 
 Function attribution is separate and opt-in: the client's `PRF` verb makes `SeSyncCpuHook` keep
 the continuous per-instruction callback installed (`SsDbgSetProfileActive`), and
