@@ -904,6 +904,8 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
 SMPC_INPUT_UPDATE = """\
   SeSMPCUpdateInput(vp, time_elapsed);
 """
+# The upstream line it replaces (kept inside the fence, so --revert restores it; see ORIG_OPEN).
+SMPC_UPDATE_ANCHOR = r'[ \t]*VirtualPorts\[vp\]->UpdateInput\(VirtualPortsDPtr\[vp\], time_elapsed\);'
 
 # Files that get an accessor block appended at EOF: (filename, block, key). ss.cpp
 # also gets accessors, but via process_ss (it has hook injections too).
@@ -1378,12 +1380,54 @@ def apply_prepend(text, code, key):
     return upsert(text, code, key, lambda t, block: block + "\n" + t)
 
 
+# A fence that REPLACES a line of the upstream file keeps that line inside itself, disabled, so --revert
+# can put it back byte for byte (a plain fence is just deleted by --revert, which would lose the line):
+#
+#   /* --- SE_EXPORT ... --- */
+#   <replacement code>
+#   #if 0 /* SE_ORIGINAL */
+#   <the upstream text, verbatim, including its leading indentation>
+#   #endif
+#   /* --- end SE_EXPORT --- */
+ORIG_OPEN = "\n#if 0 /* SE_ORIGINAL */\n"
+ORIG_CLOSE = "\n#endif"
+
+# Fences written by apply.py versions that replaced a line WITHOUT keeping it (the upstream text is
+# gone from such a tree): the exact old fence body -> the upstream text it replaced. Recognised on
+# re-apply (the original is put back inside the new-style fence) and on --revert (put back in place).
+LEGACY_REPLACED = {
+    "SeSMPCUpdateInput(vp, time_elapsed);\n":     # compared after strip()
+        "  VirtualPorts[vp]->UpdateInput(VirtualPortsDPtr[vp], time_elapsed);",
+}
+
+
+def fence_original(fence_text):
+    """The upstream text a replacing fence stands for, or None for a plain (insert-only) fence."""
+    body = fence_text[len(BEGIN):len(fence_text) - len(END)] if fence_text.endswith(END) else fence_text[len(BEGIN):]
+    body = body.strip("\n") + "\n"
+    i = body.find(ORIG_OPEN)
+    if i >= 0 and body.endswith(ORIG_CLOSE + "\n"):
+        return body[i + len(ORIG_OPEN):-len(ORIG_CLOSE) - 1]
+    return LEGACY_REPLACED.get(body.strip() + "\n")
+
+
 def apply_replace(text, anchor, code, key):
-    """Replace one regex match with fenced `code` (or update its existing fence)."""
-    def place(t, block):
-        m = re.search(anchor, t)
-        return t[:m.start()] + block + t[m.end():] if m else None
-    return upsert(text, code, key, place)
+    """Replace one regex match with fenced `code`, keeping the matched text inside the fence (see
+    ORIG_OPEN) so --revert restores it exactly; an existing fence is updated in place."""
+    existing = next((m.group(0) for m in FENCE_RE.finditer(text) if key in m.group(0)), None)
+    if existing is not None:
+        original = fence_original(existing)
+        if original is None:
+            return text, f"  ANCHOR MISS   {key}  <-- fence without a recoverable original (revert, then re-apply)"
+        block = fence(code.rstrip("\n") + ORIG_OPEN + original + ORIG_CLOSE)
+        if existing == block:
+            return text, f"  ok (already)  {key}"
+        return text.replace(existing, block, 1), f"  ~ updated     {key}"
+    m = re.search(anchor, text)
+    if not m:
+        return text, f"  ANCHOR MISS   {key}  <-- add by hand (see README)"
+    block = fence(code.rstrip("\n") + ORIG_OPEN + m.group(0) + ORIG_CLOSE)
+    return text[:m.start()] + block + text[m.end():], f"  + applied     {key}"
 
 
 def process_ss(src_dir, do_write, with_pause):
@@ -1653,9 +1697,7 @@ def process_smpc(src_dir, do_write):
                              SMPC_INPUT_STATE, "SeInjectedPad[2]")
     notes.append(n)
     text, n = apply_replace(
-        text,
-        r'[ \t]*VirtualPorts\[vp\]->UpdateInput\(VirtualPortsDPtr\[vp\], time_elapsed\);',
-        SMPC_INPUT_UPDATE, "SeSMPCUpdateInput(vp, time_elapsed)")
+        text, SMPC_UPDATE_ANCHOR, SMPC_INPUT_UPDATE, "SeSMPCUpdateInput(vp, time_elapsed)")
     notes.append(n)
     if do_write and text != original:
         open(cpp_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
@@ -1794,6 +1836,16 @@ def process_build(root, do_write):
             "  ANCHOR MISS   add se_export.c + se_mednafen_glue.c to the ss build by hand"]
 
 
+def revert_fence(m):
+    """What --revert leaves where a fence was: nothing, or -- for a fence that replaced upstream text --
+    that text. The fence's own trailing newline (matched by the caller's regex) is the upstream
+    line's, so it is kept in the second case."""
+    text = m.group(0)
+    nl = text.endswith("\n")
+    original = fence_original(text[:-1] if nl else text)
+    return "" if original is None else original + ("\n" if nl else "")
+
+
 def revert(src_dir, root):
     fence_re = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
     edited = [os.path.join(src_dir, f) for f in
@@ -1806,7 +1858,7 @@ def revert(src_dir, root):
     for path in edited:
         if os.path.isfile(path):
             t = open(path, encoding="utf-8", errors="surrogateescape").read()
-            open(path, "w", encoding="utf-8", errors="surrogateescape").write(fence_re.sub("", t))
+            open(path, "w", encoding="utf-8", errors="surrogateescape").write(fence_re.sub(revert_fence, t))
     for name in COMMON_FILES + [GLUE_FILE]:
         p = os.path.join(src_dir, name)
         if os.path.isfile(p):

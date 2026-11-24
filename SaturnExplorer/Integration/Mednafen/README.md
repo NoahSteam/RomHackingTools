@@ -691,8 +691,12 @@ total / idle / executed cycles), `ss.cpp` (cache emulation mode) plus the frame 
 the server at the end of every frame (`SeMdfnPerfEndFrame`), sets the `SE_PERF_VALID_*` bit for each
 v27 counter the hooks produce, and zeroes it. The increments are unconditional and cheap; every hook
 is an insertion after an anchor, so `--revert` removes them cleanly (appended blocks keep their
-separating blank line inside the fence, so the file comes back byte for byte; `smpc.cpp` is the
-exception, since one hook there replaces a line). An `ANCHOR MISS` here costs one figure in the
+separating blank line inside the fence, so the file comes back byte for byte). The one hook that
+REPLACES a line, the `UpdateInput` call in `smpc.cpp`, keeps the upstream line inside its fence under
+`#if 0 /* SE_ORIGINAL */`, and `--revert` puts that text back; a tree patched by an older `apply.py`,
+which dropped the line, is recognised, migrated on re-apply and restored on revert. `check_migration.py`
+asserts that the whole tree is byte-identical to the pristine one after `--revert`.
+An `ANCHOR MISS` here costs one figure in the
 Profiler panel (it reads zero) and is reported like any other miss. What each counter means is in
 `Docs/Codebase/Systems/Profiler.md`.
 
@@ -716,14 +720,16 @@ re-inserted without it).
 Any future rename needs a new entry there. Checks:
 
 * `Integration/tests/check_apply_hooks.py` (ctest `SaturnExplorerMednafenProfilerHooks`, no
-  Mednafen source needed): the retirement on synthetic fences, exact revert, the F4 debit macro
+  Mednafen source needed): the retirement on synthetic fences, exact revert (also of the replaced `smpc.cpp` line, and of the block an older `apply.py` wrote), the F4 debit macro
   compiled around a copy of Mednafen's, and the F8 address table compiled and checked at both ends of
   every range.
 * `Integration/Mednafen/check_migration.py <checkout> <scratch> <old apply.py>...` (needs the
   checkout; `git show 4b6cd9e:SaturnExplorer/Integration/Mednafen/apply.py > old.py`): patches
   pristine copies with each old `apply.py`, then with this one, and asserts the retired text is gone,
   every hook is present exactly once, a third apply changes nothing, `vdp1.cpp` / `sound.cpp` /
-  `m68k.cpp` / `ss.cpp` still parse, and `--revert` restores the files.
+  `m68k.cpp` / `ss.cpp` still parse, and `--revert` restores the WHOLE tree byte for byte (a snapshot of
+  every file, so an unlisted file is caught too), with and without `--with-pause`; applying again
+  gives the migrated tree.
 * `Integration/Mednafen/check_component.py <checkout> <scratch>` (needs the checkout): builds the
   *real* patched `vdp1.cpp` (F4: `VDP1::Update` / `DoDrawing` over a tiny VRAM command list), the
   patched 68000 core and `sound.cpp` (F5: real STOP / interrupt wake / external halt, and a real

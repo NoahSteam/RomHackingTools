@@ -94,6 +94,31 @@ t4, _ = mod.apply_append(t4, "void h() {}\n", "h()")
 if strip.sub("", t4) != original:
     fail("two appended blocks do not revert exactly")
 
+# ---- a fence that REPLACES upstream text reverts exactly (smpc.cpp's UpdateInput call) ---------------
+smpc = "void SMPC_UpdateInput(const int32 time_elapsed)\n{\n for(unsigned vp = 0; vp < 12; vp++)\n {\n" \
+       "  VirtualPorts[vp]->UpdateInput(VirtualPortsDPtr[vp], time_elapsed);\n }\n}\n"
+strip_or_restore = re.compile(re.escape(mod.BEGIN) + r".*?" + re.escape(mod.END) + r"\n?", re.DOTALL)
+KEY = "SeSMPCUpdateInput(vp, time_elapsed)"
+r1, n = mod.apply_replace(smpc, mod.SMPC_UPDATE_ANCHOR, mod.SMPC_INPUT_UPDATE, KEY)
+if "applied" not in n or "SeSMPCUpdateInput(vp, time_elapsed);" not in r1:
+    fail("the smpc.cpp replacement did not apply: %s" % n)
+if strip_or_restore.sub(mod.revert_fence, r1) != smpc:
+    fail("--revert does not restore the replaced smpc.cpp line byte for byte")
+r2, n = mod.apply_replace(r1, mod.SMPC_UPDATE_ANCHOR, mod.SMPC_INPUT_UPDATE, KEY)
+if r2 != r1 or "already" not in n:
+    fail("applying the smpc.cpp replacement twice is not a no-op")
+# a block an older apply.py wrote (the replaced line is gone from the tree): recognised, the line is
+# put back inside the new-style fence on re-apply, and put back in place by --revert
+legacy = smpc.replace("  VirtualPorts[vp]->UpdateInput(VirtualPortsDPtr[vp], time_elapsed);",
+                      mod.fence("  SeSMPCUpdateInput(vp, time_elapsed);"))
+if strip_or_restore.sub(mod.revert_fence, legacy) != smpc:
+    fail("--revert does not restore the line an older apply.py replaced in smpc.cpp")
+r3, n = mod.apply_replace(legacy, mod.SMPC_UPDATE_ANCHOR, mod.SMPC_INPUT_UPDATE, KEY)
+if r3 != r1 or "updated" not in n:
+    fail("an older apply.py's smpc.cpp block is not migrated to the revertible form: %s" % n)
+if strip_or_restore.sub(mod.revert_fence, r3) != smpc:
+    fail("a migrated smpc.cpp block does not revert exactly")
+
 if HAS_F5:
     # --revert reaches the shared 68000 core
     with tempfile.TemporaryDirectory(dir=work) as root:

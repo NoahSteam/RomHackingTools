@@ -13,7 +13,10 @@ compile error. This script proves the migration against a real Mednafen source:
   3. patch it again with the CURRENT apply.py and check: no ANCHOR MISS, no retired text left, every
      hook of F4/F5/F8 present exactly once, applying a third time changes nothing, and the patched
      vdp1.cpp / sound.cpp / m68k.cpp / ss.cpp still parse (g++ -fsyntax-only, with the real headers);
-  4. --revert restores every file this patch owns to the pristine bytes.
+  4. --revert restores the scratch tree to the pristine bytes: EVERY file, compared as a whole-tree
+     snapshot (so a file apply.py touches that this script's lists forgot is caught too, and so is a
+     file left behind); applying again afterwards gives exactly the tree the migrating apply gave, and
+     a second apply changes nothing; the same with --with-pause.
 
 The Mednafen source is not in this repository (it is a generated, untracked checkout), so this is a
 script, not a ctest. The part that needs no source -- the migration logic on a synthetic file -- is
@@ -31,14 +34,12 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 NEW_APPLY = os.path.join(HERE, "apply.py")
 
-# Files the patch edits, relative to the Mednafen root. The ones in OWNED must come back byte for
-# byte from --revert. (smpc.cpp is not: apply.py REPLACES a line there, so revert cannot restore it;
-# that predates this check and is reported, not asserted.)
+# Files the patch edits, relative to the Mednafen root (for the "third apply changes nothing" and the
+# per-file revert checks; --revert is additionally checked over the whole scratch tree, see snapshot()).
 EDITED = ["src/ss/vdp1.cpp", "src/ss/vdp2.cpp", "src/ss/ss.cpp", "src/ss/scu.inc", "src/ss/debug.inc",
           "src/ss/sound.cpp", "src/ss/scsp.h", "src/ss/cdb.cpp", "src/ss/smpc.cpp", "src/ss/smpc.h",
           "src/ss/sh7095.inc", "src/ss/sh7095_ops.inc", "src/hw_cpu/m68k/m68k.h", "src/hw_cpu/m68k/m68k.cpp",
           "src/drivers/video.cpp", "src/drivers/input.cpp", "src/ss/Makefile.am"]
-NOT_RESTORED = {"src/ss/smpc.cpp"}
 
 # (file, key, how many fences must contain it, apply.py attribute that exists once the item has landed)
 # for what this apply.py writes in the F4/F5/F8 areas; an entry whose attribute is absent is skipped.
@@ -75,6 +76,22 @@ def git_show(root, rel):
 def fences_containing(text, key, mod):
     return sum(1 for m in re.finditer(re.escape(mod.BEGIN) + r".*?" + re.escape(mod.END), text, re.S)
                if key in m.group(0))
+
+
+def snapshot(work):
+    """Every regular file of the scratch tree (symlinked directories are not entered), by relative path."""
+    out = {}
+    for dirpath, dirnames, filenames in os.walk(work):
+        for name in filenames:
+            p = os.path.join(dirpath, name)
+            if not os.path.islink(p):
+                with open(p, "rb") as f:
+                    out[os.path.relpath(p, work)] = f.read()
+    return out
+
+
+def diff_snapshots(a, b):
+    return sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
 
 
 def run_apply(script, root, *flags):
@@ -141,6 +158,7 @@ def main():
         print("== migrating from %s" % old)
         work = make_scratch(root, scratch)
         pristine = {rel: git_show(root, rel) for rel in EDITED if os.path.isfile(os.path.join(work, rel))}
+        whole_pristine = snapshot(work)
         rc, out = run_apply(os.path.abspath(old), work)
         if rc not in (0, 3):
             fail("the old apply.py did not run (status %d):\n%s" % (rc, out[-600:]))
@@ -179,14 +197,38 @@ def main():
                 fail("%s does not compile after the migration:\n%s" % (rel, r.stderr[-1500:]))
             else:
                 print("   compiles: " + rel)
-        rc, out = run_apply(NEW_APPLY, work, "--revert")
-        for rel, data in pristine.items():
-            now = open(os.path.join(work, rel), "rb").read()
-            if now != data:
-                if rel in NOT_RESTORED:
-                    print("   note: %s is not restored by --revert (apply.py replaces a line there)" % rel)
-                else:
-                    fail("--revert did not restore %s byte for byte" % rel)
+        migrated = snapshot(work)
+
+        def revert_is_exact(what):
+            run_apply(NEW_APPLY, work, "--revert")
+            for rel, data in pristine.items():
+                if open(os.path.join(work, rel), "rb").read() != data:
+                    fail("%s: --revert did not restore %s byte for byte" % (what, rel))
+            changed = diff_snapshots(whole_pristine, snapshot(work))
+            if changed:
+                fail("%s: --revert left the tree different from the pristine one in: %s" % (what, ", ".join(changed)))
+            else:
+                print("   %s: --revert restored all %d files of the tree byte for byte" % (what, len(whole_pristine)))
+
+        revert_is_exact("migrated tree")
+        rc, out = run_apply(NEW_APPLY, work)
+        if rc != 0 or "ANCHOR MISS" in out:
+            fail("applying again after --revert failed:\n%s" % out[-600:])
+        again = diff_snapshots(migrated, snapshot(work))
+        if again:
+            fail("apply after --revert is not the tree the migrating apply gave; differs in: %s" % ", ".join(again))
+        else:
+            print("   apply after --revert equals the migrated tree")
+        revert_is_exact("re-applied tree")
+        for flag_set in (["--with-pause"],):
+            rc, out = run_apply(NEW_APPLY, work, *flag_set)
+            if rc != 0 or "ANCHOR MISS" in out:
+                fail("apply %s failed:\n%s" % (flag_set, out[-600:]))
+            first = snapshot(work)
+            rc, out = run_apply(NEW_APPLY, work, *flag_set)
+            if "applied" in out or "updated" in out or diff_snapshots(first, snapshot(work)):
+                fail("a second apply %s was not a no-op:\n%s" % (flag_set, out[-600:]))
+            revert_is_exact("apply " + " ".join(flag_set))
     print("OK" if not bad else "%d check(s) failed" % bad)
     return 1 if bad else 0
 
