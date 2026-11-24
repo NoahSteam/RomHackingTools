@@ -320,6 +320,8 @@ Needs a Saturn BIOS, discs and a toolchain, which the build environment used so 
   and on within the patched build, since the continuous debug callback changes peripheral update
   cadence. Ownership is checked against an independent instruction / exception trace, not the
   Call Stack panel, which shares the profiler's stack producer.
+  Harness, procedure and results template (built and tested against a stand-in emulator only; no measurement
+  has been made): [Integration/Validation/V3/PROCEDURE.md](../Integration/Validation/V3/PROCEDURE.md).
 
 ## Conditional on measurement
 
