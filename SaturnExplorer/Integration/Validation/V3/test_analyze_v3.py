@@ -50,6 +50,15 @@ def write_run(d, rep, cfg, fps, cpu_ms_per_frame=None, gap_at=None, mode=None, s
             f.write("%s=%s\n" % (k, v))
 
 
+def add_warmup(d, rep, cfg, requested, overshoot, with_field=True):
+    """Append the warm-up record a client summary carries (origin 100)."""
+    with open(os.path.join(d, "run%02d_%s.summary" % (rep, cfg)), "a") as f:
+        f.write("warmup_frames_requested=%d\nwindow_origin_frame=100\nwindow_open_frame=%d\n"
+                % (requested, 100 + requested + overshoot))
+        if with_field:
+            f.write("warmup_overshoot_frames=%d\n" % overshoot)
+
+
 def make(d, a, b, c, **kw):
     for i, (fa, fb, fc) in enumerate(zip(a, b, c)):
         write_run(d, i + 1, "a", fa)
@@ -123,6 +132,43 @@ class Analyze(unittest.TestCase):
             self.assertEqual(res["configs"]["c"]["valid"], 1)
             # the lost-sample run's speed must not be in the statistics
             self.assertEqual(len(res["configs"]["b"]["speed"]["values"]), 2)
+
+    def test_warmup_overshoot_is_flagged_not_invalid(self):
+        with tempfile.TemporaryDirectory() as d:
+            make(d, [600] * 3, [540] * 3, [300] * 3)
+            for rep in (1, 2, 3):
+                for cfg in "abc":
+                    add_warmup(d, rep, cfg, 300, 2)
+            res = self.run_analysis(d)
+            self.assertEqual([w for w in res["warnings"] if "warm-up" in w], [])
+            # rep 2 a overshoots by 394 (the real-run figure), rep 3 a by 61 (just over 20 percent of 300),
+            # rep 3 b by 59 (just under: not flagged by itself) and 2 against a's 61 is a spread of 59 only
+            add_warmup(d, 2, "a", 300, 394)
+            add_warmup(d, 3, "a", 300, 61)
+            add_warmup(d, 3, "b", 300, 59, with_field=False)   # old summary: derived from origin and open frames
+            res = self.run_analysis(d)
+            text = " ".join(res["warnings"])
+            self.assertIn("rep 02 a: warm-up overshoot +394", text)
+            self.assertIn("rep 02: warm-up overshoot differs by 392", text)
+            self.assertIn("rep 03 a: warm-up overshoot +61", text)
+            self.assertNotIn("rep 03 b", text)
+            self.assertNotIn("rep 01", text)
+            # flagged, not excluded: the speed statistics still hold all three runs of a
+            self.assertEqual(res["configs"]["a"]["valid"], 3)
+            flags = {(r["rep"], r["cfg"]): r["flags"] for r in res["runs"]}
+            self.assertTrue(flags[(2, "b")] and flags[(2, "a")])   # the spread flag marks every config of the rep
+            self.assertEqual(flags[(1, "a")], [])
+            buf = io.StringIO()
+            A.report(res, {}, out=buf)
+            self.assertIn("FLAG: warm-up overshoot +394", buf.getvalue())
+            self.assertEqual(A.DEFAULT_MIN_FRAMES, 1000)
+
+    def test_warmup_without_frame_request_is_not_flagged(self):
+        with tempfile.TemporaryDirectory() as d:
+            make(d, [600] * 3, [540] * 3, [300] * 3)
+            with open(os.path.join(d, "run01_a.summary"), "a") as f:
+                f.write("warmup_frames_requested=0\nwarmup_overshoot_frames=0\n")
+            self.assertEqual(self.run_analysis(d)["warnings"], [])
 
     def test_drift_between_repetitions_is_flagged(self):
         with tempfile.TemporaryDirectory() as d:
