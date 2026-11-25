@@ -332,7 +332,7 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     bool haveStatus = false;
     std::vector<std::string> invalid;
 
-    int64_t originFrame = -1, openFrame = -1;
+    int64_t originFrame = -1, openFrame = -1, originArrivalNs = -1;
     uint64_t warmProbes = 0;
     int64_t holdWarmNs = 0;
     size_t startIdx = 0;   // bracket: the row of the probe that opens the window
@@ -359,6 +359,7 @@ int RunBench(const BenchOptions& o, std::FILE* out)
             if (!Probe(o, t0, rows, &cpuTmp, &holdTmp, out, &probeInconsistent)) return kError;
             const Row org = rows.back();
             originFrame = org.frameNo;
+            originArrivalNs = org.arrivalNs;
             uint64_t probes = 1;
             for (;;)
             {
@@ -404,20 +405,52 @@ int RunBench(const BenchOptions& o, std::FILE* out)
         startIdx = rows.size() - 1;
         openFrame = rows.back().frameNo;
         windowStartNs = rows.back().arrivalNs;
-        SleepUntilNs(t0, windowStartNs + durNs);
-        const int64_t startFrame = rows.back().frameNo;
-        for (;;)
+        const Row startRow = rows.back();
+        const int64_t startFrame = startRow.frameNo;
+        if (o.frames <= 0)
         {
+            SleepUntilNs(t0, windowStartNs + durNs);
             if (!Probe(o, t0, rows, &cpuEnd, &holdEndNs, out, &probeInconsistent)) return kError;
             windowEndNs = rows.back().arrivalNs;
-            if (o.frames <= 0 || rows.back().frameNo - startFrame >= o.frames) break;
-            if (NowNs(t0) > static_cast<int64_t>(o.timeoutS * 1e9))
+        }
+        else
+        {
+            // A window in frames (--duration is not used, as in stream mode). The end is found with few probes by
+            // the warm-up's method: estimate the remaining time from the frame rate seen so far (between the start
+            // probe and the newest one; before there is a second one, the rate of the warm-up), sleep 90 percent of
+            // it (never under kMinSpacingNs), look again. The remaining time shrinks tenfold per look, so the number
+            // of looks grows with the logarithm of the count, not with the length of the window. Granularity: the
+            // window ends at the first look at or past the target, so it overshoots by less than the frames between
+            // the last two looks (reported as window_overshoot_frames). Bounds: timeoutS for the whole run and
+            // kMaxEndProbes extra looks.
+            const int64_t kMinSpacingNs = 20000000, kFirstSleepNs = 50000000, kStalledSleepNs = 250000000;
+            const uint64_t kMaxEndProbes = 64;
+            const int64_t deadlineNs = static_cast<int64_t>(o.timeoutS * 1e9);
+            const double seedFrames = static_cast<double>(openFrame - originFrame);
+            const double seedNs = static_cast<double>(windowStartNs - originArrivalNs);
+            for (;;)
             {
-                std::fprintf(out, "error: %lld frames not reached within %.0f s\n", static_cast<long long>(o.frames), o.timeoutS);
-                return kError;
+                const Row cur = rows.back();
+                const int64_t df = cur.frameNo - startFrame, dt = cur.arrivalNs - startRow.arrivalNs;
+                int64_t sleepNs = (df > 0) ? kStalledSleepNs : kFirstSleepNs;
+                if (df > 0 && dt > 0)
+                    sleepNs = static_cast<int64_t>(0.9 * static_cast<double>(o.frames - df) * static_cast<double>(dt) / static_cast<double>(df));
+                else if (df <= 0 && originArrivalNs >= 0 && seedFrames > 0 && seedNs > 0)
+                    sleepNs = static_cast<int64_t>(0.9 * static_cast<double>(o.frames) * seedNs / seedFrames);
+                sleepNs = (std::max)(sleepNs, kMinSpacingNs);
+                SleepUntilNs(t0, (std::min)(cur.arrivalNs + sleepNs, deadlineNs));
+                if (!Probe(o, t0, rows, &cpuEnd, &holdEndNs, out, &probeInconsistent)) return kError;
+                windowEndNs = rows.back().arrivalNs;
+                if (rows.back().frameNo - startFrame >= o.frames) break;
+                if (NowNs(t0) >= deadlineNs || extraProbes >= kMaxEndProbes)
+                {
+                    std::fprintf(out, "error: %lld frames not reached (%lld seen) within %.0f s / %llu probes\n",
+                                 static_cast<long long>(o.frames), static_cast<long long>(rows.back().frameNo - startFrame), o.timeoutS,
+                                 static_cast<unsigned long long>(extraProbes + 2));
+                    return kError;
+                }
+                ++extraProbes;   // too few frames yet: look again (each look is a short connection, kept in the CSV)
             }
-            ++extraProbes;   // too few frames yet: look again (each look is a short connection, kept in the CSV)
-            SleepMs(250);
         }
     }
     else
@@ -582,6 +615,11 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     if (o.mode == Mode::Bracket) windowFrames = lastFrame - firstFrame;
     s.Put("window_frames", static_cast<long long>(windowFrames));
     s.Put("frames_requested", static_cast<long long>(o.frames));
+    // How the window was ended: "frames" (--frames; --duration is not used, in either mode) or "seconds".
+    s.Put("window_by", o.frames > 0 ? "frames" : "seconds");
+    // Frames past the target when a frame window ended (0 for a seconds window). Less than the frames between the
+    // last two observations: a drain (stream) or the last two probes (bracket).
+    s.Put("window_overshoot_frames", static_cast<long long>(o.frames > 0 && windowFrames > o.frames ? windowFrames - o.frames : 0));
     s.Put("bracket_probe_inconsistent", static_cast<unsigned long long>(probeInconsistent));
     s.Put("bracket_extra_probes", static_cast<unsigned long long>(extraProbes));
     // Warm-up record. origin = first frame published after the client attached; open = the frame the window

@@ -30,8 +30,8 @@ struct BenchOptions
     double      warmupS = 10.0;     // discarded: the window starts after it
     double      durationS = 60.0;   // length of the measured window
     // Count-driven windows. frames > 0: the measured window ends once that many emulated frames have passed
-    // since it started, whatever the host's speed (durationS is then only the minimum spacing of the two
-    // bracket probes). warmupFrames > 0: the warm-up ends after that many frames past the first frame published
+    // since it started, whatever the host's speed, in stream and bracket alike (durationS is then not
+    // used at all; bracket finds the end with a few probes, see BenchClient.cpp). warmupFrames > 0: the warm-up ends after that many frames past the first frame published
     // after attaching, instead of warmupS seconds (the seconds are then unused, in both modes; bracket makes short
     // warm-up probes to follow the count).
     // A run that cannot get there within timeoutS fails (exit 1) rather than hang.
