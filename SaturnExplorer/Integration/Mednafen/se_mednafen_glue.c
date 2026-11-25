@@ -1034,6 +1034,15 @@ void SeMednafenForeignHook(int foreign)
     }
 }
 
+/* Component-test accessor (component/perf_sh2_harness.cpp, which cannot reach the static flag and does not
+ * run the frame end that clears it): whether the frame in progress is a gap frame, and clear it. */
+int SeMednafenTakeFrameGap(void)
+{
+    const int gap = sFrameGap;
+    sFrameGap = sForeignHook;
+    return gap;
+}
+
 /* A state was loaded (rewind, slot, native): the machine is whatever the file said. Partial accounting
  * belongs to the abandoned timeline and is discarded; the slave's on-state is read from the loaded
  * CPU (a load never calls SetActive), starting at the frame's origin since a load lands between

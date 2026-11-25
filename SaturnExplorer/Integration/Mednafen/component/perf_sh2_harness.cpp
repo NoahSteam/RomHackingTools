@@ -21,6 +21,7 @@ extern "C"
 unsigned int SeExportCallStackEpoch(int cpu);
 unsigned int SeExportCurrentFunction(int cpu);
 void SeExportPushFrame(int cpu, unsigned int callSite, unsigned int func, unsigned int ret, unsigned int sp, unsigned long long cycle);
+int SeMednafenTakeFrameGap(void);
 }
 
 // Data the rest of ss.cpp refers to and this test never reaches (hidden-visibility externs the linker will not
@@ -73,6 +74,23 @@ int gHookCalls = 0;      // CPU-hook calls
 int gHookBpoint = 0;     // calls that carried bpoint = true
 sscpu_timestamp_t CountingEvent(const sscpu_timestamp_t) { ++gSyncCalls; return 0x3FFFFF00; }
 void CountingHook(uint32, bool bpoint) { ++gHookCalls; if (bpoint) ++gHookBpoint; }
+
+// A debugger whose callback is a one-shot: it is installed from inside a device handler during
+// DBG_CPUHandler's sync (so the sync that reports it is deferred), runs once for the instruction, and asks for NULL.
+int gOneShotCalls = 0;
+int gOneShotArm = 0;
+int gOneShotDropsProfile = 0;   // the SE client also switches attribution off in that same handler call
+void OneShotNative(uint32, bool) { ++gOneShotCalls; DBGInfo.SetCPUCallback(nullptr, false); }
+sscpu_timestamp_t InstallOneShotEvent(const sscpu_timestamp_t)
+{
+    if (gOneShotArm)
+    {
+        gOneShotArm = 0;
+        DBGInfo.SetCPUCallback(OneShotNative, true);
+        if (gOneShotDropsProfile) { SsDbgSetProfileActive(0); sSeBpActive = 0; }
+    }
+    return 0x3FFFFF00;
+}
 
 // One instruction presented to the handler of each SH-2 under the current mode; returns the sync count.
 int HandlerSyncs(bool useCountingHook)
@@ -291,6 +309,92 @@ int main()
         Expect("the handler returned: ours is installed", DBG.CPUHook == SeSsBpHook && DBG.CPUHookContinuous, 1);
         SsDbgSetProfileActive(0);
         Expect("and removed again when nothing wants it", DBG.CPUHook == nullptr, 1);
+    }
+
+    std::printf("native debugger: a callback installed and released inside ONE handler call is still a takeover\n");
+    {
+        // The reported hole: SeSyncCpuHook is deferred inside the handler, so when it ran the debugger had already
+        // asked for NULL and nothing said that the instruction went to its callback instead of ours.
+        events[SS_EVENT__SYNFIRST + 1].event_handler = InstallOneShotEvent;
+        for (int withTrace = 1; withTrace >= 0; --withTrace)
+        {
+            const char* mode = withTrace ? "profiling and a tracepoint" : "profiling and a breakpoint (no trace)";
+            CPU[0].timestamp = CPU[1].timestamp = SS_EVENT_DISABLED_TS;
+            DBG.eff_ts = 0;
+            DBG.BreakPointsPC.clear();
+            sSeBpActive = 0;
+            SsDbgSetTraceActive(0);
+            SsDbgSetProfileActive(0);
+            DBGInfo.SetCPUCallback(nullptr, false);
+            SsDbgSetProfileActive(1);
+            if (withTrace) SsDbgSetTraceActive(1);
+            else
+            {
+                // profiling alone does not sync the devices; a breakpoint found on the instruction does
+                DBG_AddBreakPoint(BPOINT_PC, 0, 0xFFFFFFFFu, true);
+                sSeBpActive = 1;
+                SeSyncCpuHook();
+            }
+            Expect(mode, DBG.CPUHook == SeSsBpHook && DBG.CPUHookContinuous, 1);
+            SeSsOwnCpuHook = SeSsBpHook;
+            SeMednafenTakeFrameGap();                            // start the frame clean
+            SeExportPushFrame(0, 0x06001000u, 0x06002000u, 0x06001004u, 0x060F0000u, 0);
+            Expect("a function is recorded", SeExportCurrentFunction(0) != 0, 1);
+            const unsigned epoch0 = SeExportCallStackEpoch(0);
+            Expect("before: not a gap frame", SeMednafenTakeFrameGap(), 0);
+
+            gOneShotCalls = 0;
+            gOneShotArm = 1;
+            DBG_CPUHandler<0>();
+            Expect("the debugger's one-shot callback ran once", gOneShotCalls, 1);
+            Expect("ours is back as the handler returned", DBG.CPUHook == SeSsBpHook, 1);
+            Expect("no callback request is left pending", MDFN_IEN_SS::SeSsInHandler, 0);
+            Expect("the frame is a gap frame", SeMednafenTakeFrameGap(), 1);
+            Expect("the shadow stack restarted", SeExportCallStackEpoch(0) != epoch0, 1);
+            Expect("and no function is named until a call is seen", (long long)SeExportCurrentFunction(0), 0);
+            Expect("both SH-2s are observed again", MDFN_IEN_SS::SeSsBothCpus, 1);
+
+            // The takeover is delivered once: a later sync marks nothing new.
+            SeExportPushFrame(0, 0x06001000u, 0x06002000u, 0x06001004u, 0x060F0000u, 0);
+            const unsigned epoch1 = SeExportCallStackEpoch(0);
+            SeSyncCpuHook();
+            Expect("an unrelated sync later marks no gap", SeMednafenTakeFrameGap(), 0);
+            Expect("and does not restart the stack again", SeExportCallStackEpoch(0) == epoch1, 1);
+        }
+        // Attribution switched off in the same call: when the sync runs we want nothing, so nothing is marked.
+        DBG.BreakPointsPC.clear();
+        sSeBpActive = 0;
+        SsDbgSetTraceActive(0);
+        SsDbgSetProfileActive(0);
+        DBGInfo.SetCPUCallback(nullptr, false);
+        SsDbgSetProfileActive(1);
+        DBG_AddBreakPoint(BPOINT_PC, 0, 0xFFFFFFFFu, true);   // makes the handler sync the devices (profiling alone does not)
+        sSeBpActive = 1;
+        SeSyncCpuHook();
+        SeSsOwnCpuHook = SeSsBpHook;
+        SeMednafenTakeFrameGap();
+        gOneShotCalls = 0;
+        gOneShotArm = 1;
+        gOneShotDropsProfile = 1;
+        DBG_CPUHandler<0>();
+        gOneShotDropsProfile = 0;
+        Expect("wanted nothing by the time of the sync: the one-shot still ran", gOneShotCalls, 1);
+        Expect("wanted nothing by the time of the sync: nothing is marked", SeMednafenTakeFrameGap(), 0);
+        Expect("wanted nothing by the time of the sync: no callback is left", DBG.CPUHook == nullptr, 1);
+        DBG.BreakPointsPC.clear();
+        // When we want no callback at that moment nothing is marked.
+        DBG.BreakPointsPC.clear();
+        sSeBpActive = 0;
+        SsDbgSetTraceActive(0);
+        SsDbgSetProfileActive(0);
+        DBGInfo.SetCPUCallback(nullptr, false);
+        SeSyncCpuHook();
+        SeMednafenTakeFrameGap();
+        DBGInfo.SetCPUCallback(CountingHook, true);
+        DBGInfo.SetCPUCallback(nullptr, false);
+        Expect("nothing wanted: a takeover and release marks no gap", SeMednafenTakeFrameGap(), 0);
+        Expect("nothing wanted: no callback is left behind", DBG.CPUHook == nullptr, 1);
+        for (unsigned i = SS_EVENT__SYNFIRST + 1; i < SS_EVENT__SYNLAST; ++i) events[i].event_handler = CountingEvent;
     }
 
     std::printf("%s\n", gFail ? "FAILED" : "PASSED");

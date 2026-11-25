@@ -380,7 +380,9 @@ if hasattr(mod, "DEBUG_SYNC_EDIT"):
                       ("else if (wasHeld)\n      SeSyncCpuHook();", "re-applies our mode when the debugger releases the callback"),
                       ("if (sSeNativeCb != 0)\n      return;", "SeSyncCpuHook leaves a callback the debugger holds alone"),
                       ("SeSsBothCpus = on && !foreign;", "the both-CPU handler is off while the debugger holds the callback"),
-                      ("SeMednafenForeignHook(foreign);", "the glue is told when ours is not the installed callback")):
+                      ("SeMednafenForeignHook(foreign);", "the glue is told when ours is not the installed callback"),
+                      ("if (sSeOursInstalled) { sSeNativeLost = 1; sSeOursInstalled = 0; }", "a takeover from our installed callback is recorded when it happens"),
+                      ("sSeNativeLost = 0;\n      if (on) SeMednafenForeignHook(1);", "the recorded takeover is delivered by the next sync that runs, only when we want a callback")):
         if need not in src:
             fail("the native-callback wrapper does not hold: " + why)
     if "void SeMednafenForeignHook(int foreign);" not in mod.FWD_DECLS or not re.search(r"^void SeMednafenForeignHook\(", glue, re.M):

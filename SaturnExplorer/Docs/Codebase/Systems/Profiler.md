@@ -314,7 +314,7 @@ the callback was taken, until a client re-armed the profiler.
 
 The code runs unobserved while the debugger holds the callback (`SeMednafenForeignHook(1)`, called by
 `SeSyncCpuHook` whenever we want a callback and ours is not the installed one): the baselines are dropped and
-ownership is withdrawn, so nothing is named. When ours returns (`SeMednafenForeignHook(0)`) the shadow call
+ownership is withdrawn, so nothing is named. A takeover that is released inside the very handler call it was made in (a one-shot callback) is still delivered: the sync is deferred, so `SeSsNativeSetCPUCallback` records the loss in `sSeNativeLost` and the next sync that runs calls `SeMednafenForeignHook(1)` before `(0)`. When ours returns (`SeMednafenForeignHook(0)`) the shadow call
 stack of both CPUs is reset and any held call/return is dropped (it missed calls and returns), so the first
 instruction after the gap has no baseline and the gap is never charged to the function that was on top.
 **On the wire (v27, unchanged):** a frame during any part of which our callback was absent (`sFrameGap`:

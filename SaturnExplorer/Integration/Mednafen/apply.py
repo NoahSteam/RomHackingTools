@@ -272,6 +272,14 @@ static int sSeSyncPending = 0;
    good the first time the debugger was opened and nothing ever put it back. While it holds a callback it keeps
    it (SeSyncCpuHook leaves DBG.CPUHook alone), exactly as upstream would. */
 static void (*sSeNativeCb)(uint32 PC, bool bpoint) = 0;
+/* Our callback is the one DBG.CPUHook holds (SeSyncCpuHook installed it and nothing has replaced it since). */
+static int sSeOursInstalled = 0;
+/* The debugger took the callback away from ours. Sticky until a sync that actually runs has told the glue:
+   the takeover is a change of DBG.CPUHook made at once, but the sync that reports it is deferred inside a
+   DBG_CPUHandler call, and a debugger that asks for NULL again in that same call (a one-shot callback) leaves
+   sSeNativeCb == 0 by the time it runs -- an instruction went to the debugger's callback and nothing would
+   say so. */
+static int sSeNativeLost = 0;
 static void SeSyncCpuHook(void) {
    /* Never change the callback while DBG_CPUHandler is running: it has already decided to call it.
       The handler's scope guard re-runs this as it returns, before the next instruction. */
@@ -289,15 +297,25 @@ static void SeSyncCpuHook(void) {
    /* A held call/return is completed by the instructions that follow it; if the CPU is about to run
       without presenting them, it must be told (it is not told of an edit made while halted). */
    if (!sSeHalted) SeMednafenHookMode(every != 0 && !foreign);
+   /* A takeover that was released before this sync could run is still a gap: the glue is told it began (the
+      next call then ends it), so the frame is not attributed and the stack restarts. Nothing is marked when we
+      want no callback. This is outside any handler call (above), where the glue may be entered. */
+   if (sSeNativeLost) {
+      sSeNativeLost = 0;
+      if (on) SeMednafenForeignHook(1);
+   }
    SeMednafenForeignHook(foreign);
    if (sSeNativeCb != 0)
       return;   /* the native debugger's callback stays; it gets ours back when it releases it */
    if (on) {
       SeSsOwnCpuHook = SeSsBpHook;
       DBG_SetCPUCallback(SeSsBpHook, every != 0);
+      sSeOursInstalled = 1;
    }
-   else
+   else {
       DBG_SetCPUCallback(0, false);
+      sSeOursInstalled = 0;
+   }
 }
 /* DebuggerInfo.SetCPUCallback (debug.inc routes the table entry here). A callback the native debugger asks for
    is installed exactly as upstream does -- it takes precedence, and DBG.CPUHook != SeSsOwnCpuHook keeps
@@ -307,6 +325,7 @@ extern "C" void SeSsNativeSetCPUCallback(void (*callb)(uint32 PC, bool bpoint), 
    const int wasHeld = sSeNativeCb != 0;
    sSeNativeCb = callb;
    if (callb) {
+      if (sSeOursInstalled) { sSeNativeLost = 1; sSeOursInstalled = 0; }
       DBG_SetCPUCallback(callb, continuous);
       SeSyncCpuHook();   /* notes the takeover (and is deferred inside a handler call, like any edit) */
    }

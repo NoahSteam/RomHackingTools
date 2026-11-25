@@ -361,9 +361,12 @@ the whole busy total on one function). `process_debug` now replaces the table en
 - `SeSyncCpuHook` tells the glue (`SeMednafenForeignHook`) whether we want a callback and it is not ours; the glue
   withdraws ownership and drops the sampling baseline, resets both shadow stacks when ours returns, and publishes
   every frame touched by the gap as not attributed (`Docs/Codebase/Systems/Profiler.md`, "Cost of attribution").
+- a callback taken and released inside one `DBG_CPUHandler` call (a one-shot) is still a gap: the takeover is
+  recorded when it happens (`sSeNativeLost`) and the next sync that actually runs reports it to the glue before the
+  release, so the frame is not attributed and the stack restarts; nothing is marked if we wanted no callback then.
 
 `check_component.py` (f2_sh2) drives the real table entry; `--mutate native-table-upstream|native-null-not-reapplied|
-native-not-installed|native-stolen-by-edit|native-both-cpus|native-not-noted|native-in-handler|native-null-always-drops`
+native-not-installed|native-stolen-by-edit|native-both-cpus|native-not-noted|native-in-handler|native-null-always-drops|native-transient-lost|native-transient-undelivered|native-transient-unconditional|native-transient-kept`
 must each make it fail. Verified on the pinned source and in the harness; not yet on the real emulator.
 
 ### Installs run on the emulate thread

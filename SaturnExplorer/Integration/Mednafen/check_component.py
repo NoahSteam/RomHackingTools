@@ -41,7 +41,11 @@ ours for good), "native-null-not-reapplied" (a NULL request is not answered with
 (what the debugger asks for is not installed), "native-stolen-by-edit" (an SE install edit takes the callback while
 the debugger holds it), "native-both-cpus" (the both-CPU handler stays on under the debugger's callback),
 "native-not-noted" (the glue is never told that the code ran unobserved: no stack restart), "native-in-handler"
-(the callback changes inside a handler call), "native-null-always-drops" (a NULL request removes ours, then we sync)."""
+(the callback changes inside a handler call), "native-null-always-drops" (a NULL request removes ours, then we sync).
+A takeover released inside the handler call it was made in (the deferred sync finds the debugger's callback already
+gone) must still be a gap, and these must make it fail: "native-transient-lost" (the takeover is not recorded),
+"native-transient-undelivered" (the sync does not tell the glue), "native-transient-unconditional" (it is told even
+when we want no callback), "native-transient-kept" (the record is never cleared: every later sync repeats it)."""
 import os
 import subprocess
 import sys
@@ -187,6 +191,10 @@ SYNC_MUTATIONS = {
     "native-not-noted": ("f2_sh2", "src/ss/ss.cpp", "   SeMednafenForeignHook(foreign);\n", ""),
     "native-in-handler": ("f2_sh2", "src/ss/ss.cpp", "if (SeSsInHandler > 0) { sSeSyncPending = 1; return; }", "if (0) { sSeSyncPending = 1; return; }"),
     "native-null-always-drops": ("f2_sh2", "src/ss/ss.cpp", "else if (wasHeld)\n      SeSyncCpuHook();", "else { DBG_SetCPUCallback(0, false); SeSyncCpuHook(); }"),
+    "native-transient-lost": ("f2_sh2", "src/ss/ss.cpp", "if (sSeOursInstalled) { sSeNativeLost = 1; sSeOursInstalled = 0; }", "if (sSeOursInstalled) { sSeOursInstalled = 0; }"),
+    "native-transient-undelivered": ("f2_sh2", "src/ss/ss.cpp", "if (on) SeMednafenForeignHook(1);", ""),
+    "native-transient-unconditional": ("f2_sh2", "src/ss/ss.cpp", "if (on) SeMednafenForeignHook(1);", "SeMednafenForeignHook(1);"),
+    "native-transient-kept": ("f2_sh2", "src/ss/ss.cpp", "      sSeNativeLost = 0;\n      if (on)", "      if (on)"),
 }
 
 
