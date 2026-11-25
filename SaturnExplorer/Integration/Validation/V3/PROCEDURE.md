@@ -203,7 +203,7 @@ The seconds options still work and are the default. The validity floors of the a
 to either.
 
 The tests use this: every V3 test counts frames and holds no assertion about frames per second, so they pass on a
-loaded or slow host (`V3_TEST_FRAME_MS` and `FAKE_FRAME_MS` slow the two stand-ins down to check that).
+loaded or slow host (`V3_TEST_FRAME_MS` and `FAKE_FRAME_MS` slow the two stand-ins down to check that). The script test runs its stand-in at 20 ms per frame by default: the live ring holds 16 records, so a stand-in much faster than the client can be drained loses samples whenever the client is starved, which is a correct "invalid" verdict about the run but not what that test is about.
 
 ### Windows
 
