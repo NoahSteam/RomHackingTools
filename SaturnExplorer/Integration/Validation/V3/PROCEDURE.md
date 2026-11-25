@@ -1,11 +1,11 @@
 # V3: profiler cost on the emulator, recording procedure
 
 This is the harness for `Docs/ProfilerFixPlan.md` Phase 5, item V3, and the numbers it produces
-are the input to the plan's "Conditional on measurement" items F12 and F13. **Nothing in this
-directory has been run against a real emulator.** It was built and tested against the real
-exporter (`se_export.c`) and driver with a stand-in emulator thread, which proves the harness
-records, flags and computes correctly; it says nothing about how fast or slow the patched
-Mednafen is. The overhead figures exist only after you run the procedure below.
+are the input to the plan's "Conditional on measurement" items F12 and F13. The harness was built and
+tested against the real exporter (`se_export.c`) and driver with a stand-in emulator thread, which proves it
+records, flags and computes correctly; it says nothing about how fast or slow the patched Mednafen is. It has
+been run once against a real emulator, on a machine that was not quiesced: see "First real run, 2026-11-25"
+at the end of this file, which is provisional and not a result.
 
 ## What is measured
 
@@ -145,12 +145,36 @@ Losses during the discarded warm-up are reported but do not invalidate.
    the patch revision. Use a build with the profiler (`SE_LIVE_CAP_PROFILER`) and function attribution
    (`SE_LIVE_CAP_PROF_FUNCTIONS`); the client refuses otherwise.
 3. Pick the scene (see `Docs/ProfilerFixPlan.md` V2 for candidates), run it in the emulator under the same
-   `--cache` mode you will benchmark, and save it with Mednafen's own save-state key into a numbered slot (the
+   `--cache` mode you will benchmark (see "The save state and the cache mode" below), and save it with Mednafen's own save-state key into a numbered slot (the
    selected slot changes with its `state_slot_dec` / `state_slot_inc` keys, `-` and `=` by default,
    `drivers/input.cpp:1357`). Note the game revision and the slot. `se-bench-client --mode load-slot --slot N` asks
    the patched emulator to load that slot with its own loader (ELS verb; `apply.py:650-660` builds the path with
    `MDFN_MakeFName(MDFNMKF_STATE, slot)`, which includes the disc's MD5, so the slot only loads for the same
    disc image). `-autosave` is not used and is pinned to 0.
+
+   **Where the state lives.** Mednafen keeps states in `<base>/mcs/<game>.<md5>.mc<N>`, `<base>` being
+   `$MEDNAFEN_HOME` when that is set, else the platform default (`~/.mednafen`; `%USERPROFILE%\.mednafen` on
+   Windows). Saturn Explorer's GUI launches Mednafen with `MEDNAFEN_HOME` set to the emulator exe's folder
+   (`WindowsPlatform.cpp:446`), so **a state made through the GUI is in `<exe dir>/mcs`**, which a shell run
+   without `MEDNAFEN_HOME` does not read (the first real run lost time to exactly this). `run_v3.sh` therefore
+   checks, before it starts anything, that `<base>/mcs/*.mc<slot>` exists, prints the candidates it found (the
+   file name carries the disc's MD5, which it does not compute; Mednafen loads the matching one), and otherwise
+   stops naming the folder it looked in and suggesting `--mednafen-home <exe dir>`. `--mednafen-home DIR` exports
+   `MEDNAFEN_HOME=DIR` to the emulator it launches. It never copies or moves a state. Setting `MEDNAFEN_HOME`
+   moves more than states: `mednafen.cfg` (read and, for settings not in the override file, written) and
+   `firmware/` (the BIOS) are looked for under the same base, so with a base that has no `mednafen.cfg` Mednafen
+   creates a default one there and will not find a BIOS unless `firmware/` is in it. The pinned settings still go
+   in through `-ovconfig` and `-dump_settings_def` is run with the same environment, so the settings preflight
+   is unaffected; the base used is recorded in `run_meta.txt` (`mednafen_base`, `mednafen_base_from`).
+   `--skip-state-check` turns the check off.
+
+   **The save state and the cache mode.** The state must be made under the same SH-2 cache mode the run pins:
+   if you pin `--cache full` (`ss.dbg_cem`), make the state with that mode in force, because the emulator's
+   cache contents are part of the scene and a state made under another mode (the GUI's default mode, say) runs a
+   different workload, or not the same one, under a pinned mode. The first real run was made with the
+   cache **unpinned** because its state came from the GUI's default. Unpinned is allowed: leave `--cache` off and
+   `run_meta.txt` records `cache=unpinned`; the result is then "speed under whatever mode the GUI state was made
+   under", and the results note must say so. Do not pin a mode and load a state from another one.
 4. Quiesce the machine: AC power, performance governor (`cpupower frequency-set -g performance`),
    no other heavy processes, same desktop state for every run.
 5. Settings. `run_v3.sh` writes the pinned settings to `OUT/pinned.cfg` and gives it to the emulator with
@@ -183,35 +207,67 @@ Losses during the discarded warm-up are reported but do not invalidate.
 
 ```
 Integration/Validation/V3/run_v3.sh --emu /path/mednafen --game /path/game.cue --slot 0 \
-    --bench build/bin/se-bench-client --out runs/2026-xx-xx-patched --reps 5 --warmup 10 --duration 60 \
-    --throttle off --cache full
+    --bench build/bin/se-bench-client --out runs/2026-xx-xx-patched --reps 5 \
+    --throttle off --cache full [--mednafen-home /path/to/mednafen/exe/dir]
 python3 -I Integration/Validation/V3/analyze_v3.py runs/2026-xx-xx-patched
 ```
 
+The default window is counted in frames, the same for all three configurations: `--frames 1500
+--warmup-frames 300 --timeout 900`. `--warmup` and `--duration` are not used with it (only with `--frames 0` /
+`--warmup-frames 0`, the seconds windows). Why 1500: the analyzer's validity floors are 1000 frames and 5 s in a
+window and are not lowered. The slowest configuration (c, about 10 fps on the first real run) needs at least
+1000 frames, and 1500 leaves the end-of-window overshoot and any shortfall a margin; the fastest (a, about
+100 fps) then takes 15 s, above the 5 s floor, so it stays valid up to about 300 fps. A host faster than that
+needs a larger `--frames`; one whose slow configuration is slower than 1 fps hits `--timeout`.
+
+Expected wall time per repetition (a, b, c, each in a fresh emulator): window plus warm-up is 1800 frames, so
+at 100 fps 18 s and at 10 fps 180 s, plus about 10 s per configuration of start, slot load, `--settle` and
+cool-down. With (a) 100 fps, (b) 92 fps, (c) 10 fps that is about 18 + 20 + 180 + 30, roughly 4 minutes per
+repetition and 20 minutes for five. At 10 fps for all three it is about 3.5 minutes per configuration.
+
+If a run is invalid for too few frames or too short a window, `run_v3.sh` says so right after the run and
+`analyze_v3.py` says so in its table, in both cases naming the change: raise `--frames` (so the slowest
+configuration reaches the frame floor, or the fastest one the time floor). Raising the floor in the analyzer is
+not the fix.
+
 Each repetition runs a, b, c (interleaved: a b c a b c ...), each from a fresh emulator process that is
-placed on the scene by `se-bench-client --mode load-slot` and then left alone for `--settle` seconds.
+placed on the scene by `se-bench-client --mode load-slot` and then left alone for `--settle` seconds. Run it from a
+shell where nothing else is going on: the first real run's (a) missed the repeatability threshold with the
+machine at load average 9.65.
 Output per run: `runNN_X.csv` (one row per frame: kind, sample_seq, frame_no, timeline_id, mode, gap_count,
 evict_count, arrival_ns, newest_seq), `runNN_X.summary` (exact per-cause loss counts, validity, CPU samples),
-logs, and `run_meta.txt` (machine, governor, hashes, pinned arguments). Five repetitions at 60 s is about
-twenty minutes. Use at least five; the bootstrap interval is not informative below three valid runs per
+logs, and `run_meta.txt` (machine, governor, hashes, pinned arguments). Use at least five; the bootstrap interval is not informative below three valid runs per
 configuration.
 
 Exit codes of `se-bench-client`: 0 valid, 1 error, 2 completed but invalid (lost samples).
 
-### Windows counted in frames instead of seconds
+### Windows counted in frames
 
 `--frames N` (with `--warmup-frames W`) ends the measured window after N emulated frames, and the warm-up after
-W, instead of after a number of seconds: `run_v3.sh ... --frames 3000 --warmup-frames 300`. Every run then
-measures the same amount of emulation whatever the speed (3000 frames is 50 s at real time and a few seconds
-unthrottled), and a slow configuration is not compared over a different stretch of the game than a fast one. The
-speed estimator is unchanged: frames divided by the time they took, from the same two window edges. In stream
-mode the window also opens only once the frames carry the attribution mode that was requested, so a warm-up
-shorter than the request's latency cannot make a run invalid. In bracket mode `--duration` is the minimum gap
-between the two probes; if the end probe finds fewer than N frames it looks again after 250 ms (each extra look is
-a short connection, kept in the CSV and counted as `bracket_extra_probes`; on an unthrottled emulator there are
-none). `--timeout SEC` (default 600) turns a run that cannot get there into an error (exit 1) instead of a hang.
-The seconds options still work and are the default. The validity floors of the analyzer (1000 frames, 5 s) apply
-to either.
+W, instead of after a number of seconds, and is `run_v3.sh`'s default. Every run then measures the same amount
+of emulation whatever the speed, and a slow configuration is not compared over a different stretch of the game
+than a fast one. The speed estimator is unchanged: frames divided by the time they took, from the same two
+window edges. In stream mode the window also opens only once the frames carry the attribution mode that was
+requested, so a warm-up shorter than the request's latency cannot make a run invalid.
+
+**What `--frames` and `--duration` mean together (the same in both modes).** With `--frames`, `--duration`
+is not used at all: the window is the frame count. (The first real run found bracket mode treating it as a
+minimum gap with a 60 s default, which made a 3000-frame request a 3593-frame window, and `--duration 1`
+made it poll 128 times.) The seconds options apply only when no frame count is given. `--timeout SEC`
+(default 600; `run_v3.sh` passes 900) turns a run that cannot get there into an error (exit 1) instead of a hang.
+The validity floors of the analyzer (1000 frames, 5 s) apply to either kind of window.
+
+**How the bracket finds the end of a frame window.** The same way it finds the end of a frame warm-up: the
+window opens at the start probe; then it estimates the time left from the frame rate seen so far (the warm-up's
+rate before a second observation exists), sleeps 90 percent of it (never under 20 ms; 50 ms when nothing is
+known), and probes again, until the count is reached. The remaining time shrinks tenfold per look, so the
+number of extra looks grows with the logarithm of the count, a handful for thousands of frames, not with the
+window's length. Bounds: `--timeout`, 64 extra looks, and a probe that sees no fresh frame fails after
+`--connect-timeout`. The end probe is the first look at or past the target, so the window overshoots by less than
+the frames between the last two looks; the summary reports it as `window_overshoot_frames` (frames past the
+target, both modes; stream: less than one drain period of frames) next to `window_by=frames|seconds`, and
+`bracket_extra_probes` counts the looks that found the count not yet reached (each a short connection, kept in
+the CSV; the perturbation of configuration (a) is these plus `bracket_warmup_probes`).
 
 **What the warm-up means, in every configuration.** `--warmup-frames W` is counted from the *origin*: the first
 frame published after the client attached (a new connection's first reply is the previous connection's last
@@ -247,7 +303,7 @@ sequence by hand or in PowerShell for each repetition and each of a, b, c:
 start mednafen.exe <the pinned arguments from run_meta.txt> -force_module ss game.cue
 se-bench-client.exe --mode load-slot --slot 0
 Start-Sleep 3
-se-bench-client.exe --mode bracket|stream [--attribution on|off] --warmup 10 --duration 60 --csv run01_a.csv --summary run01_a.summary
+se-bench-client.exe --mode bracket|stream [--attribution on|off] --warmup-frames 300 --frames 1500 --timeout 900 --csv run01_a.csv --summary run01_a.summary
 ```
 
 Name the files `runNN_a|b|c`. There is no `--pid` CPU column on Windows, so use the speed metric
@@ -279,3 +335,30 @@ Conclusion for F12 (plan: "only if V3 shows a cost"):
 Conclusion for F13 (plan: "only if timing shows a visible cost"):
 What this run did not cover:
 ```
+
+## First real run, 2026-11-25 (provisional; not a pass/fail result)
+
+Recorded as the operator reported it. **Provisional**: the machine was not quiesced (load average 9.65), the
+save state had been made under the GUI's default cache mode so the cache setting was unpinned, and the windows
+were not the ones this procedure now defaults to. Nothing here is evidence for or against F12 or F13.
+
+* Machine and build: Windows 10, i7-7700, patched Mednafen 1.32.1, Panzer Dragoon II, `run_v3.sh` from Git Bash.
+* A. `se-bench-client --mode bracket --warmup-frames 300 --frames 3000` produced windows of about 3,593 frames,
+  not 3,000: with `--frames`, bracket mode treated `--duration` as a minimum gap and it defaults to 60 s. Adding
+  `--duration 1` gave 3,001 frames but 128 extra probes (`bracket_extra_probes`), a heavy perturbation of the
+  "no client" configuration. (Fixed afterwards: see "Windows counted in frames".)
+* B. `run_v3.sh --slot 0 --reps 5 --warmup 10 --duration 60 --throttle off`:
+  * (a) no client: 90 to 110 fps, median 106.0, cv 7.6 percent. It missed the 3 percent repeatability threshold.
+  * (b) attribution off: median 92.0 fps, cv 3.9 percent.
+  * (b) versus (a): +15.3 percent host time per frame, 95 percent interval [-2.0 percent, +23.5 percent], which
+    includes 0.
+  * (c) attribution on: about 10 fps, real, every frame delivered, 0 lost. About 9 times slower than (b) on that
+    scene (92 to 10 fps). 60 s gave only about 600 frames, so all five (c) runs were INVALID under the analyzer's
+    1,000-frame floor (not a loss problem).
+* C. The slot-0 state was not where the run looked (GUI states are in `<exe dir>/mcs`; the shell run read
+  `%USERPROFILE%\.mednafen\mcs`, empty); the operator copied the `.mc0` by hand. `run_v3.sh` now checks this
+  first (see "Where the state lives").
+* D. The state was made under the GUI's default cache mode, so the cache setting was unpinned (see "The save
+  state and the cache mode").
+* Not done: the on-screen fps cross-check for (a) and a quiesced machine. A rerun with the defaults above on a
+  quiet machine is what would produce a result.
