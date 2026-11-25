@@ -164,17 +164,25 @@ bool WriteText(const std::string& path, const std::string& text)
     return static_cast<bool>(f);
 }
 
-// One short connection: newest frame the server hands a new connection, then hang up.
-// Returns false when no identified record arrived within the connect timeout.
+// One short connection: the first frame PUBLISHED AFTER this connection attached, then hang up.
+// A real emulator publishes perf records only while somebody is attached, so the sequence stands still between
+// probes and a new connection's first reply carries the newest publication: the previous connection's last
+// frame, from long ago. Its sample_seq equals the newest_seq that reply reports. The edge is therefore the
+// first identified record with sample_seq strictly after that baseline (a signed difference, so a wrap of the
+// 64-bit counter would not matter). A first reply with no record still reports newest_seq (a gap-only item, or
+// 0 when nothing was ever published, in which case every record is fresh). A baseline of 0 on a record (a
+// server that does not report it) falls back to that record's own sample_seq, i.e. it is treated as stale.
+// Returns false when no fresh record arrived within the connect timeout (a paused emulator publishes none).
 bool Probe(const BenchOptions& o, Clock::time_point t0, std::vector<Row>& rows, CpuSample* cpu,
-           int64_t* holdNs, std::FILE* out)
+           int64_t* holdNs, std::FILE* out, uint64_t* inconsistent = nullptr)
 {
     se_data_source ds{};
     if (!OpenWithRetry(o, &ds, t0)) { std::fprintf(out, "error: cannot connect\n"); return false; }
     se_live_set_rewind_enabled(&ds, 0);   // as in the stream configs: rewind is held off
     const int64_t limit = NowNs(t0) + static_cast<int64_t>(o.connectTimeoutS) * 1000000000ll;
     se_live_perf_frame b[16];
-    bool got = false;
+    bool got = false, haveBase = false;
+    uint64_t base = 0;
     int64_t sampledNs = 0;
     while (!got && NowNs(t0) < limit)
     {
@@ -182,8 +190,23 @@ bool Probe(const BenchOptions& o, Clock::time_point t0, std::vector<Row>& rows, 
         const int64_t at = NowNs(t0);
         for (uint32_t i = 0; i < n; ++i)
         {
+            if (!haveBase)
+            {
+                base = b[i].newest_seq ? b[i].newest_seq : (b[i].gap_only ? 0 : b[i].sample_seq);
+                haveBase = true;
+            }
             if (b[i].gap_only || !(b[i].valid & SE_PERF_VALID_IDENTITY)) continue;
-            // The newest record of the batch is the server's newest frame at this instant.
+            if (static_cast<int64_t>(b[i].sample_seq - base) <= 0) continue;   // published before we attached
+            // Frames published while attached are one per frame: consecutive sequence numbers (nothing lost
+            // between them) carry consecutive frame numbers on one timeline. A batch that breaks this did not
+            // come from a live stream, and no speed may be computed from it.
+            if (inconsistent && got && rows.back().gapCount == 0 && b[i].gap_count == 0)
+            {
+                const Row& prev = rows.back();
+                if (b[i].sample_seq == prev.sampleSeq + 1 &&
+                    (static_cast<int64_t>(b[i].frame_no) != prev.frameNo + 1 || b[i].timeline_id != prev.timeline))
+                    ++*inconsistent;
+            }
             Row r = ToRow(b[i], at);
             r.kind = "probe";
             if (got) rows.pop_back();
@@ -193,6 +216,9 @@ bool Probe(const BenchOptions& o, Clock::time_point t0, std::vector<Row>& rows, 
         }
         if (!got) SleepMs(1);
     }
+    if (!got)
+        std::fprintf(out, "error: no frame published after the connection attached within %d s (is the emulator paused? "
+                          "a stale frame from an earlier connection is not accepted)\n", o.connectTimeoutS);
     if (got && cpu) *cpu = SampleCpu(o.pid, t0);
     // The first reply is the handshake's; the REW 0 request goes out behind it. Hanging up before it was
     // sent would leave the server capturing a savestate per frame for the whole (short) connection, so
@@ -299,6 +325,8 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     CpuSample cpuStart, cpuEnd;
     int64_t windowStartNs = -1, windowEndNs = -1;
     int64_t holdStartNs = 0, holdEndNs = 0;
+    uint64_t extraProbes = 0, probeInconsistent = 0;
+    int64_t windowFrames = -1;
     uint32_t caps = 0, version = 0;
     uint64_t statusServerLost = 0, statusDriverEvicted = 0;
     bool haveStatus = false;
@@ -307,11 +335,23 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     if (o.mode == Mode::Bracket)
     {
         SleepUntilNs(t0, warmNs);
-        if (!Probe(o, t0, rows, &cpuStart, &holdStartNs, out)) return kError;
+        if (!Probe(o, t0, rows, &cpuStart, &holdStartNs, out, &probeInconsistent)) return kError;
         windowStartNs = rows.back().arrivalNs;
         SleepUntilNs(t0, windowStartNs + durNs);
-        if (!Probe(o, t0, rows, &cpuEnd, &holdEndNs, out)) return kError;
-        windowEndNs = rows.back().arrivalNs;
+        const int64_t startFrame = rows.back().frameNo;
+        for (;;)
+        {
+            if (!Probe(o, t0, rows, &cpuEnd, &holdEndNs, out, &probeInconsistent)) return kError;
+            windowEndNs = rows.back().arrivalNs;
+            if (o.frames <= 0 || rows.back().frameNo - startFrame >= o.frames) break;
+            if (NowNs(t0) > static_cast<int64_t>(o.timeoutS * 1e9))
+            {
+                std::fprintf(out, "error: %lld frames not reached within %.0f s\n", static_cast<long long>(o.frames), o.timeoutS);
+                return kError;
+            }
+            ++extraProbes;   // too few frames yet: look again (each look is a short connection, kept in the CSV)
+            SleepMs(250);
+        }
     }
     else
     {
@@ -332,25 +372,58 @@ int RunBench(const BenchOptions& o, std::FILE* out)
             se_live_set_profiler(&ds, 0);
         const int64_t startNs = NowNs(t0);   // the measured schedule starts when the stream is up
         const int64_t wsTarget = startNs + warmNs;
-        const int64_t endTarget = wsTarget + durNs;
+        const bool byCount = o.frames > 0 || o.warmupFrames > 0;
+        const int64_t timeoutNs = static_cast<int64_t>((byCount ? o.timeoutS : o.warmupS + o.durationS + o.timeoutS) * 1e9);
+        const uint32_t wantMode0 = o.functions ? SE_LIVE_PROF_FUNCTIONS : 0u;
+        int64_t newest = -1, firstSeen = -1, startFrame = -1;
+        uint32_t newestMode = 0;
         se_live_perf_frame b[64];
         for (;;)
         {
             SleepMs(o.drainMs);
             uint32_t n;
             const int64_t at = NowNs(t0);
+            bool mixedBatch = false;   // a frame in this drain ran in another mode than requested
             while ((n = se_live_drain_perf(&ds, b, 64)) != 0)
-                for (uint32_t i = 0; i < n; ++i) rows.push_back(ToRow(b[i], at));
-            if (windowStartNs < 0 && at >= wsTarget)
+                for (uint32_t i = 0; i < n; ++i)
+                {
+                    rows.push_back(ToRow(b[i], at));
+                    const Row& r = rows.back();
+                    if (r.frameNo >= 0 && std::strcmp(r.kind, "gap") != 0)
+                    {
+                        if (r.mode != wantMode0) mixedBatch = true;
+                        if (firstSeen < 0) firstSeen = r.frameNo;
+                        newest = r.frameNo;
+                        newestMode = r.mode;
+                    }
+                }
+            // The window opens once the warm-up is over AND the requested attribution mode is the one the newest
+            // frame ran in: the request is applied at a frame boundary some frames after it is sent, and how many
+            // depends on the host, so a fixed warm-up cannot promise it.
+            const bool warmDone = o.warmupFrames > 0 ? (firstSeen >= 0 && newest - firstSeen >= o.warmupFrames) : at >= wsTarget;
+            // All rows drained together share one arrival time, so a drain that still holds a frame of the old mode
+            // cannot open the window: that frame would be counted inside it.
+            if (windowStartNs < 0 && warmDone && newest >= 0 && newestMode == wantMode0 && !mixedBatch)
             {
                 windowStartNs = at;
+                startFrame = newest;
                 cpuStart = SampleCpu(o.pid, t0);
             }
-            if (at >= endTarget)
+            if (windowStartNs >= 0 && (o.frames > 0 ? newest - startFrame >= o.frames : at >= windowStartNs + durNs))
             {
                 windowEndNs = at;
+                windowFrames = newest - startFrame;
                 cpuEnd = SampleCpu(o.pid, t0);
                 break;
+            }
+            if (at > timeoutNs)
+            {
+                Close(ds);
+                std::fprintf(out, "error: the measured window %s within %.0f s (newest frame %lld, mode %u, wanted %u)\n",
+                             windowStartNs < 0 ? "did not open" : "did not reach its frame count",
+                             byCount ? o.timeoutS : o.warmupS + o.durationS + o.timeoutS, static_cast<long long>(newest),
+                             newestMode, wantMode0);
+                return kError;
             }
         }
         se_live_perf_status st{};
@@ -399,7 +472,19 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     if (timelineChanges) invalid.push_back("timeline changed inside the measured window");
     if (noIdentity) invalid.push_back("records without frame identity");
     if (o.mode == Mode::Stream && windowRows < 2) invalid.push_back("fewer than two frames in the window");
-    if (o.mode == Mode::Bracket && windowRows != 2) invalid.push_back("a bracket probe did not read a frame");
+    if (o.mode == Mode::Bracket && windowRows < 2) invalid.push_back("a bracket probe did not read a frame");
+    if (o.mode == Mode::Bracket && probeInconsistent)
+        invalid.push_back("a bracket probe read frames whose numbers do not follow their sample sequence");
+    if (o.mode == Mode::Bracket && windowRows >= 2)
+    {
+        // The two edges are fresh records of one emulator run: later in publication order AND in frame number.
+        // (The sample sequence advances only while somebody is attached, so its distance says nothing about
+        // how many frames passed between the probes; the order is all it can tell.)
+        size_t first = rows.size(), last = 0;
+        for (size_t i = 0; i < rows.size(); ++i) if (!std::strcmp(rows[i].kind, "probe")) { if (first == rows.size()) first = i; last = i; }
+        if (first < last && (rows[last].sampleSeq <= rows[first].sampleSeq || rows[last].frameNo <= rows[first].frameNo))
+            invalid.push_back("the bracket's end probe is not later than its start probe");
+    }
     if (haveStatus && (statusServerLost != lostServerAll || statusDriverEvicted != lostDriverAll))
         invalid.push_back("per-row loss counts disagree with the driver's own totals");
 
@@ -414,6 +499,11 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     s.Put("drain_ms", static_cast<long long>(o.drainMs));
     s.Put("window_start_ns", static_cast<long long>(windowStartNs));
     s.Put("window_end_ns", static_cast<long long>(windowEndNs));
+    if (o.mode == Mode::Bracket) windowFrames = lastFrame - firstFrame;
+    s.Put("window_frames", static_cast<long long>(windowFrames));
+    s.Put("frames_requested", static_cast<long long>(o.frames));
+    s.Put("bracket_probe_inconsistent", static_cast<unsigned long long>(probeInconsistent));
+    s.Put("bracket_extra_probes", static_cast<unsigned long long>(extraProbes));
     s.Put("window_rows", static_cast<unsigned long long>(windowRows));
     s.Put("window_first_frame", static_cast<long long>(firstFrame));
     s.Put("window_last_frame", static_cast<long long>(lastFrame));

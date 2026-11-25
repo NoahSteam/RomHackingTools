@@ -1,16 +1,26 @@
 #!/usr/bin/env bash
 # run_v3.sh end to end against a stand-in emulator (FakeEmulator.cpp: real exporter, no BIOS),
 # then analyze_v3.py on what it wrote. Checks the interleaved order, the files, and that every
-# run is valid. usage: test_run_v3.sh FAKE_EMULATOR BENCH_CLIENT SOCKET_PATH
+# run is valid. Count-driven: every window holds exactly the frames asked for (--frames), so the outcome
+# does not depend on how many frames per second the host manages (FAKE_FRAME_MS=40 must pass as well). usage: test_run_v3.sh FAKE_EMULATOR BENCH_CLIENT SOCKET_PATH
 set -u
 FAKE="$1"; BENCH="$2"; SOCK="$3"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-OUT="$(mktemp -d)"
+OUT="$(mktemp -d "${TMPDIR:-/tmp}/se_v3_run.XXXXXX")"
 trap 'rm -rf "$OUT"' EXIT
+# The stand-in's frame period. The live ring keeps 16 records and drops the oldest (that is what the loss rule
+# counts), so a client starved for 16 frame periods loses samples on ANY host; a 4 ms stand-in would turn a CPU
+# starved test client into a "lost samples" invalid run. 20 ms leaves the client 320 ms. The test's outcome is
+# otherwise independent of the period (FAKE_FRAME_MS=40 is run as well).
+FAKE_FRAME_MS="${FAKE_FRAME_MS:-20}"; export FAKE_FRAME_MS
+# Publish only while a client is attached, like the real emulator: configuration (a)'s second connection is then
+# handed a stale frame, which the client must skip.
+FAKE_ONLY_ATTACHED="${FAKE_ONLY_ATTACHED:-1}"; export FAKE_ONLY_ATTACHED
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 "$HERE/run_v3.sh" --emu "$FAKE" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT" --bench "$BENCH" \
-    --endpoint "$SOCK" --reps 2 --warmup 0.5 --duration 2 --settle 0.5 --cache full > "$OUT/run.log" 2>&1 \
+    --endpoint "$SOCK" --reps 2 --frames 120 --warmup-frames 10 --warmup 0.2 --duration 0.5 --settle 0.5 --cache full \
+    > "$OUT/run.log" 2>&1 \
     || { cat "$OUT/run.log"; fail "run_v3.sh failed"; }
 cat "$OUT/run.log"
 
@@ -26,7 +36,9 @@ grep -q -- '-ovconfig' "$OUT/run_meta.txt" || fail "emulator not given -ovconfig
 grep -q '^attribution_requested=1' "$OUT/run01_c.summary" || fail "c did not request attribution"
 grep -q '^attribution_requested=0' "$OUT/run01_b.summary" || fail "b requested attribution"
 grep -q '^mode=bracket' "$OUT/run01_a.summary" || fail "a is not a bracket run"
-python3 -I "$HERE/analyze_v3.py" "$OUT" --min-frames 200 --min-window-s 1 --bootstrap 200 > "$OUT/analysis.txt" \
+# TEST VALUES, not the benchmark's: the real defaults (1000 frames, 5 s) stay in analyze_v3.py. Windows here are
+# 120 frames by construction, so 100 passes at any host speed; the time floor is off because it would not.
+python3 -I "$HERE/analyze_v3.py" "$OUT" --min-frames 100 --min-window-s 0 --bootstrap 200 > "$OUT/analysis.txt" \
     || { cat "$OUT/analysis.txt"; fail "analysis failed or a configuration has no valid run"; }
 cat "$OUT/analysis.txt"
 n="$(grep -c '^  rep .* valid$' "$OUT/analysis.txt")"

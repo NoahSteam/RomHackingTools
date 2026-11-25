@@ -26,7 +26,10 @@ Two metrics, both computed by `analyze_v3.py` with **one estimator for all three
 
 1. **Speed (emulated frames per host second).** The emulator stamps every frame with its own
    frame number (`frame_no`, committed once per emulated frame whether or not a client is attached:
-   `SeExportEndFrame`; the first reply a new connection receives carries the newest published frame).
+   `SeExportEndFrame`). Perf records, by contrast, are published only while a client is attached, so the first
+   reply a new connection receives carries the newest publication, which is the PREVIOUS connection's last
+   frame and stale: a bracket probe skips it and takes as its edge the first frame published after it attached
+   (`sample_seq` greater than the `newest_seq` of that first reply).
    A run defines a window `[ws, we]`. Speed is `(f(we) - f(ws)) / (we - ws)` where `f(t)` is the
    frame number of the newest frame observed at or before `t`.
    * b, c: the client stays connected, drains every 16 ms like the UI, and `ws`, `we` are drain
@@ -61,7 +64,15 @@ that costs less: every verb replies with a full snapshot, and the driver polls w
 "a client that wants nothing" does not exist, which is why the plan's "no client" cannot be a probe
 that stays connected. The bracket makes (a) client-free for the whole window at the price of two short
 connections inside it (a few hundred milliseconds of client-attached emulation per 60 s, reported as
-`probe_hold_*_ms` in the summary; keep it under about 1 percent of the window).
+`probe_hold_*_ms` in the summary; keep it under about 1 percent of the window). A probe stays attached until
+it has read one fresh frame (one emulated frame period or two longer than a stale-frame probe would) and the
+reply to its `REW 0`; with a 60 fps emulator that is roughly 20 to 40 ms per probe, plus the wait for the second
+reply, so configuration (a) carries slightly more client time than the hold figures of earlier runs showed.
+The figures in `probe_hold_*_ms` count exactly this (from the fresh frame to hang-up). A probe that sees no fresh
+frame within `--connect-timeout` (a paused emulator) fails the run with exit 1 instead of hanging. Each bracket
+also carries `bracket_probe_inconsistent` (fresh frames whose numbers do not follow their sample sequence) and is
+invalid when the end probe is not later than the start probe. The distance of the two `sample_seq` values is
+not a check: the sequence stands still while detached, so it is small by construction.
 
 What this cannot give you: an independent confirmation that (a) was unperturbed by the client at all.
 The only fully independent clock is the emulator's own speed readout. The script enables it
@@ -186,6 +197,24 @@ twenty minutes. Use at least five; the bootstrap interval is not informative bel
 configuration.
 
 Exit codes of `se-bench-client`: 0 valid, 1 error, 2 completed but invalid (lost samples).
+
+### Windows counted in frames instead of seconds
+
+`--frames N` (with `--warmup-frames W`) ends the measured window after N emulated frames, and the warm-up after
+W, instead of after a number of seconds: `run_v3.sh ... --frames 3000 --warmup-frames 300`. Every run then
+measures the same amount of emulation whatever the speed (3000 frames is 50 s at real time and a few seconds
+unthrottled), and a slow configuration is not compared over a different stretch of the game than a fast one. The
+speed estimator is unchanged: frames divided by the time they took, from the same two window edges. In stream
+mode the window also opens only once the frames carry the attribution mode that was requested, so a warm-up
+shorter than the request's latency cannot make a run invalid. In bracket mode `--duration` is the minimum gap
+between the two probes; if the end probe finds fewer than N frames it looks again after 250 ms (each extra look is
+a short connection, kept in the CSV and counted as `bracket_extra_probes`; on an unthrottled emulator there are
+none). `--timeout SEC` (default 600) turns a run that cannot get there into an error (exit 1) instead of a hang.
+The seconds options still work and are the default. The validity floors of the analyzer (1000 frames, 5 s) apply
+to either.
+
+The tests use this: every V3 test counts frames and holds no assertion about frames per second, so they pass on a
+loaded or slow host (`V3_TEST_FRAME_MS` and `FAKE_FRAME_MS` slow the two stand-ins down to check that). The script test runs its stand-in at 20 ms per frame by default: the live ring holds 16 records, so a stand-in much faster than the client can be drained loses samples whenever the client is starved, which is a correct "invalid" verdict about the run but not what that test is about.
 
 ### Windows
 

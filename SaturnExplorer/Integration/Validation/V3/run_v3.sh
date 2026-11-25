@@ -13,13 +13,17 @@
 set -u
 
 EMU=""; GAME=""; SLOT=""; OUT=""; BENCH=""; ENDPOINT=""
-REPS=5; WARMUP=10; DURATION=60; SETTLE=3; THROTTLE=off; CACHE=""; EXTRA=""; SKIP_PREFLIGHT=0
+REPS=5; WARMUP=10; DURATION=60; FRAMES=0; WARMUP_FRAMES=0; SETTLE=3; THROTTLE=off; CACHE=""; EXTRA=""; SKIP_PREFLIGHT=0
 usage() {
 cat <<'EOF'
 run_v3.sh --emu PATH --game PATH --slot N --out DIR --bench PATH/se-bench-client [options]
   --reps N          repetitions of the a/b/c block (default 5)
   --warmup SEC      discarded time before each window (default 10)
   --duration SEC    measured window (default 60)
+  --frames N        end every window after N emulated frames instead of --duration seconds (a fairer
+                    window than a fixed time: it holds the same amount of emulation at any speed). With
+                    it, --duration is only the minimum gap between config a's two probes
+  --warmup-frames N end the warm-up after N frames instead of --warmup seconds
   --settle SEC      wait after the slot load before the warm-up starts (default 3)
   --throttle off|on off: frame limiter disabled so host speed is measurable (default);
                     on: real-time pacing, only CPU-per-frame carries information
@@ -41,6 +45,8 @@ while [ $# -gt 0 ]; do
     --reps) REPS="$2"; shift 2;;
     --warmup) WARMUP="$2"; shift 2;;
     --duration) DURATION="$2"; shift 2;;
+    --frames) FRAMES="$2"; shift 2;;
+    --warmup-frames) WARMUP_FRAMES="$2"; shift 2;;
     --settle) SETTLE="$2"; shift 2;;
     --throttle) THROTTLE="$2"; shift 2;;
     --cache) CACHE="$2"; shift 2;;
@@ -143,6 +149,8 @@ BENCH_EP=()
   echo "reps=$REPS"
   echo "warmup_s=$WARMUP"
   echo "duration_s=$DURATION"
+  echo "frames=$FRAMES"
+  echo "warmup_frames=$WARMUP_FRAMES"
   echo "settle_s=$SETTLE"
   echo "cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null)"
   echo "cpu_model=$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ //')"
@@ -173,19 +181,22 @@ run_config() { # rep cfg
   "$EMU" "${PINNED[@]}" -force_module ss "$GAME" > "$name.emulator.log" 2>&1 &
   PID=$!
   # One fresh process per run, each placed on the same scene by the emulator's own slot loader.
-  if ! "$BENCH" --mode load-slot --slot "$SLOT" --connect-timeout 60 "${BENCH_EP[@]}" > "$name.load.log" 2>&1; then
+  if ! "$BENCH" --mode load-slot --slot "$SLOT" --connect-timeout 60 ${BENCH_EP[@]+"${BENCH_EP[@]}"} > "$name.load.log" 2>&1; then
     echo "  slot load failed, see $name.load.log" >&2
     cleanup; PID=""; abort_run "$tag: slot load failed"
   fi
   sleep "$SETTLE"
   local rc=0
+  local COUNT=()
+  [ "$FRAMES" -gt 0 ] && COUNT+=(--frames "$FRAMES")
+  [ "$WARMUP_FRAMES" -gt 0 ] && COUNT+=(--warmup-frames "$WARMUP_FRAMES")
   case "$cfg" in
-    a) "$BENCH" --mode bracket --tag a --warmup "$WARMUP" --duration "$DURATION" --pid "$PID" \
-         --csv "$name.csv" --summary "$name.summary" "${BENCH_EP[@]}" > "$name.client.log" 2>&1 || rc=$?;;
-    b) "$BENCH" --mode stream --attribution off --tag b --warmup "$WARMUP" --duration "$DURATION" --pid "$PID" \
-         --csv "$name.csv" --summary "$name.summary" "${BENCH_EP[@]}" > "$name.client.log" 2>&1 || rc=$?;;
-    c) "$BENCH" --mode stream --attribution on --tag c --warmup "$WARMUP" --duration "$DURATION" --pid "$PID" \
-         --csv "$name.csv" --summary "$name.summary" "${BENCH_EP[@]}" > "$name.client.log" 2>&1 || rc=$?;;
+    a) "$BENCH" --mode bracket --tag a --warmup "$WARMUP" --duration "$DURATION" ${COUNT[@]+"${COUNT[@]}"} --pid "$PID" \
+         --csv "$name.csv" --summary "$name.summary" ${BENCH_EP[@]+"${BENCH_EP[@]}"} > "$name.client.log" 2>&1 || rc=$?;;
+    b) "$BENCH" --mode stream --attribution off --tag b --warmup "$WARMUP" --duration "$DURATION" ${COUNT[@]+"${COUNT[@]}"} --pid "$PID" \
+         --csv "$name.csv" --summary "$name.summary" ${BENCH_EP[@]+"${BENCH_EP[@]}"} > "$name.client.log" 2>&1 || rc=$?;;
+    c) "$BENCH" --mode stream --attribution on --tag c --warmup "$WARMUP" --duration "$DURATION" ${COUNT[@]+"${COUNT[@]}"} --pid "$PID" \
+         --csv "$name.csv" --summary "$name.summary" ${BENCH_EP[@]+"${BENCH_EP[@]}"} > "$name.client.log" 2>&1 || rc=$?;;
   esac
   case "$rc" in
     0) echo "  ok";;

@@ -18,6 +18,10 @@ void Usage()
         "  --attribution on|off              request function attribution (stream mode; default off)\n"
         "  --warmup SEC                      discarded time before the window (default 10)\n"
         "  --duration SEC                    measured window (default 60)\n"
+        "  --frames N                        end the window after N emulated frames instead of --duration\n"
+        "                                    (bracket: --duration is then the minimum gap; more probes if needed)\n"
+        "  --warmup-frames N                 end the warm-up after N frames instead of --warmup seconds\n"
+        "  --timeout SEC                     give up (exit 1) if a frame-count run cannot finish (default 600)\n"
         "  --endpoint E                      unix path, tcp:host:port, or pipe; default = the driver's\n"
         "  --slot N                          load-slot: the emulator slot index\n"
         "  --pid PID                         emulator process id: records its CPU time (Linux only)\n"
@@ -55,6 +59,9 @@ int main(int argc, char** argv)
         }
         else if (a == "--warmup") o.warmupS = std::atof(next("--warmup"));
         else if (a == "--duration") o.durationS = std::atof(next("--duration"));
+        else if (a == "--frames") o.frames = std::atoll(next("--frames"));
+        else if (a == "--warmup-frames") o.warmupFrames = std::atoll(next("--warmup-frames"));
+        else if (a == "--timeout") o.timeoutS = std::atof(next("--timeout"));
         else if (a == "--endpoint") o.endpoint = next("--endpoint");
         else if (a == "--slot") o.loadSlot = std::atoi(next("--slot"));
         else if (a == "--pid") o.pid = std::atol(next("--pid"));

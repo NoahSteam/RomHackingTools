@@ -29,6 +29,13 @@ struct BenchOptions
     bool        functions = false;  // request SE_LIVE_PROF_FUNCTIONS (attribution on)
     double      warmupS = 10.0;     // discarded: the window starts after it
     double      durationS = 60.0;   // length of the measured window
+    // Count-driven windows. frames > 0: the measured window ends once that many emulated frames have passed
+    // since it started, whatever the host's speed (durationS is then only the minimum spacing of the two
+    // bracket probes). warmupFrames > 0: the warm-up ends after that many frames instead of warmupS seconds.
+    // A run that cannot get there within timeoutS fails (exit 1) rather than hang.
+    int64_t     frames = 0;
+    int64_t     warmupFrames = 0;
+    double      timeoutS = 600.0;
     int         drainMs = 16;       // Stream: drain period (the UI drains once per ~16 ms frame)
     int         connectTimeoutS = 30;
     int         loadSlot = -1;      // LoadSlot: the emulator's slot index
