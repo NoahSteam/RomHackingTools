@@ -1,7 +1,7 @@
 # Profiler
 
 Inspected revision: the change that introduced it (protocol v26), on top of
-`6491e73`, plus the v27 wire/counter freeze (Step 0 of [ProfilerFixPlan](../../ProfilerFixPlan.md)).
+`6491e73`, plus the v27 wire/counter freeze; "Cost of attribution" re-inspected against `ece035f` and the pinned Mednafen 1.32.1 fork base `783518d` (Step 0 of [ProfilerFixPlan](../../ProfilerFixPlan.md)).
 **v27 status:** the record layout and counter indices below are frozen; the fields the fix plan
 has not filled yet are declared and carried but marked "not available" on the wire (a clear bit in
 the record's `valid` word). Filled so far: frame identity and lost-record accounting (F3), the per-connection
@@ -244,8 +244,9 @@ records, sequence, declared capabilities and the profiler hook.
 ### Function attribution (opt-in)
 
 `SE_LIVE_PROF_FUNCTIONS` (the `PRF` verb) makes `SeSyncCpuHook` keep the continuous
-per-instruction callback installed, exactly as a tracepoint does. That selects Mednafen's
-debug run loop, which is several times slower, so:
+per-instruction callback installed, as a tracepoint does. That selects Mednafen's
+debug run loop, which is several times slower (see "Cost of attribution" below for the
+measurement and for the per-instruction device sync it skips), so:
 
 - the client sends it only while the panel is open with the checkbox ticked
   (`App::UpdateProfiler` restates the setting every frame; the driver sends changes);
@@ -271,6 +272,79 @@ instruction was in. The function is the innermost shadow-call-stack frame's entr
 profiling began, an interrupt handler, the body after a computed jump, a parent we never saw) the
 key is a 16-byte bucket of the raw PC, flagged `SE_PERF_FN_RAW_PC`. A per-frame hash table collects
 the keys; the 64 hottest go on the wire and the rest are summed into `fn_other_cycles`.
+
+### Cost of attribution, and the device sync it does not need
+
+Attribution runs Mednafen's debug loop, which calls `DBG_CPUHandler` for every instruction of both SH-2s.
+Measured on a real title (Windows, Panzer Dragoon II, sampling profile, ~9,900 samples each), the emulation
+thread needed **13.5 ms of CPU per frame with attribution off and 126.7 ms with it on**. The 126.7 ms was:
+
+| Share | Where |
+|---|---|
+| 69.4 % (87.9 ms) | upstream `DBG_CPUHandler` (`ss/debug.inc`, ~l. 527): `ForceEventUpdates(DBG.eff_ts)` before every hook call (all devices brought up to date and rescheduled, per instruction) |
+| 12.0 % | the debug-variant run loop itself |
+| 10.6 % | `se_mednafen_glue.c`'s per-instruction hook (opcode read, flow tracking, `SeMdfnProfSampleAt`, hash insert) |
+| 4.3 % | the rest of `DBG_CPUHandler` (PC-breakpoint scan, `CheckRWBreakpoints`, `GetRegister`) |
+| 3.3 % | `se_export.c` (ownership, shadow stack) |
+
+**What the guard does.** `apply.py` (`process_debug`) makes the sync conditional:
+`if(DBG.FoundBPoint || SeSsHookNeedsSync) ForceEventUpdates(...)`. `SeSyncCpuHook` sets the flag from
+`sSeTraceActive || sSeStepActive` only, so it is **clear for attribution alone** and the handler skips the
+sync. It still syncs (exactly as upstream) while a tracepoint is armed, while an instruction step is in
+progress, and on any instruction where a PC or data breakpoint was found. Without the sync the frame
+should cost roughly 39 ms (about 3x the attribution-off cost) instead of 127 ms (about 9.5x); that is
+the expectation to verify, not a measurement.
+
+**Why skipping it is safe (verified from source, Mednafen 1.32.1 / fork base `783518d`).**
+- *The profile-only hook path reads no device state.* `SeSsBpHook` -> `SeMednafenTraceHook` ->
+  `SeMdfnTrackFlow` reads the opcode at the PC (`SsDbgReadOpcode` = two `CheatMemRead` byte reads through
+  `SH7095_FastMap`, plain RAM/ROM pointers) and, for the few flow opcodes, the CPU register file
+  (`SsDbgSh2Regs`: `GetRegister` of R0-R15, SR, GBR, VBR, MACH, MACL, PR, `PC_ID` / `RPC`: plain CPU
+  members) and, for `trapa`, the vector longword through the same fast map. `SeMdfnLandingRegs` is the same
+  register read. `SeMdfnProfSampleAt` reads `CPU[c].timestamp` (`SsDbgCpuTimestamp`) and the
+  `SE_PERF_SH2_SLEEP/STALL` counters, which are incremented only inside the SH-2 core
+  (`sh7095_ops.inc`: sleep, standby, bus stall), never by a device handler. `SeExportNoteExecuted`,
+  `SeExportCurrentFunction`, `SeExportOwnershipInvalidate` and the shadow-stack functions are pure
+  `se_export.c` state (no `SsDbg*` call in that file). The tracepoint scan only fires for an enabled
+  tracepoint, which is when `sSeTraceActive` (and so the sync) is on; the step tick only runs for
+  `sSeStepActive`.
+- *`ForceEventUpdates` does not feed that path.* It runs `CPU[c].ForceInternalEventUpdates()` (FRT/WDT) and
+  every non-disabled event's handler with `DBG.eff_ts`, reschedules them with `SS_SetEventNT`, and
+  recomputes `next_event_ts`. Event handlers do not write R0-R15 / SR / PC and do not touch guest code
+  bytes in the fast map, so nothing the hook reads is changed by them.
+- *It is not part of normal emulation.* The non-debug loop (`RunLoop`) never calls it per instruction;
+  devices run when `eff_ts >= next_event_ts` (`EventHandler`) and at the top of each outer iteration
+  and at the end of the frame (`ss.cpp` l. 760, 946, both unchanged). `DebugMode` in the SH-2 core only
+  adds bookkeeping (`PC_ID`/`PC_IF` tracking and `DBG_AddBranchTrace`). With the per-instruction sync
+  skipped, attribution-on therefore follows the same device-update schedule as attribution-off. The forced
+  path was the deviation: the slave's handler is also called from inside the master's memory access
+  (`RunSlaveUntil_Debug`, `sh7095s_rsu.inc`) where it used to run every device mid-access. What this
+  does NOT establish is bit-identity of the two schedules for every title (a device handler called earlier
+  or later may round differently); a profile-only run can differ from a pre-change attribution-on run at
+  that level, and is closer to an attribution-off run, which is what a profile is meant to look at.
+- *The hook never halts or publishes on a profile-only instruction.* `SeSsBpHook` halts only when `bpoint`
+  (a breakpoint found, which syncs) or an instruction step ends (`sSeStepActive`, which syncs). The
+  pause request, state save / load and rewind capture paths run at the frame gate (`SeExportGateFrame`),
+  in `MidSync` (an ordinary event) and in the end-of-frame hook, all reached from the event scheduler,
+  not from the profile-only hook; a halt's snapshot is taken after the sync that preceded the hook.
+  `DBG.inss` is still set around the hook call, so the slave-step guards in `StateAction` and the reset
+  command are unchanged.
+- *Mode changes.* A tracepoint can be armed while profiling only through the install queue, which
+  `SeApplyPendingInstalls` applies on the emulate thread (`SeGateDecide`: the frame gate and a halt's gate;
+  `SeExportSnapshot`, reached from `SeMednafenFrameHook` in `MidSync` and at the end of the frame). `MidSync` used to be reachable from inside the handler (through the forced sync),
+  which is why `SeSyncCpuHook` defers while `SeSsInHandler > 0`; with the sync skipped it is reached
+  from the scheduler instead. Either way `SeSyncCpuHook` writes the flag and the callback together, after
+  the deferral check, so the handler call that decides whether to sync never sees them disagree; an
+  edit postponed by the deferral takes effect at `SeSsHandlerExit`, before the next instruction.
+  `SeSsDmaWatch` (SCU-DMA watchpoints) halts from the DMA, not from this handler, and is unaffected.
+
+**Task-2 observations (not done: they would restructure the hook).** On the profile-only path the
+remaining waste is: `CheckRWBreakpoints` runs for every instruction even with no read/write watchpoint
+(upstream; a `BreakPointsRead.size() || BreakPointsWrite.size()` guard would skip a switch on the pipeline
+opcode); `SeMdfnTrackFlow` reads the opcode with two byte reads; `SeMdfnProfSampleAt` does one hash
+insert per instruction where it could accumulate in a register while the key is unchanged and flush on
+change, frame close and mode change; `DBG.CurPC[which] = GetRegister(...)` at the end of the handler is
+for the debugger UI only.
 
 ### Function ownership (F9)
 

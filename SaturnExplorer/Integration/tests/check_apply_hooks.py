@@ -316,5 +316,41 @@ if HAS_LIFECYCLE:
             (t.index("else if(!active") < off_at < t.index("Reset(true);")):
         fail("the SetActive hooks are not on the right sides of the power transition:\n" + t)
 
+# ---- the device-sync guard in DBG_CPUHandler (profile-only instructions skip ForceEventUpdates) -----------------
+if hasattr(mod, "DEBUG_SYNC_EDIT"):
+    mock = ("template<unsigned which>\nstatic MDFN_COLD void DBG_CPUHandler(void)\n{\n const uint32 PC = 0;\n"
+            " DBG.CPUHookContinuous |= DBG.FoundBPoint;\n\n if(DBG.CPUHookContinuous && DBG.CPUHook)\n {\n"
+            "  DBG.inss = which;\n  ForceEventUpdates(DBG.eff_ts);\n  DBG.CPUHook(PC, DBG.FoundBPoint);\n"
+            "  DBG.inss = false;\n }\n}\n")
+    with tempfile.TemporaryDirectory(dir=work) as d:
+        path = os.path.join(d, mod.DEBUG_FILE)
+        open(path, "w", newline="").write(mock)
+        notes = "\n".join(mod.process_debug(d, True))
+        t = open(path, newline="").read()
+        if "ANCHOR MISS" in notes:
+            fail("process_debug missed an anchor on the mock handler:\n" + notes)
+        # the sync is conditional on exactly: a breakpoint found now, or the flag the glue maintains
+        if "if(DBG.FoundBPoint || SeSsHookNeedsSync)\n   ForceEventUpdates(DBG.eff_ts);" not in t:
+            fail("the guarded ForceEventUpdates is not in the patched handler:\n" + t)
+        if t.count("ForceEventUpdates(DBG.eff_ts);") != 2 or "#if 0 /* SE_ORIGINAL */\n  ForceEventUpdates(DBG.eff_ts);" not in t:
+            fail("the upstream ForceEventUpdates line is not kept inside its fence")
+        if "extern \"C\" int SeSsHookNeedsSync;" not in t:
+            fail("SeSsHookNeedsSync is not declared before the handler")
+        if t.index("SeSsHookNeedsSync;") > t.index("MDFN_COLD void DBG_CPUHandler"):
+            fail("SeSsHookNeedsSync is declared after the handler uses it")
+        mod.process_debug(d, True)
+        if open(path, newline="").read() != t:
+            fail("applying the debug.inc patch twice changed the file")
+        mod.revert(d, d)
+        if open(path, newline="").read() != mock:
+            fail("--revert did not restore debug.inc byte for byte")
+    # the flag is defined and maintained next to the callback it describes, and profiling alone leaves it clear
+    if "int SeSsHookNeedsSync = 1;" not in open(apply_py).read():
+        fail("SeSsHookNeedsSync is never defined")
+    if "SeSsHookNeedsSync = (sSeTraceActive || sSeStepActive) ? 1 : 0;" not in open(apply_py).read():
+        fail("SeSyncCpuHook does not maintain SeSsHookNeedsSync from the trace and step state alone")
+    if open(apply_py).read().count("int SeSsHookNeedsSync = 1;") != 2:
+        fail("SeSsHookNeedsSync needs a definition in both the debugger and the non-debugger branch")
+
 print("OK" if not bad else "%d check(s) failed" % bad)
 sys.exit(1 if bad else 0)

@@ -29,7 +29,11 @@ power edges in SetActive), "SE_CPU_RESET_HOOK" (the top of Reset).
 --mutate NAME edits the bus hooks in the SCRATCH copy (never the checkout) and the f8_bus harness must then
 fail (exit 0 = detected): "bus-burst" (burst reads are not counted: the three burst reads of a cache fill and
 the 16-byte DMA's reads 1..3 vanish), "bus-dma-read" (a read made by the DMAC, SH2DMAHax set, is not counted),
-"bus-dma-write" (same for writes), "bus-all-reads" / "bus-all-writes" (the hook is gone)."""
+"bus-dma-write" (same for writes), "bus-all-reads" / "bus-all-writes" (the hook is gone).
+The device-sync guard in DBG_CPUHandler (debug.inc, SeSsHookNeedsSync) is checked by the f2_sh2 harness, and
+these mutations must make it fail: "sync-guard-removed" (ForceEventUpdates is unconditional again, so a
+profile-only instruction syncs), "sync-never" (it never runs), "sync-no-breakpoint" (a breakpoint found on the
+instruction no longer syncs), "sync-flag-profile" (the flag is also set for profiling alone)."""
 import os
 import subprocess
 import sys
@@ -157,6 +161,16 @@ BUS_MUTATIONS = {
 }
 
 
+# The device-sync guard (apply.py, DEBUG_SYNC_EDIT / SeSyncCpuHook): (harness, file, patched text, mutated text).
+SYNC_MUTATIONS = {
+    "sync-guard-removed": ("f2_sh2", "src/ss/debug.inc", "if(DBG.FoundBPoint || SeSsHookNeedsSync)", "if(1)"),
+    "sync-never": ("f2_sh2", "src/ss/debug.inc", "if(DBG.FoundBPoint || SeSsHookNeedsSync)", "if(0)"),
+    "sync-no-breakpoint": ("f2_sh2", "src/ss/debug.inc", "if(DBG.FoundBPoint || SeSsHookNeedsSync)", "if(SeSsHookNeedsSync)"),
+    "sync-flag-profile": ("f2_sh2", "src/ss/ss.cpp", "SeSsHookNeedsSync = (sSeTraceActive || sSeStepActive) ? 1 : 0;",
+                          "SeSsHookNeedsSync = (sSeTraceActive || sSeStepActive || sSeProfActive) ? 1 : 0;"),
+}
+
+
 def unsupported_linker(cxx):
     """The harnesses link real emulator translation units whose references into the rest of Mednafen are left
     unresolved on purpose (-Wl,--unresolved-symbols=ignore-in-object-files, below). That GNU ld option exists for
@@ -209,12 +223,18 @@ def main():
             return 1
         print("decoder and hook-placement checks: ok")
     apply_mod = cm.load_new()
+    mutated_harnesses = set()
     for key in mutates:
-        old, new = BUS_MUTATIONS[key]
-        path = os.path.join(work, "src/ss/sh7095.inc")
+        if key in SYNC_MUTATIONS:
+            harness, rel, old, new = SYNC_MUTATIONS[key]
+        else:
+            harness, rel = "f8_bus", "src/ss/sh7095.inc"
+            old, new = BUS_MUTATIONS[key]
+        mutated_harnesses.add(harness)
+        path = os.path.join(work, rel)
         text = open(path, newline="").read()
         if old not in text:
-            print("mutation %s: the hook text is not in the patched sh7095.inc" % key)
+            print("mutation %s: the hook text is not in the patched %s" % (key, rel))
             return 1
         open(path, "w", newline="").write(text.replace(old, new))
         print("mutation: %s" % key)
@@ -256,7 +276,7 @@ def main():
             ("f8_bus", "SE_SS_CPP", "perf_bus_harness.cpp", glue_objs + ["-lpthread"])):
         if only and name not in only:
             continue
-        if mutates and name != "f8_bus":
+        if mutates and name not in mutated_harnesses:
             continue
         if not os.path.isfile(os.path.join(HERE, "component", src)):
             continue

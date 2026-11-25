@@ -241,6 +241,16 @@ extern "C" { int SeSsMemWatchArmed = 0; }
 /* SeSsBothCpus: run the debugger handler for whichever SH-2 is executing (see above).
    SeSsExecCpu: the CPU DBG_CPUHandler is currently running for (0 master / 1 slave). */
 extern "C" { int SeSsBothCpus = 0; int SeSsExecCpu = 0; }
+/* SeSsHookNeedsSync: must DBG_CPUHandler bring every device up to date (ForceEventUpdates) before it calls
+   our callback? Upstream does it for every instruction while the callback is continuous. That is only
+   worth its cost (~70% of the emulation thread with function attribution on) when the callback may look
+   at device state: a tracepoint (its action reads memory and registers) or an instruction step (it halts
+   and publishes a snapshot). Profiling alone reads only the CPU's own registers and timestamp and the
+   guest's code bytes, none of which a device update writes, so it does not ask for the sync; a PC / data
+   breakpoint found on THIS instruction does, and debug.inc tests that itself (DBG.FoundBPoint).
+   Maintained by SeSyncCpuHook together with the callback, so the two never disagree; 1 until the first
+   sync, which is upstream's behaviour. */
+extern "C" { int SeSsHookNeedsSync = 1; }
 /* Install/remove the per-instruction callback to match what is armed: continuous (every
    instruction) when tracepoints OR an instruction step are active so the hook sees every
    PC; non-continuous (fires only when the debugger finds a PC breakpoint) when only
@@ -260,6 +270,7 @@ static void SeSyncCpuHook(void) {
    const int every = sSeTraceActive || sSeStepActive || sSeProfActive;
    const int on = sSeBpActive || every;
    SeSsBothCpus = on;
+   SeSsHookNeedsSync = (sSeTraceActive || sSeStepActive) ? 1 : 0;   /* not sSeProfActive: see above */
    /* A held call/return is completed by the instructions that follow it; if the CPU is about to run
       without presenting them, it must be told (it is not told of an edit made while halted). */
    if (!sSeHalted) SeMednafenHookMode(every != 0);
@@ -408,6 +419,7 @@ extern "C" void SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, uns
 extern "C" void SsDbgClearBps(void) {}
 extern "C" void SsDbgSetTraceActive(int active) { (void)active; }
 extern "C" { int SeSsBothCpus = 0; int SeSsExecCpu = 0; }
+extern "C" { int SeSsHookNeedsSync = 1; }
 #endif
 }"""
 
@@ -1192,6 +1204,8 @@ extern "C" int SeSsExecCpu;
    last tracepoint there nulled the hook between the test and the call (a crash on the real fork). */
 extern "C" int SeSsInHandler;
 extern "C" void SeSsHandlerExit(void);
+/* Whether the handler must run ForceEventUpdates before calling the CPU hook (ss.cpp, SeSyncCpuHook). */
+extern "C" int SeSsHookNeedsSync;
 template<typename T> struct SeSsActiveCpuScope {
    T& ref; T saved;
    SeSsActiveCpuScope(T& active, unsigned int which) : ref(active), saved(active) {
@@ -1207,6 +1221,19 @@ DEBUG_SCOPE_USE = (
 )
 DEBUG_HANDLER_ANCHOR = r'(\bDBG_CPUHandler\s*\([^)]*\)\s*(?:noexcept\s*)?\{[ \t]*\n)'
 DEBUG_FILE = "debug.inc"
+
+# The upstream handler brings EVERY device up to the current timestamp before each call of the CPU hook
+# (`ForceEventUpdates(DBG.eff_ts);` -- CDB, SMPC, SCSP, VDP1/2, SCU DMA, SH-2 DMAC and FRT/WDT, then it
+# reschedules them all), on every instruction of both SH-2s while the hook is continuous. A debugger halting
+# there needs that; function profiling does not (see SeSsHookNeedsSync in ss.cpp). The sync is kept whenever
+# a tracepoint is armed, an instruction step is running or a breakpoint was found on this instruction.
+# Replaces the one upstream line (kept inside the fence, so --revert restores it byte for byte).
+DEBUG_SYNC_ANCHOR = r'[ \t]*ForceEventUpdates\(DBG\.eff_ts\);'
+DEBUG_SYNC_EDIT = (
+    "  /* Saturn Explorer: profile-only instructions skip the device sync (SeSsHookNeedsSync, ss.cpp). */\n"
+    "  if(DBG.FoundBPoint || SeSsHookNeedsSync)\n"
+    "   ForceEventUpdates(DBG.eff_ts);\n"
+)
 
 # Per-frame snapshot call, injected after the frame's cycle count is finalized.
 FRAME_HOOK = (
@@ -1606,6 +1633,8 @@ def process_debug(src_dir, do_write):
     text, n = apply_prepend(text, DEBUG_SCOPE_HELPER, "SeSsActiveCpuScope {")
     notes.append(n)
     text, n = apply_anchored(text, DEBUG_HANDLER_ANCHOR, DEBUG_SCOPE_USE, "SeSsActiveCpuScope<decltype")
+    notes.append(n)
+    text, n = apply_replace(text, DEBUG_SYNC_ANCHOR, DEBUG_SYNC_EDIT, "SeSsHookNeedsSync)")
     notes.append(n)
     if do_write and text != original:
         write_src(path, text)

@@ -65,6 +65,24 @@ void CloseFrame(int end)
 }
 // The slave has run up to 'ts' (its own timestamp), as it would by executing.
 void SlaveRunsTo(int ts) { CPU[1].timestamp = ts; }
+
+// ---- DBG_CPUHandler and the device sync (debug.inc, patched). Every device handler of the REAL event list is
+// replaced by one that counts its calls, so ForceEventUpdates itself (the real one) is what is observed.
+int gSyncCalls = 0;      // device-handler calls: nonzero exactly when ForceEventUpdates ran
+int gHookCalls = 0;      // CPU-hook calls
+int gHookBpoint = 0;     // calls that carried bpoint = true
+sscpu_timestamp_t CountingEvent(const sscpu_timestamp_t) { ++gSyncCalls; return 0x3FFFFF00; }
+void CountingHook(uint32, bool bpoint) { ++gHookCalls; if (bpoint) ++gHookBpoint; }
+
+// One instruction presented to the handler of each SH-2 under the current mode; returns the sync count.
+int HandlerSyncs(bool useCountingHook)
+{
+    if (useCountingHook) DBG_SetCPUCallback(CountingHook, true);   // same continuous mode, a hook that cannot halt
+    gSyncCalls = gHookCalls = gHookBpoint = 0;
+    DBG_CPUHandler<0>();
+    DBG_CPUHandler<1>();
+    return gSyncCalls;
+}
 }
 
 int main()
@@ -108,6 +126,58 @@ int main()
     SlaveRunsTo(900);
     CloseFrame(1000);
     Expect("on-time is the whole frame (the reset opened no gap)", (long long)SeSsPerfC[SE_PERF_SSH2_ON_CYCLES], 1000);
+
+
+    std::printf("DBG_CPUHandler: the device sync runs only when something can look at device state\n");
+    {
+        for (unsigned i = SS_EVENT__SYNFIRST + 1; i < SS_EVENT__SYNLAST; ++i) events[i].event_handler = CountingEvent;
+        CPU[0].timestamp = CPU[1].timestamp = SS_EVENT_DISABLED_TS;   // no FRT/WDT work: only the scheduler's devices are counted
+        DBG.eff_ts = 0;
+        DBG.BreakPointsPC.clear();
+        DBG.BreakPointsRead.clear();
+        DBG.BreakPointsWrite.clear();
+        SsDbgSetTraceActive(0);
+        SsDbgSetProfileActive(0);
+        Expect("nothing armed: the hook is removed", DBG.CPUHook == nullptr, 1);
+
+        SsDbgSetProfileActive(1);   // attribution alone
+        Expect("profile-only: the hook is continuous", DBG.CPUHookContinuous && DBG.CPUHook == SeSsBpHook, 1);
+        Expect("profile-only: SeSsHookNeedsSync is clear", SeSsHookNeedsSync, 0);
+        Expect("profile-only: the real hook runs and the devices are NOT synced (both SH-2s)", HandlerSyncs(false), 0);
+        HandlerSyncs(true);
+        Expect("profile-only: a counting hook is still called, for both SH-2s", gHookCalls, 2);
+        Expect("profile-only: and carries no breakpoint", gHookBpoint, 0);
+        Expect("profile-only: and still no device sync", gSyncCalls, 0);
+
+        SsDbgSetTraceActive(1);     // tracepoint armed while profiling
+        Expect("trace: SeSsHookNeedsSync is set", SeSsHookNeedsSync, 1);
+        Expect("trace: the devices are synced before the hook (both SH-2s)", HandlerSyncs(true) > 0, 1);
+        Expect("trace: the hook still ran", gHookCalls, 2);
+        SsDbgSetTraceActive(0);
+        Expect("trace disarmed while profiling: back to no sync", SeSsHookNeedsSync, 0);
+
+        sSeStepActive = 1;          // instruction step in progress
+        SeSyncCpuHook();
+        Expect("step: SeSsHookNeedsSync is set", SeSsHookNeedsSync, 1);
+        Expect("step: the devices are synced before the hook", HandlerSyncs(true) > 0, 1);
+        sSeStepActive = 0;
+        SeSyncCpuHook();
+        Expect("step over: back to no sync", SeSsHookNeedsSync, 0);
+
+        DBG_AddBreakPoint(BPOINT_PC, 0, 0xFFFFFFFFu, true);   // a breakpoint on this instruction, profiling only
+        sSeBpActive = 1;
+        SeSyncCpuHook();
+        Expect("breakpoint installed while profiling: the flag stays clear", SeSsHookNeedsSync, 0);
+        Expect("breakpoint found: the devices are synced before the hook", HandlerSyncs(true) > 0, 1);
+        Expect("breakpoint found: the hook is told", gHookBpoint, 2);
+        DBG.BreakPointsPC.clear();
+        sSeBpActive = 0;
+        SeSyncCpuHook();
+        Expect("breakpoint gone, profile-only again: no sync", HandlerSyncs(true), 0);
+
+        SsDbgSetProfileActive(0);
+        DBG_SetCPUCallback(0, false);
+    }
 
     std::printf("%s\n", gFail ? "FAILED" : "PASSED");
     return gFail ? 1 : 0;
