@@ -416,7 +416,13 @@ were not the ones this procedure now defaults to. Nothing here is evidence for o
   warm-up overshoot of the old pacing in bracket mode: run 1 origin 233, window opened at 927 (+394, 2 warm-up
   probes); run 2 origin 302, opened at 635 (+33, 3 probes). Earlier, throttled at 60 fps, five runs: +1, +4, +1, +24, +3
   (3 to 4 probes). The window end was fine (`window_overshoot_frames` 3 and 4 with 2 extra probes), and stream mode
-  opened at +1, +2 and 0. The cause and the replacement are in "Warm-up convergence"; the new rule has not been run
-  against a real emulator.
+  opened at +1, +2 and 0. The cause and the replacement are in "Warm-up convergence".
+* F. The replacement pacing on the same machine (unthrottled, about 90 to 93 fps, fresh emulator per run,
+  `--warmup-frames 300 --frames 1500`), three runs: `warmup_overshoot_frames` 6, 40 and 7 (at most 13 percent, under
+  the 20 percent flag) with 5 warm-up probes each; `window_overshoot_frames` 29, 11 and 16 with 2 extra probes; all
+  valid, none inconsistent.
+* G. With the per-instruction device sync skipped for attribution alone (see Profiler.md, "Cost of attribution"),
+  configuration (c) on this scene ran at about 31.6 fps instead of about 8.7, so the default 1,500-frame window is
+  reachable within the default time-out. Not quiesced, so still provisional.
 * Not done: the on-screen fps cross-check for (a) and a quiesced machine. A rerun with the defaults above on a
   quiet machine is what would produce a result.

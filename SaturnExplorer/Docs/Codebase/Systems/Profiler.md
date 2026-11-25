@@ -297,9 +297,19 @@ other callback**: Mednafen's native debugger (`drivers/debugger.cpp` `UpdateCore
 `DebuggerInfo.SetCPUCallback` = `DBG_SetCPUCallback`) replaces ours for stepping and trace logging without
 touching our flag, and the pointer comparison needs no cooperation from it. Known limit (pre-existing):
 when the native debugger later removes its callback our hook is not reinstalled until `SeSyncCpuHook` runs
-again (any install edit or a halt), so attribution samples nothing in between. Without the sync the frame
-should cost roughly 39 ms (about 3x the attribution-off cost) instead of 127 ms (about 9.5x); that is
-the expectation to verify, not a measurement.
+again (any install edit or a halt), so attribution samples nothing in between.
+
+**Measured with the guard (same machine and scene, 2026-11-25, desktop not quiesced).** Emulation thread:
+12.2 ms of CPU per frame with attribution off, 114.7 ms with it on before the guard, **31.6 ms with it on
+after** (2.6x the attribution-off cost instead of 9.5x; about 8.7 -> 31.6 fps unthrottled). In 9,967 samples
+no stack contains `ForceEventUpdates` under the handler. What remains: the debug run loop 13.6 ms (about a
+normal frame), the glue hook 9.7 ms, the rest of `DBG_CPUHandler` 4.2 ms, `se_export.c` ownership 3.5 ms.
+On the V1 guest the guard also removed attribution's own perturbation: with the old per-instruction sync,
+attribution-on runs differed from attribution-off runs by 7 cycles of master DMA stall (phases 6 to 8) and
+about 153 units of VDP1 discarded work (phase 8); with the guard every non-function counter is identical
+with attribution on and off. Breakpoint, single-step and tracepoint were checked with attribution on
+through the live driver (halt PC exact, one instruction per step, attribution continuing with a tracepoint
+armed and after its removal). Mednafen's native debugger (Alt+D) has not been exercised on the guard.
 
 **Why skipping it is safe (verified from source, Mednafen 1.32.1 / fork base `783518d`).**
 - *The profile-only hook path reads no device state.* `SeSsBpHook` -> `SeMednafenTraceHook` ->

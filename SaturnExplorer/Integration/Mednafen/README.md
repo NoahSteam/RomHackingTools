@@ -322,7 +322,8 @@ while the hook is continuous: every device (CDB, SMPC, SCSP, VDP1/VDP2, SCU DMA 
 FRT/WDT) is run up to the current timestamp and rescheduled, once per instruction of both SH-2s. A
 debugger halting at that instruction needs it. Function attribution does not, and measured on a real
 title (Panzer Dragoon II, ~9,900 sampled frames) that sync was 69 % of the emulation thread's time with
-attribution on (127 ms of CPU per frame against 13.5 ms with it off).
+attribution on (127 ms of CPU per frame against 13.5 ms with it off). With the guard below the same
+scene measured 31.6 ms against 12.2 ms, with no sample in `ForceEventUpdates` under the handler.
 
 `process_debug` therefore replaces that one line (upstream text kept inside the fence, so `--revert` is
 byte exact) by `if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook) ForceEventUpdates(DBG.eff_ts);`
