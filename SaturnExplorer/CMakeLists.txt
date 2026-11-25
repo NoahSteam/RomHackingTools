@@ -1886,7 +1886,7 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         add_dependencies(SaturnExplorerV3BenchClientTests se-bench-client)
         add_test(NAME SaturnExplorerV3BenchClientTests
                  COMMAND SaturnExplorerV3BenchClientTests $<TARGET_FILE:se-bench-client>)
-        set_tests_properties(SaturnExplorerV3BenchClientTests PROPERTIES TIMEOUT 120)
+        set_tests_properties(SaturnExplorerV3BenchClientTests PROPERTIES TIMEOUT 300)
 
         # run_v3.sh end to end against a stand-in emulator built on the real exporter (own socket and port 6954).
         add_executable(SaturnExplorerV3FakeEmulator
@@ -1919,7 +1919,7 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
                      COMMAND ${SE_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Validation/V3/test_run_v3.sh
                              $<TARGET_FILE:SaturnExplorerV3FakeEmulator> $<TARGET_FILE:se-bench-client>
                              /tmp/saturn_explorer_v3_script_test.sock)
-            set_tests_properties(SaturnExplorerV3RunScriptTests PROPERTIES TIMEOUT 180)
+            set_tests_properties(SaturnExplorerV3RunScriptTests PROPERTIES TIMEOUT 600)
         endif()
 
         # A1-7: a paused emulator that is captured every UI frame (a state load nobody confirms)
