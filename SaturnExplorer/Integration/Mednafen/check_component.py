@@ -157,6 +157,24 @@ BUS_MUTATIONS = {
 }
 
 
+def unsupported_linker(cxx):
+    """The harnesses link real emulator translation units whose references into the rest of Mednafen are left
+    unresolved on purpose (-Wl,--unresolved-symbols=ignore-in-object-files, below). That GNU ld option exists for
+    ELF only: the PE linkers (MinGW ld, MSVC/lld-link) and Apple's ld64 do not honour it, and there is no
+    equivalent that works on them (--warn-unresolved-symbols is ELF-only too; the alternative is a stub for every
+    missing symbol, which would hide link errors the harness is meant to expose). So detect such a toolchain up
+    front. Returns a one-line reason, or None for an ELF target (the Linux behaviour, unchanged)."""
+    try:
+        machine = subprocess.run([cxx, "-dumpmachine"], capture_output=True, text=True, timeout=30).stdout.strip().lower()
+    except (OSError, subprocess.SubprocessError):
+        machine = ""
+    if any(t in machine for t in ("mingw", "windows", "msys", "cygwin", "darwin", "apple")) or \
+            (not machine and sys.platform in ("win32", "cygwin", "darwin")):
+        return ("target %s is not ELF: its linker ignores --unresolved-symbols=ignore-in-object-files, "
+                "so the component harnesses cannot link (Linux/ELF only)" % (machine or sys.platform))
+    return None
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
@@ -176,6 +194,10 @@ def main():
         print("SKIP: no Mednafen checkout at %s" % root)
         return 77
     cxx = args[2] if len(args) > 2 else os.environ.get("CXX", "g++")
+    reason = unsupported_linker(cxx)
+    if reason:
+        print("SKIP: " + reason)
+        return 77
     os.makedirs(scratch, exist_ok=True)
     work = cm.make_scratch(root, scratch)
     rc, out = cm.run_apply(cm.NEW_APPLY, work)
@@ -190,19 +212,19 @@ def main():
     for key in mutates:
         old, new = BUS_MUTATIONS[key]
         path = os.path.join(work, "src/ss/sh7095.inc")
-        text = open(path).read()
+        text = open(path, newline="").read()
         if old not in text:
             print("mutation %s: the hook text is not in the patched sh7095.inc" % key)
             return 1
-        open(path, "w").write(text.replace(old, new))
+        open(path, "w", newline="").write(text.replace(old, new))
         print("mutation: %s" % key)
     for key in drops:
         for rel in ("src/ss/vdp1.cpp", "src/ss/sound.cpp", "src/hw_cpu/m68k/m68k.cpp", "src/ss/sh7095.inc"):
             path = os.path.join(work, rel)
-            text = open(path).read()
+            text = open(path, newline="").read()
             new, n = apply_mod.retire_fences_text(text, key)
             if n:
-                open(path, "w").write(new)
+                open(path, "w", newline="").write(new)
                 print("mutation: dropped %d block(s) containing %r from %s" % (n, key, rel))
     ss = os.path.join(work, "src", "ss")
     flags = ["-std=gnu++11", "-O1", "-g", "-fsigned-char", "-fwrapv", "-fexceptions", "-DHAVE_CONFIG_H",

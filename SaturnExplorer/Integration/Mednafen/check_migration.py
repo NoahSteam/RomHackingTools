@@ -99,6 +99,19 @@ def run_apply(script, root, *flags):
     return p.returncode, p.stdout + p.stderr
 
 
+def link_or_copy(src, dst):
+    """Symlink src at dst; where that is not allowed (Windows without the symlink privilege raises OSError, some
+    platforms NotImplementedError) copy it instead. The copy is read-only use: these are headers and
+    unpatched sources the harnesses only include."""
+    try:
+        os.symlink(src, dst)
+    except (OSError, NotImplementedError):
+        if os.path.isdir(src):
+            shutil.copytree(src, dst)
+        else:
+            shutil.copy2(src, dst)
+
+
 def make_scratch(root, scratch):
     """A mini Mednafen tree: pristine text of everything the includes need, plus the real headers by
     symlink. Returns the work root."""
@@ -120,14 +133,14 @@ def make_scratch(root, scratch):
     # headers, config.h and the rest of src/ that the translation units reach by <mednafen/...>.
     for link in ("include", "intl"):
         if os.path.exists(os.path.join(root, link)):
-            os.symlink(os.path.abspath(os.path.join(root, link)), os.path.join(work, link))
+            link_or_copy(os.path.abspath(os.path.join(root, link)), os.path.join(work, link))
     for entry in os.listdir(os.path.join(root, "src")):
         if entry not in ("ss", "hw_cpu", "drivers") and not os.path.exists(os.path.join(work, "src", entry)):
-            os.symlink(os.path.abspath(os.path.join(root, "src", entry)), os.path.join(work, "src", entry))
+            link_or_copy(os.path.abspath(os.path.join(root, "src", entry)), os.path.join(work, "src", entry))
     hw = os.path.join(root, "src", "hw_cpu")
     for entry in os.listdir(hw):
         if entry != "m68k" and not os.path.exists(os.path.join(work, "src/hw_cpu", entry)):
-            os.symlink(os.path.abspath(os.path.join(hw, entry)), os.path.join(work, "src/hw_cpu", entry))
+            link_or_copy(os.path.abspath(os.path.join(hw, entry)), os.path.join(work, "src/hw_cpu", entry))
     return work
 
 

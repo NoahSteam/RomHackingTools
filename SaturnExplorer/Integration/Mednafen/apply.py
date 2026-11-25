@@ -1434,7 +1434,7 @@ def process_ss(src_dir, do_write, with_pause):
     path = os.path.join(src_dir, "ss.cpp")
     if not os.path.isfile(path):
         return ["MISSING  ss.cpp"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     notes = ["ss.cpp:"]
     text, n = apply_prepend(text, FWD_DECLS, "SeMednafenFrameHook(void)")
     notes.append(n)
@@ -1456,7 +1456,7 @@ def process_ss(src_dir, do_write, with_pause):
     text, n = apply_append(text, EMU_SLOT_ACCESSORS, "SsDbgEmuSlotInfo")
     notes.append(n)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return notes
 
 
@@ -1469,11 +1469,11 @@ def process_scu(src_dir, do_write):
     if not os.path.isfile(path):
         return ["scu.inc (DMA watchpoint):", "  MISSING  scu.inc"]
     notes = ["scu.inc (DMA watchpoint):"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     text, n = apply_anchored(text, SCU_DMA_ANCHOR, SCU_DMA_HOOK, "SeSsDmaWatch(A,")
     notes.append(n)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return notes
 
 
@@ -1484,7 +1484,7 @@ def process_anchored(src_dir, fname, title, edits, do_write, prepend=None):
     notes = [f"{fname} ({title}):"]
     if not os.path.isfile(path):
         return notes + [f"  MISSING  {fname}"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     if prepend:
         text, n = apply_prepend(text, prepend[0], prepend[1])
         notes.append(n)
@@ -1492,7 +1492,7 @@ def process_anchored(src_dir, fname, title, edits, do_write, prepend=None):
         text, n = apply_anchored(text, anchor, code, key)
         notes.append(n)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return notes
 
 
@@ -1534,12 +1534,12 @@ def process_retired(src_dir, do_write):
         path = os.path.join(src_dir, fname)
         if not os.path.isfile(path):
             continue
-        text = open(path, encoding="utf-8", errors="surrogateescape").read()
+        text = read_src(path)
         new, n = retire_fences_text(text, key)
         if n:
             notes.append(f"  - retired     {fname}: {n} obsolete block(s) containing {key}")
             if do_write:
-                open(path, "w", encoding="utf-8", errors="surrogateescape").write(new)
+                write_src(path, new)
     return ["retired v26 hooks:"] + notes if notes else []
 
 
@@ -1602,13 +1602,13 @@ def process_debug(src_dir, do_write):
     if not os.path.isfile(path):
         return ["debug.inc (slave SH-2 handler):", "  MISSING  debug.inc"]
     notes = ["debug.inc (slave SH-2 handler):"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     text, n = apply_prepend(text, DEBUG_SCOPE_HELPER, "SeSsActiveCpuScope {")
     notes.append(n)
     text, n = apply_anchored(text, DEBUG_HANDLER_ANCHOR, DEBUG_SCOPE_USE, "SeSsActiveCpuScope<decltype")
     notes.append(n)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return notes
 
 
@@ -1620,7 +1620,7 @@ def process_vdp1_drawend(src_dir, do_write):
     if not os.path.isfile(path):
         return ["vdp1.cpp (draw-end latch):", "  MISSING  vdp1.cpp"]
     notes = ["vdp1.cpp (draw-end latch):"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     text, n = apply_prepend(text, VDP1_DRAWEND_FWD, "SE_VDP1_LATCH_FWD")
     notes.append(n)
     text, n = apply_anchored(text, VDP1_DRAWEND_ANCHOR, VDP1_DRAWEND_HOOK, "SsDbgVdp1LatchDrawEnd();")
@@ -1630,7 +1630,7 @@ def process_vdp1_drawend(src_dir, do_write):
     text, n = apply_anchored(text, VDP1_LOAD_ANCHOR, VDP1_LOAD_HOOK, "SE_VDP1_LATCH_LOAD")
     notes.append(n)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return notes
 
 
@@ -1645,17 +1645,17 @@ def process_sound(src_dir, do_write):
     if not os.path.isfile(h_path) or not os.path.isfile(cpp_path):
         return notes + ["  MISSING  scsp.h or sound.cpp"]
 
-    text = original = open(h_path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(h_path)
     text, n = apply_anchored(text, SCSP_RAMPTR_ANCHOR, SCSP_SLOT_METHOD, "SeDbgReadSlots")
     notes.append(n)
     if do_write and text != original:
-        open(h_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(h_path, text)
 
-    text = original = open(cpp_path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(cpp_path)
     text, n = apply_append(text, SOUND_ACCESSORS, "SsDbgScspSlots")
     notes.append(n)
     if do_write and text != original:
-        open(cpp_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(cpp_path, text)
     return notes
 
 
@@ -1668,11 +1668,11 @@ def process_cd(src_dir, do_write):
     notes = ["cdb.cpp:"]
     if not os.path.isfile(cpp_path):
         return notes + ["  MISSING  cdb.cpp"]
-    text = original = open(cpp_path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(cpp_path)
     text, n = apply_append(text, CD_ACCESSORS, "SsDbgCdStatus")
     notes.append(n)
     if do_write and text != original:
-        open(cpp_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(cpp_path, text)
     return notes
 
 
@@ -1683,7 +1683,7 @@ def process_smpc(src_dir, do_write):
     if not os.path.isfile(cpp_path) or not os.path.isfile(h_path):
         return notes + ["  MISSING  smpc.cpp or smpc.h"]
 
-    text = original = open(cpp_path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(cpp_path)
     # Early versions of this hook prepended <atomic>, but Mednafen requires types.h
     # (pulled in by ss.h) to precede standard integer headers. Remove that exact legacy
     # fence once, then keep the include anchored immediately after ss.h.
@@ -1700,14 +1700,14 @@ def process_smpc(src_dir, do_write):
         text, SMPC_UPDATE_ANCHOR, SMPC_INPUT_UPDATE, "SeSMPCUpdateInput(vp, time_elapsed)")
     notes.append(n)
     if do_write and text != original:
-        open(cpp_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(cpp_path, text)
 
-    text = original = open(h_path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(h_path)
     text, n = apply_anchored(text, r'(void SMPC_SetInput\([^;]+;\s*\n)',
                              SMPC_INPUT_DECL, "SMPC_SetInjectedInput")
     notes.append(n)
     if do_write and text != original:
-        open(h_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(h_path, text)
     return notes
 
 
@@ -1715,10 +1715,10 @@ def process_append_file(src_dir, fname, block, key, do_write):
     path = os.path.join(src_dir, fname)
     if not os.path.isfile(path):
         return [f"MISSING  {fname}"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     text, note = apply_append(text, block, key)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return [f"{fname}:", note]
 
 
@@ -1728,14 +1728,14 @@ def process_title(root, do_write):
     path = os.path.join(root, TITLE_FILE)
     if not os.path.isfile(path):
         return [f"{TITLE_FILE}:", "  (not found — window-title mark skipped; non-SDL build?)"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     notes = [f"{TITLE_FILE}:"]
     text, n = apply_prepend(text, TITLE_FWD, "SeExportTitleSuffix(const char*")
     notes.append(n)
     text, n = apply_anchored(text, TITLE_ANCHOR, TITLE_HOOK, 'SeExportTitleSuffix("Mednafen"')
     notes.append(n)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return notes
 
 
@@ -1745,11 +1745,40 @@ def process_input(root, do_write):
     path = os.path.join(root, INPUT_FILE)
     if not os.path.isfile(path):
         return [f"{INPUT_FILE}:", "  (not found — keyboard-map hook skipped; non-SDL build?)"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     text, note = apply_append(text, INPUT_ACCESSORS, "SsDbgQueryKeyMap")
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return [f"{INPUT_FILE}:", note]
+
+
+def read_src(path):
+    """Source text of a file we patch, with CRLF folded to LF in memory (the anchors and fences are all LF).
+    Binary I/O: no platform newline translation, so what write_src() writes back is exactly what was read."""
+    with open(path, "rb") as f:
+        data = f.read()
+    text = data.decode("utf-8", errors="surrogateescape")
+    return text.replace("\r\n", "\n") if _is_crlf(data) else text
+
+
+def _is_crlf(data):
+    """A file that uses CRLF throughout (every LF preceded by CR); mixed or LF files are left as they are."""
+    return b"\r\n" in data and data.count(b"\n") == data.count(b"\r\n")
+
+
+def write_src(path, text):
+    """Write patched text back in the file's own line-ending style (decided from what is on disk right now,
+    i.e. the pre-edit bytes). A CRLF file stays pure CRLF, an LF file stays pure LF."""
+    eol_crlf = False
+    try:
+        with open(path, "rb") as f:
+            eol_crlf = _is_crlf(f.read())
+    except OSError:
+        pass
+    if eol_crlf:
+        text = text.replace("\n", "\r\n")
+    with open(path, "wb") as f:
+        f.write(text.encode("utf-8", errors="surrogateescape"))
 
 
 def write_if_changed(destpath, data):
@@ -1813,7 +1842,7 @@ def process_build(root, do_write):
         path = os.path.join(root, rel)
         if not os.path.isfile(path):
             continue
-        text = open(path, encoding="utf-8", errors="surrogateescape").read()
+        text = read_src(path)
         if "se_mednafen_glue.c" in text:
             return [f"{rel}:", "  ok (already)  se_export.c + se_mednafen_glue.c"]
         m = VDP1_SRC_RE.search(text)
@@ -1830,7 +1859,7 @@ def process_build(root, do_write):
             ins = "".join(f"{prefix}{s} " for s in NEW_SOURCES)
         new = text[: m.start()] + ins + text[m.start():]
         if do_write:
-            open(path, "w", encoding="utf-8", errors="surrogateescape").write(new)
+            write_src(path, new)
         return [f"{rel}:", f"  + inserted    {', '.join(NEW_SOURCES)}"]
     return ["build file:",
             "  ANCHOR MISS   add se_export.c + se_mednafen_glue.c to the ss build by hand"]
@@ -1857,8 +1886,8 @@ def revert(src_dir, root):
     edited.append(os.path.join(root, INPUT_FILE))   # keyboard-map hook (SDL frontend)
     for path in edited:
         if os.path.isfile(path):
-            t = open(path, encoding="utf-8", errors="surrogateescape").read()
-            open(path, "w", encoding="utf-8", errors="surrogateescape").write(fence_re.sub(revert_fence, t))
+            t = read_src(path)
+            write_src(path, fence_re.sub(revert_fence, t))
     for name in COMMON_FILES + [GLUE_FILE]:
         p = os.path.join(src_dir, name)
         if os.path.isfile(p):
@@ -1866,12 +1895,12 @@ def revert(src_dir, root):
     for rel in BUILD_CANDIDATES:
         path = os.path.join(root, rel)
         if os.path.isfile(path):
-            t = open(path, encoding="utf-8", errors="surrogateescape").read()
+            t = read_src(path)
             for s in NEW_SOURCES:
                 # Remove the inline token we inserted before vdp1 (quoted or not, with
                 # any path prefix and a trailing comma/space).
                 t = re.sub(r'''["']?(?:\S+/)?''' + re.escape(s) + r'''["']?,?[ \t]*''', "", t)
-            open(path, "w", encoding="utf-8", errors="surrogateescape").write(t)
+            write_src(path, t)
     print("Reverted: removed SE_EXPORT edits and copied files.")
 
 
