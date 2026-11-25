@@ -728,6 +728,10 @@ Any future rename needs a new entry there. Checks:
   pure CRLF; Windows' text-mode newline translation is simulated by wrapping `open`. `apply.py` reads and
   writes patched files as bytes (`read_src` / `write_src`), folding a pure-CRLF file to LF only in memory.
   A file mixing LF and CRLF is patched as-is (its anchors may then miss).
+* `Integration/tests/check_scratch_includes.py` (ctest `SaturnExplorerMednafenScratchIncludes`, no checkout): the
+  scratch tree of `check_migration.py` / `check_component.py` resolves `<mednafen/...>` to the PATCHED `work/src`
+  both with symlinks and with `os.symlink` forced to fail (then `include/mednafen` is a mirror that
+  `include_flags()` re-syncs before every compile). Checks compile with `check_migration.include_flags(work)`.
 * `Integration/Mednafen/check_migration.py <checkout> <scratch> <old apply.py>...` (needs the
   checkout; `git show 4b6cd9e:SaturnExplorer/Integration/Mednafen/apply.py > old.py`): patches
   pristine copies with each old `apply.py`, then with this one, and asserts the retired text is gone,

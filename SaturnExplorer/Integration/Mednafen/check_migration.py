@@ -78,13 +78,26 @@ def fences_containing(text, key, mod):
                if key in m.group(0))
 
 
+def is_checkout_copy(rel):
+    """True for a scratch path that is the checkout's own unpatched content (a symlink, or its copy where symlinks
+    are unavailable), or the include/mednafen mirror of the patched src: not the scratch tree's own files."""
+    parts = rel.replace(os.sep, "/").split("/")
+    if parts[0] in ("include", "intl"):
+        return True
+    if parts[0] == "src" and len(parts) > 1 and parts[1] not in ("ss", "hw_cpu", "drivers"):
+        return True
+    return parts[:2] == ["src", "hw_cpu"] and len(parts) > 2 and parts[2] != "m68k"
+
+
 def snapshot(work):
-    """Every regular file of the scratch tree (symlinked directories are not entered), by relative path."""
+    """Every regular file of the scratch tree's own content (symlinked directories are not entered; copies of the
+    checkout's unpatched dirs, made where symlinks are unavailable, are skipped), by relative path."""
     out = {}
     for dirpath, dirnames, filenames in os.walk(work):
+        dirnames[:] = [d for d in dirnames if not is_checkout_copy(os.path.relpath(os.path.join(dirpath, d), work))]
         for name in filenames:
             p = os.path.join(dirpath, name)
-            if not os.path.islink(p):
+            if not os.path.islink(p) and not is_checkout_copy(os.path.relpath(p, work)):
                 with open(p, "rb") as f:
                     out[os.path.relpath(p, work)] = f.read()
     return out
@@ -110,6 +123,49 @@ def link_or_copy(src, dst):
             shutil.copytree(src, dst)
         else:
             shutil.copy2(src, dst)
+
+
+PATCHED_DIRS = ("ss", "drivers", "hw_cpu/m68k")   # the src subtrees apply.py writes; the rest of src is never patched
+
+
+def sync_tree(src, dst):
+    """Make dst a byte-for-byte mirror of the directory src (files only; extra files in dst are removed)."""
+    os.makedirs(dst, exist_ok=True)
+    want = set()
+    for dirpath, _dirs, files in os.walk(src):
+        rel = os.path.relpath(dirpath, src)
+        os.makedirs(os.path.normpath(os.path.join(dst, rel)), exist_ok=True)
+        for name in files:
+            a, b = os.path.join(dirpath, name), os.path.normpath(os.path.join(dst, rel, name))
+            want.add(b)
+            with open(a, "rb") as f:
+                data = f.read()
+            if not os.path.isfile(b) or open(b, "rb").read() != data:
+                with open(b, "wb") as f:
+                    f.write(data)
+    for dirpath, _dirs, files in os.walk(dst):
+        for name in files:
+            if os.path.join(dirpath, name) not in want:
+                os.remove(os.path.join(dirpath, name))
+
+
+def refresh_includes(work):
+    """Make <mednafen/...> resolve to the CURRENT bytes of work/src. With the include/mednafen symlink that is
+    automatic; where symlinks are unavailable include/mednafen is a real directory mirroring the patched subtrees
+    of work/src (the only places apply.py writes), re-synced here. Every compile goes through include_flags(),
+    which calls this, so no apply / revert / mutation can leave a stale header behind."""
+    link = os.path.join(work, "include", "mednafen")
+    if os.path.islink(link) or not os.path.isdir(link):
+        return
+    for sub in PATCHED_DIRS:
+        if os.path.isdir(os.path.join(work, "src", sub)):
+            sync_tree(os.path.join(work, "src", sub), os.path.join(link, sub))
+
+
+def include_flags(work):
+    """The -I flags every check compiles with to reach headers by <mednafen/...> and <intl/...>."""
+    refresh_includes(work)
+    return ["-I" + os.path.join(work, "include"), "-I" + os.path.join(work, "intl")]
 
 
 def make_scratch(root, scratch):
@@ -149,14 +205,27 @@ def make_scratch(root, scratch):
         if entry != "m68k" and not os.path.exists(os.path.join(work, "src/hw_cpu", entry)):
             link_or_copy(os.path.abspath(os.path.join(hw, entry)), os.path.join(work, "src/hw_cpu", entry))
     if os.path.isdir(inc):
-        link_or_copy(os.path.abspath(os.path.join(work, "src")), os.path.join(work, "include", "mednafen"))
+        link = os.path.join(work, "include", "mednafen")
+        try:
+            os.symlink(os.path.abspath(os.path.join(work, "src")), link)
+        except (OSError, NotImplementedError):
+            # No symlinks: a real directory, mirrored from work/src (see refresh_includes). Its unpatched
+            # entries are copied from the checkout once; the patched subtrees are synced before each compile.
+            os.makedirs(link)
+            for entry in os.listdir(os.path.join(root, "src")):
+                if entry not in ("ss", "drivers", "hw_cpu"):
+                    link_or_copy(os.path.abspath(os.path.join(root, "src", entry)), os.path.join(link, entry))
+            for entry in os.listdir(hw):
+                if entry != "m68k":
+                    os.makedirs(os.path.join(link, "hw_cpu"), exist_ok=True)
+                    link_or_copy(os.path.abspath(os.path.join(hw, entry)), os.path.join(link, "hw_cpu", entry))
+            refresh_includes(work)
     return work
 
 
 def syntax_check(work, rel, cxx):
     d = os.path.dirname(os.path.join(work, rel))
-    cmd = [cxx, "-std=gnu++11", "-fsyntax-only", "-fsigned-char", "-fwrapv", "-fexceptions", "-DHAVE_CONFIG_H",
-           "-I" + os.path.join(work, "include"), "-I" + os.path.join(work, "intl"),
+    cmd = [cxx, "-std=gnu++11", "-fsyntax-only", "-fsigned-char", "-fwrapv", "-fexceptions", "-DHAVE_CONFIG_H"] + include_flags(work) + [
            "-I" + os.path.join(work, "src", "ss"), os.path.join(work, rel)]
     return subprocess.run(cmd, cwd=d, capture_output=True, text=True)
 
