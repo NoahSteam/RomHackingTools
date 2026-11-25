@@ -1621,6 +1621,7 @@ if(BUILD_TESTING)
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_scratch_includes.py
                          ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen
                          ${CMAKE_CURRENT_BINARY_DIR}/scratch_includes_test)
+        se_skip_code_77(SaturnExplorerMednafenScratchIncludes)   # exits 77 with no C++ compiler on PATH
         add_test(NAME SaturnExplorerMednafenHaltOrdering
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_halt_ordering.py
                          ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py)

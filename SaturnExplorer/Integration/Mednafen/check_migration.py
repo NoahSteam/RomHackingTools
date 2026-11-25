@@ -145,7 +145,9 @@ def sync_tree(src, dst):
                     f.write(data)
     for dirpath, _dirs, files in os.walk(dst):
         for name in files:
-            if os.path.join(dirpath, name) not in want:
+            # normpath on both sides: on Windows a dst given with "/" (CMake passes D:/..., PATCHED_DIRS has
+            # "hw_cpu/m68k") walks as mixed separators, and every file just copied would look extra.
+            if os.path.normpath(os.path.join(dirpath, name)) not in want:
                 os.remove(os.path.join(dirpath, name))
 
 

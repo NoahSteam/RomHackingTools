@@ -110,8 +110,32 @@ def symlinks_available():
     return True
 
 
+def mirror_keeps_files():
+    """sync_tree with a destination spelled un-normalised (as Windows spells one given with "/"): the files it
+    has just copied must survive its own clean-up pass, and a stale extra file must still be removed."""
+    src, dst = os.path.join(scratch, "sync-src"), os.path.join(scratch, "sync-dst")
+    os.makedirs(os.path.join(src, "sub"), exist_ok=True)
+    os.makedirs(os.path.join(dst, "sub"), exist_ok=True)
+    for rel in ("a.h", os.path.join("sub", "b.h")):
+        with open(os.path.join(src, rel), "w") as f:
+            f.write("x")
+    with open(os.path.join(dst, "sub", "stale.h"), "w") as f:
+        f.write("x")
+    cm.sync_tree(src, dst + os.sep + "." + os.sep + "sub" + os.sep + "..")
+    have = sorted(os.path.relpath(os.path.join(d, n), dst) for d, _s, ns in os.walk(dst) for n in ns)
+    want = sorted(["a.h", os.path.join("sub", "b.h")])
+    return None if have == want else "sync_tree left %r, expected %r" % (have, want)
+
+
 os.makedirs(scratch, exist_ok=True)
+cxx = os.environ.get("CXX", "g++")
+if shutil.which(cxx) is None:
+    print("SKIP: no C++ compiler (%s) on PATH; this check compiles against the scratch include tree" % cxx)
+    sys.exit(77)
 bad = 0
+err = mirror_keeps_files()
+print("mirror: %s" % ("ok" if err is None else "FAIL " + err))
+bad += err is not None
 for label, symlinks in (("symlinks", True), ("copies", False)):
     # The link-specific case needs real symlinks; the forced-copy case always runs.
     if symlinks and not symlinks_available():
