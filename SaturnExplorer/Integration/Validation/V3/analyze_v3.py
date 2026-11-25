@@ -117,9 +117,11 @@ def evaluate_run(summary, rows, min_frames, min_window_s):
     frames = f1["frame_no"] - f0["frame_no"]
     secs = (we - ws) / 1e9
     if frames < min_frames:
-        why.append("only %d frames in the window (< %d)" % (frames, min_frames))
+        why.append("only %d frames in the window (< %d): measure more frames (run_v3.sh --frames N, N large enough "
+                   "that the SLOWEST configuration reaches %d); the floor is not lowered to fit" % (frames, min_frames, min_frames))
     if secs < min_window_s:
-        why.append("window %.2f s shorter than %.2f s" % (secs, min_window_s))
+        why.append("window %.2f s shorter than %.2f s: measure more frames (run_v3.sh --frames N, N large enough "
+                   "that the FASTEST configuration takes %.2f s)" % (secs, min_window_s, min_window_s))
     m = {"frames": frames, "window_s": secs}
     if frames > 0:
         m["speed"] = frames / secs
@@ -302,15 +304,21 @@ def report(res, meta, out=sys.stdout):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("dir")
+    ap.add_argument("dir", nargs="?")
     ap.add_argument("--min-frames", type=int, default=DEFAULT_MIN_FRAMES)
     ap.add_argument("--min-window-s", type=float, default=DEFAULT_MIN_WINDOW_S)
     ap.add_argument("--drift-pct", type=float, default=DEFAULT_DRIFT_PCT)
     ap.add_argument("--bootstrap", type=int, default=4000)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--print-floors", action="store_true", help="print the default frame and seconds floors and exit (used by run_v3.sh)")
     ap.add_argument("--vs", metavar="DIR", help="another run directory (another build): compares its (a) runs with this one's")
     ap.add_argument("--json", metavar="FILE", help="also write the numbers as JSON")
     args = ap.parse_args(argv)
+    if args.print_floors:
+        print("%d %g" % (DEFAULT_MIN_FRAMES, DEFAULT_MIN_WINDOW_S))
+        return 0
+    if not args.dir:
+        ap.error("the following arguments are required: dir")
     if not os.path.isdir(args.dir):
         print("not a directory: " + args.dir, file=sys.stderr)
         return 1
