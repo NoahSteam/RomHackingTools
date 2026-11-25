@@ -3,7 +3,8 @@
 Run date: ______  emulator revision / title string: ______________  cache mode (`data` / `full`): ______
 Observed frame cycles `F` (Frame tab, any steady frame): ______   68000/SH-2 ratio read: ______
 Read steady frames only (5..118 of each phase). Pass = observed inside the Expected cell.
-`EXPECTED.md` has the derivation for each row; **Expected numbers are unconfirmed predictions.**
+`EXPECTED.md` has the derivation for each row. The expected numbers were written first; they were confirmed on a real run 2026-11-25 (Windows, Mednafen 1.32.1 patched, real BIOS, both cache modes, 48/48 checklist rows matched; exact matches for the phase 0 baseline, the 15 phase-3 bus buckets, VDP1 commands/work, SCU DMA byte counts, slave on-time and the 68000 phases; in-range: phase 1 busy 160,073, func_a/func_b 12,003/4,003, stall ratio 3.98, 68000/SH-2 clock ratio 0.42009).
+Not checked on that run: the readings came through a headless recorder on the live connection, not the Profiler panel; hook-disable checks were done for slave on-time, VDP1 work and the bus buckets only (the F5, F9 and F11 hook checks were not run). The disc needed a manual fix to boot (an empty root directory made the BIOS drop to its CD player); `build_v1.py` now writes a real first file. The guest was changed after that run (see README: display bring-up for the backdrop colour); in the fake-machine simulation every steady frame performs exactly the same accesses at the same addresses as before (the change is one-time start-up code placed after all other payload bytes); not re-run on the emulator.
 
 | Phase | Counter / view | Expected | Observed | Pass / fail | Notes |
 |---|---|---|---|---|---|
