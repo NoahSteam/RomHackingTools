@@ -6,8 +6,13 @@
 set -u
 FAKE="$1"; BENCH="$2"; SOCK="$3"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-OUT="$(mktemp -d)"
+OUT="$(mktemp -d "${TMPDIR:-/tmp}/se_v3_run.XXXXXX")"
 trap 'rm -rf "$OUT"' EXIT
+# The stand-in's frame period. The live ring keeps 16 records and drops the oldest (that is what the loss rule
+# counts), so a client starved for 16 frame periods loses samples on ANY host; a 4 ms stand-in would turn a CPU
+# starved test client into a "lost samples" invalid run. 20 ms leaves the client 320 ms. The test's outcome is
+# otherwise independent of the period (FAKE_FRAME_MS=40 is run as well).
+FAKE_FRAME_MS="${FAKE_FRAME_MS:-20}"; export FAKE_FRAME_MS
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 "$HERE/run_v3.sh" --emu "$FAKE" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT" --bench "$BENCH" \

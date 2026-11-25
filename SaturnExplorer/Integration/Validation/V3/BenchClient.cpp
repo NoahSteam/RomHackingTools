@@ -357,6 +357,7 @@ int RunBench(const BenchOptions& o, std::FILE* out)
             SleepMs(o.drainMs);
             uint32_t n;
             const int64_t at = NowNs(t0);
+            bool mixedBatch = false;   // a frame in this drain ran in another mode than requested
             while ((n = se_live_drain_perf(&ds, b, 64)) != 0)
                 for (uint32_t i = 0; i < n; ++i)
                 {
@@ -364,6 +365,7 @@ int RunBench(const BenchOptions& o, std::FILE* out)
                     const Row& r = rows.back();
                     if (r.frameNo >= 0 && std::strcmp(r.kind, "gap") != 0)
                     {
+                        if (r.mode != wantMode0) mixedBatch = true;
                         if (firstSeen < 0) firstSeen = r.frameNo;
                         newest = r.frameNo;
                         newestMode = r.mode;
@@ -373,7 +375,9 @@ int RunBench(const BenchOptions& o, std::FILE* out)
             // frame ran in: the request is applied at a frame boundary some frames after it is sent, and how many
             // depends on the host, so a fixed warm-up cannot promise it.
             const bool warmDone = o.warmupFrames > 0 ? (firstSeen >= 0 && newest - firstSeen >= o.warmupFrames) : at >= wsTarget;
-            if (windowStartNs < 0 && warmDone && newest >= 0 && newestMode == wantMode0)
+            // All rows drained together share one arrival time, so a drain that still holds a frame of the old mode
+            // cannot open the window: that frame would be counted inside it.
+            if (windowStartNs < 0 && warmDone && newest >= 0 && newestMode == wantMode0 && !mixedBatch)
             {
                 windowStartNs = at;
                 startFrame = newest;
