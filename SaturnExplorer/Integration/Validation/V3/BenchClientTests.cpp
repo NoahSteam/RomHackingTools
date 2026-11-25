@@ -306,24 +306,32 @@ void TestStreamAttributionOn()
 // the requested mode, and every frame in the window must carry it, whatever the lag.
 void TestWindowWaitsForRequestedMode()
 {
-    v3::BenchOptions o = Base("lag", 40);
-    o.functions = true;
-    gHookFlags = 0;
     gModeLag = 30;
-    const unsigned long long p0 = gPublished.load();
-    const int rc = v3::RunBench(o, stdout);
-    const unsigned long long ran = gPublished.load() - p0;
+    // Five runs with a coarse drain (about ten frames per drain): whether the frame where the mode changes shares
+    // a drain with the frames of the old mode is a matter of timing, and one of five misses it only with
+    // probability around 1e-5.
+    for (int rep = 0; rep < 5; ++rep)
+    {
+        v3::BenchOptions o = Base("lag" + std::to_string(rep), 40);
+        o.functions = true;
+        o.drainMs = 40;
+        gHookFlags = 0;
+        CHECK(WaitFrames(40));   // stamps back to the old mode: the previous run's disconnect has come through
+        const unsigned long long p0 = gPublished.load();
+        const int rc = v3::RunBench(o, stdout);
+        const unsigned long long ran = gPublished.load() - p0;
+        CHECK(rc == v3::kOk);
+        const Csv c = ReadCsv(o.csvPath);
+        const auto s = ReadSummary(o.summaryPath);
+        CHECK(s.at("valid") == "1" && s.at("mode_mismatch_window") == "0");
+        CheckFrames(c, s, SE_LIVE_PROF_FUNCTIONS, ran, 40);
+        // Frames of the old mode were delivered, and the window opened after the last of them.
+        size_t old = 0;
+        for (size_t i = 0; i < c.rows.size(); ++i) if (c.U(i, "mode") == 0u) ++old;
+        CHECK(old > 0);
+    }
     gModeLag = 0;
-    CHECK(rc == v3::kOk);
-    const Csv c = ReadCsv(o.csvPath);
-    const auto s = ReadSummary(o.summaryPath);
-    CHECK(s.at("valid") == "1" && s.at("mode_mismatch_window") == "0");
-    CheckFrames(c, s, SE_LIVE_PROF_FUNCTIONS, ran, 40);
-    // Frames of the old mode were delivered, and the window opened after the last of them.
-    size_t old = 0;
-    for (size_t i = 0; i < c.rows.size(); ++i) if (c.U(i, "mode") == 0u) ++old;
-    CHECK(old > 0);
-    CHECK(WaitFrames(40));   // the lag drains: the disconnect is applied and the old mode comes back
+    CHECK(WaitFrames(40));
 }
 
 // A frame in the window that ran in another mode than requested makes the run invalid, counted exactly.
