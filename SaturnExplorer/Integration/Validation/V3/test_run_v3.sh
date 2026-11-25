@@ -99,7 +99,25 @@ grep -q "no slot 0 save state in $EMPTY/mcs" "$OUT/m1.log" || { cat "$OUT/m1.log
 grep -q 'mednafen exe dir' "$OUT/m1.log" || fail "no hint about the GUI's states folder"
 grep -q -- '--mednafen-home' "$OUT/m1.log" || fail "no --mednafen-home suggestion"
 [ ! -e "$OUT/m1" ] && [ ! -e "$OUT/seen_home" ] || fail "something was created or started before the state check failed"
-# the platform default is what is looked in when nothing is set (HOME stands in; USERPROFILE is unset)
+# Mednafen's own order when MEDNAFEN_HOME is unset: HOME/.mednafen, never USERPROFILE. A state under HOME is
+# found although USERPROFILE points somewhere empty (the failing client then ends the run, after the check).
+mkdir -p "$OUT/shellhome/.mednafen/mcs" "$OUT/userprofile/.mednafen/mcs"; : > "$OUT/shellhome/.mednafen/mcs/Game.0123.mc0"
+env -u MEDNAFEN_HOME HOME="$OUT/shellhome" USERPROFILE="$OUT/userprofile" "$HERE/run_v3.sh" --emu "$OUT/emu_home.sh" --game "$HERE/run_v3.sh" --slot 0 \
+    --out "$OUT/m6" --bench "$OUT/bench_fail.sh" --reps 1 --settle 0 --skip-preflight > "$OUT/m6.log" 2>&1
+grep -q "state check: base $OUT/shellhome/.mednafen (from HOME)" "$OUT/m6.log" || { cat "$OUT/m6.log"; fail "HOME/.mednafen was not the base when USERPROFILE differs"; }
+grep -q 'no slot 0 save state' "$OUT/m6.log" && fail "a valid state under HOME was rejected"
+rm -f "$OUT/seen_home"
+# and the reverse: a state only under USERPROFILE is NOT where Mednafen looks
+env -u MEDNAFEN_HOME HOME="$OUT/userprofile/nohome" USERPROFILE="$OUT/shellhome" "$HERE/run_v3.sh" --emu "$OUT/emu_home.sh" --game "$HERE/run_v3.sh" --slot 0 \
+    --out "$OUT/m7" --bench "$OUT/bench_fail.sh" --reps 1 --settle 0 --skip-preflight > "$OUT/m7.log" 2>&1 && fail "a state under USERPROFILE was accepted"
+grep -q "no slot 0 save state in $OUT/userprofile/nohome/.mednafen/mcs" "$OUT/m7.log" || { cat "$OUT/m7.log"; fail "USERPROFILE was consulted"; }
+# with HOME unset and a Windows emulator (.exe), the base is the emulator's own folder
+WEXE="$OUT/winexe"; mkdir -p "$WEXE/mcs"; : > "$WEXE/mcs/Game.0123.mc0"; cp "$OUT/emu_home.sh" "$WEXE/mednafen.exe"
+env -u MEDNAFEN_HOME -u HOME USERPROFILE="$OUT/userprofile" "$HERE/run_v3.sh" --emu "$WEXE/mednafen.exe" --game "$HERE/run_v3.sh" --slot 0 \
+    --out "$OUT/m8" --bench "$OUT/bench_fail.sh" --reps 1 --settle 0 --skip-preflight > "$OUT/m8.log" 2>&1
+grep -q "state check: base $WEXE (from the emulator's folder" "$OUT/m8.log" || { cat "$OUT/m8.log"; fail "exe folder not used with HOME unset"; }
+rm -f "$OUT/seen_home"
+# nothing set but HOME: its .mednafen is named when it holds no state
 mkdir -p "$OUT/fakehome"
 env -u MEDNAFEN_HOME -u USERPROFILE HOME="$OUT/fakehome" "$HERE/run_v3.sh" --emu "$OUT/emu_home.sh" --game "$HERE/run_v3.sh" --slot 0 \
     --out "$OUT/m2" --bench "$OUT/bench_fail.sh" --reps 1 --settle 0 --skip-preflight > "$OUT/m2.log" 2>&1 && fail "default folder without a state accepted"

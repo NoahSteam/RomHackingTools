@@ -40,7 +40,7 @@ run_v3.sh --emu PATH --game PATH --slot N --out DIR --bench PATH/se-bench-client
   --skip-preflight  do not check the pinned settings against the emulator's -dump_settings_def
   --skip-state-check  do not check that a slot state file exists in the emulator's states folder
 Before anything is started the script checks that <home>/mcs/*.mc<slot> exists, <home> being --mednafen-home,
-else $MEDNAFEN_HOME, else the platform default (~/.mednafen; %USERPROFILE%\.mednafen under Git Bash).
+else $MEDNAFEN_HOME, else $HOME/.mednafen (on Windows too; with HOME unset there, the emulator's own folder).
 Environment: SDL_VIDEODRIVER, MEDNAFEN_HOME and similar are passed through to the emulator.
 EOF
 }
@@ -95,7 +95,19 @@ elif [ -n "${MEDNAFEN_HOME:-}" ]; then
 else
   HOME_SRC="platform default"
 fi
-if [ -n "${MEDNAFEN_HOME:-}" ]; then BASE="$MEDNAFEN_HOME"; else BASE="${USERPROFILE:-$HOME}/.mednafen"; fi
+# The same order as Mednafen's GetBaseDirectory() (src/drivers/main.cpp): a non-empty MEDNAFEN_HOME; else
+# $HOME/.mednafen whenever HOME is set, on Windows too (it never reads USERPROFILE); else, on Windows, the
+# emulator exe's own folder, and elsewhere the account's home directory.
+is_windows_emu() { case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) return 0;; esac; case "$EMU" in *.exe|*.EXE) return 0;; esac; return 1; }
+if [ -n "${MEDNAFEN_HOME:-}" ]; then
+  BASE="$MEDNAFEN_HOME"
+elif [ -n "${HOME+set}" ]; then
+  BASE="$HOME/.mednafen"; HOME_SRC="HOME"
+elif is_windows_emu; then
+  BASE="$(cd "$(dirname "$EMU")" 2>/dev/null && pwd)"; HOME_SRC="the emulator's folder (HOME is not set)"
+else
+  BASE="$(eval echo "~$(id -un 2>/dev/null)")/.mednafen"; HOME_SRC="the account's home directory (HOME is not set)"
+fi
 list_states() { # dir -> one line per state file
   local f
   for f in "$1"/mcs/*.mc"$SLOT"; do if [ -f "$f" ]; then echo "$f"; fi; done
@@ -104,7 +116,7 @@ STATES="$(list_states "$BASE")"
 if [ "$SKIP_STATE_CHECK" -eq 0 ]; then
   if [ -z "$STATES" ]; then
     echo "preflight: no slot $SLOT save state in $BASE/mcs (looked for *.mc$SLOT; base from $HOME_SRC)." >&2
-    echo "  Mednafen reads states from MEDNAFEN_HOME when set, else the platform default. States made through the" >&2
+    echo "  Mednafen reads states from MEDNAFEN_HOME when set, else HOME/.mednafen. States made through the" >&2
     echo "  Saturn Explorer GUI are in <mednafen exe dir>/mcs, because the GUI sets MEDNAFEN_HOME to that folder." >&2
     EMUDIR="$(cd "$(dirname "$EMU")" 2>/dev/null && pwd)"
     if [ -n "$EMUDIR" ] && [ -n "$(list_states "$EMUDIR")" ]; then

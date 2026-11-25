@@ -153,8 +153,9 @@ Losses during the discarded warm-up are reported but do not invalidate.
    disc image). `-autosave` is not used and is pinned to 0.
 
    **Where the state lives.** Mednafen keeps states in `<base>/mcs/<game>.<md5>.mc<N>`, `<base>` being
-   `$MEDNAFEN_HOME` when that is set, else the platform default (`~/.mednafen`; `%USERPROFILE%\.mednafen` on
-   Windows). Saturn Explorer's GUI launches Mednafen with `MEDNAFEN_HOME` set to the emulator exe's folder
+   `$MEDNAFEN_HOME` when that is set, else `$HOME/.mednafen` whenever `HOME` is set (on Windows too: it never
+   reads `USERPROFILE`; Git Bash sets `HOME`, a plain `cmd` window usually does not), else on Windows the
+   emulator exe's own folder. Saturn Explorer's GUI launches Mednafen with `MEDNAFEN_HOME` set to the emulator exe's folder
    (`WindowsPlatform.cpp:446`), so **a state made through the GUI is in `<exe dir>/mcs`**, which a shell run
    without `MEDNAFEN_HOME` does not read (the first real run lost time to exactly this). `run_v3.sh` therefore
    checks, before it starts anything, that `<base>/mcs/*.mc<slot>` exists, prints the candidates it found (the
@@ -356,7 +357,7 @@ were not the ones this procedure now defaults to. Nothing here is evidence for o
     scene (92 to 10 fps). 60 s gave only about 600 frames, so all five (c) runs were INVALID under the analyzer's
     1,000-frame floor (not a loss problem).
 * C. The slot-0 state was not where the run looked (GUI states are in `<exe dir>/mcs`; the shell run read
-  `%USERPROFILE%\.mednafen\mcs`, empty); the operator copied the `.mc0` by hand. `run_v3.sh` now checks this
+  `$HOME/.mednafen/mcs` -- under Git Bash the same folder as `%USERPROFILE%\.mednafen\mcs` -- empty); the operator copied the `.mc0` by hand. `run_v3.sh` now checks this
   first (see "Where the state lives").
 * D. The state was made under the GUI's default cache mode, so the cache setting was unpinned (see "The save
   state and the cache mode").
