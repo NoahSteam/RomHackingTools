@@ -315,6 +315,29 @@ file. If your fork spells the definition differently, `apply.py` reports `ANCHOR
 `SeSsActiveCpuScope<decltype`; add the one line it prints by hand. Without it, slave
 breakpoints silently do nothing.
 
+### The device sync in the continuous hook (`SeSsHookNeedsSync`)
+
+Upstream's `DBG_CPUHandler` does `ForceEventUpdates(DBG.eff_ts)` before **every** call of the CPU hook
+while the hook is continuous: every device (CDB, SMPC, SCSP, VDP1/VDP2, SCU DMA and DSP, both SH-2 DMACs,
+FRT/WDT) is run up to the current timestamp and rescheduled, once per instruction of both SH-2s. A
+debugger halting at that instruction needs it. Function attribution does not, and measured on a real
+title (Panzer Dragoon II, ~9,900 sampled frames) that sync was 69 % of the emulation thread's time with
+attribution on (127 ms of CPU per frame against 13.5 ms with it off).
+
+`process_debug` therefore replaces that one line (upstream text kept inside the fence, so `--revert` is
+byte exact) by `if(DBG.FoundBPoint || SeSsHookNeedsSync) ForceEventUpdates(DBG.eff_ts);`.
+`SeSsHookNeedsSync` is defined in the `ss.cpp` block (1 until first set: upstream's behaviour) and
+maintained by `SeSyncCpuHook` next to the callback it describes: **set while a tracepoint is armed or an
+instruction step is in progress, clear for profiling alone**. A PC or data breakpoint found on this very
+instruction (`DBG.FoundBPoint`) always syncs. So the sync still happens wherever the callback may read
+device state or halt; it is skipped only for an instruction whose hook does the profile and the shadow
+call stack. Because the flag is written in `SeSyncCpuHook`, it obeys the same deferral
+(`SeSsInHandler` / `sSeSyncPending`) as the callback itself: the two change together, at the end of the
+handler call that postponed them. Why that is safe, and what the profile-only path reads, is in
+`Docs/Codebase/Systems/Profiler.md` ("Cost of attribution"). `check_component.py` (f2_sh2) counts the
+real `ForceEventUpdates`'s device calls in each mode, and `--mutate sync-guard-removed|sync-never|
+sync-no-breakpoint|sync-flag-profile` must make it fail.
+
 ### Installs run on the emulate thread
 
 Breakpoint, watchpoint and tracepoint sets arrive on a server thread, but what they install —
@@ -753,6 +776,8 @@ Any future rename needs a new entry there. Checks:
   dummy / unmapped buckets) and asserts the exact request counts of `component/BUS_EXPECTED.md`;
   `--only f8_bus` runs just it (also registered as ctest `SaturnExplorerMednafenBusComponent`, skipped when
   there is no checkout: exit status 77) and `--mutate bus-burst|bus-dma-read|bus-dma-write` must make it fail.
+  The `debug.inc` device-sync guard is checked in the f2_sh2 harness (`--mutate sync-guard-removed|sync-never|
+  sync-no-breakpoint|sync-flag-profile`).
 
 Function attribution is separate and opt-in: the client's `PRF` verb makes `SeSyncCpuHook` keep
 the continuous per-instruction callback installed (`SsDbgSetProfileActive`), and
@@ -761,8 +786,9 @@ sleep/stall cycles counted meanwhile) to the innermost shadow-call-stack frame w
 known, else to a raw-PC bucket (F9). The mode only changes between frames (the server applies the request
 at the top-of-frame gate or the end-of-frame hook, never at a halt or snapshot) and is published with
 the record. It therefore needs
-`--enable-debugger`, costs what a tracepoint costs (the debug run loop), and is switched off by
-the server when the client disconnects.
+`--enable-debugger`, runs the debug run loop (several times slower than the fast one; the device sync
+upstream's handler does per instruction is skipped for profiling alone, see "The device sync in the
+continuous hook"), and is switched off by the server when the client disconnects.
 
 **Not yet verified against a running game**: the patched 1.32.1 tree compiles and links with
 these hooks, and the wire path is tested end to end with the real server and driver, but the
