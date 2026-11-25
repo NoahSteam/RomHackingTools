@@ -126,8 +126,12 @@ void PublishOne(bool snapshot)
     ++gFrames;
     if (publish) ++gPublished;
 }
+std::atomic<int> gAttachStallMs{ 0 };               // see Emulator(): time lost when a client attaches
+std::atomic<unsigned long long> gStepAtFrame{ 0 };   // emulated frame count from which a frame takes gStepMs
+std::atomic<int> gStepMs{ 4 };
 void Emulator()
 {
+    bool wasAttached = false;
     while (!gStop.load())
     {
         if (gPaused.load()) { SleepMs(gFrameMs); continue; }
@@ -137,8 +141,16 @@ void Emulator()
             gBurstAt = 0;
             for (int n = gBurstSize.load(); n > 0; --n) PublishOne(false);
         }
+        // Attach stall: the emulate thread loses gAttachStallMs when a client attaches (the first frames for a new
+        // client are slow: ring set-up, snapshot capture starting). Emulated frames do not advance meanwhile, so a
+        // look's interval contains time without frames, as a real attach does.
+        const bool attached = SeExportHasClient();
+        if (attached && !wasAttached && gAttachStallMs.load() > 0) SleepMs(gAttachStallMs.load());
+        wasAttached = attached;
         PublishOne(true);
-        SleepMs(gFrameMs);
+        // Rate step: from the emulated frame gStepAtFrame on, a frame takes gStepMs (0 = no step). Count-driven.
+        const unsigned long long stepAt = gStepAtFrame.load();
+        SleepMs(stepAt != 0 && gFrames.load() >= stepAt ? gStepMs.load() : gFrameMs);
     }
 }
 // Blocks until the stand-in has published 'n' more frames. The bound only turns a hang into a failure.
@@ -595,6 +607,100 @@ void TestWarmupFramesOverrideSeconds()
     }
 }
 
+// ---- the warm-up must not overshoot when the early rate estimate is poor ----
+
+// One bracket run with a 300-frame warm-up (a real run's), read back from its CSV and summary.
+struct WarmRun
+{
+    int     rc = -1;
+    bool    ok = false;
+    int64_t offset = 0, probes = 0, requested = 0, reported = -1;
+};
+WarmRun RunWarm(const std::string& name, int64_t warm)
+{
+    WarmRun r;
+    v3::BenchOptions o = Base(name, 30);
+    o.mode = v3::Mode::Bracket;
+    o.warmupFrames = warm;
+    o.durationS = 0.05;
+    o.timeoutS = 120.0;
+    r.rc = v3::RunBench(o, stdout);
+    const WindowOpen w = ReadWindowOpen(o.csvPath, o.summaryPath);
+    const auto s = ReadSummary(o.summaryPath);
+    r.ok = r.rc == v3::kOk && w.ok && s.count("bracket_warmup_probes");
+    if (!r.ok) return r;
+    r.offset = w.Offset();
+    r.requested = warm;
+    r.probes = std::atoll(s.at("bracket_warmup_probes").c_str());
+    if (s.count("warmup_overshoot_frames")) r.reported = std::atoll(s.at("warmup_overshoot_frames").c_str());
+    return r;
+}
+
+// The failure seen on the real emulator (+394 frames on a 300-frame warm-up): the emulator publishes only while
+// attached, and every attach costs it time in which no frame advances, so the interval between the origin look and
+// the second one holds frames for only part of its duration and the rate comes out low. The old rule slept 90
+// percent of the remaining frames at that low rate, in one go. Here the attach stall is 40 ms against a 4 ms frame
+// (the stall is the host-independent part: it only ever adds time without frames, so a slower or loaded host makes
+// the early estimate worse, not better). Judged on frames: the warm-up overshoots by less than the analyzer's flag
+// level (20 percent of the request), in a handful of looks, and the summary reports what the CSV shows.
+void TestWarmupOvershootWithAttachStall()
+{
+    gOnlyAttached = true;
+    gAttachStallMs = 40;
+    LetFramesPass(60);
+    const int64_t kW = 300;
+    const WarmRun r = RunWarm("wu_stall", kW);
+    gAttachStallMs = 0;
+    gOnlyAttached = false;
+    CHECK(r.ok);
+    if (!r.ok) return;
+    const int64_t over = r.offset - kW;
+    std::printf("attach stall: warm-up %lld frames asked, opened %lld after the origin (overshoot %lld) with %lld probes\n",
+                static_cast<long long>(kW), static_cast<long long>(r.offset), static_cast<long long>(over), static_cast<long long>(r.probes));
+    CHECK(over >= 0);
+    CHECK(over <= kW / 5);
+    CHECK(r.probes <= 9);
+    CHECK(r.reported == over);
+}
+
+// The rate changes several-fold DURING the warm-up. Slowing down 10 times (attribution turned on does that): the
+// bound holds trivially (the sleeps were sized for a faster emulator, so they yield fewer frames, not more), and
+// what must hold is convergence: a regime change is detected and the look count stays small, far from the
+// 64-look cap. Speeding up 2 times is the edge of the documented assumption (the rate may rise by rho = 2
+// between a baseline and its sleep): the bound still holds. Speeding up 10 times is beyond it: the run must still
+// finish and the summary must report the overshoot truthfully (that is what the analyzer flags); no bound is asserted.
+void TestWarmupRateChanges()
+{
+    gOnlyAttached = true;
+    const int64_t kW = 300;
+    struct Case { const char* name; int fromMs, toMs; unsigned long long afterFrames; int maxProbes; bool bounded; };
+    const Case cases[] = {
+        { "wu_slow10", 4, 40, 80, 14, true },
+        { "wu_fast2", 8, 4, 20, 9, true },
+        { "wu_fast10", 40, 4, 12, 64, false },
+    };
+    for (const Case& c : cases)
+    {
+        gFrameMs = c.fromMs;
+        gStepMs = c.toMs;
+        LetFramesPass(40);
+        gStepAtFrame = gFrames.load() + c.afterFrames;
+        const WarmRun r = RunWarm(c.name, kW);
+        gStepAtFrame = 0;
+        gFrameMs = 4;
+        CHECK(r.ok);
+        if (!r.ok) continue;
+        const int64_t over = r.offset - kW;
+        std::printf("%s: %d ms -> %d ms per frame after %llu frames: overshoot %lld, %lld probes\n", c.name, c.fromMs, c.toMs,
+                    c.afterFrames, static_cast<long long>(over), static_cast<long long>(r.probes));
+        CHECK(over >= 0);
+        CHECK(r.reported == over);
+        CHECK(r.probes <= c.maxProbes);
+        if (c.bounded) CHECK(over <= kW / 5);
+    }
+    gOnlyAttached = false;
+}
+
 // Warm-up that cannot finish ends in an error exit with a message, never a hang. Paused emulator: no frame is
 // published, so the origin probe itself fails when its connect timeout expires. Emulator running, count out of
 // reach: the warm-up's own timeout.
@@ -928,6 +1034,8 @@ int main(int argc, char** argv)
     TestFrameWindowAgreesAcrossModes();
     TestWarmupFramesMatchAcrossModes();
     TestWarmupFramesOverrideSeconds();
+    TestWarmupOvershootWithAttachStall();
+    TestWarmupRateChanges();
     TestWarmupTimesOutCleanly();
     TestLossIsCountedAndInvalid();
     TestLoadSlot();
