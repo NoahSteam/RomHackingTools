@@ -213,6 +213,27 @@ none). `--timeout SEC` (default 600) turns a run that cannot get there into an e
 The seconds options still work and are the default. The validity floors of the analyzer (1000 frames, 5 s) apply
 to either.
 
+**What the warm-up means, in every configuration.** `--warmup-frames W` is counted from the *origin*: the first
+frame published after the client attached (a new connection's first reply is the previous connection's last
+publication and is not counted), and the window opens at the first observation at least W frames past it. If
+`--warmup SEC` is given as well, the frame count wins and the seconds are not used (stream and bracket alike;
+run_v3.sh passes both to all three configurations). Configuration (a) is disconnected between probes, and the
+emulator publishes only while a client is attached, so its progress is read with extra short probes: an origin
+probe, then probes after a sleep of 90 percent of the remaining frames at the rate seen so far (at least 20 ms;
+50 ms before any rate is known), until the count is reached. The probe that reaches it is the window's start
+probe, so a frame warm-up costs `bracket_warmup_probes` connections (origin included, typically 3 to 6) and
+`probe_hold_warmup_ms` of client-attached time before the window, each about 20 to 40 ms; that perturbs the scene
+before the window opens, never inside it. Bounds: `--timeout` for the whole warm-up, 64 probes, and a probe that
+sees no fresh frame (paused emulator) fails after `--connect-timeout`; all end in exit 1 with a message. A
+timeline change during the warm-up (a state load) is also an error: load the slot first, with a separate
+`--mode load-slot` run, as run_v3.sh does; the bracket itself never loads or saves a state and every probe sends
+`REW 0`. Granularity: the window opens in `[origin + W, origin + W + step)`, where step is the frames between the
+last two observations: one drain period for the stream (`--drain-ms`), the last probe interval for the bracket
+(shrinking towards the 20 ms floor plus the connection latency). The summary records `warmup_frames_requested`,
+`window_origin_frame` and `window_open_frame` for both modes. With `--warmup SEC` only (no frame count) the
+bracket sleeps SEC and takes one probe, as before. (The stream's origin used to be the first frame received,
+which after a pause could be a stale publication from the load-slot connection; it is now the first fresh one.)
+
 The tests use this: every V3 test counts frames and holds no assertion about frames per second, so they pass on a
 loaded or slow host (`V3_TEST_FRAME_MS` and `FAKE_FRAME_MS` slow the two stand-ins down to check that). The script test runs its stand-in at 20 ms per frame by default: the live ring holds 16 records, so a stand-in much faster than the client can be drained loses samples whenever the client is starved, which is a correct "invalid" verdict about the run but not what that test is about.
 
