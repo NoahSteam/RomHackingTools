@@ -227,9 +227,8 @@ def main():
                 open(path, "w", newline="").write(new)
                 print("mutation: dropped %d block(s) containing %r from %s" % (n, key, rel))
     ss = os.path.join(work, "src", "ss")
-    flags = ["-std=gnu++11", "-O1", "-g", "-fsigned-char", "-fwrapv", "-fexceptions", "-DHAVE_CONFIG_H",
-             "-I" + os.path.join(work, "include"), "-I" + os.path.join(work, "intl"), "-I" + ss,
-             "-I" + os.path.join(HERE, "..", "Common"), "-w"]
+    flags = ["-std=gnu++11", "-O1", "-g", "-fsigned-char", "-fwrapv", "-fexceptions", "-DHAVE_CONFIG_H"] + cm.include_flags(work) + [
+             "-I" + ss, "-I" + os.path.join(HERE, "..", "Common"), "-w"]
     link = ["-Wl,--unresolved-symbols=ignore-in-object-files"]
     # The patched 68000 core, linked into the sound harness (the VDP1 one does not use it).
     m68k_o = os.path.join(scratch, "m68k.o")

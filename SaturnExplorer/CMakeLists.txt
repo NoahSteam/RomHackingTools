@@ -1615,6 +1615,12 @@ if(BUILD_TESTING)
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_apply_newlines.py
                          ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
                          ${CMAKE_CURRENT_BINARY_DIR}/apply_newlines_test)
+        # The patcher checks' scratch tree: <mednafen/...> must resolve to the patched sources with or without
+        # symlinks (a copy made before apply.py ran left the compile checks on pristine headers).
+        add_test(NAME SaturnExplorerMednafenScratchIncludes
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_scratch_includes.py
+                         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen
+                         ${CMAKE_CURRENT_BINARY_DIR}/scratch_includes_test)
         add_test(NAME SaturnExplorerMednafenHaltOrdering
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_halt_ordering.py
                          ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py)
