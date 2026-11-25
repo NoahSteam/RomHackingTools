@@ -87,6 +87,8 @@ extern "C" int FakeSlotLoad(unsigned int slot)
 // snapshot (the ring overrun it provokes is in the perf records, not the VRAM copy).
 std::atomic<bool> gStop{ false };
 std::atomic<unsigned long long> gPublished{ 0 };
+std::atomic<unsigned long long> gFrames{ 0 };   // every frame emulated, published or not
+std::atomic<bool> gOnlyAttached{ false };       // publish only while a client is attached (as the Mednafen glue does)
 std::atomic<unsigned long long> gBurstAt{ 0 };   // publish a burst once gPublished reaches this (0 = never)
 std::atomic<int> gBurstSize{ 0 };
 int gFrameMs = 4;
@@ -113,12 +115,14 @@ void PublishOne(bool snapshot)
         if (gMismatchCount.fetch_sub(1) > 0) info.mode = 0; else gMismatchAt = 0;
     }
     unsigned long long c[SE_PERF_COUNT] = {};
-    SeExportPublishPerf(c, SE_PERF_COUNT, nullptr, nullptr, 0, 0, &info);
+    const bool publish = !gOnlyAttached.load() || SeExportHasClient();
+    if (publish) SeExportPublishPerf(c, SE_PERF_COUNT, nullptr, nullptr, 0, 0, &info);
     if (snapshot)
         SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
                          nullptr, nullptr, nullptr, nullptr, nullptr);
     SeExportEndFrame();
-    ++gPublished;
+    ++gFrames;
+    if (publish) ++gPublished;
 }
 void Emulator()
 {
@@ -349,6 +353,45 @@ void TestModeMismatchIsInvalid()
     CHECK(s.at("valid") == "0");
     CHECK(s.at("mode_mismatch_window") == "3");
     CHECK(WaitFrames(5));
+}
+
+// The real emulator publishes only while somebody is attached, so a new connection's first reply is the newest
+// publication of the PREVIOUS connection: a stale frame. A probe that took it as its edge measured frames that
+// passed between connections, not the window. Count-driven: nothing here depends on how fast frames come.
+void TestBracketSkipsStaleFrame()
+{
+    gOnlyAttached = true;
+    // Let a run of frames pass with nobody attached, so the newest publication is far behind the frame counter.
+    {
+        const unsigned long long target = gFrames.load() + 60;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+        while (gFrames.load() < target && std::chrono::steady_clock::now() < deadline) SleepMs(1);
+    }
+    v3::BenchOptions o = Base("stale", 100);
+    o.mode = v3::Mode::Bracket;
+    o.warmupS = 0.05;
+    o.durationS = 0.1;
+    o.timeoutS = 20.0;
+    o.connectTimeoutS = 10;
+    unsigned long long f0 = 0;
+    unsigned int tl = 0;
+    SeExportFrameIdentity(&tl, &f0);   // the frame under execution now; everything published before is older
+    const int rc = v3::RunBench(o, stdout);
+    gOnlyAttached = false;
+    CHECK(rc == v3::kOk);
+    const Csv c = ReadCsv(o.csvPath);
+    const auto s = ReadSummary(o.summaryPath);
+    CHECK(s.at("valid") == "1");
+    CHECK(c.rows.size() >= 2);
+    if (c.rows.size() >= 2)
+    {
+        // The start edge was published after the run began: its frame number is at least the one under execution
+        // when the run started. A stale first reply would show a frame from before the 60 silent ones.
+        CHECK(static_cast<unsigned long long>(c.I(0, "frame_no")) >= f0);
+        CHECK(c.I(c.rows.size() - 1, "frame_no") - c.I(0, "frame_no") >= 100);   // the count asked for
+        CHECK(c.U(c.rows.size() - 1, "sample_seq") > c.U(0, "sample_seq"));
+    }
+    CHECK(std::atoll(s.at("window_frames").c_str()) >= 100);
 }
 
 void TestBracket()
@@ -662,6 +705,7 @@ int main(int argc, char** argv)
     TestStreamAttributionOn();
     TestWindowWaitsForRequestedMode();
     TestModeMismatchIsInvalid();
+    TestBracketSkipsStaleFrame();
     TestBracket();
     TestLossIsCountedAndInvalid();
     TestLoadSlot();

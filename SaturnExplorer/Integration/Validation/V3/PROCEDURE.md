@@ -26,7 +26,10 @@ Two metrics, both computed by `analyze_v3.py` with **one estimator for all three
 
 1. **Speed (emulated frames per host second).** The emulator stamps every frame with its own
    frame number (`frame_no`, committed once per emulated frame whether or not a client is attached:
-   `SeExportEndFrame`; the first reply a new connection receives carries the newest published frame).
+   `SeExportEndFrame`). Perf records, by contrast, are published only while a client is attached, so the first
+   reply a new connection receives carries the newest publication, which is the PREVIOUS connection's last
+   frame and stale: a bracket probe skips it and takes as its edge the first frame published after it attached
+   (`sample_seq` greater than the `newest_seq` of that first reply).
    A run defines a window `[ws, we]`. Speed is `(f(we) - f(ws)) / (we - ws)` where `f(t)` is the
    frame number of the newest frame observed at or before `t`.
    * b, c: the client stays connected, drains every 16 ms like the UI, and `ws`, `we` are drain
@@ -61,7 +64,15 @@ that costs less: every verb replies with a full snapshot, and the driver polls w
 "a client that wants nothing" does not exist, which is why the plan's "no client" cannot be a probe
 that stays connected. The bracket makes (a) client-free for the whole window at the price of two short
 connections inside it (a few hundred milliseconds of client-attached emulation per 60 s, reported as
-`probe_hold_*_ms` in the summary; keep it under about 1 percent of the window).
+`probe_hold_*_ms` in the summary; keep it under about 1 percent of the window). A probe stays attached until
+it has read one fresh frame (one emulated frame period or two longer than a stale-frame probe would) and the
+reply to its `REW 0`; with a 60 fps emulator that is roughly 20 to 40 ms per probe, plus the wait for the second
+reply, so configuration (a) carries slightly more client time than the hold figures of earlier runs showed.
+The figures in `probe_hold_*_ms` count exactly this (from the fresh frame to hang-up). A probe that sees no fresh
+frame within `--connect-timeout` (a paused emulator) fails the run with exit 1 instead of hanging. Each bracket
+also carries `bracket_probe_inconsistent` (fresh frames whose numbers do not follow their sample sequence) and is
+invalid when the end probe is not later than the start probe. The distance of the two `sample_seq` values is
+not a check: the sequence stands still while detached, so it is small by construction.
 
 What this cannot give you: an independent confirmation that (a) was unperturbed by the client at all.
 The only fully independent clock is the emulator's own speed readout. The script enables it

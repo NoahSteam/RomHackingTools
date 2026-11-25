@@ -13,6 +13,9 @@ trap 'rm -rf "$OUT"' EXIT
 # starved test client into a "lost samples" invalid run. 20 ms leaves the client 320 ms. The test's outcome is
 # otherwise independent of the period (FAKE_FRAME_MS=40 is run as well).
 FAKE_FRAME_MS="${FAKE_FRAME_MS:-20}"; export FAKE_FRAME_MS
+# Publish only while a client is attached, like the real emulator: configuration (a)'s second connection is then
+# handed a stale frame, which the client must skip.
+FAKE_ONLY_ATTACHED="${FAKE_ONLY_ATTACHED:-1}"; export FAKE_ONLY_ATTACHED
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 "$HERE/run_v3.sh" --emu "$FAKE" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT" --bench "$BENCH" \

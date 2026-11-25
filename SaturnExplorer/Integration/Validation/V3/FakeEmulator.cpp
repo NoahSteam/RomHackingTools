@@ -71,6 +71,10 @@ int main(int argc, char** argv)
     // FAKE_FRAME_MS: milliseconds per frame (default 4). The tests must pass at any value; slow it to mimic a loaded host.
     int frameMs = 4;
     if (const char* e = std::getenv("FAKE_FRAME_MS")) frameMs = std::atoi(e) > 0 ? std::atoi(e) : 4;
+    // FAKE_ONLY_ATTACHED=1: publish perf records only while a client is attached (frames keep being emulated, so
+    // frame_no advances while nobody listens), as the Mednafen glue does; a new connection is then handed the
+    // previous one's last frame. Default: publish every frame.
+    const bool onlyAttached = std::getenv("FAKE_ONLY_ATTACHED") != nullptr && std::atoi(std::getenv("FAKE_ONLY_ATTACHED")) != 0;
     std::signal(SIGTERM, OnSignal);
     std::signal(SIGINT, OnSignal);
     if (SeExportPrepare() != 0) return 1;
@@ -87,7 +91,8 @@ int main(int argc, char** argv)
         info.valid = SE_PERF_VALID_IDENTITY | SE_PERF_VALID_MODE;
         info.mode = SeExportProfilerFlags();
         unsigned long long c[SE_PERF_COUNT] = {};
-        SeExportPublishPerf(c, SE_PERF_COUNT, nullptr, nullptr, 0, 0, &info);
+        if (!onlyAttached || SeExportHasClient())
+            SeExportPublishPerf(c, SE_PERF_COUNT, nullptr, nullptr, 0, 0, &info);
         SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
                          nullptr, nullptr, nullptr, nullptr, nullptr);
         SeExportEndFrame();
