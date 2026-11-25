@@ -34,7 +34,14 @@ The device-sync guard in DBG_CPUHandler (debug.inc, SeSsHookNeedsSync) is checke
 these mutations must make it fail: "sync-guard-removed" (ForceEventUpdates is unconditional again, so a
 profile-only instruction syncs), "sync-never" (it never runs), "sync-no-breakpoint" (a breakpoint found on the
 instruction no longer syncs), "sync-flag-only" (the guard keys on our flag alone: a foreign callback is skipped),
-"sync-flag-profile" (the flag is also set for profiling alone)."""
+"sync-flag-profile" (the flag is also set for profiling alone).
+The native debugger's callback (SeSsNativeSetCPUCallback, the DebuggerInfo entry) is checked by the same harness, and
+these must make it fail: "native-table-upstream" (the table entry is DBG_SetCPUCallback again: the debugger's NULL drops
+ours for good), "native-null-not-reapplied" (a NULL request is not answered with our mode), "native-not-installed"
+(what the debugger asks for is not installed), "native-stolen-by-edit" (an SE install edit takes the callback while
+the debugger holds it), "native-both-cpus" (the both-CPU handler stays on under the debugger's callback),
+"native-not-noted" (the glue is never told that the code ran unobserved: no stack restart), "native-in-handler"
+(the callback changes inside a handler call), "native-null-always-drops" (a NULL request removes ours, then we sync)."""
 import os
 import subprocess
 import sys
@@ -170,6 +177,16 @@ SYNC_MUTATIONS = {
     "sync-flag-only": ("f2_sh2", "src/ss/debug.inc", "if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook)", "if(DBG.FoundBPoint || SeSsHookNeedsSync)"),
     "sync-flag-profile": ("f2_sh2", "src/ss/ss.cpp", "SeSsHookNeedsSync = (sSeTraceActive || sSeStepActive) ? 1 : 0;",
                           "SeSsHookNeedsSync = (sSeTraceActive || sSeStepActive || sSeProfActive) ? 1 : 0;"),
+    # The native debugger's callback (apply.py, SeSsNativeSetCPUCallback). Each of these must fail the f2_sh2 harness.
+    "native-table-upstream": ("f2_sh2", "src/ss/debug.inc", " SeSsNativeSetCPUCallback,   /* Saturn Explorer: the native debugger's callback request (ss.cpp) */",
+                              " DBG_SetCPUCallback,"),
+    "native-null-not-reapplied": ("f2_sh2", "src/ss/ss.cpp", "else if (wasHeld)\n      SeSyncCpuHook();", "else if (0)\n      SeSyncCpuHook();"),
+    "native-not-installed": ("f2_sh2", "src/ss/ss.cpp", "DBG_SetCPUCallback(callb, continuous);\n      SeSyncCpuHook();", "SeSyncCpuHook();"),
+    "native-stolen-by-edit": ("f2_sh2", "src/ss/ss.cpp", "if (sSeNativeCb != 0)\n      return;", "if (0)\n      return;"),
+    "native-both-cpus": ("f2_sh2", "src/ss/ss.cpp", "SeSsBothCpus = on && !foreign;", "SeSsBothCpus = on;"),
+    "native-not-noted": ("f2_sh2", "src/ss/ss.cpp", "   SeMednafenForeignHook(foreign);\n", ""),
+    "native-in-handler": ("f2_sh2", "src/ss/ss.cpp", "if (SeSsInHandler > 0) { sSeSyncPending = 1; return; }", "if (0) { sSeSyncPending = 1; return; }"),
+    "native-null-always-drops": ("f2_sh2", "src/ss/ss.cpp", "else if (wasHeld)\n      SeSyncCpuHook();", "else { DBG_SetCPUCallback(0, false); SeSyncCpuHook(); }"),
 }
 
 

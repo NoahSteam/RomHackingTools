@@ -956,6 +956,20 @@ static void SeMdfnProfSampleAt(int cpu, unsigned int pc, int ts)
 static int sSlaveOn = -1;          /* -1 unknown, 0 off, 1 on: our record of the slave's power */
 static int sSlaveSince;            /* start (frame-relative, >= 0) of the open on-interval */
 static unsigned int sFrameMode;    /* SE_LIVE_PROF_* the frame in progress runs in (F6) */
+/* ---- the native debugger holds the callback (Alt+D stepping, trace logging) --------------------------
+ * Mednafen's native debugger replaces our per-instruction callback while it needs one and removes its own
+ * when it is done (apply.py, SeSsNativeSetCPUCallback). SeSyncCpuHook tells us whenever we WANT a callback
+ * whether it is ours that is installed. While it is not, no instruction reaches SeMednafenTraceHook: the
+ * shadow call stack misses calls and returns, and the profiler's last sampled function stays "on top"
+ * of a stack that no longer describes the code. Two consequences, both handled here:
+ *   - the frame is not an attributed frame (sFrameGap, see SeMdfnPerfEndFrame): any frame during any part of
+ *     which our callback was absent publishes no function rows, and the mode it reports is the non-attributed
+ *     one -- the existing, honest "this frame was not attributed" form of the v27 record;
+ *   - when ours returns, the baseline and the shadow stack start again from nothing, so the gap is never
+ *     charged to the function that happened to be on top when the callback was taken. */
+static int sForeignHook;   /* we want a callback and another one is installed */
+static int sFrameGap;      /* part of the frame in progress ran without our callback */
+
 
 static void SeMdfnSlaveAccumulate(int until)
 {
@@ -1000,6 +1014,24 @@ void SeMednafenExceptionEntry(int cpu)
     const SeMdfnFlowPending* p = &sFlowPending[cpu ? 1 : 0];
     if (p->stage == 2 && p->kind == SeFlowTrap && p->epoch == SeExportCallStackEpoch(cpu)) return;
     SeExportOwnershipInvalidate(cpu, 0);
+}
+
+void SeMednafenForeignHook(int foreign)
+{
+    int c;
+    foreign = foreign ? 1 : 0;
+    if (foreign == sForeignHook) return;
+    sForeignHook = foreign;
+    sFrameGap |= foreign;
+    for (c = 0; c < 2; ++c)
+    {
+        sProfSynced[c] = 0;                   /* the interval across the gap is nobody's */
+        sFlowPending[c].stage = 0;            /* a held call/return was never completed by what followed it */
+        if (foreign)
+            SeExportOwnershipInvalidate(c, 1);
+        else
+            SeExportResetCallStack(c);        /* calls and returns were missed: restart from nothing */
+    }
 }
 
 /* A state was loaded (rewind, slot, native): the machine is whatever the file said. Partial accounting
@@ -1052,6 +1084,7 @@ static void SeMdfnApplyMode(unsigned int flags)
 {
     sProfOn = (flags & SE_LIVE_PROF_FUNCTIONS) ? 1 : 0;
     sFrameMode = flags & SE_LIVE_PROF_FUNCTIONS;
+    sFrameGap = sForeignHook;   /* the frame starts without our callback if that is how it is now */
     sProfSynced[0] = sProfSynced[1] = 0;
     SeExportOwnershipInvalidate(0, 1);
     SeExportOwnershipInvalidate(1, 1);
@@ -1072,9 +1105,16 @@ static void SeMdfnPerfEndFrame(void)
 {
     unsigned int keys[SE_LIVE_PERF_FN_MAX], cycles[SE_LIVE_PERF_FN_MAX];
     unsigned int n = 0, other = sProfOther, i;
+    /* A frame during any part of which our callback was not the installed one (the native debugger held it)
+     * cannot be attributed: its table holds only the instructions seen before and after the gap, and its
+     * shadow stack was frozen in between. It is published as a frame that was NOT attributed -- no function
+     * rows, no remainder, mode without SE_LIVE_PROF_FUNCTIONS (valid), no Other split -- which is what the
+     * v27 record already says for a frame that ran with attribution off. The counters are untouched. */
+    const int gap = (sFrameMode & SE_LIVE_PROF_FUNCTIONS) && sFrameGap;
+    if (gap) other = 0;
     if (SeExportHasClient())
     {
-        if (sProfUsed)
+        if (sProfUsed && !gap)
         {
             /* The SE_LIVE_PERF_FN_MAX largest, hottest first, by insertion into a short sorted
              * list: one pass over the table, once a frame. */
@@ -1112,11 +1152,11 @@ static void SeMdfnPerfEndFrame(void)
             info.valid |= SE_PERF_VALID_IDENTITY;
             /* F6: the mode this frame ran in. It only changes between frames (SeMdfnSetProfiler is applied
              * at a boundary), so the frame is published under exactly the mode it ran in. */
-            info.mode = sFrameMode;
+            info.mode = gap ? (sFrameMode & ~SE_LIVE_PROF_FUNCTIONS) : sFrameMode;
             info.valid |= SE_PERF_VALID_MODE;
             /* F7: Other per CPU and cause. Only a frame that ran with attribution on measured it; with it
              * off nothing was attributed, and "0 in Other" would claim a measurement that never happened. */
-            if (sFrameMode & SE_LIVE_PROF_FUNCTIONS)
+            if ((sFrameMode & SE_LIVE_PROF_FUNCTIONS) && !gap)
             {
                 unsigned long long sum = 0;
                 for (i = 0; i < 2; ++i)
@@ -1149,6 +1189,8 @@ static void SeMdfnPerfEndFrame(void)
     memset(SeSsPerfC, 0, sizeof SeSsPerfC);
     if (sProfUsed) { memset(sProfTab, 0, sizeof sProfTab); sProfUsed = 0; }
     SeMdfnProfOtherReset();
+    /* The next frame is a gap frame from its first instruction if the callback is still not ours. */
+    sFrameGap = sForeignHook;
     /* The CPUs' cycle counters were rebased just before this hook. The final interval of the frame was
      * charged, and the baselines moved to the rebased clock, by SeMednafenFrameClose (before the
      * rebase), so sampling carries on across the boundary with nothing lost and nothing doubled. */
@@ -1229,6 +1271,6 @@ void SeMednafenSuppressUnusedWarnings(void)
     (void)SeMdfnSaveState; (void)SeMdfnLoadState;
     (void)SeMdfnApplyFlow; (void)SeMdfnProfSampleAt;   /* reached only through the wired SeMdfnTrackFlow */
     (void)SeMdfnProfAdd; (void)SeMdfnProfIdle; (void)SeMdfnApplyMode; (void)SeMdfnPerfEndFrame; (void)sProfOn;
-    (void)sProfSynced; (void)sProfLastTs; (void)sProfLastIdle; (void)sProfKey;
+    (void)sFrameGap; (void)sForeignHook; (void)sProfSynced; (void)sProfLastTs; (void)sProfLastIdle; (void)sProfKey;
 }
 #endif

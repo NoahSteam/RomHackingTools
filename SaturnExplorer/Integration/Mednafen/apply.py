@@ -265,6 +265,13 @@ static int sSeHalted = 0;
 /* DBG_CPUHandler depth (see SeSsActiveCpuScope in debug.inc) and a re-arm it postponed. */
 extern "C" { int SeSsInHandler = 0; }
 static int sSeSyncPending = 0;
+/* What Mednafen's native debugger (Alt+D) last asked for through DebuggerInfo.SetCPUCallback, which
+   process_debug routes to SeSsNativeSetCPUCallback below. It replaces our callback for stepping and trace
+   logging (drivers/debugger.cpp, UpdateCoreHooks) and sets NULL when it is done -- and also on every
+   breakpoint edit or window change while it needs none, so without this record our callback was dropped for
+   good the first time the debugger was opened and nothing ever put it back. While it holds a callback it keeps
+   it (SeSyncCpuHook leaves DBG.CPUHook alone), exactly as upstream would. */
+static void (*sSeNativeCb)(uint32 PC, bool bpoint) = 0;
 static void SeSyncCpuHook(void) {
    /* Never change the callback while DBG_CPUHandler is running: it has already decided to call it.
       The handler's scope guard re-runs this as it returns, before the next instruction. */
@@ -273,17 +280,39 @@ static void SeSyncCpuHook(void) {
    /* Function profiling needs every instruction of both CPUs, exactly like a tracepoint. */
    const int every = sSeTraceActive || sSeStepActive || sSeProfActive;
    const int on = sSeBpActive || every;
-   SeSsBothCpus = on;
+   /* The native debugger holds the callback: ours is not installed, whatever we want. The handler then
+      behaves as upstream does for it (the debugger's active CPU only), so SeSsBothCpus is off, and the glue is
+      told that the code runs unobserved (it drops the baseline and, when ours returns, the shadow stack). */
+   const int foreign = on && sSeNativeCb != 0;
+   SeSsBothCpus = on && !foreign;
    SeSsHookNeedsSync = (sSeTraceActive || sSeStepActive) ? 1 : 0;   /* not sSeProfActive: see above */
    /* A held call/return is completed by the instructions that follow it; if the CPU is about to run
       without presenting them, it must be told (it is not told of an edit made while halted). */
-   if (!sSeHalted) SeMednafenHookMode(every != 0);
+   if (!sSeHalted) SeMednafenHookMode(every != 0 && !foreign);
+   SeMednafenForeignHook(foreign);
+   if (sSeNativeCb != 0)
+      return;   /* the native debugger's callback stays; it gets ours back when it releases it */
    if (on) {
       SeSsOwnCpuHook = SeSsBpHook;
       DBG_SetCPUCallback(SeSsBpHook, every != 0);
    }
    else
       DBG_SetCPUCallback(0, false);
+}
+/* DebuggerInfo.SetCPUCallback (debug.inc routes the table entry here). A callback the native debugger asks for
+   is installed exactly as upstream does -- it takes precedence, and DBG.CPUHook != SeSsOwnCpuHook keeps
+   the per-instruction device sync for it. NULL means it is finished with the callback: ours is applied again
+   at once, or at the end of the handler call when it was asked from inside one. */
+extern "C" void SeSsNativeSetCPUCallback(void (*callb)(uint32 PC, bool bpoint), bool continuous) {
+   const int wasHeld = sSeNativeCb != 0;
+   sSeNativeCb = callb;
+   if (callb) {
+      DBG_SetCPUCallback(callb, continuous);
+      SeSyncCpuHook();   /* notes the takeover (and is deferred inside a handler call, like any edit) */
+   }
+   else if (wasHeld)
+      SeSyncCpuHook();   /* released: ours again (installed only if something wants it) */
+   /* NULL while it held nothing: ours (if any) is still installed and stays, which upstream would have dropped */
 }
 extern "C" void SeSsHandlerExit(void) { if (sSeSyncPending) SeSyncCpuHook(); }
 static void SeSsBpHook(uint32 PC, bool bpoint) {
@@ -1179,6 +1208,7 @@ FWD_DECLS = (
     "extern \"C\" int  SeExportInsnStepTick(int cpu, unsigned int pc, int selfBranchTaken);\n"
     "extern \"C\" void SeMednafenTraceHook(int cpu, unsigned int pc);\n"
     "extern \"C\" void SeMednafenHookMode(int continuous);\n"
+    "extern \"C\" void SeMednafenForeignHook(int foreign);\n"
     "extern \"C\" int  SeMednafenSelfBranchTaken(int cpu, unsigned int pc);\n"
     # debug.inc (patched, see process_debug) runs DBG_CPUHandler for the executing CPU while these say so.
     "extern \"C\" int  SeSsBothCpus;\n"
@@ -1211,6 +1241,8 @@ extern "C" int SeSsExecCpu;
    last tracepoint there nulled the hook between the test and the call (a crash on the real fork). */
 extern "C" int SeSsInHandler;
 extern "C" void SeSsHandlerExit(void);
+/* The native debugger's SetCPUCallback request (ss.cpp, SeSsNativeSetCPUCallback): the DebuggerInfo table entry. */
+extern "C" void SeSsNativeSetCPUCallback(void (*callb)(uint32 PC, bool bpoint), bool continuous);
 /* Whether the handler must run ForceEventUpdates before calling the CPU hook (ss.cpp, SeSyncCpuHook). */
 extern "C" int SeSsHookNeedsSync;
 extern "C" void (*SeSsOwnCpuHook)(uint32 PC, bool bpoint);
@@ -1243,6 +1275,15 @@ DEBUG_SYNC_EDIT = (
     "  if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook)\n"
     "   ForceEventUpdates(DBG.eff_ts);\n"
 )
+
+# DebuggerInfo.SetCPUCallback is how Mednafen's native debugger (Alt+D) installs and removes its callback
+# (drivers/debugger.cpp, UpdateCoreHooks). Upstream points the table entry at DBG_SetCPUCallback, so opening the
+# debugger and stepping replaced SeSsBpHook and leaving stepping removed it, for good. The entry now goes
+# through SeSsNativeSetCPUCallback (ss.cpp), which installs what the debugger asks for exactly as upstream and
+# puts ours back when it asks for none. The table is the only place that name appears followed by a comma
+# (the definition and our own calls are followed by a parenthesis). The upstream entry stays inside the fence.
+DEBUG_NATIVE_ANCHOR = r'[ \t]*DBG_SetCPUCallback,'
+DEBUG_NATIVE_EDIT = " SeSsNativeSetCPUCallback,   /* Saturn Explorer: the native debugger's callback request (ss.cpp) */\n"
 
 # Per-frame snapshot call, injected after the frame's cycle count is finalized.
 FRAME_HOOK = (
@@ -1644,6 +1685,8 @@ def process_debug(src_dir, do_write):
     text, n = apply_anchored(text, DEBUG_HANDLER_ANCHOR, DEBUG_SCOPE_USE, "SeSsActiveCpuScope<decltype")
     notes.append(n)
     text, n = apply_replace(text, DEBUG_SYNC_ANCHOR, DEBUG_SYNC_EDIT, "profile-only instructions skip the device sync")
+    notes.append(n)
+    text, n = apply_replace(text, DEBUG_NATIVE_ANCHOR, DEBUG_NATIVE_EDIT, "SeSsNativeSetCPUCallback,")
     notes.append(n)
     if do_write and text != original:
         write_src(path, text)

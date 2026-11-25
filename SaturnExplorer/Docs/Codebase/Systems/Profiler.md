@@ -295,9 +295,37 @@ installed callback is that one. It still syncs (exactly as upstream) while a tra
 instruction step is in progress, on any instruction where a PC or data breakpoint was found, and for **any
 other callback**: Mednafen's native debugger (`drivers/debugger.cpp` `UpdateCoreHooks`, through
 `DebuggerInfo.SetCPUCallback` = `DBG_SetCPUCallback`) replaces ours for stepping and trace logging without
-touching our flag, and the pointer comparison needs no cooperation from it. Known limit (pre-existing):
-when the native debugger later removes its callback our hook is not reinstalled until `SeSyncCpuHook` runs
-again (any install edit or a halt), so attribution samples nothing in between.
+touching our flag, and the pointer comparison needs no cooperation from it.
+
+**When the native debugger holds the callback.** `DebuggerInfo.SetCPUCallback` is the only way the native
+debugger installs or removes a callback, and `UpdateCoreHooks` calls it on every breakpoint edit, window change
+and step, with NULL whenever it needs none. `process_debug` routes that table entry through
+`SeSsNativeSetCPUCallback` (ss.cpp), which records the request. A callback it asks for is installed exactly as
+upstream does (the native debugger takes precedence, and the pointer guard above keeps the device sync for
+it); `SeSyncCpuHook` then leaves `DBG.CPUHook` alone however SE's own state changes (a client arming a
+tracepoint, attribution switched on) and turns `SeSsBothCpus` off, so the handler is the upstream one for the
+debugger's callback. A NULL request while it held a callback re-applies our mode at once through
+`SeSyncCpuHook` (or at the end of the handler call when it was asked from inside one, the same
+`SeSsInHandler` / `SeSsHandlerExit` deferral as every other edit); a NULL request while it held nothing leaves
+ours installed (upstream would drop it, which is what froze attribution). Before this, opening the debugger
+and stepping replaced `SeSsBpHook` and nothing put it back: perf records kept arriving with mode 1 and
+function rows, every frame's busy total charged to the one function that was on top of the shadow stack when
+the callback was taken, until a client re-armed the profiler.
+
+The code runs unobserved while the debugger holds the callback (`SeMednafenForeignHook(1)`, called by
+`SeSyncCpuHook` whenever we want a callback and ours is not the installed one): the baselines are dropped and
+ownership is withdrawn, so nothing is named. When ours returns (`SeMednafenForeignHook(0)`) the shadow call
+stack of both CPUs is reset and any held call/return is dropped (it missed calls and returns), so the first
+instruction after the gap has no baseline and the gap is never charged to the function that was on top.
+**On the wire (v27, unchanged):** a frame during any part of which our callback was absent (`sFrameGap`:
+a takeover inside it, or one that began before it and is still in force, or attribution switched on while the
+debugger holds the callback) is published as a frame that was not attributed: `mode` without
+`SE_LIVE_PROF_FUNCTIONS` with `SE_PERF_VALID_MODE` set, `fnCount` 0, `fnOtherCycles` 0 and
+`SE_PERF_VALID_OTHER` clear; the counters are those of the frame as usual. The client therefore counts it as a
+frame with attribution off ("on in k of n frames"), excludes it from the function windows and the "Not
+observed" estimate, and cannot show a frozen split. It is not distinguishable on the wire from a frame that ran
+with attribution off; v27 has no field for "was attributed, then lost" and none was added. The frame in which
+ours returns is also a gap frame; the next one is attributed again from an empty table.
 
 **Measured with the guard (same machine and scene, 2026-11-25, desktop not quiesced).** Emulation thread:
 12.2 ms of CPU per frame with attribution off, 114.7 ms with it on before the guard, **31.6 ms with it on
@@ -309,7 +337,7 @@ attribution-on runs differed from attribution-off runs by 7 cycles of master DMA
 about 153 units of VDP1 discarded work (phase 8); with the guard every non-function counter is identical
 with attribution on and off. Breakpoint, single-step and tracepoint were checked with attribution on
 through the live driver (halt PC exact, one instruction per step, attribution continuing with a tracepoint
-armed and after its removal). Mednafen's native debugger (Alt+D) has not been exercised on the guard.
+armed and after its removal). At `da6c04d` on the real emulator, native stepping (Alt+D) worked with attribution on and off, attribution-off counters were unchanged (0 of 826 rows), and with attribution on the split froze after the debugger released the callback, which this change fixes; the fix is not yet verified on the real emulator.
 
 **Why skipping it is safe (verified from source, Mednafen 1.32.1 / fork base `783518d`).**
 - *The profile-only hook path reads no device state.* `SeSsBpHook` -> `SeMednafenTraceHook` ->
@@ -377,7 +405,7 @@ bucket, while ownership is unknown.
 | Actual exception entry (interrupt, NMI, address error, illegal instruction: hooks in `sh7095_ops.inc`; **not** `trapa`, which is observed) | Unknown. The stack is kept, since a balanced handler returns through it |
 | A call whose target is not where execution arrived (an interrupt came between the call and the callee's first instruction) | Unknown |
 | Completed unconditional jump (`bra`, `jmp @Rn`, `braf Rn`), owner known, innermost frame a call frame | By where it landed, see "Unconditional jumps" below: a known entry transfers the frame to that function (tail call), an address the owner already ran or a forward move out of a function still inside its body keeps it, anything else is unknown until a call or a matching return proves it. Owner unknown, or the landing is not the jump's own target (an interrupt came between): unknown |
-| Loss of continuous observation (profiler toggled, `SeMednafenHookMode(0)`) | Unknown, and every frame recorded so far is distrusted (it may have returned unseen) |
+| Loss of continuous observation (profiler toggled, `SeMednafenHookMode(0)`, the native debugger holding the callback) | Unknown, and every frame recorded so far is distrusted (it may have returned unseen) |
 | CPU reset (watchdog, `SetActive`), state load | Stack dropped, ownership unknown |
 
 Not done (deferred, as in the plan): reconstructing the exception stack. An interrupt therefore

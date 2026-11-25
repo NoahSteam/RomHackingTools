@@ -43,6 +43,8 @@ static void Fresh(unsigned int mode)
     memset(sProfTab, 0, sizeof sProfTab);
     sProfUsed = 0;
     SeMdfnProfOtherReset();
+    sForeignHook = 0;
+    sFrameGap = 0;
     SeMdfnApplyMode(mode);
     gCapPublished = 0;
     memset(&gCapInfo, 0, sizeof gCapInfo);
@@ -175,6 +177,88 @@ static void TestResetsBetweenFrames(void)
     CHECK_EQ(Listed(0), 11);
 }
 
+/* The native debugger held the callback for part of the frame: the function table holds only the
+ * instructions seen before and after the gap, so the frame is published as NOT attributed -- no rows, no
+ * remainder, the mode without SE_LIVE_PROF_FUNCTIONS (and valid), no Other split. Never a valid-looking
+ * split. The counters are still published (the frame itself happened). */
+static void TestGapFrameIsNotAttributed(void)
+{
+    Fresh(SE_LIVE_PROF_FUNCTIONS);
+    SeMdfnProfAdd(Key(1, 0), 700);
+    SeMednafenForeignHook(1);                       /* the debugger takes the callback mid-frame */
+    SeMednafenForeignHook(0);                       /* and gives it back before the frame ends */
+    SeMdfnProfAdd(Key(2, 0), 300);
+    SeMdfnPerfEndFrame();
+    CHECK_EQ(gCapPublished, 1);
+    CHECK_EQ(gCapFnCount, 0);
+    CHECK_EQ(gCapOther, 0);
+    CHECK((gCapInfo.valid & SE_PERF_VALID_MODE) != 0);
+    CHECK_EQ(gCapInfo.mode & SE_LIVE_PROF_FUNCTIONS, 0);
+    CHECK((gCapInfo.valid & SE_PERF_VALID_OTHER) == 0);
+    CHECK_EQ(gCapInfo.satFlags, 0);
+    CHECK((gCapInfo.valid & SE_PERF_VALID_IDENTITY) != 0);   /* it is still a frame */
+    /* The next frame ran entirely with our callback: attributed again, from an empty table. */
+    SeMdfnProfAdd(Key(3, 0), 40);
+    SeMdfnPerfEndFrame();
+    CHECK_EQ(gCapPublished, 2);
+    CHECK_EQ(gCapInfo.mode & SE_LIVE_PROF_FUNCTIONS, SE_LIVE_PROF_FUNCTIONS);
+    CHECK((gCapInfo.valid & SE_PERF_VALID_OTHER) != 0);
+    CHECK_EQ(gCapFnCount, 1);
+    CHECK_EQ(Listed(0), 40);
+}
+
+/* A takeover that spans frames: every frame it touches is a gap frame, including the one it ends in. */
+static void TestGapSpansFrames(void)
+{
+    Fresh(SE_LIVE_PROF_FUNCTIONS);
+    SeMednafenForeignHook(1);
+    SeMdfnPerfEndFrame();
+    CHECK_EQ(gCapInfo.mode & SE_LIVE_PROF_FUNCTIONS, 0);
+    SeMdfnProfAdd(Key(1, 0), 5);                    /* even rows somehow present are not published */
+    SeMdfnPerfEndFrame();                           /* still held for this whole frame */
+    CHECK_EQ(gCapInfo.mode & SE_LIVE_PROF_FUNCTIONS, 0);
+    CHECK_EQ(gCapFnCount, 0);
+    SeMednafenForeignHook(0);                       /* released inside the next frame */
+    SeMdfnPerfEndFrame();
+    CHECK_EQ(gCapInfo.mode & SE_LIVE_PROF_FUNCTIONS, 0);
+    SeMdfnProfAdd(Key(1, 0), 9);
+    SeMdfnPerfEndFrame();
+    CHECK_EQ(gCapInfo.mode & SE_LIVE_PROF_FUNCTIONS, SE_LIVE_PROF_FUNCTIONS);
+    CHECK_EQ(Listed(0), 9);
+}
+
+/* Attribution switched on while the debugger already holds the callback: the frame starts as a gap frame. */
+static void TestAttributionOnWhileHeld(void)
+{
+    Fresh(0);
+    SeMednafenForeignHook(1);
+    SeMdfnApplyMode(SE_LIVE_PROF_FUNCTIONS);
+    SeMdfnPerfEndFrame();
+    CHECK_EQ(gCapInfo.mode & SE_LIVE_PROF_FUNCTIONS, 0);
+    CHECK_EQ(gCapFnCount, 0);
+    SeMednafenForeignHook(0);                       /* released inside the next frame, which began without it */
+    SeMdfnProfAdd(Key(1, 0), 8);
+    SeMdfnPerfEndFrame();
+    CHECK_EQ(gCapInfo.mode & SE_LIVE_PROF_FUNCTIONS, 0);
+    CHECK_EQ(gCapFnCount, 0);
+    SeMdfnProfAdd(Key(1, 0), 8);
+    SeMdfnPerfEndFrame();
+    CHECK_EQ(gCapInfo.mode & SE_LIVE_PROF_FUNCTIONS, SE_LIVE_PROF_FUNCTIONS);
+    CHECK_EQ(Listed(0), 8);
+}
+
+/* A takeover with attribution off changes nothing about the (non-attributed) frame the client sees. */
+static void TestGapWithAttributionOff(void)
+{
+    Fresh(0);
+    SeMednafenForeignHook(1);
+    SeMednafenForeignHook(0);
+    SeMdfnPerfEndFrame();
+    CHECK_EQ(gCapInfo.mode, 0);
+    CHECK((gCapInfo.valid & SE_PERF_VALID_MODE) != 0);
+    CHECK((gCapInfo.valid & SE_PERF_VALID_OTHER) == 0);
+}
+
 int main(void)
 {
     TestNothingLost();
@@ -184,6 +268,10 @@ int main(void)
     TestSaturatedSum();
     TestModeOffIsNotAMeasuredZero();
     TestResetsBetweenFrames();
+    TestGapFrameIsNotAttributed();
+    TestGapSpansFrames();
+    TestAttributionOnWhileHeld();
+    TestGapWithAttributionOff();
     if (gFailures) { fprintf(stderr, "%d check(s) failed\n", gFailures); return 1; }
     printf("ProfilerOtherTests: all checks passed\n");
     return 0;

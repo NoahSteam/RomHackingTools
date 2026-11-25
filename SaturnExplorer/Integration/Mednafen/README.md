@@ -341,6 +341,31 @@ handler call that postponed them. Why that is safe, and what the profile-only pa
 real `ForceEventUpdates`'s device calls in each mode, and `--mutate sync-guard-removed|sync-never|
 sync-no-breakpoint|sync-flag-only|sync-flag-profile` must make it fail.
 
+### The native debugger and our callback (`SeSsNativeSetCPUCallback`)
+
+Mednafen's own debugger (Alt+D) installs and removes its CPU callback through `DebuggerInfo.SetCPUCallback`
+(`drivers/debugger.cpp`, `UpdateCoreHooks`: NULL on every breakpoint edit, window change and end of stepping
+while it needs none). Upstream points that table entry at `DBG_SetCPUCallback`, so the first time the debugger
+was opened it replaced `SeSsBpHook` and a later NULL removed it for good: nothing reinstalled it until an SE
+install event ran `SeSyncCpuHook`. Function attribution then froze (records kept arriving with mode 1 and rows,
+the whole busy total on one function). `process_debug` now replaces the table entry with
+`SeSsNativeSetCPUCallback` (fenced, upstream entry kept under the fence; the extern lives in the
+`SeSsActiveCpuScope` helper block, so a tree patched by the previous `apply.py` is upgraded in place):
+
+- a callback the debugger asks for is installed as upstream does, and **it keeps it**: `SeSyncCpuHook` no longer
+  writes `DBG.CPUHook` while the debugger holds one (before, any SE install edit during native stepping took the
+  callback from it), and `SeSsBothCpus` is off so the handler behaves as upstream for it. Our breakpoints and
+  tracepoints do not fire for the other SH-2 meanwhile; that is the price of the debugger taking precedence;
+- NULL while it held a callback: our mode is applied again by `SeSyncCpuHook` (deferred to `SeSsHandlerExit` when
+  asked from inside `DBG_CPUHandler`, like every edit); NULL while it held nothing changes nothing;
+- `SeSyncCpuHook` tells the glue (`SeMednafenForeignHook`) whether we want a callback and it is not ours; the glue
+  withdraws ownership and drops the sampling baseline, resets both shadow stacks when ours returns, and publishes
+  every frame touched by the gap as not attributed (`Docs/Codebase/Systems/Profiler.md`, "Cost of attribution").
+
+`check_component.py` (f2_sh2) drives the real table entry; `--mutate native-table-upstream|native-null-not-reapplied|
+native-not-installed|native-stolen-by-edit|native-both-cpus|native-not-noted|native-in-handler|native-null-always-drops`
+must each make it fail. Verified on the pinned source and in the harness; not yet on the real emulator.
+
 ### Installs run on the emulate thread
 
 Breakpoint, watchpoint and tracepoint sets arrive on a server thread, but what they install —

@@ -196,6 +196,103 @@ int main()
         DBG_SetCPUCallback(0, false);
     }
 
+    // The native debugger (Alt+D) reaches the core through DebuggerInfo.SetCPUCallback. Everything below goes
+    // through that table entry, as drivers/debugger.cpp's UpdateCoreHooks does, and no SE install event
+    // (SsDbg*) runs between the debugger's request and the check unless the line says so.
+    std::printf("native debugger: it takes the callback, releases it, and ours comes back by itself\n");
+    {
+        Expect("the DebuggerInfo entry is the SE wrapper", DBGInfo.SetCPUCallback == SeSsNativeSetCPUCallback, 1);
+        DBG.BreakPointsPC.clear();
+        DBG.BreakPointsRead.clear();
+        DBG.BreakPointsWrite.clear();
+        sSeBpActive = 0;
+        SsDbgSetTraceActive(0);
+        SsDbgSetProfileActive(0);
+        Expect("clean slate: no callback", DBG.CPUHook == nullptr, 1);
+
+        SsDbgSetProfileActive(1);   // attribution on
+        SeExportPushFrame(0, 0x06001000u, 0x06002000u, 0x06001004u, 0x060F0000u, 0);
+        Expect("a function is recorded", SeExportCurrentFunction(0) != 0, 1);
+        const unsigned epoch0 = SeExportCallStackEpoch(0);
+
+        DBGInfo.SetCPUCallback(CountingHook, true);   // the debugger steps
+        Expect("native takes it: the debugger's callback is installed", DBG.CPUHook == CountingHook && DBG.CPUHookContinuous, 1);
+        Expect("native holds it: the handler is the upstream one (no both-CPU mode)", MDFN_IEN_SS::SeSsBothCpus, 0);
+        Expect("native holds it: no function is named for the unwatched code", (long long)SeExportCurrentFunction(0), 0);
+        Expect("native holds it: the devices are synced for it", HandlerSyncs(false) > 0, 1);
+        Expect("native holds it: and its hook ran", gHookCalls >= 1, 1);
+
+        DBGInfo.SetCPUCallback(0, false);             // the debugger leaves stepping
+        Expect("native released: ours is installed again, with no SE event", DBG.CPUHook == SeSsBpHook && DBG.CPUHookContinuous, 1);
+        Expect("native released: both SH-2s again", MDFN_IEN_SS::SeSsBothCpus, 1);
+        Expect("native released: profile-only, so no device sync", HandlerSyncs(false), 0);
+        Expect("native released: the shadow stack restarted (calls and returns were missed)", SeExportCallStackEpoch(0) != epoch0, 1);
+        Expect("native released: and nothing is named until a call is seen", (long long)SeExportCurrentFunction(0), 0);
+
+        DBGInfo.SetCPUCallback(0, false);             // it asks for NULL on every breakpoint edit: ours must stay
+        Expect("a NULL request while native held nothing leaves ours in place", DBG.CPUHook == SeSsBpHook && DBG.CPUHookContinuous, 1);
+
+        // Our hook's own non-continuous (breakpoint only) mode is restored too, not just the continuous one.
+        SsDbgSetProfileActive(0);
+        DBG_AddBreakPoint(BPOINT_PC, 0, 0xFFFFFFFFu, true);
+        sSeBpActive = 1;
+        SeSyncCpuHook();
+        Expect("breakpoint only: our callback is not continuous", DBG.CPUHook == SeSsBpHook && !DBG.CPUHookContinuous, 1);
+        DBGInfo.SetCPUCallback(CountingHook, true);
+        DBGInfo.SetCPUCallback(0, false);
+        Expect("breakpoint only, after native: ours again, not continuous", DBG.CPUHook == SeSsBpHook && !DBG.CPUHookContinuous, 1);
+        DBG.BreakPointsPC.clear();
+        sSeBpActive = 0;
+        SeSyncCpuHook();
+        Expect("nothing wanted: the hook is removed", DBG.CPUHook == nullptr, 1);
+        DBGInfo.SetCPUCallback(CountingHook, true);
+        DBGInfo.SetCPUCallback(0, false);
+        Expect("nothing wanted, native released: no callback is left behind", DBG.CPUHook == nullptr, 1);
+    }
+
+    std::printf("native debugger: an SE install edit while it holds the callback does not take it\n");
+    {
+        DBGInfo.SetCPUCallback(CountingHook, true);   // the debugger is stepping
+        SsDbgSetTraceActive(1);                       // an SE client arms a tracepoint
+        Expect("a tracepoint armed: native keeps the callback", DBG.CPUHook == CountingHook, 1);
+        SsDbgSetProfileActive(1);
+        Expect("attribution switched on: native keeps the callback", DBG.CPUHook == CountingHook, 1);
+        sSeStepActive = 1;
+        SeSyncCpuHook();
+        Expect("an instruction step: native keeps the callback", DBG.CPUHook == CountingHook, 1);
+        Expect("native keeps it: still the upstream handler", MDFN_IEN_SS::SeSsBothCpus, 0);
+        sSeStepActive = 0;
+        SsDbgSetTraceActive(0);
+        SeSyncCpuHook();
+        Expect("native keeps it through every edit", DBG.CPUHook == CountingHook && DBG.CPUHookContinuous, 1);
+        SsDbgSetProfileActive(0);
+        Expect("everything of ours removed: native still keeps it", DBG.CPUHook == CountingHook, 1);
+        DBGInfo.SetCPUCallback(0, false);
+        Expect("native released with nothing wanted: no callback", DBG.CPUHook == nullptr, 1);
+
+        // And a want that arrived meanwhile is honoured the moment native lets go.
+        DBGInfo.SetCPUCallback(CountingHook, true);
+        SsDbgSetProfileActive(1);
+        Expect("attribution on while native holds: native keeps it", DBG.CPUHook == CountingHook, 1);
+        DBGInfo.SetCPUCallback(0, false);
+        Expect("native released: the want made meanwhile is installed", DBG.CPUHook == SeSsBpHook && DBG.CPUHookContinuous, 1);
+    }
+
+    std::printf("native debugger: a request made inside DBG_CPUHandler waits for the handler to return\n");
+    {
+        // The native debugger asks from inside its own callback. The callback is never changed under a handler
+        // call that has already decided to call it: ours is re-applied as the handler returns.
+        DBGInfo.SetCPUCallback(CountingHook, true);
+        SeSsInHandler = 1;
+        DBGInfo.SetCPUCallback(0, false);
+        Expect("released inside the handler: the callback is untouched until it returns", DBG.CPUHook == CountingHook, 1);
+        SeSsInHandler = 0;
+        SeSsHandlerExit();
+        Expect("the handler returned: ours is installed", DBG.CPUHook == SeSsBpHook && DBG.CPUHookContinuous, 1);
+        SsDbgSetProfileActive(0);
+        Expect("and removed again when nothing wants it", DBG.CPUHook == nullptr, 1);
+    }
+
     std::printf("%s\n", gFail ? "FAILED" : "PASSED");
     return gFail ? 1 : 0;
 }

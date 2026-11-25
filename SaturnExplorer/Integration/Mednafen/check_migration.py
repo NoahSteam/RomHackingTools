@@ -57,6 +57,8 @@ EXPECT = [
     ("src/ss/sh7095.inc", "SE_PERF_BUS_WRITE", 1, "VDP1_EAT_HOOK"),
     ("src/ss/scu.inc", "SE_PERF_DMA_ROUTE_BYTES", 1, "VDP1_EAT_HOOK"),
     ("src/ss/scu.inc", "SE_PERF_DSP_CYCLES", 1, "VDP1_EAT_HOOK"),
+    ("src/ss/debug.inc", "SeSsNativeSetCPUCallback,", 1, "DEBUG_NATIVE_EDIT"),
+    ("src/ss/ss.cpp", "SeSsNativeSetCPUCallback(void", 1, "DEBUG_NATIVE_EDIT"),
 ]
 GONE = [("src/ss/vdp1.cpp", "SE_PERF_VDP1_DRAW_CYCLES"), ("src/ss/sound.cpp", "se_perf_t0", "M68K_IDLE_STEP")]
 SYNTAX = ["src/ss/vdp1.cpp", "src/ss/sound.cpp", "src/hw_cpu/m68k/m68k.cpp", "src/ss/ss.cpp"]

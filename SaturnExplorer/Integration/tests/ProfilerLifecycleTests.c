@@ -74,6 +74,8 @@ static void Fresh(int profiling)
     memset(sProfLastTs, 0, sizeof sProfLastTs);
     memset(sProfLastIdle, 0, sizeof sProfLastIdle);
     memset(sFlowPending, 0, sizeof sFlowPending);
+    sForeignHook = 0;
+    sFrameGap = 0;
     sSlaveOn = -1;
     sSlaveSince = 0;
     SeMdfnApplyMode(profiling ? SE_LIVE_PROF_FUNCTIONS : 0u);
@@ -546,6 +548,68 @@ static void TestOwnResetDropsOwnFlow(void)
     Nop(0, A, 8);
     Nop(0, A + 2, 12);
     CHECK(SeExportCurrentFunction(0) == 0u);                   /* the call was not applied after the reset */
+}
+
+/* The native debugger holds the callback for a while (Alt+D stepping): nothing is presented, so the stack
+ * misses calls and returns. While it does, no function is named; when ours returns the gap is not charged to
+ * the function that was on top when the callback was taken, and the stack starts again from nothing. */
+static void TestForeignHookGap(void)
+{
+    const unsigned int A = 0x06001800u, X = 0x06005000u;
+    Fresh(1);
+    Insn(0, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);
+    Nop(0, U_PC + 2, 4);
+    Nop(0, A, 8);
+    Nop(0, A + 2, 12);
+    CHECK_EQ(SeExportCurrentFunction(0), FnKey(A, 0));
+    const unsigned int epoch = SeExportCallStackEpoch(0);
+    SeMednafenForeignHook(1);                        /* the debugger takes the callback */
+    CHECK_EQ(SeExportCurrentFunction(0), 0u);        /* the frozen stack names nothing */
+    CHECK_EQ(SeExportCallStackEpoch(0), epoch);      /* ... and not dropped until the callback returns */
+    SeMednafenForeignHook(1);                        /* repeated: no change */
+    SeMednafenForeignHook(0);                        /* ... and gives it back, 100000 cycles later */
+    Nop(0, X, 100000);                               /* first sample: no baseline, nothing charged */
+    CHECK(SeExportCallStackEpoch(0) != epoch);       /* the stack restarted (it missed calls and returns) */
+    CHECK_EQ(SeExportCurrentFunction(0), 0u);        /* A is not on top any more */
+    Nop(0, X + 2, 100010);
+    CHECK_EQ(Cycles(FnKey(A, 0)), 12 - 8 + 0);       /* only what was seen before the takeover: [8,12) */
+    CHECK_EQ(Cycles(RawKey(X, 0)), 10);              /* seen after: the 10 cycles of the first instruction */
+    CHECK_EQ(CpuTotal(0), (12 - 8) + 10 + 8);        /* [0,8) charged to the caller as before; nothing for the gap */
+    /* A rts after the takeover finds no frame: it must not return into A's caller by a stale record. */
+    Insn(0, X + 4, OP_RTS, 0, 0x060EFF00, 100020);
+    Nop(0, X + 6, 100024);
+    Nop(0, U_PC + 6, 100030);
+    CHECK_EQ(SeExportCurrentFunction(0), 0u);
+    ResetPendingReturn(1);
+}
+
+/* A call held when the callback was taken is never completed by what followed it. */
+static void TestForeignHookDropsPendingFlow(void)
+{
+    const unsigned int A = 0x06001800u, X = 0x06005000u;
+    Fresh(1);
+    Insn(0, U_PC, BsrTo(U_PC, A), 0, 0x060F0000, 0);   /* the call is held until its delay slot has run */
+    SeMednafenForeignHook(1);
+    SeMednafenForeignHook(0);
+    Nop(0, A, 500);                                    /* whatever ran in between, this is not the bsr's landing */
+    Nop(0, A + 2, 510);
+    CHECK_EQ(SeExportCurrentFunction(0), 0u);
+    (void)X;
+}
+
+/* Attribution counts nothing across the takeover on the other CPU either. */
+static void TestForeignHookBothCpus(void)
+{
+    Fresh(1);
+    Nop(1, 0x06006000u, 0);
+    Nop(1, 0x06006002u, 6);
+    SeMednafenForeignHook(1);
+    SeMednafenForeignHook(0);
+    Nop(1, 0x06007000u, 9000);
+    Nop(1, 0x06007002u, 9004);
+    CHECK_EQ(Cycles(RawKey(0x06006000u, 1)), 6);
+    CHECK_EQ(Cycles(RawKey(0x06007000u, 1)), 4);
+    CHECK_EQ(CpuTotal(1), 10);
 }
 
 /* ================================ F6: the latched mode ================================ */
@@ -1078,6 +1142,9 @@ int main(void)
     TestHookModeLoss();
     TestCrossCpuReset();
     TestOwnResetDropsOwnFlow();
+    TestForeignHookGap();
+    TestForeignHookDropsPendingFlow();
+    TestForeignHookBothCpus();
     TestModeLatch();
     TestTailCallToKnownEntry();
     TestRecursionAndTail();

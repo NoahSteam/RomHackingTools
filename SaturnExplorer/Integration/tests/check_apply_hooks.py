@@ -267,8 +267,8 @@ if HAS_LIFECYCLE:
     for bit in ("SE_PERF_VALID_SSH2_INT", "SE_PERF_VALID_MODE"):
         if not re.search(r"info\.valid\s*\|=[^;]*\b" + bit + r"\b", glue):
             fail("the glue never sets " + bit)
-    if not re.search(r"info\.mode\s*=\s*sFrameMode", glue):
-        fail("the glue does not publish the latched mode")
+    if not re.search(r"info\.mode\s*=\s*gap\s*\?\s*\(sFrameMode\s*&\s*~SE_LIVE_PROF_FUNCTIONS\)\s*:\s*sFrameMode", glue):
+        fail("the glue does not publish the latched mode (or a frame with a gap as a non-attributed one)")
     if "SE_PERF_RESERVED_54" in glue or any("SE_PERF_RESERVED_54" in h for h in (mod.END_FRAME_HOOK, mod.FRAME_CLOSE_HOOK)):
         fail("index 54 is reserved and must never be produced")
     # the old end-of-frame fence (3269140 and before) counted the slave all-or-nothing after the rebase; the
@@ -321,7 +321,9 @@ if hasattr(mod, "DEBUG_SYNC_EDIT"):
     mock = ("template<unsigned which>\nstatic MDFN_COLD void DBG_CPUHandler(void)\n{\n const uint32 PC = 0;\n"
             " DBG.CPUHookContinuous |= DBG.FoundBPoint;\n\n if(DBG.CPUHookContinuous && DBG.CPUHook)\n {\n"
             "  DBG.inss = which;\n  ForceEventUpdates(DBG.eff_ts);\n  DBG.CPUHook(PC, DBG.FoundBPoint);\n"
-            "  DBG.inss = false;\n }\n}\n")
+            "  DBG.inss = false;\n }\n}\n"
+            "\nstatic DebuggerInfoStruct DBGInfo\n{\n false,\n\n DBG_FlushBreakPoints,\n DBG_AddBreakPoint,\n"
+            " DBG_SetCPUCallback,\n\n DBG_EnableBranchTrace,\n};\n")
     with tempfile.TemporaryDirectory(dir=work) as d:
         path = os.path.join(d, mod.DEBUG_FILE)
         open(path, "w", newline="").write(mock)
@@ -338,9 +340,31 @@ if hasattr(mod, "DEBUG_SYNC_EDIT"):
             fail("SeSsHookNeedsSync is not declared before the handler")
         if t.index("SeSsHookNeedsSync;") > t.index("MDFN_COLD void DBG_CPUHandler"):
             fail("SeSsHookNeedsSync is declared after the handler uses it")
+        # the native debugger's callback request goes through the SE wrapper; the upstream entry stays under the fence
+        if "\n SeSsNativeSetCPUCallback,   /*" not in t or "#if 0 /* SE_ORIGINAL */\n DBG_SetCPUCallback,\n#endif" not in t:
+            fail("the DebuggerInfo.SetCPUCallback entry is not routed through SeSsNativeSetCPUCallback:\n" + t)
+        if t.count("DBG_SetCPUCallback,") != 1:
+            fail("the upstream table entry must survive exactly once, inside its fence")
+        if "extern \"C\" void SeSsNativeSetCPUCallback(" not in t or t.index("SeSsNativeSetCPUCallback(") > t.index("DBGInfo"):
+            fail("SeSsNativeSetCPUCallback is not declared before the table that names it")
         mod.process_debug(d, True)
         if open(path, newline="").read() != t:
             fail("applying the debug.inc patch twice changed the file")
+        # a tree patched by the previous apply.py (no native-callback fence, no extern in the helper) is upgraded in place
+        old = t
+        fm = [m for m in mod.FENCE_RE.finditer(old) if "SeSsNativeSetCPUCallback," in m.group(0) and "SE_ORIGINAL" in m.group(0)]
+        if len(fm) != 1:
+            fail("expected exactly one native-callback fence")
+        else:
+            old = old[:fm[0].start()] + mod.fence_original(fm[0].group(0)).rstrip("\n") + old[fm[0].end():]
+            old = old.replace("/* The native debugger's SetCPUCallback request (ss.cpp, SeSsNativeSetCPUCallback): the DebuggerInfo table entry. */\n"
+                              "extern \"C\" void SeSsNativeSetCPUCallback(void (*callb)(uint32 PC, bool bpoint), bool continuous);\n", "")
+            if old == t or "SeSsNativeSetCPUCallback" in old:
+                fail("could not build the previous-version tree for the upgrade check")
+            open(path, "w", newline="").write(old)
+            mod.process_debug(d, True)
+            if open(path, newline="").read() != t:
+                fail("a tree patched by the previous apply.py was not upgraded to the current text")
         mod.revert(d, d)
         if open(path, newline="").read() != mock:
             fail("--revert did not restore debug.inc byte for byte")
@@ -349,6 +373,18 @@ if hasattr(mod, "DEBUG_SYNC_EDIT"):
         fail("SeSsHookNeedsSync is never defined")
     if "SeSsHookNeedsSync = (sSeTraceActive || sSeStepActive) ? 1 : 0;" not in open(apply_py).read():
         fail("SeSyncCpuHook does not maintain SeSsHookNeedsSync from the trace and step state alone")
+    src = open(apply_py).read()
+    # the wrapper: what the debugger asks for is installed as upstream; NULL re-applies our mode; an SE edit leaves a held callback alone
+    for need, why in (("extern \"C\" void SeSsNativeSetCPUCallback(void (*callb)(uint32 PC, bool bpoint), bool continuous) {", "defined with C linkage"),
+                      ("DBG_SetCPUCallback(callb, continuous);\n      SeSyncCpuHook();", "installs a non-NULL request as upstream does"),
+                      ("else if (wasHeld)\n      SeSyncCpuHook();", "re-applies our mode when the debugger releases the callback"),
+                      ("if (sSeNativeCb != 0)\n      return;", "SeSyncCpuHook leaves a callback the debugger holds alone"),
+                      ("SeSsBothCpus = on && !foreign;", "the both-CPU handler is off while the debugger holds the callback"),
+                      ("SeMednafenForeignHook(foreign);", "the glue is told when ours is not the installed callback")):
+        if need not in src:
+            fail("the native-callback wrapper does not hold: " + why)
+    if "void SeMednafenForeignHook(int foreign);" not in mod.FWD_DECLS or not re.search(r"^void SeMednafenForeignHook\(", glue, re.M):
+        fail("SeMednafenForeignHook is not forward-declared and defined")
     if open(apply_py).read().count("int SeSsHookNeedsSync = 1;") != 2:
         fail("SeSsHookNeedsSync needs a definition in both the debugger and the non-debugger branch")
 
