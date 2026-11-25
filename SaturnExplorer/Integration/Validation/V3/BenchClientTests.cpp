@@ -7,6 +7,11 @@
 // the run invalid with the exact count, that a slot load reaches the emulator, and the same through
 // the real executable (argv[1]) with its exit codes. It says NOTHING about emulator overhead.
 //
+// Nothing here depends on how many frames per second the host manages. Windows are counted in frames
+// (the client's --frames / --warmup-frames), progress is awaited by published-frame count, and every
+// assertion is relative to what the stand-in actually published; the only time values are timeouts that
+// turn a hang into a failure, and lower bounds on sleeps. V3_TEST_FRAME_MS=40 (25 fps) must pass too.
+//
 // Socket and port of their own: 6953 and /tmp/saturn_explorer_v3_bench_test.sock.
 #include <atomic>
 #include <chrono>
@@ -75,11 +80,16 @@ extern "C" int FakeSlotLoad(unsigned int slot)
     return 0;
 }
 
-// The stand-in emulator: one frame every 'periodMs', each stamped with the producer's identity and
-// the attribution mode in force. 'burst' makes it publish that many frames back to back once.
+// The stand-in emulator: one frame every gFrameMs, each stamped with the producer's identity and the
+// attribution mode in force. gPublished counts them; tests wait on that count, never on the clock.
+// A burst is published at a chosen frame count and, to take microseconds whatever the host, carries no
+// snapshot (the ring overrun it provokes is in the perf records, not the VRAM copy).
 std::atomic<bool> gStop{ false };
-std::atomic<int> gBurst{ 0 };
-void Publish1()
+std::atomic<unsigned long long> gPublished{ 0 };
+std::atomic<unsigned long long> gBurstAt{ 0 };   // publish a burst once gPublished reaches this (0 = never)
+std::atomic<int> gBurstSize{ 0 };
+int gFrameMs = 4;
+void PublishOne(bool snapshot)
 {
     SeExportGateFrame();
     SeExportPerfInfo info;
@@ -89,19 +99,37 @@ void Publish1()
     info.mode = SeExportProfilerFlags();
     unsigned long long c[SE_PERF_COUNT] = {};
     SeExportPublishPerf(c, SE_PERF_COUNT, nullptr, nullptr, 0, 0, &info);
-    SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                     nullptr, nullptr, nullptr, nullptr, nullptr);
+    if (snapshot)
+        SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, nullptr, nullptr);
     SeExportEndFrame();
+    ++gPublished;
 }
 void Emulator()
 {
     while (!gStop.load())
     {
-        int n = gBurst.exchange(0);
-        if (n > 0) { while (n-- > 0) Publish1(); }
-        Publish1();
-        SleepMs(4);
+        const unsigned long long at = gBurstAt.load();
+        if (at != 0 && gPublished.load() >= at)
+        {
+            gBurstAt = 0;
+            for (int n = gBurstSize.load(); n > 0; --n) PublishOne(false);
+        }
+        PublishOne(true);
+        SleepMs(gFrameMs);
     }
+}
+// Blocks until the stand-in has published 'n' more frames. The bound only turns a hang into a failure.
+bool WaitFrames(unsigned long long n, int boundSeconds = 120)
+{
+    const unsigned long long target = gPublished.load() + n;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(boundSeconds);
+    while (gPublished.load() < target)
+    {
+        if (std::chrono::steady_clock::now() > deadline) return false;
+        SleepMs(1);
+    }
+    return true;
 }
 
 struct Csv
@@ -146,28 +174,49 @@ std::map<std::string, std::string> ReadSummary(const std::string& path)
 const char* const kSock = SE_LIVE_DEFAULT_SOCK_PATH;
 std::string gTmp;
 
-v3::BenchOptions Base(const std::string& name)
+const int64_t kWarmFrames = 10;
+const int64_t kWindowFrames = 80;
+
+// Count-driven options: warm up 'kWarmFrames' frames, measure 'frames' frames. The timeout is a safety bound.
+v3::BenchOptions Base(const std::string& name, int64_t frames = kWindowFrames)
 {
     v3::BenchOptions o;
     o.endpoint = kSock;
-    o.warmupS = 0.4;
-    o.durationS = 1.2;
+    o.frames = frames;
+    o.warmupFrames = kWarmFrames;
+    o.warmupS = 0.0;
+    o.durationS = 0.3;   // bracket only: the minimum gap between its two probes
+    o.timeoutS = 30.0;
     o.drainMs = 8;
-    o.connectTimeoutS = 20;
+    o.connectTimeoutS = 30;
     o.csvPath = gTmp + name + ".csv";
     o.summaryPath = gTmp + name + ".summary";
     o.tag = name;
     return o;
 }
 
-// Rows of kind "frame" at or after the window start, from the summary's own window.
-void CheckFrames(const Csv& c, const std::map<std::string, std::string>& s, uint32_t wantMode)
+// Newest frame number among rows that arrived at or before 't' (the analyzer's f(t)).
+int64_t FrameAt(const Csv& c, int64_t t)
+{
+    int64_t f = -1;
+    for (size_t i = 0; i < c.rows.size(); ++i)
+        if (c.I(i, "arrival_ns") <= t && c.I(i, "frame_no") >= 0) f = c.I(i, "frame_no");
+    return f;
+}
+
+// A clean stream run, judged against what was asked and what the stand-in published, never against a rate:
+// every row is a frame, consecutive in sequence and frame number, one timeline, nothing lost; the rows are
+// exactly the frames from the first to the last one seen; the window holds at least the requested frames and
+// the CSV agrees with the summary about how many; the warm-up was at least the requested frames; every
+// frame from the window start on ran in the requested attribution mode.
+void CheckFrames(const Csv& c, const std::map<std::string, std::string>& s, uint32_t wantMode,
+                 unsigned long long publishedDuringRun)
 {
     const int64_t ws = std::atoll(s.at("window_start_ns").c_str());
+    const int64_t we = std::atoll(s.at("window_end_ns").c_str());
     uint64_t prevSeq = 0;
     int64_t prevFrame = -1, prevArrival = -1;
     uint32_t timeline = 0;
-    size_t inWin = 0;
     for (size_t i = 0; i < c.rows.size(); ++i)
     {
         CHECK(c.rows[i].at("kind") == "frame");
@@ -178,27 +227,35 @@ void CheckFrames(const Csv& c, const std::map<std::string, std::string>& s, uint
         if (prevSeq) { CHECK(seq == prevSeq + 1); CHECK(fr == prevFrame + 1); CHECK(c.U(i, "timeline_id") == timeline); }
         timeline = static_cast<uint32_t>(c.U(i, "timeline_id"));
         CHECK(c.U(i, "gap_count") == 0 && c.U(i, "evict_count") == 0);
-        if (at >= ws) { ++inWin; CHECK(c.U(i, "mode") == wantMode); }
+        if (at >= ws) CHECK(c.U(i, "mode") == wantMode);
         prevSeq = seq; prevFrame = fr; prevArrival = at;
     }
-    // 1.2 s at one frame per 4 ms: far more than a handful, and not more than a frame per ms.
-    CHECK(inWin > 60);
-    CHECK(inWin < 1300);
-    CHECK(static_cast<uint64_t>(std::atoll(s.at("window_rows").c_str())) == inWin);
+    CHECK(!c.rows.empty());
+    if (c.rows.empty()) return;
+    const int64_t first = c.I(0, "frame_no"), last = c.I(c.rows.size() - 1, "frame_no");
+    CHECK(static_cast<int64_t>(c.rows.size()) == last - first + 1);   // rows == the frames in between: none missing
+    // and none invented. Two of slack: a connection starts at the newest record, which can be the one published
+    // just before the count was read (the stand-in counts a frame after publishing it).
+    CHECK(c.rows.size() <= publishedDuringRun + 2);
+    const int64_t fws = FrameAt(c, ws), fwe = FrameAt(c, we);
+    CHECK(fwe - fws >= kWindowFrames);                                // the window holds what was asked
+    CHECK(std::atoll(s.at("window_frames").c_str()) == fwe - fws);
+    CHECK(fws - first >= kWarmFrames);                                // and the warm-up was at least that long
 }
 
 void TestStreamAttributionOff()
 {
     v3::BenchOptions o = Base("off");
+    const unsigned long long p0 = gPublished.load();
     const int rc = v3::RunBench(o, stdout);
+    const unsigned long long ran = gPublished.load() - p0;
     CHECK(rc == v3::kOk);
     const Csv c = ReadCsv(o.csvPath);
     const auto s = ReadSummary(o.summaryPath);
     CHECK(s.at("valid") == "1");
     CHECK(s.at("attribution_requested") == "0");
     CHECK(s.at("lost_server_ring_total") == "0" && s.at("lost_client_queue_total") == "0");
-    CHECK(c.rows.size() > 100);
-    if (!c.rows.empty()) CheckFrames(c, s, 0u);
+    CheckFrames(c, s, 0u, ran);
     CHECK(gHookFlags.load() == 0u);
 }
 
@@ -213,8 +270,10 @@ void TestStreamAttributionOn()
     std::thread watcher([&] {
         while (!done.load()) { if (gHookFlags.load() == SE_LIVE_PROF_FUNCTIONS) sawOn = true; SleepMs(1); }
     });
+    const unsigned long long p0 = gPublished.load();
     const int rc = v3::RunBench(o, stdout);
-    SleepMs(300);   // the emulate side applies the disconnect at its next frame
+    const unsigned long long ran = gPublished.load() - p0;
+    CHECK(WaitFrames(5));   // the emulate side applies the disconnect at a frame boundary
     done = true;
     watcher.join();
     CHECK(rc == v3::kOk);
@@ -224,42 +283,52 @@ void TestStreamAttributionOn()
     const auto s = ReadSummary(o.summaryPath);
     CHECK(s.at("valid") == "1");
     CHECK(s.at("attribution_requested") == "1");
-    if (!c.rows.empty()) CheckFrames(c, s, SE_LIVE_PROF_FUNCTIONS);
-    // Warm-up rows exist and precede the window (the first ones ran before the request landed or after).
-    CHECK(std::atoll(s.at("window_start_ns").c_str()) >= 400000000ll);
+    CheckFrames(c, s, SE_LIVE_PROF_FUNCTIONS, ran);
 }
 
 void TestBracket()
 {
-    v3::BenchOptions o = Base("bracket");
+    v3::BenchOptions o = Base("bracket", 150);   // more than the 0.3 s minimum gap holds at 4 ms a frame: forces a second look
     o.mode = v3::Mode::Bracket;
-    o.warmupS = 0.3;
-    o.durationS = 1.0;
+    o.warmupS = 0.15;
+    o.durationS = 0.3;
+    const unsigned long long p0 = gPublished.load();
     const int rc = v3::RunBench(o, stdout);
+    const unsigned long long ran = gPublished.load() - p0;
     CHECK(rc == v3::kOk);
     const Csv c = ReadCsv(o.csvPath);
     const auto s = ReadSummary(o.summaryPath);
     CHECK(s.at("mode") == "bracket" && s.at("valid") == "1");
-    CHECK(c.rows.size() == 2);
-    if (c.rows.size() == 2)
+    // Two probes, plus one more for every time the end probe found fewer than the requested frames.
+    const size_t extra = static_cast<size_t>(std::atoll(s.at("bracket_extra_probes").c_str()));
+    CHECK(c.rows.size() == 2 + extra);
+    if (c.rows.size() >= 2)
     {
-        CHECK(c.rows[0].at("kind") == "probe" && c.rows[1].at("kind") == "probe");
-        const int64_t dt = c.I(1, "arrival_ns") - c.I(0, "arrival_ns");
-        CHECK(dt >= 1000000000ll && dt < 4000000000ll);
-        const int64_t df = c.I(1, "frame_no") - c.I(0, "frame_no");
-        // ~250 frames/s over ~1 s; a stalled or double-counting clock is far outside this.
-        CHECK(df > 100 && df < 2000);
-        CHECK(c.I(0, "arrival_ns") >= 300000000ll);   // nothing connected during the warm-up
-        CHECK(c.U(0, "timeline_id") == c.U(1, "timeline_id"));
+        for (size_t i = 0; i < c.rows.size(); ++i) CHECK(c.rows[i].at("kind") == "probe");
+        const size_t n = c.rows.size();
+        const int64_t dt = c.I(n - 1, "arrival_ns") - c.I(0, "arrival_ns");
+        CHECK(dt >= 300000000ll);                     // a sleep is never shorter than asked
+        CHECK(c.I(0, "arrival_ns") >= 150000000ll);   // nothing connected during the warm-up
+        const int64_t df = c.I(n - 1, "frame_no") - c.I(0, "frame_no");
+        CHECK(df >= 150);                             // the count that was asked for
+        CHECK(static_cast<unsigned long long>(df) <= ran + 2);   // and not more than the stand-in published (2 slack, as above)
+        CHECK(std::atoll(s.at("window_frames").c_str()) == df);
+        for (size_t i = 1; i < n; ++i) CHECK(c.U(i, "timeline_id") == c.U(0, "timeline_id"));
     }
 }
 
+// A burst published far faster than the ring holds, at a chosen frame count inside the window. Judged by the
+// exact accounting every run must satisfy: sequence numbers from the first to the last delivered record are
+// the records delivered plus the records the CSV says were lost, and the lost count is large (the ring keeps
+// 16, a reply carries 8).
 void TestLossIsCountedAndInvalid()
 {
-    v3::BenchOptions o = Base("loss");
-    std::thread burster([] { SleepMs(900); gBurst = 200; });   // inside the window
+    v3::BenchOptions o = Base("loss", 150);
+    const unsigned long long burstAt = gPublished.load() + 70;   // well after the 10-frame warm-up, well before 150
+    gBurstSize = 200;
+    gBurstAt = burstAt;
     const int rc = v3::RunBench(o, stdout);
-    burster.join();
+    gBurstAt = 0;
     CHECK(rc == v3::kInvalid);
     const auto s = ReadSummary(o.summaryPath);
     CHECK(s.at("valid") == "0");
@@ -269,16 +338,26 @@ void TestLossIsCountedAndInvalid()
         all << sf.rdbuf();
         CHECK(all.str().find("invalid_reason=samples lost in the measured window") != std::string::npos);
     }
-    const uint64_t lost = std::strtoull(s.at("lost_server_ring_window").c_str(), nullptr, 10);
-    CHECK(lost > 150);   // 200 frames at once into a 16-deep ring
+    const uint64_t lostWin = std::strtoull(s.at("lost_server_ring_window").c_str(), nullptr, 10);
+    const uint64_t lostAll = std::strtoull(s.at("lost_server_ring_total").c_str(), nullptr, 10);
+    CHECK(lostWin >= 150);   // 200 records at once into a 16-deep ring
+    CHECK(lostAll >= lostWin);
     CHECK(std::atoll(s.at("lost_client_queue_window").c_str()) == 0);
-    // The CSV carries the same exact count, row by row.
     const Csv c = ReadCsv(o.csvPath);
-    uint64_t sum = 0;
-    for (size_t i = 0; i < c.rows.size(); ++i) sum += c.U(i, "gap_count");
-    CHECK(sum == std::strtoull(s.at("lost_server_ring_total").c_str(), nullptr, 10));
-    CHECK(sum >= lost);
-    CHECK(std::atoll(s.at("seq_missing_window").c_str()) > 0 || lost > 0);
+    uint64_t sum = 0, evict = 0, frames = 0, firstSeq = 0, lastSeq = 0;
+    for (size_t i = 0; i < c.rows.size(); ++i)
+    {
+        sum += c.U(i, "gap_count");
+        evict += c.U(i, "evict_count");
+        if (c.rows[i].at("kind") == "frame")
+        {
+            ++frames;
+            if (!firstSeq) firstSeq = c.U(i, "sample_seq");
+            lastSeq = c.U(i, "sample_seq");
+        }
+    }
+    CHECK(sum == lostAll);                                      // the CSV carries the same exact count
+    CHECK(lastSeq - firstSeq + 1 == frames + sum + evict);      // every record is delivered or counted lost
 }
 
 void TestLoadSlot()
@@ -402,54 +481,62 @@ bool Has(const std::vector<std::string>& v, const std::string& t)
 // anything) and at the server (no per-frame savestates while the client is attached).
 void TestRewindOffEveryMode()
 {
-    // Positive control: a client that does not send REW 0 makes the stand-in take savestates.
+    // Control: a client that does not send REW 0 has the stand-in take a savestate for (nearly) every frame
+    // it publishes while the client is attached.
     {
         se_data_source ds{};
         for (int i = 0; i < 2000 && se_live_open(kSock, &ds) != SE_OK; ++i) SleepMs(5);
         CHECK(ds.close != nullptr);
-        SleepMs(150);
-        const int before = gSaves.load();
-        SleepMs(600);
-        CHECK(gSaves.load() - before > 40);
+        for (int i = 0; i < 6000 && se_live_server_version(&ds) == 0; ++i) SleepMs(2);
+        CHECK(WaitFrames(3));   // attached and flowing before counting
+        const int s0 = gSaves.load();
+        const unsigned long long p0 = gPublished.load();
+        CHECK(WaitFrames(60));
+        const int saves = gSaves.load() - s0;
+        const long long frames = static_cast<long long>(gPublished.load() - p0);
+        std::printf("control (no REW 0): %d savestates over %lld frames\n", saves, frames);
+        CHECK(frames >= 60);
+        CHECK(saves >= frames - 8);
         if (ds.close) ds.close(ds.user);
-        SleepMs(200);
+        CHECK(WaitFrames(5));
     }
-    // Server side, stream mode over the local socket (no proxy in the way).
+    // Server side, stream mode over the local socket (no proxy in the way): the same client turned off
+    // REW, so only the frames before its request landed may have been saved.
     {
-        v3::BenchOptions o = Base("rew_srv");
-        o.warmupS = 0.3;
-        o.durationS = 1.2;
-        const int before = gSaves.load();
+        v3::BenchOptions o = Base("rew_srv", 120);
+        const int s0 = gSaves.load();
+        const unsigned long long p0 = gPublished.load();
         CHECK(v3::RunBench(o, stdout) == v3::kOk);
-        const int taken = gSaves.load() - before;
-        std::printf("savestates taken during a 1.5 s stream run: %d\n", taken);
-        CHECK(taken < 30);   // ~375 frames ran; only those before REW 0 landed may be saved
+        const int taken = gSaves.load() - s0;
+        const long long frames = static_cast<long long>(gPublished.load() - p0);
+        std::printf("REW 0 stream run: %d savestates over %lld frames\n", taken, frames);
+        CHECK(frames >= 130);
+        CHECK(taken * 4 < frames);   // a quarter at most; the control above saves all but a handful
     }
     // Wire side, all three modes, through the sniffer.
     Sniffer sn;
     CHECK(sn.Start(6953));
-    v3::BenchOptions st = Base("rew_stream");
+    v3::BenchOptions st = Base("rew_stream", 40);
     st.endpoint = sn.Endpoint();
     st.functions = true;
-    st.warmupS = 0.3;
-    st.durationS = 0.6;
-    (void)v3::RunBench(st, stdout);   // over TCP the stand-in may overrun the ring: validity is not the point here
-    v3::BenchOptions br = Base("rew_bracket");
+    (void)v3::RunBench(st, stdout);   // validity is not the point here, only what the client sent
+    v3::BenchOptions br = Base("rew_bracket", 30);
     br.endpoint = sn.Endpoint();
     br.mode = v3::Mode::Bracket;
-    br.warmupS = 0.2;
-    br.durationS = 0.5;
+    br.warmupS = 0.1;
+    br.durationS = 0.2;
     CHECK(v3::RunBench(br, stdout) == v3::kOk);
+    const size_t extraProbes = static_cast<size_t>(std::atoll(ReadSummary(br.summaryPath).at("bracket_extra_probes").c_str()));
     v3::BenchOptions ls = Base("rew_slot");
     ls.endpoint = sn.Endpoint();
     ls.mode = v3::Mode::LoadSlot;
     ls.loadSlot = 2;
     CHECK(v3::RunBench(ls, stdout) == v3::kOk);
-    SleepMs(200);
+    CHECK(WaitFrames(5));
     sn.Stop();
     const auto used = sn.Used();
-    // stream: 1 connection, bracket: 2, load-slot: 1
-    CHECK(used.size() == 4);
+    // stream: 1 connection, bracket: 2 plus one per extra look, load-slot: 1
+    CHECK(used.size() == 4 + extraProbes);
     size_t withRew = 0, withPrf1 = 0, withEls = 0;
     for (const auto& c : used)
     {
@@ -476,7 +563,7 @@ int Exec(const std::string& cmd)
 void TestExecutable(const char* exe)
 {
     // Attribution on through the real command line.
-    const std::string base = std::string("\"") + exe + "\" --endpoint " + std::string(kSock) + " --warmup 0.3 --duration 1 --drain-ms 8 ";
+    const std::string base = std::string("\"") + exe + "\" --endpoint " + std::string(kSock) + " --frames 60 --warmup-frames 10 --drain-ms 8 ";
     gHookFlags = 0;
     int rc = Exec(base + "--attribution on --tag exe --csv " + gTmp + "exe.csv --summary " + gTmp + "exe.summary > " + gTmp + "exe.out");
     CHECK(rc == v3::kOk);
@@ -484,8 +571,9 @@ void TestExecutable(const char* exe)
     CHECK(s.count("valid") && s.at("valid") == "1");
     CHECK(s.count("attribution_requested") && s.at("attribution_requested") == "1");
     const Csv c = ReadCsv(gTmp + "exe.csv");
-    CHECK(c.rows.size() > 100);
+    CHECK(c.rows.size() >= 60 + 10);   // the warm-up frames and the window's, both delivered
     if (!c.rows.empty()) CHECK(c.U(c.rows.size() - 1, "mode") == SE_LIVE_PROF_FUNCTIONS);
+    CHECK(s.count("window_frames") && std::atoll(s.at("window_frames").c_str()) >= 60);
     CHECK(Exec(std::string("\"") + exe + "\" --mode nonsense > " + gTmp + "bad.out 2>&1") == v3::kError);
     // Nothing listening: an error exit, not a hang.
     CHECK(Exec(std::string("\"") + exe + "\" --endpoint tcp:127.0.0.1:6959 --connect-timeout 1 > " + gTmp + "none.out") == v3::kError);
@@ -494,6 +582,7 @@ void TestExecutable(const char* exe)
 
 int main(int argc, char** argv)
 {
+    if (const char* e = std::getenv("V3_TEST_FRAME_MS")) { if (std::atoi(e) > 0) gFrameMs = std::atoi(e); }
     gTmp = "/tmp/se_v3_bench_test_" + std::to_string(static_cast<long>(std::time(nullptr))) + "_";
     if (SeExportPrepare() != 0) { std::printf("SeExportPrepare failed\n"); return 1; }
     SeExportSetProfilerHook(FakeSetProfiler);

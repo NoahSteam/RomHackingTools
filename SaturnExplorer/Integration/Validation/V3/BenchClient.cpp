@@ -299,6 +299,8 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     CpuSample cpuStart, cpuEnd;
     int64_t windowStartNs = -1, windowEndNs = -1;
     int64_t holdStartNs = 0, holdEndNs = 0;
+    uint64_t extraProbes = 0;
+    int64_t windowFrames = -1;
     uint32_t caps = 0, version = 0;
     uint64_t statusServerLost = 0, statusDriverEvicted = 0;
     bool haveStatus = false;
@@ -310,8 +312,20 @@ int RunBench(const BenchOptions& o, std::FILE* out)
         if (!Probe(o, t0, rows, &cpuStart, &holdStartNs, out)) return kError;
         windowStartNs = rows.back().arrivalNs;
         SleepUntilNs(t0, windowStartNs + durNs);
-        if (!Probe(o, t0, rows, &cpuEnd, &holdEndNs, out)) return kError;
-        windowEndNs = rows.back().arrivalNs;
+        const int64_t startFrame = rows.back().frameNo;
+        for (;;)
+        {
+            if (!Probe(o, t0, rows, &cpuEnd, &holdEndNs, out)) return kError;
+            windowEndNs = rows.back().arrivalNs;
+            if (o.frames <= 0 || rows.back().frameNo - startFrame >= o.frames) break;
+            if (NowNs(t0) > static_cast<int64_t>(o.timeoutS * 1e9))
+            {
+                std::fprintf(out, "error: %lld frames not reached within %.0f s\n", static_cast<long long>(o.frames), o.timeoutS);
+                return kError;
+            }
+            ++extraProbes;   // too few frames yet: look again (each look is a short connection, kept in the CSV)
+            SleepMs(250);
+        }
     }
     else
     {
@@ -332,7 +346,11 @@ int RunBench(const BenchOptions& o, std::FILE* out)
             se_live_set_profiler(&ds, 0);
         const int64_t startNs = NowNs(t0);   // the measured schedule starts when the stream is up
         const int64_t wsTarget = startNs + warmNs;
-        const int64_t endTarget = wsTarget + durNs;
+        const bool byCount = o.frames > 0 || o.warmupFrames > 0;
+        const int64_t timeoutNs = static_cast<int64_t>((byCount ? o.timeoutS : o.warmupS + o.durationS + o.timeoutS) * 1e9);
+        const uint32_t wantMode0 = o.functions ? SE_LIVE_PROF_FUNCTIONS : 0u;
+        int64_t newest = -1, firstSeen = -1, startFrame = -1;
+        uint32_t newestMode = 0;
         se_live_perf_frame b[64];
         for (;;)
         {
@@ -340,17 +358,42 @@ int RunBench(const BenchOptions& o, std::FILE* out)
             uint32_t n;
             const int64_t at = NowNs(t0);
             while ((n = se_live_drain_perf(&ds, b, 64)) != 0)
-                for (uint32_t i = 0; i < n; ++i) rows.push_back(ToRow(b[i], at));
-            if (windowStartNs < 0 && at >= wsTarget)
+                for (uint32_t i = 0; i < n; ++i)
+                {
+                    rows.push_back(ToRow(b[i], at));
+                    const Row& r = rows.back();
+                    if (r.frameNo >= 0 && std::strcmp(r.kind, "gap") != 0)
+                    {
+                        if (firstSeen < 0) firstSeen = r.frameNo;
+                        newest = r.frameNo;
+                        newestMode = r.mode;
+                    }
+                }
+            // The window opens once the warm-up is over AND the requested attribution mode is the one the newest
+            // frame ran in: the request is applied at a frame boundary some frames after it is sent, and how many
+            // depends on the host, so a fixed warm-up cannot promise it.
+            const bool warmDone = o.warmupFrames > 0 ? (firstSeen >= 0 && newest - firstSeen >= o.warmupFrames) : at >= wsTarget;
+            if (windowStartNs < 0 && warmDone && newest >= 0 && newestMode == wantMode0)
             {
                 windowStartNs = at;
+                startFrame = newest;
                 cpuStart = SampleCpu(o.pid, t0);
             }
-            if (at >= endTarget)
+            if (windowStartNs >= 0 && (o.frames > 0 ? newest - startFrame >= o.frames : at >= windowStartNs + durNs))
             {
                 windowEndNs = at;
+                windowFrames = newest - startFrame;
                 cpuEnd = SampleCpu(o.pid, t0);
                 break;
+            }
+            if (at > timeoutNs)
+            {
+                Close(ds);
+                std::fprintf(out, "error: the measured window %s within %.0f s (newest frame %lld, mode %u, wanted %u)\n",
+                             windowStartNs < 0 ? "did not open" : "did not reach its frame count",
+                             byCount ? o.timeoutS : o.warmupS + o.durationS + o.timeoutS, static_cast<long long>(newest),
+                             newestMode, wantMode0);
+                return kError;
             }
         }
         se_live_perf_status st{};
@@ -399,7 +442,7 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     if (timelineChanges) invalid.push_back("timeline changed inside the measured window");
     if (noIdentity) invalid.push_back("records without frame identity");
     if (o.mode == Mode::Stream && windowRows < 2) invalid.push_back("fewer than two frames in the window");
-    if (o.mode == Mode::Bracket && windowRows != 2) invalid.push_back("a bracket probe did not read a frame");
+    if (o.mode == Mode::Bracket && windowRows < 2) invalid.push_back("a bracket probe did not read a frame");
     if (haveStatus && (statusServerLost != lostServerAll || statusDriverEvicted != lostDriverAll))
         invalid.push_back("per-row loss counts disagree with the driver's own totals");
 
@@ -414,6 +457,10 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     s.Put("drain_ms", static_cast<long long>(o.drainMs));
     s.Put("window_start_ns", static_cast<long long>(windowStartNs));
     s.Put("window_end_ns", static_cast<long long>(windowEndNs));
+    if (o.mode == Mode::Bracket) windowFrames = lastFrame - firstFrame;
+    s.Put("window_frames", static_cast<long long>(windowFrames));
+    s.Put("frames_requested", static_cast<long long>(o.frames));
+    s.Put("bracket_extra_probes", static_cast<unsigned long long>(extraProbes));
     s.Put("window_rows", static_cast<unsigned long long>(windowRows));
     s.Put("window_first_frame", static_cast<long long>(firstFrame));
     s.Put("window_last_frame", static_cast<long long>(lastFrame));

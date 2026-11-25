@@ -187,6 +187,24 @@ configuration.
 
 Exit codes of `se-bench-client`: 0 valid, 1 error, 2 completed but invalid (lost samples).
 
+### Windows counted in frames instead of seconds
+
+`--frames N` (with `--warmup-frames W`) ends the measured window after N emulated frames, and the warm-up after
+W, instead of after a number of seconds: `run_v3.sh ... --frames 3000 --warmup-frames 300`. Every run then
+measures the same amount of emulation whatever the speed (3000 frames is 50 s at real time and a few seconds
+unthrottled), and a slow configuration is not compared over a different stretch of the game than a fast one. The
+speed estimator is unchanged: frames divided by the time they took, from the same two window edges. In stream
+mode the window also opens only once the frames carry the attribution mode that was requested, so a warm-up
+shorter than the request's latency cannot make a run invalid. In bracket mode `--duration` is the minimum gap
+between the two probes; if the end probe finds fewer than N frames it looks again after 250 ms (each extra look is
+a short connection, kept in the CSV and counted as `bracket_extra_probes`; on an unthrottled emulator there are
+none). `--timeout SEC` (default 600) turns a run that cannot get there into an error (exit 1) instead of a hang.
+The seconds options still work and are the default. The validity floors of the analyzer (1000 frames, 5 s) apply
+to either.
+
+The tests use this: every V3 test counts frames and holds no assertion about frames per second, so they pass on a
+loaded or slow host (`V3_TEST_FRAME_MS` and `FAKE_FRAME_MS` slow the two stand-ins down to check that).
+
 ### Windows
 
 `run_v3.sh` needs a POSIX shell (Git Bash or WSL; under WSL the emulator and client must both run in WSL or

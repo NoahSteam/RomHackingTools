@@ -68,6 +68,9 @@ int main(int argc, char** argv)
     bool functions = true;   // --no-functions: a build without attribution (no SE_LIVE_CAP_PROF_FUNCTIONS)
     for (int i = 1; i < argc; ++i)
         if (!std::strcmp(argv[i], "--no-functions")) functions = false;
+    // FAKE_FRAME_MS: milliseconds per frame (default 4). The tests must pass at any value; slow it to mimic a loaded host.
+    int frameMs = 4;
+    if (const char* e = std::getenv("FAKE_FRAME_MS")) frameMs = std::atoi(e) > 0 ? std::atoi(e) : 4;
     std::signal(SIGTERM, OnSignal);
     std::signal(SIGINT, OnSignal);
     if (SeExportPrepare() != 0) return 1;
@@ -88,7 +91,7 @@ int main(int argc, char** argv)
         SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
                          nullptr, nullptr, nullptr, nullptr, nullptr);
         SeExportEndFrame();
-        std::this_thread::sleep_for(std::chrono::milliseconds(4));
+        std::this_thread::sleep_for(std::chrono::milliseconds(frameMs));
     }
     SeExportDeinit();
     return 0;
