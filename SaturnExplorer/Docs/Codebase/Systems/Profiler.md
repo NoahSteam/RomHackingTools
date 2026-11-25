@@ -288,10 +288,16 @@ thread needed **13.5 ms of CPU per frame with attribution off and 126.7 ms with 
 | 3.3 % | `se_export.c` (ownership, shadow stack) |
 
 **What the guard does.** `apply.py` (`process_debug`) makes the sync conditional:
-`if(DBG.FoundBPoint || SeSsHookNeedsSync) ForceEventUpdates(...)`. `SeSyncCpuHook` sets the flag from
-`sSeTraceActive || sSeStepActive` only, so it is **clear for attribution alone** and the handler skips the
-sync. It still syncs (exactly as upstream) while a tracepoint is armed, while an instruction step is in
-progress, and on any instruction where a PC or data breakpoint was found. Without the sync the frame
+`if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook) ForceEventUpdates(...)`.
+`SeSyncCpuHook` sets the flag from `sSeTraceActive || sSeStepActive` only, so it is **clear for attribution
+alone**, and records the callback it installs in `SeSsOwnCpuHook`. The handler skips the sync only while the
+installed callback is that one. It still syncs (exactly as upstream) while a tracepoint is armed, while an
+instruction step is in progress, on any instruction where a PC or data breakpoint was found, and for **any
+other callback**: Mednafen's native debugger (`drivers/debugger.cpp` `UpdateCoreHooks`, through
+`DebuggerInfo.SetCPUCallback` = `DBG_SetCPUCallback`) replaces ours for stepping and trace logging without
+touching our flag, and the pointer comparison needs no cooperation from it. Known limit (pre-existing):
+when the native debugger later removes its callback our hook is not reinstalled until `SeSyncCpuHook` runs
+again (any install edit or a halt), so attribution samples nothing in between. Without the sync the frame
 should cost roughly 39 ms (about 3x the attribution-off cost) instead of 127 ms (about 9.5x); that is
 the expectation to verify, not a measurement.
 

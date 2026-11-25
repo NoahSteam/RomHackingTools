@@ -330,7 +330,7 @@ if hasattr(mod, "DEBUG_SYNC_EDIT"):
         if "ANCHOR MISS" in notes:
             fail("process_debug missed an anchor on the mock handler:\n" + notes)
         # the sync is conditional on exactly: a breakpoint found now, or the flag the glue maintains
-        if "if(DBG.FoundBPoint || SeSsHookNeedsSync)\n   ForceEventUpdates(DBG.eff_ts);" not in t:
+        if "if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook)\n   ForceEventUpdates(DBG.eff_ts);" not in t:
             fail("the guarded ForceEventUpdates is not in the patched handler:\n" + t)
         if t.count("ForceEventUpdates(DBG.eff_ts);") != 2 or "#if 0 /* SE_ORIGINAL */\n  ForceEventUpdates(DBG.eff_ts);" not in t:
             fail("the upstream ForceEventUpdates line is not kept inside its fence")
