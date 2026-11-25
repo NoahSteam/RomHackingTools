@@ -1609,6 +1609,12 @@ if(BUILD_TESTING)
                              --only f8_bus --skip-if-missing)
             set_tests_properties(SaturnExplorerMednafenBusComponent PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
         endif()
+        # apply.py's line endings: apply/--revert byte-exact on an LF and a CRLF tree, no CR added to LF, with
+        # Windows' text-mode newline translation simulated (so the Windows bug is caught on Linux).
+        add_test(NAME SaturnExplorerMednafenApplyNewlines
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_apply_newlines.py
+                         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
+                         ${CMAKE_CURRENT_BINARY_DIR}/apply_newlines_test)
         add_test(NAME SaturnExplorerMednafenHaltOrdering
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_halt_ordering.py
                          ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py)

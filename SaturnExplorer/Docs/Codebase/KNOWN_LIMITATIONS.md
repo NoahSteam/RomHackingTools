@@ -50,6 +50,7 @@ These discrepancies are documented here rather than rewriting broader historical
 This is source navigation and architecture mapping, not a correctness sign-off. No new hardware
 or runtime defect is asserted based solely on the observations above.
 
+- `Integration/Mednafen/check_component.py` links with an ELF-only GNU ld option (`--unresolved-symbols=ignore-in-object-files`), so on MinGW/MSVC/macOS it exits 77 (skipped) up front; the Windows paths of `apply.py` / `check_migration.py` (CRLF, no symlink privilege) are covered on Linux by simulation only.
 - Native Windows/macOS UI, dialogs, GPU/audio device behavior and packaging were not executed.
 - No real emulator game/rewind/restore run or independent hardware register audit was performed.
 - Large synthetic decompiler suites, semantic oracles and historical review claims were located

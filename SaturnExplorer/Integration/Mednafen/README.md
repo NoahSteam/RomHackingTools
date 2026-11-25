@@ -723,6 +723,11 @@ Any future rename needs a new entry there. Checks:
   Mednafen source needed): the retirement on synthetic fences, exact revert (also of the replaced `smpc.cpp` line, and of the block an older `apply.py` wrote), the F4 debit macro
   compiled around a copy of Mednafen's, and the F8 address table compiled and checked at both ends of
   every range.
+* `Integration/tests/check_apply_newlines.py` (ctest `SaturnExplorerMednafenApplyNewlines`, no checkout): apply and
+  `--revert` on a synthetic LF tree and its CRLF copy are byte-exact, an LF tree gains no CR, a CRLF tree stays
+  pure CRLF; Windows' text-mode newline translation is simulated by wrapping `open`. `apply.py` reads and
+  writes patched files as bytes (`read_src` / `write_src`), folding a pure-CRLF file to LF only in memory.
+  A file mixing LF and CRLF is patched as-is (its anchors may then miss).
 * `Integration/Mednafen/check_migration.py <checkout> <scratch> <old apply.py>...` (needs the
   checkout; `git show 4b6cd9e:SaturnExplorer/Integration/Mednafen/apply.py > old.py`): patches
   pristine copies with each old `apply.py`, then with this one, and asserts the retired text is gone,
