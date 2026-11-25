@@ -251,6 +251,10 @@ extern "C" { int SeSsBothCpus = 0; int SeSsExecCpu = 0; }
    Maintained by SeSyncCpuHook together with the callback, so the two never disagree; 1 until the first
    sync, which is upstream's behaviour. */
 extern "C" { int SeSsHookNeedsSync = 1; }
+/* The callback SeSyncCpuHook installed (0 until it has). debug.inc syncs for ANY other continuous callback: the
+   native debugger (drivers/debugger.cpp, UpdateCoreHooks) replaces ours through DebuggerInfo.SetCPUCallback
+   for stepping and trace logging without telling us, and its consumers expect upstream's synchronization. */
+extern "C" { void (*SeSsOwnCpuHook)(uint32 PC, bool bpoint) = 0; }
 /* Install/remove the per-instruction callback to match what is armed: continuous (every
    instruction) when tracepoints OR an instruction step are active so the hook sees every
    PC; non-continuous (fires only when the debugger finds a PC breakpoint) when only
@@ -274,8 +278,10 @@ static void SeSyncCpuHook(void) {
    /* A held call/return is completed by the instructions that follow it; if the CPU is about to run
       without presenting them, it must be told (it is not told of an edit made while halted). */
    if (!sSeHalted) SeMednafenHookMode(every != 0);
-   if (on)
+   if (on) {
+      SeSsOwnCpuHook = SeSsBpHook;
       DBG_SetCPUCallback(SeSsBpHook, every != 0);
+   }
    else
       DBG_SetCPUCallback(0, false);
 }
@@ -420,6 +426,7 @@ extern "C" void SsDbgClearBps(void) {}
 extern "C" void SsDbgSetTraceActive(int active) { (void)active; }
 extern "C" { int SeSsBothCpus = 0; int SeSsExecCpu = 0; }
 extern "C" { int SeSsHookNeedsSync = 1; }
+extern "C" { void (*SeSsOwnCpuHook)(uint32 PC, bool bpoint) = 0; }
 #endif
 }"""
 
@@ -1206,6 +1213,7 @@ extern "C" int SeSsInHandler;
 extern "C" void SeSsHandlerExit(void);
 /* Whether the handler must run ForceEventUpdates before calling the CPU hook (ss.cpp, SeSyncCpuHook). */
 extern "C" int SeSsHookNeedsSync;
+extern "C" void (*SeSsOwnCpuHook)(uint32 PC, bool bpoint);
 template<typename T> struct SeSsActiveCpuScope {
    T& ref; T saved;
    SeSsActiveCpuScope(T& active, unsigned int which) : ref(active), saved(active) {
@@ -1226,12 +1234,13 @@ DEBUG_FILE = "debug.inc"
 # (`ForceEventUpdates(DBG.eff_ts);` -- CDB, SMPC, SCSP, VDP1/2, SCU DMA, SH-2 DMAC and FRT/WDT, then it
 # reschedules them all), on every instruction of both SH-2s while the hook is continuous. A debugger halting
 # there needs that; function profiling does not (see SeSsHookNeedsSync in ss.cpp). The sync is kept whenever
-# a tracepoint is armed, an instruction step is running or a breakpoint was found on this instruction.
+# a tracepoint is armed, an instruction step is running, a breakpoint was found on this instruction, or the
+# installed callback is not ours (the native debugger's).
 # Replaces the one upstream line (kept inside the fence, so --revert restores it byte for byte).
 DEBUG_SYNC_ANCHOR = r'[ \t]*ForceEventUpdates\(DBG\.eff_ts\);'
 DEBUG_SYNC_EDIT = (
     "  /* Saturn Explorer: profile-only instructions skip the device sync (SeSsHookNeedsSync, ss.cpp). */\n"
-    "  if(DBG.FoundBPoint || SeSsHookNeedsSync)\n"
+    "  if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook)\n"
     "   ForceEventUpdates(DBG.eff_ts);\n"
 )
 
@@ -1634,7 +1643,7 @@ def process_debug(src_dir, do_write):
     notes.append(n)
     text, n = apply_anchored(text, DEBUG_HANDLER_ANCHOR, DEBUG_SCOPE_USE, "SeSsActiveCpuScope<decltype")
     notes.append(n)
-    text, n = apply_replace(text, DEBUG_SYNC_ANCHOR, DEBUG_SYNC_EDIT, "SeSsHookNeedsSync)")
+    text, n = apply_replace(text, DEBUG_SYNC_ANCHOR, DEBUG_SYNC_EDIT, "profile-only instructions skip the device sync")
     notes.append(n)
     if do_write and text != original:
         write_src(path, text)

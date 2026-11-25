@@ -77,7 +77,8 @@ void CountingHook(uint32, bool bpoint) { ++gHookCalls; if (bpoint) ++gHookBpoint
 // One instruction presented to the handler of each SH-2 under the current mode; returns the sync count.
 int HandlerSyncs(bool useCountingHook)
 {
-    if (useCountingHook) DBG_SetCPUCallback(CountingHook, true);   // same continuous mode, a hook that cannot halt
+    // Same continuous mode, with a stand-in for SeSsBpHook that cannot halt, registered as 'ours' (SeSsOwnCpuHook).
+    if (useCountingHook) { SeSsOwnCpuHook = CountingHook; DBG_SetCPUCallback(CountingHook, true); }
     gSyncCalls = gHookCalls = gHookBpoint = 0;
     DBG_CPUHandler<0>();
     DBG_CPUHandler<1>();
@@ -144,8 +145,8 @@ int main()
         Expect("profile-only: the hook is continuous", DBG.CPUHookContinuous && DBG.CPUHook == SeSsBpHook, 1);
         Expect("profile-only: SeSsHookNeedsSync is clear", SeSsHookNeedsSync, 0);
         Expect("profile-only: the real hook runs and the devices are NOT synced (both SH-2s)", HandlerSyncs(false), 0);
-        HandlerSyncs(true);
-        Expect("profile-only: a counting hook is still called, for both SH-2s", gHookCalls, 2);
+        HandlerSyncs(true);   // our callback (the stand-in) is called for both SH-2s
+        Expect("profile-only: the hook is still called, for both SH-2s", gHookCalls, 2);
         Expect("profile-only: and carries no breakpoint", gHookBpoint, 0);
         Expect("profile-only: and still no device sync", gSyncCalls, 0);
 
@@ -174,7 +175,23 @@ int main()
         sSeBpActive = 0;
         SeSyncCpuHook();
         Expect("breakpoint gone, profile-only again: no sync", HandlerSyncs(true), 0);
+        SeSsOwnCpuHook = SeSsBpHook;
 
+        // A callback that is not ours: the native debugger's stepping / trace logging installs one through the
+        // debugger interface and never touches SeSsHookNeedsSync. It must get upstream's sync, with profiling
+        // off and with it on beforehand, and with no breakpoint found.
+        SsDbgSetProfileActive(0);
+        SeSsOwnCpuHook = SeSsBpHook;   // what SeSyncCpuHook records; CountingHook below is NOT it
+        DBG_SetCPUCallback(CountingHook, true);
+        Expect("foreign callback, profiling off: the devices are synced", HandlerSyncs(false) > 0, 1);
+        Expect("foreign callback, profiling off: the hook ran", gHookCalls >= 1, 1);
+        SsDbgSetProfileActive(1);
+        Expect("profiling on, our callback: no sync", HandlerSyncs(false), 0);
+        DBG_SetCPUCallback(CountingHook, true);   // the native debugger replaces ours; SeSyncCpuHook is NOT re-run
+        Expect("flag still clear, foreign callback replaced ours: the devices are synced", HandlerSyncs(false) > 0, 1);
+        Expect("foreign callback replaced ours: the hook ran", gHookCalls, 2);
+        SeSyncCpuHook();                           // our mode is re-applied: back to the profile-only callback
+        Expect("handed back to our callback: no sync", HandlerSyncs(false), 0);
         SsDbgSetProfileActive(0);
         DBG_SetCPUCallback(0, false);
     }

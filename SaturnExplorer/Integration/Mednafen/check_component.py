@@ -33,7 +33,8 @@ the 16-byte DMA's reads 1..3 vanish), "bus-dma-read" (a read made by the DMAC, S
 The device-sync guard in DBG_CPUHandler (debug.inc, SeSsHookNeedsSync) is checked by the f2_sh2 harness, and
 these mutations must make it fail: "sync-guard-removed" (ForceEventUpdates is unconditional again, so a
 profile-only instruction syncs), "sync-never" (it never runs), "sync-no-breakpoint" (a breakpoint found on the
-instruction no longer syncs), "sync-flag-profile" (the flag is also set for profiling alone)."""
+instruction no longer syncs), "sync-flag-only" (the guard keys on our flag alone: a foreign callback is skipped),
+"sync-flag-profile" (the flag is also set for profiling alone)."""
 import os
 import subprocess
 import sys
@@ -163,9 +164,10 @@ BUS_MUTATIONS = {
 
 # The device-sync guard (apply.py, DEBUG_SYNC_EDIT / SeSyncCpuHook): (harness, file, patched text, mutated text).
 SYNC_MUTATIONS = {
-    "sync-guard-removed": ("f2_sh2", "src/ss/debug.inc", "if(DBG.FoundBPoint || SeSsHookNeedsSync)", "if(1)"),
-    "sync-never": ("f2_sh2", "src/ss/debug.inc", "if(DBG.FoundBPoint || SeSsHookNeedsSync)", "if(0)"),
-    "sync-no-breakpoint": ("f2_sh2", "src/ss/debug.inc", "if(DBG.FoundBPoint || SeSsHookNeedsSync)", "if(SeSsHookNeedsSync)"),
+    "sync-guard-removed": ("f2_sh2", "src/ss/debug.inc", "if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook)", "if(1)"),
+    "sync-never": ("f2_sh2", "src/ss/debug.inc", "if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook)", "if(0)"),
+    "sync-no-breakpoint": ("f2_sh2", "src/ss/debug.inc", "if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook)", "if(SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook)"),
+    "sync-flag-only": ("f2_sh2", "src/ss/debug.inc", "if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook)", "if(DBG.FoundBPoint || SeSsHookNeedsSync)"),
     "sync-flag-profile": ("f2_sh2", "src/ss/ss.cpp", "SeSsHookNeedsSync = (sSeTraceActive || sSeStepActive) ? 1 : 0;",
                           "SeSsHookNeedsSync = (sSeTraceActive || sSeStepActive || sSeProfActive) ? 1 : 0;"),
 }

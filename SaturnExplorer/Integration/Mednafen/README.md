@@ -325,7 +325,9 @@ title (Panzer Dragoon II, ~9,900 sampled frames) that sync was 69 % of the emula
 attribution on (127 ms of CPU per frame against 13.5 ms with it off).
 
 `process_debug` therefore replaces that one line (upstream text kept inside the fence, so `--revert` is
-byte exact) by `if(DBG.FoundBPoint || SeSsHookNeedsSync) ForceEventUpdates(DBG.eff_ts);`.
+byte exact) by `if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook) ForceEventUpdates(DBG.eff_ts);`
+(`SeSsOwnCpuHook` is the callback `SeSyncCpuHook` installed, so a callback the native debugger installs gets
+the upstream sync).
 `SeSsHookNeedsSync` is defined in the `ss.cpp` block (1 until first set: upstream's behaviour) and
 maintained by `SeSyncCpuHook` next to the callback it describes: **set while a tracepoint is armed or an
 instruction step is in progress, clear for profiling alone**. A PC or data breakpoint found on this very
@@ -336,7 +338,7 @@ call stack. Because the flag is written in `SeSyncCpuHook`, it obeys the same de
 handler call that postponed them. Why that is safe, and what the profile-only path reads, is in
 `Docs/Codebase/Systems/Profiler.md` ("Cost of attribution"). `check_component.py` (f2_sh2) counts the
 real `ForceEventUpdates`'s device calls in each mode, and `--mutate sync-guard-removed|sync-never|
-sync-no-breakpoint|sync-flag-profile` must make it fail.
+sync-no-breakpoint|sync-flag-only|sync-flag-profile` must make it fail.
 
 ### Installs run on the emulate thread
 
@@ -777,7 +779,7 @@ Any future rename needs a new entry there. Checks:
   `--only f8_bus` runs just it (also registered as ctest `SaturnExplorerMednafenBusComponent`, skipped when
   there is no checkout: exit status 77) and `--mutate bus-burst|bus-dma-read|bus-dma-write` must make it fail.
   The `debug.inc` device-sync guard is checked in the f2_sh2 harness (`--mutate sync-guard-removed|sync-never|
-  sync-no-breakpoint|sync-flag-profile`).
+  sync-no-breakpoint|sync-flag-only|sync-flag-profile`).
 
 Function attribution is separate and opt-in: the client's `PRF` verb makes `SeSyncCpuHook` keep
 the continuous per-instruction callback installed (`SsDbgSetProfileActive`), and
