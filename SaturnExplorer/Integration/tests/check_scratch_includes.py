@@ -99,9 +99,24 @@ def case(label, symlinks):
     return None
 
 
+def symlinks_available():
+    """Whether this host can make a symlink at all (Windows without the privilege cannot)."""
+    probe = os.path.join(scratch, "symlink-probe")
+    try:
+        os.symlink(scratch, probe)
+    except (OSError, NotImplementedError):
+        return False
+    os.remove(probe)
+    return True
+
+
 os.makedirs(scratch, exist_ok=True)
 bad = 0
 for label, symlinks in (("symlinks", True), ("copies", False)):
+    # The link-specific case needs real symlinks; the forced-copy case always runs.
+    if symlinks and not symlinks_available():
+        print("%s: skipped (this host cannot create symlinks)" % label)
+        continue
     err = case(label, symlinks)
     print("%s: %s" % (label, "ok" if err is None else "FAIL " + err))
     bad += err is not None
