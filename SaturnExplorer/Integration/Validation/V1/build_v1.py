@@ -11,8 +11,8 @@ sector area). That block is Sega-copyrighted and is NOT in this repository and i
 sectors, first sector at offset 0) -- and copies only that block (after proving it is the block
 Mednafen recognises, by SHA-256) and the area/peripheral header bytes from it.
 
-The layout follows the documented system ID format (see "Layout" below) but has not been run against a
-BIOS: none was available where this was written.
+The layout follows the documented system ID format (see "Layout" below). It was run on a real BIOS
+(2026-11-25): it booted once the ISO root directory held a file, which is why it now always does.
 """
 import argparse
 import hashlib
@@ -34,7 +34,9 @@ SYS_AREA = 16 * 2048
 #   0x100..0xDFF  security code and its tables (the BIOS runs it at 0x06002100 after loading the IP to 0x06002000)
 #   0xE00..       one 0x20-byte area-code block per region letter in +0x40; the BIOS validates them and
 #                 execution falls through them
-#   0xE00+0x20*n  the application's initial code (this guest); it never returns, so no 1st-read file exists
+#   0xE00+0x20*n  the application's initial code (this guest); it never returns and loads nothing itself.
+#                 The ISO root directory holds one small file (V1.BIN) only because the BIOS will not boot a
+#                 disc with an empty root directory; its content is the payload's first bytes (see build_disc)
 DEFAULT_IP_LOAD = 0x06002000
 AREA_BLOCK = 0x20
 AREA_BASE = 0xE00
@@ -95,8 +97,15 @@ def probe(path):
           % (AREA_BASE + AREA_BLOCK * n, DEFAULT_IP_LOAD + AREA_BASE + AREA_BLOCK * n, DEFAULT_IP_LOAD))
 
 
-def iso9660(total_sectors):
-    """Sectors 16..: a valid, empty ISO 9660 volume (PVD, terminator, path tables, root directory)."""
+FILE_NAME = b"V1.BIN;1"
+FILE_SECTOR = 21                # 16 PVD, 17 terminator, 18/19 path tables, 20 root directory, 21 the file
+
+
+def iso9660(total_sectors, file_data):
+    """Sectors 16..: a valid ISO 9660 volume (PVD, terminator, path tables, root directory) whose root
+    directory holds exactly one file, V1.BIN;1, extent at sector FILE_SECTOR, content `file_data`.
+    Without a file the BIOS does not boot the disc: it drops to its CD player."""
+    assert 0 < len(file_data) <= 2048
     def both32(v): return struct.pack("<I", v) + struct.pack(">I", v)
     def both16(v): return struct.pack("<H", v) + struct.pack(">H", v)
     def pad(s, n): return s.ljust(n, b" ")[:n]
@@ -135,7 +144,16 @@ def iso9660(total_sectors):
     dotdot = dot[:-1] + bytes([1])
     rd[0:34] = dot
     rd[34:68] = dotdot
-    return bytes(pvd) + bytes(term) + bytes(ptl) + bytes(ptm) + bytes(rd)
+    # file record: length, xattr, extent (both-endian), size (both-endian), date, flags 0 (plain file),
+    # unit size 0, gap 0, volume sequence 1 (both-endian), name length, name, pad to an even length
+    rec = (bytes([0, 0]) + both32(FILE_SECTOR) + both32(len(file_data)) + date7 + bytes([0, 0, 0]) + both16(1)
+           + bytes([len(FILE_NAME)]) + FILE_NAME)
+    rec += b"\0" * (len(rec) & 1)
+    rec = bytes([len(rec)]) + rec[1:]
+    rd[68:68 + len(rec)] = rec
+    fsec = bytearray(2048)
+    fsec[:len(file_data)] = file_data
+    return bytes(pvd) + bytes(term) + bytes(ptl) + bytes(ptm) + bytes(rd) + bytes(fsec)
 
 
 def code_offset(n):
@@ -162,11 +180,15 @@ def build_disc(ip_path, outdir, ip_load, security_sha=SECURITY_SHA256):
         struct.pack_into(">I", s, 0xE8, DEFAULT_STACK_M)
     if struct.unpack(">I", s[0xEC:0xF0])[0] == 0:
         struct.pack_into(">I", s, 0xEC, DEFAULT_STACK_S)
-    struct.pack_into(">I", s, 0xF0, GUEST_BASE)     # harmless: the code never returns, no file is read
+    # 1st read address / size: unchanged from the real run (address 0x06010000 = where the IP code copies the
+    # payload, size 0 = the BIOS is not asked to load the file). The root directory still needs a real file or
+    # the BIOS refuses to boot the disc (real run 2026-11-25). V1.BIN is the first bytes of the payload, so
+    # whatever order a loader and the IP copy happen in, 0x06010000 ends up holding payload bytes.
+    struct.pack_into(">I", s, 0xF0, GUEST_BASE)
     struct.pack_into(">I", s, 0xF4, 0)
     s[off:] = b"\0" * (SYS_AREA - off)             # bytes 0..off (system ID, security code, area blocks) stay the user's
     s[off:off + len(code)] = code
-    vol = iso9660(32)
+    vol = iso9660(32, payload[:2048])
     img = bytes(s) + vol
     img += b"\0" * (32 * 2048 - len(img))
     os.makedirs(outdir, exist_ok=True)

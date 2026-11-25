@@ -375,6 +375,61 @@ def synthetic_sysarea(letters):
     return bytes(img)
 
 
+def both(b, off, w, what):
+    """A both-endian field: returns the value, fails if the two halves disagree."""
+    le = int.from_bytes(b[off:off + w], "little")
+    be = int.from_bytes(b[off + w:off + 2 * w], "big")
+    check(le == be, "%s: little-endian %d != big-endian %d" % (what, le, be))
+    return le
+
+
+def check_iso_tree(iso, n, payload):
+    """Parse the image's PVD and root directory the way a BIOS would: an empty root directory makes the
+    BIOS drop to its CD player (real run 2026-11-25), so there must be a file record whose extent lies
+    inside the image and whose bytes are the payload's first bytes."""
+    tag = "n=%d iso" % n
+    total = len(iso) // 2048
+    pvd = iso[16 * 2048:17 * 2048]
+    check(pvd[0] == 1 and pvd[1:6] == b"CD001" and pvd[6] == 1, tag + ": no PVD at sector 16")
+    check(iso[17 * 2048] == 255 and iso[17 * 2048 + 1:17 * 2048 + 6] == b"CD001", tag + ": no terminator at sector 17")
+    check(both(pvd, 80, 4, tag + " volume size") == total, tag + ": PVD volume size != image sectors %d" % total)
+    check(both(pvd, 128, 2, tag + " block size") == 2048, tag + ": logical block size")
+    root = pvd[156:190]
+    check(root[0] == 34 and root[25] & 2, tag + ": PVD root record is not a 34-byte directory record")
+    rext = both(root, 2, 4, tag + " root extent")
+    rlen = both(root, 10, 4, tag + " root size")
+    check(0 < rext < total and rlen >= 2048 and (rext + (rlen + 2047) // 2048) <= total, tag + ": root extent outside the image")
+    # path tables: one entry for the root, pointing at the same extent
+    ptsz = both(pvd, 132, 4, tag + " path table size")
+    lpt = struct.unpack("<I", pvd[140:144])[0]
+    mpt = struct.unpack(">I", pvd[148:152])[0]
+    check(lpt < total and mpt < total, tag + ": path table location outside the image")
+    check(struct.unpack("<I", iso[lpt * 2048 + 2:lpt * 2048 + 6])[0] == rext, tag + ": L path table root extent")
+    check(struct.unpack(">I", iso[mpt * 2048 + 2:mpt * 2048 + 6])[0] == rext, tag + ": M path table root extent")
+    check(ptsz == 10, tag + ": path table size %d (one root entry is 10 bytes)" % ptsz)
+    # walk the root directory
+    d = iso[rext * 2048:rext * 2048 + rlen]
+    pos = 0
+    files = []
+    while pos < len(d) and d[pos]:
+        ln = d[pos]
+        rec = d[pos:pos + ln]
+        check(ln >= 34 and ln % 2 == 0 and ln >= 33 + rec[32] and pos + ln <= len(d), tag + ": malformed directory record")
+        ext = both(rec, 2, 4, tag + " extent")
+        size = both(rec, 10, 4, tag + " size")
+        check(rec[28:32] == struct.pack("<H", 1) + struct.pack(">H", 1), tag + ": volume sequence number")
+        name = bytes(rec[33:33 + rec[32]])
+        if not rec[25] & 2:
+            files.append((name, ext, size))
+        pos += ln
+    check(len(files) >= 1, tag + ": root directory has no file record (the BIOS would drop to the CD player)")
+    for name, ext, size in files:
+        check(size > 0 and ext > rext and ext + (size + 2047) // 2048 <= total,
+              tag + ": file %r extent %d size %d is not inside the %d-sector image" % (name, ext, size, total))
+        check(iso[ext * 2048:ext * 2048 + size] == payload[:size], tag + ": file %r content is not the payload's first bytes" % name)
+    print("iso (%s): PVD ok, volume %d sectors, root dir at %d, files %s" % (tag, total, rext, [(f[0].decode(), f[1], f[2]) for f in files]))
+
+
 with tempfile.TemporaryDirectory() as td:
     # the real check path refuses an image without Sega's block
     bogus = os.path.join(td, "ip.bin")
@@ -407,6 +462,7 @@ with tempfile.TemporaryDirectory() as td:
         check(iso[0x20:0x2A] == b"V1VALID".ljust(10), "n=%d: product number not replaced" % n)
         check(iso[16 * 2048 + 1:16 * 2048 + 6] == b"CD001", "no ISO 9660 primary volume descriptor at sector 16")
         check(open(os.path.join(out, "v1.cue")).read().count("MODE1/2048") == 1, "cue")
+        check_iso_tree(iso, n, payload)
         # the code at its real entry address still copies and jumps
         mm = sh2sim.Machine()
         entry = build_v1.DEFAULT_IP_LOAD + off
