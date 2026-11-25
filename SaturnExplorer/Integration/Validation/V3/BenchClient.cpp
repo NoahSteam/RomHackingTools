@@ -164,6 +164,73 @@ bool WriteText(const std::string& path, const std::string& text)
     return static_cast<bool>(f);
 }
 
+// Sizes the sleeps between a bracket's looks (warm-up and window end alike). A look is an observation
+// (frame number, arrival time) of one short connection; the question is how long to stay away before the next
+// one so that it lands just past a target frame, with few looks, when the rate is known only from earlier looks.
+//
+// Why the early estimate is poor: a look's frame is the first one PUBLISHED after it attached and its arrival is
+// the drain instant, so each look carries an unknown latency L (poll period, connection set-up, an emulator that
+// is slower while it serves a new client). Two looks give df exactly but dt = (true interval) + (L2 - L1); over
+// ~50 ms that error is as large as dt, so the rate is off by a factor of 2 to 3 either way. A sleep of 0.9 * R *
+// dt / df (the former rule) then lands 0.9 * R * x frames out for a rate underestimated by x.
+//
+// Rules (PROCEDURE.md, "Warm-up convergence", states the guarantee):
+//  1. A rate is TRUSTED only when its baseline spans >= kTrustFrames frames AND >= kTrustNs. Before that the
+//     look is sized with a fixed pessimistic factor (kUntrustedRho * rho).
+//  2. With no baseline the first sleep is kTrustNs, so the first baseline already meets the time condition.
+//     It is rate-free: its frames stay below the target unless the emulator runs faster than target / kTrustNs.
+//  3. A trusted baseline of dt underestimates the rate by at most k = dt / (dt - kJitterNs) (|L2 - L1| <= kJitterNs),
+//     and the mean rate may rise by rho between the baseline and the sleep. The sleep is sized so that even then
+//     it yields at most the target plus a budget B: aim = (R + B) / (k * rho) frames, never more than R + B/2.
+//  4. The rate comes from the longest baseline (the earliest look of the current regime to the newest). When the
+//     newest interval is itself trusted and its rate differs from the baseline's by more than rho either way, the
+//     regime has changed (a several-fold step) and the baseline restarts at the previous look.
+struct Pacer
+{
+    struct Obs { int64_t frame; int64_t ns; };
+    static constexpr int64_t kTrustFrames = 8;
+    static constexpr int64_t kTrustNs = 250000000;     // 250 ms
+    static constexpr int64_t kJitterNs = 50000000;     // 50 ms: bound on the latency difference of two looks
+    static constexpr int64_t kStalledNs = 250000000;   // no frame between baseline and newest look: look again after this
+    static constexpr double  kUntrustedRho = 2.0;      // extra pessimism while the baseline is short
+
+    double rho = 2.0;           // allowed rise of the mean rate between the baseline and the next sleep
+    double budgetFrac = 0.05;   // B, as a fraction of the requested frames
+    std::vector<Obs> obs;
+    size_t base = 0;
+
+    void Add(int64_t frame, int64_t ns)
+    {
+        obs.push_back({ frame, ns });
+        const size_t n = obs.size();
+        if (n < 3 || base + 2 > n - 1) return;   // needs a baseline older than the newest interval
+        const Obs &a = obs[n - 2], &b = obs[n - 1], &z = obs[base];
+        const int64_t rf = b.frame - a.frame, rt = b.ns - a.ns, lf = b.frame - z.frame, lt = b.ns - z.ns;
+        if (rt < kTrustNs || rf < kTrustFrames || lt < kTrustNs || lf < kTrustFrames) return;
+        const double recent = static_cast<double>(rf) / static_cast<double>(rt);
+        const double longer = static_cast<double>(lf) / static_cast<double>(lt);
+        if (recent > rho * longer || recent * rho < longer) base = n - 2;
+    }
+
+    // Nanoseconds to wait after the newest observation. 'targetFrame' is absolute, 'requested' is the count the
+    // budget is a fraction of. The caller applies its own floor (minimum spacing) and the deadline.
+    int64_t NextSleepNs(int64_t targetFrame, int64_t requested) const
+    {
+        if (obs.empty() || base + 1 >= obs.size()) return kTrustNs;
+        const Obs &z = obs[base], &l = obs.back();
+        const int64_t df = l.frame - z.frame, dt = l.ns - z.ns;
+        if (df <= 0 || dt <= 0) return kStalledNs;
+        const double remaining = static_cast<double>((std::max)(targetFrame - l.frame, static_cast<int64_t>(1)));
+        const double budget = (std::max)(1.0, budgetFrac * static_cast<double>(requested));
+        const bool trusted = df >= kTrustFrames && dt >= kTrustNs;
+        const double factor = trusted
+            ? rho * static_cast<double>(dt) / static_cast<double>((std::max)(dt - kJitterNs, static_cast<int64_t>(1)))
+            : kUntrustedRho * rho;
+        const double aim = (std::min)(remaining + budget / 2.0, (remaining + budget) / factor);   // frames to sleep for
+        return static_cast<int64_t>(aim * static_cast<double>(dt) / static_cast<double>(df));
+    }
+};
+
 // One short connection: the first frame PUBLISHED AFTER this connection attached, then hang up.
 // A real emulator publishes perf records only while somebody is attached, so the sequence stands still between
 // probes and a new connection's first reply carries the newest publication: the previous connection's last
@@ -336,6 +403,7 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     uint64_t warmProbes = 0;
     int64_t holdWarmNs = 0;
     size_t startIdx = 0;   // bracket: the row of the probe that opens the window
+    Pacer pacer;           // the bracket's looks, warm-up and window end
     if (o.mode == Mode::Bracket)
     {
         if (o.warmupFrames > 0)
@@ -346,18 +414,17 @@ int RunBench(const BenchOptions& o, std::FILE* out)
             // client is attached and the client stays disconnected between probes, so the progress is read with
             // short probes: one for the origin, then, after a sleep sized from the frame rate seen so far, one
             // more, until the count is reached. That probe is the window's start probe (no extra connection).
-            // Granularity: the window opens within (the last sleep + one probe's latency) of frames after the
-            // target, in frames at most the distance between the last two probes' frame numbers; each sleep is
-            // 90 percent of the estimated remaining time (never under kMinSpacingNs), so that shrinks as the
-            // target nears. Bounds: timeoutS for the whole warm-up, kMaxWarmProbes probes, and a probe that
+            // Overshoot: see Pacer (each sleep is sized so that even a rate underestimated by the stated factor
+            // lands within the budget past the target; never under kMinSpacingNs). Bounds: timeoutS for the whole warm-up, kMaxWarmProbes probes, and a probe that
             // sees no fresh frame fails after connectTimeoutS.
-            const int64_t kMinSpacingNs = 20000000, kFirstSleepNs = 50000000, kStalledSleepNs = 250000000;
+            const int64_t kMinSpacingNs = 20000000;
             const uint64_t kMaxWarmProbes = 64;
             const int64_t deadlineNs = NowNs(t0) + static_cast<int64_t>(o.timeoutS * 1e9);
             CpuSample cpuTmp;
             int64_t holdTmp = 0;
             if (!Probe(o, t0, rows, &cpuTmp, &holdTmp, out, &probeInconsistent)) return kError;
             const Row org = rows.back();
+            pacer.Add(org.frameNo, org.arrivalNs);
             originFrame = org.frameNo;
             originArrivalNs = org.arrivalNs;
             uint64_t probes = 1;
@@ -378,16 +445,12 @@ int RunBench(const BenchOptions& o, std::FILE* out)
                                  static_cast<long long>(cur.frameNo), static_cast<unsigned long long>(probes), o.timeoutS);
                     return kError;
                 }
-                int64_t sleepNs = kFirstSleepNs;
-                const int64_t dt = cur.arrivalNs - org.arrivalNs, df = cur.frameNo - org.frameNo;
-                if (probes > 1)
-                    sleepNs = (df > 0 && dt > 0)
-                        ? static_cast<int64_t>(0.9 * static_cast<double>(o.warmupFrames - df) * static_cast<double>(dt) / static_cast<double>(df))
-                        : kStalledSleepNs;
+                int64_t sleepNs = pacer.NextSleepNs(org.frameNo + o.warmupFrames, o.warmupFrames);
                 sleepNs = (std::max)(sleepNs, kMinSpacingNs);
                 SleepUntilNs(t0, (std::min)(cur.arrivalNs + sleepNs, deadlineNs));
                 if (!Probe(o, t0, rows, &cpuTmp, &holdTmp, out, &probeInconsistent)) return kError;
                 ++probes;
+                pacer.Add(rows.back().frameNo, rows.back().arrivalNs);
                 if (rows.back().timeline != org.timeline)
                 {
                     std::fprintf(out, "error: the timeline changed during the warm-up (a state load?); load the slot before the bracket starts\n");
@@ -401,6 +464,7 @@ int RunBench(const BenchOptions& o, std::FILE* out)
             SleepUntilNs(t0, warmNs);
             if (!Probe(o, t0, rows, &cpuStart, &holdStartNs, out, &probeInconsistent)) return kError;
             originFrame = rows.back().frameNo;
+            pacer.Add(rows.back().frameNo, rows.back().arrivalNs);
         }
         startIdx = rows.size() - 1;
         openFrame = rows.back().frameNo;
@@ -416,31 +480,27 @@ int RunBench(const BenchOptions& o, std::FILE* out)
         else
         {
             // A window in frames (--duration is not used, as in stream mode). The end is found with few probes by
-            // the warm-up's method: estimate the remaining time from the frame rate seen so far (between the start
-            // probe and the newest one; before there is a second one, the rate of the warm-up), sleep 90 percent of
-            // it (never under kMinSpacingNs), look again. The remaining time shrinks tenfold per look, so the number
+            // the warm-up's method (Pacer, continuing the warm-up's observations; never under kMinSpacingNs), look
+            // again. The remaining frames shrink geometrically per look, so the number
             // of looks grows with the logarithm of the count, not with the length of the window. Granularity: the
             // window ends at the first look at or past the target, so it overshoots by less than the frames between
             // the last two looks (reported as window_overshoot_frames). Bounds: timeoutS for the whole run and
             // kMaxEndProbes extra looks.
-            const int64_t kMinSpacingNs = 20000000, kFirstSleepNs = 50000000, kStalledSleepNs = 250000000;
+            const int64_t kMinSpacingNs = 20000000;
             const uint64_t kMaxEndProbes = 64;
             const int64_t deadlineNs = static_cast<int64_t>(o.timeoutS * 1e9);
-            const double seedFrames = static_cast<double>(openFrame - originFrame);
-            const double seedNs = static_cast<double>(windowStartNs - originArrivalNs);
+            // Same pacer, same observations (the warm-up's baseline is the longest there is), with a tighter rate
+            // assumption: every extra look here is a connection inside the measured window.
+            pacer.rho = 1.5;
             for (;;)
             {
                 const Row cur = rows.back();
-                const int64_t df = cur.frameNo - startFrame, dt = cur.arrivalNs - startRow.arrivalNs;
-                int64_t sleepNs = (df > 0) ? kStalledSleepNs : kFirstSleepNs;
-                if (df > 0 && dt > 0)
-                    sleepNs = static_cast<int64_t>(0.9 * static_cast<double>(o.frames - df) * static_cast<double>(dt) / static_cast<double>(df));
-                else if (df <= 0 && originArrivalNs >= 0 && seedFrames > 0 && seedNs > 0)
-                    sleepNs = static_cast<int64_t>(0.9 * static_cast<double>(o.frames) * seedNs / seedFrames);
+                int64_t sleepNs = pacer.NextSleepNs(startFrame + o.frames, o.frames);
                 sleepNs = (std::max)(sleepNs, kMinSpacingNs);
                 SleepUntilNs(t0, (std::min)(cur.arrivalNs + sleepNs, deadlineNs));
                 if (!Probe(o, t0, rows, &cpuEnd, &holdEndNs, out, &probeInconsistent)) return kError;
                 windowEndNs = rows.back().arrivalNs;
+                pacer.Add(rows.back().frameNo, rows.back().arrivalNs);
                 if (rows.back().frameNo - startFrame >= o.frames) break;
                 if (NowNs(t0) >= deadlineNs || extraProbes >= kMaxEndProbes)
                 {
@@ -628,6 +688,8 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     // short connections made before the window's start probe (origin probe included), probe_hold_warmup_ms
     // their summed hold: the perturbation a frame warm-up costs configuration (a).
     s.Put("warmup_frames_requested", static_cast<long long>(o.warmupFrames));
+    // open - origin - requested: the frames the warm-up overshot its request by (0 without a frame warm-up).
+    s.Put("warmup_overshoot_frames", static_cast<long long>(o.warmupFrames > 0 && originFrame >= 0 && openFrame >= 0 ? openFrame - originFrame - o.warmupFrames : 0));
     s.Put("window_origin_frame", static_cast<long long>(originFrame));
     s.Put("window_open_frame", static_cast<long long>(openFrame));
     s.Put("bracket_warmup_probes", static_cast<unsigned long long>(warmProbes));

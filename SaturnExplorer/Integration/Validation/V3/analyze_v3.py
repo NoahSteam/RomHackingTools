@@ -30,6 +30,14 @@ import sys
 DEFAULT_MIN_FRAMES = 1000     # frames inside the window
 DEFAULT_MIN_WINDOW_S = 5.0
 DEFAULT_DRIFT_PCT = 3.0       # spread of the SAME configuration across repetitions
+# A frame warm-up that ran past its request by more than this fraction of the request is FLAGGED, and so is a
+# repetition whose configurations (a, b, c) differ in warm-up overshoot by more than it. A flag, not an
+# invalidation: the window is counted from its own opening frame, so the speed estimate is as good as ever; what
+# is lost is that the configurations no longer started measuring at comparable points of a changing workload,
+# which only the operator can judge (a steady scene does not care). The bracket's own guarantee is about 5 percent
+# of the request plus the frames of one connection's latency (PROCEDURE.md, "Warm-up convergence"), the stream's
+# is a drain period, so 20 percent is outside what a healthy run produces.
+WARMUP_OVERSHOOT_FLAG_FRAC = 0.20
 
 PLAN_QUOTES = {
     "F12": "F12. Gate bus and idle counters behind an emulate-thread flag latched at the frame boundary, "
@@ -183,8 +191,57 @@ def collect(directory, min_frames, min_window_s):
             continue
         summary, rows = load_run(base + ".csv", base + ".summary")
         metrics, why = evaluate_run(summary, rows, min_frames, min_window_s)
-        runs.append({"rep": int(m.group(1)), "cfg": m.group(2), "name": name, "metrics": metrics, "why": why})
+        runs.append({"rep": int(m.group(1)), "cfg": m.group(2), "name": name, "metrics": metrics, "why": why,
+                     "warmup": warmup_record(summary)})
     return runs
+
+
+def warmup_record(summary):
+    """(requested, overshoot) of the frame warm-up, or None. Older summaries lack warmup_overshoot_frames:
+    derive it from the origin and opening frames when those are there."""
+    try:
+        req = int(summary.get("warmup_frames_requested", 0))
+        if req <= 0:
+            return None
+        if "warmup_overshoot_frames" in summary:
+            over = int(summary["warmup_overshoot_frames"])
+        else:
+            over = int(summary["window_open_frame"]) - int(summary["window_origin_frame"]) - req
+        return {"requested": req, "overshoot": over}
+    except (KeyError, ValueError):
+        return None
+
+
+def warmup_flags(runs, frac=WARMUP_OVERSHOOT_FLAG_FRAC):
+    """Warnings about runs whose warm-up overshot (see WARMUP_OVERSHOOT_FLAG_FRAC). Sets run['flags']."""
+    out = []
+    by_rep = {}
+    for r in runs:
+        r["flags"] = []
+        w = r.get("warmup")
+        if not w:
+            continue
+        by_rep.setdefault(r["rep"], []).append(r)
+        if w["overshoot"] > frac * w["requested"]:
+            msg = ("warm-up overshoot %+d frames on a request of %d (> %d%%): this run began measuring much later "
+                   "in the workload than asked" % (w["overshoot"], w["requested"], round(100 * frac)))
+            r["flags"].append(msg)
+            out.append("rep %02d %s: %s" % (r["rep"], r["cfg"], msg))
+    for rep, rs in sorted(by_rep.items()):
+        if len(rs) < 2:
+            continue
+        lo = min(rs, key=lambda r: r["warmup"]["overshoot"])
+        hi = max(rs, key=lambda r: r["warmup"]["overshoot"])
+        req = min(r["warmup"]["requested"] for r in rs)
+        d = hi["warmup"]["overshoot"] - lo["warmup"]["overshoot"]
+        if d > frac * req:
+            msg = ("warm-up overshoot differs by %d frames between configurations (%s %+d, %s %+d; > %d%% of %d): "
+                   "they did not start measuring at comparable points" %
+                   (d, lo["cfg"], lo["warmup"]["overshoot"], hi["cfg"], hi["warmup"]["overshoot"], round(100 * frac), req))
+            for r in rs:
+                r["flags"].append(msg)
+            out.append("rep %02d: %s" % (rep, msg))
+    return out
 
 
 def analyse(directory, min_frames=DEFAULT_MIN_FRAMES, min_window_s=DEFAULT_MIN_WINDOW_S,
@@ -198,6 +255,7 @@ def analyse(directory, min_frames=DEFAULT_MIN_FRAMES, min_window_s=DEFAULT_MIN_W
         for r in runs:
             r["why"] = list(r["why"]) + [why]
     result = {"runs": runs, "configs": {}, "overhead": {}, "warnings": []}
+    result["warnings"].extend(warmup_flags(runs))
     for cfg in "abc":
         mine = [r for r in runs if r["cfg"] == cfg]
         valid = [r for r in mine if not r["why"] and r["metrics"]]
@@ -262,6 +320,8 @@ def report(res, meta, out=sys.stdout):
         sp = "%.1f fps" % m["speed"] if "speed" in m else "-"
         cp = "%.4f ms cpu/frame" % m["cpu_ms_per_frame"] if "cpu_ms_per_frame" in m else "-"
         p("  rep %02d %s  %s  %s  %s" % (r["rep"], r["cfg"], sp, cp, txt))
+        for fl in r.get("flags", []):
+            p("      FLAG: " + fl)
     p("")
     p("Per configuration (valid runs only)")
     for cfg in "abc":

@@ -259,11 +259,12 @@ made it poll 128 times.) The seconds options apply only when no frame count is g
 The validity floors of the analyzer (1000 frames, 5 s) apply to either kind of window.
 
 **How the bracket finds the end of a frame window.** The same way it finds the end of a frame warm-up: the
-window opens at the start probe; then it estimates the time left from the frame rate seen so far (the warm-up's
-rate before a second observation exists), sleeps 90 percent of it (never under 20 ms; 50 ms when nothing is
-known), and probes again, until the count is reached. The remaining time shrinks tenfold per look, so the
-number of extra looks grows with the logarithm of the count, a handful for thousands of frames, not with the
-window's length. Bounds: `--timeout`, 64 extra looks, and a probe that sees no fresh frame fails after
+window opens at the start probe; then it sizes each sleep with the pacing rule of "Warm-up convergence" below
+(the warm-up's observations are the baseline, so the first end look is already based on a long one; the rate
+assumption is tighter here, 1.5 instead of 2, because every extra look is a connection inside the measured window),
+never under 20 ms, and probes again, until the count is reached. The remaining frames shrink by a factor of about
+1.5 to 2 per look, so the number of extra looks grows with the logarithm of the count (about 2 to 3 for 1500
+frames), not with the window's length. Bounds: `--timeout`, 64 extra looks, and a probe that sees no fresh frame fails after
 `--connect-timeout`. The end probe is the first look at or past the target, so the window overshoots by less than
 the frames between the last two looks; the summary reports it as `window_overshoot_frames` (frames past the
 target, both modes; stream: less than one drain period of frames) next to `window_by=frames|seconds`, and
@@ -276,9 +277,9 @@ publication and is not counted), and the window opens at the first observation a
 `--warmup SEC` is given as well, the frame count wins and the seconds are not used (stream and bracket alike;
 run_v3.sh passes both to all three configurations). Configuration (a) is disconnected between probes, and the
 emulator publishes only while a client is attached, so its progress is read with extra short probes: an origin
-probe, then probes after a sleep of 90 percent of the remaining frames at the rate seen so far (at least 20 ms;
-50 ms before any rate is known), until the count is reached. The probe that reaches it is the window's start
-probe, so a frame warm-up costs `bracket_warmup_probes` connections (origin included, typically 3 to 6) and
+probe, then probes after sleeps sized by the pacing rule of "Warm-up convergence" below (at least 20 ms), until
+the count is reached. The probe that reaches it is the window's start
+probe, so a frame warm-up costs `bracket_warmup_probes` connections (origin included, typically 4 to 6) and
 `probe_hold_warmup_ms` of client-attached time before the window, each about 20 to 40 ms; that perturbs the scene
 before the window opens, never inside it. Bounds: `--timeout` for the whole warm-up, 64 probes, and a probe that
 sees no fresh frame (paused emulator) fails after `--connect-timeout`; all end in exit 1 with a message. A
@@ -287,9 +288,59 @@ timeline change during the warm-up (a state load) is also an error: load the slo
 `REW 0`. Granularity: the window opens in `[origin + W, origin + W + step)`, where step is the frames between the
 last two observations: one drain period for the stream (`--drain-ms`), the last probe interval for the bracket
 (shrinking towards the 20 ms floor plus the connection latency). The summary records `warmup_frames_requested`,
-`window_origin_frame` and `window_open_frame` for both modes. With `--warmup SEC` only (no frame count) the
+`window_origin_frame`, `window_open_frame` and `warmup_overshoot_frames` (open - origin - requested) for both modes. With `--warmup SEC` only (no frame count) the
 bracket sleeps SEC and takes one probe, as before. (The stream's origin used to be the first frame received,
 which after a pause could be a stale publication from the load-slot connection; it is now the first fresh one.)
+
+**Warm-up convergence.** The first version of the bracket's warm-up slept 90 percent of the remaining time
+estimated from the origin probe and one probe about 50 ms later. A look's frame is the first one published after
+it attached and its arrival is the drain instant, so each carries a latency (poll period, connection set-up, an
+emulator that is slower while it serves a new client); over 50 ms the frame delta is a handful of frames and the
+time between the looks is wrong by as much as itself. Arithmetic of the real run (origin 233, target 533, window
+opened at 927 after 2 warm-up probes, emulator about 93 fps): the last sleep produced 694 minus the second probe's
+delta, about 690 frames, about 7.4 s; with sleep = 0.9 * (300 - df) * dt / df that needs dt / df of about 28 ms per
+frame, a rate estimate of about 36 fps against 93, a 2.6 times underestimate (for example 2 frames over 56 ms
+where 5 were expected; inferred, the CSV of that run was not kept). The overshoot is proportional to the error
+times the remainder, and nothing bounded it. The window end was fine only because its baseline was already long.
+The stand-in reproduces it with an attach stall of 40 ms (`BenchClientTests.cpp`, `TestWarmupOvershootWithAttachStall`):
+the old rule opened the window +183 frames late in 2 probes; the same run now overshoots by single digits.
+
+The rule (`Pacer` in `BenchClient.cpp`), used for the warm-up and the window end:
+
+* A rate is trusted only when its baseline spans at least 8 frames **and** 250 ms. The first sleep, with no baseline,
+  is 250 ms (rate-free). 250 ms is five times the 50 ms bound on the latency difference between two looks, so a
+  trusted rate is off by at most k = dt / (dt - 50 ms), 1.25 at the shortest baseline; 8 frames keeps one slow frame
+  from dominating a baseline when the emulator is slow (at or above 32 fps the time condition decides, below it the
+  frame condition does). Until trusted, a pessimistic factor of 4 is used.
+* The rate is the one over the longest baseline (earliest look of the current regime to the newest). When the newest
+  interval is itself trusted and its rate differs from the baseline's by more than the allowed variation either
+  way, the baseline restarts at the previous look (a several-fold regime change).
+* Each sleep is sized so that, were the true rate k * rho times the estimate, the frames in it still end at the
+  target plus a budget B (5 percent of the request): aim = min(R + B/2, (R + B) / (k * rho)) frames, R the remaining
+  frames, rho = 2 for the warm-up (1.5 for the window end). As the target nears, R falls below B / (k * rho - 1)
+  and the aim crosses the target: the last look lands within about B/2 past it. The 20 ms floor and the
+  deadline still apply.
+
+Guarantee: **overshoot <= B + r * (L + 20 ms) + 1 frames**, where r is the true rate and L the latency of the last
+look (poll plus connection plus up to one frame), provided (i) the latency difference between two looks is at most
+50 ms and (ii) the mean rate over a sleep does not exceed rho times the baseline's rate. For the 300-frame warm-up,
+B is 15: at most about 23 frames at 100 fps and 37 at 300 fps, against a typical few. Violating (i) with a long
+stall, or (ii) with a rate that rises more than rho-fold inside one sleep (the stand-in's 10 times speed-up,
+`wu_fast10`: +433, for a 40 ms to 4 ms step 12 frames in), is what can still produce a large overshoot; it is then
+reported, not hidden (next paragraph). Slowing down is safe for the bound (the sleeps yield fewer frames than
+planned): a 10 times slow-down (attribution turned on) took 7 looks in the stand-in, +2.
+
+Expected `bracket_warmup_probes` for a 300-frame warm-up (a simulation of the rule with 30 ms of latency noise,
+300 seeds, for 10, 60, 100 and 300 fps: 6, 6, 6 and 5 looks, overshoot at most 4, 8, 10 and 16 frames); the stand-in
+with a 40 ms attach stall used 5. The window end of 1500 frames adds 2 to 3 extra looks besides the end probe (was 2).
+
+**The warm-up overshoot is reported, and flagged.** `warmup_overshoot_frames` in every summary is open - origin -
+requested. `analyze_v3.py` prints a FLAG on a run whose warm-up overshot by more than 20 percent of the request (60
+frames of 300), and on every configuration of a repetition whose configurations differ in overshoot by more than that
+(the stream's is a drain period, the bracket's the guarantee above, so a healthy repetition differs by well under
+it). It is a flag and a warning, not an invalidation: the window is counted from its own opening frame, so the speed
+estimate is unaffected; what is at stake is whether the configurations began measuring at comparable points of a
+changing workload, which depends on the scene and is the operator's call. No validity floor was changed.
 
 The tests use this: every V3 test counts frames and holds no assertion about frames per second, so they pass on a
 loaded or slow host (`V3_TEST_FRAME_MS` and `FAKE_FRAME_MS` slow the two stand-ins down to check that). The script test runs its stand-in at 20 ms per frame by default: the live ring holds 16 records, so a stand-in much faster than the client can be drained loses samples whenever the client is starved, which is a correct "invalid" verdict about the run but not what that test is about.
@@ -361,5 +412,11 @@ were not the ones this procedure now defaults to. Nothing here is evidence for o
   first (see "Where the state lives").
 * D. The state was made under the GUI's default cache mode, so the cache setting was unpinned (see "The save
   state and the cache mode").
+* E. A later real run (Windows, unthrottled, about 90 to 95 fps, `--frames 1500 --warmup-frames 300`) showed the
+  warm-up overshoot of the old pacing in bracket mode: run 1 origin 233, window opened at 927 (+394, 2 warm-up
+  probes); run 2 origin 302, opened at 635 (+33, 3 probes). Earlier, throttled at 60 fps, five runs: +1, +4, +1, +24, +3
+  (3 to 4 probes). The window end was fine (`window_overshoot_frames` 3 and 4 with 2 extra probes), and stream mode
+  opened at +1, +2 and 0. The cause and the replacement are in "Warm-up convergence"; the new rule has not been run
+  against a real emulator.
 * Not done: the on-screen fps cross-check for (a) and a quiesced machine. A rerun with the defaults above on a
   quiet machine is what would produce a result.
