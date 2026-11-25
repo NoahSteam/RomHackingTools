@@ -131,9 +131,16 @@ def make_scratch(root, scratch):
                     f.write(data)
     shutil.copy(os.path.join(root, "configure.ac"), work) if os.path.isfile(os.path.join(root, "configure.ac")) else None
     # headers, config.h and the rest of src/ that the translation units reach by <mednafen/...>.
-    for link in ("include", "intl"):
-        if os.path.exists(os.path.join(root, link)):
-            link_or_copy(os.path.abspath(os.path.join(root, link)), os.path.join(work, link))
+    if os.path.exists(os.path.join(root, "intl")):
+        link_or_copy(os.path.abspath(os.path.join(root, "intl")), os.path.join(work, "intl"))
+    # include/: entry by entry, so that <mednafen/...> resolves into THIS tree's src (the scratch copy the
+    # current apply.py patches), not the checkout's -- whose own patch state may be older or absent.
+    inc = os.path.join(root, "include")
+    if os.path.isdir(inc):
+        os.makedirs(os.path.join(work, "include"), exist_ok=True)
+        for entry in os.listdir(inc):
+            if entry != "mednafen":
+                link_or_copy(os.path.abspath(os.path.join(inc, entry)), os.path.join(work, "include", entry))
     for entry in os.listdir(os.path.join(root, "src")):
         if entry not in ("ss", "hw_cpu", "drivers") and not os.path.exists(os.path.join(work, "src", entry)):
             link_or_copy(os.path.abspath(os.path.join(root, "src", entry)), os.path.join(work, "src", entry))
@@ -141,6 +148,8 @@ def make_scratch(root, scratch):
     for entry in os.listdir(hw):
         if entry != "m68k" and not os.path.exists(os.path.join(work, "src/hw_cpu", entry)):
             link_or_copy(os.path.abspath(os.path.join(hw, entry)), os.path.join(work, "src/hw_cpu", entry))
+    if os.path.isdir(inc):
+        link_or_copy(os.path.abspath(os.path.join(work, "src")), os.path.join(work, "include", "mednafen"))
     return work
 
 
