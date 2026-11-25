@@ -113,6 +113,10 @@ class Analyze(unittest.TestCase):
             self.assertTrue(any("attribution mode" in w for w in why[(4, "c")]))
             self.assertTrue(any("timeline" in w for w in why[(1, "c")]))
             self.assertTrue(any("frames in the window" in w for w in why[(2, "c")]))
+            # the message says what to change, and the floor itself stays where it was
+            self.assertTrue(any("frames in the window" in w and "--frames" in w and "SLOWEST" in w for w in why[(2, "c")]))
+            self.assertEqual(A.DEFAULT_MIN_FRAMES, 1000)
+            self.assertEqual(A.DEFAULT_MIN_WINDOW_S, 5.0)
             for key in ((1, "a"), (1, "b"), (3, "c")):
                 self.assertEqual(why[key], [], key)
             self.assertEqual(res["configs"]["b"]["valid"], 2)

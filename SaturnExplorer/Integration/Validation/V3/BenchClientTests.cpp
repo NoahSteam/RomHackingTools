@@ -399,7 +399,7 @@ void TestBracketSkipsStaleFrame()
 
 void TestBracket()
 {
-    v3::BenchOptions o = Base("bracket", 150);   // more than the 0.3 s minimum gap holds at 4 ms a frame: forces a second look
+    v3::BenchOptions o = Base("bracket", 150);
     o.mode = v3::Mode::Bracket;
     o.warmupFrames = 0;   // this test is about the seconds warm-up (a frame count would take precedence)
     o.warmupS = 0.15;
@@ -420,7 +420,7 @@ void TestBracket()
         for (size_t i = 0; i < c.rows.size(); ++i) CHECK(c.rows[i].at("kind") == "probe");
         const size_t n = c.rows.size();
         const int64_t dt = c.I(n - 1, "arrival_ns") - c.I(0, "arrival_ns");
-        CHECK(dt >= 300000000ll);                     // a sleep is never shorter than asked
+        CHECK(dt > 0);
         CHECK(c.I(0, "arrival_ns") >= 150000000ll);   // nothing connected during the warm-up
         const int64_t df = c.I(n - 1, "frame_no") - c.I(0, "frame_no");
         CHECK(df >= 150);                             // the count that was asked for
@@ -428,6 +428,56 @@ void TestBracket()
         CHECK(std::atoll(s.at("window_frames").c_str()) == df);
         for (size_t i = 1; i < n; ++i) CHECK(c.U(i, "timeline_id") == c.U(0, "timeline_id"));
     }
+}
+
+void LetFramesPass(unsigned long long n);
+
+// ---- the window counted in frames: --duration is not used, the end is found with few probes ----
+
+// Stream and bracket with --frames and the DEFAULT --duration (60 s, what a command line without --duration
+// carries): the window is the frame count in both modes. The old bracket slept the 60 s as a minimum gap and
+// then polled every 250 ms, so its window held about a minute of frames (thousands here) instead of the 300
+// asked for. Judged on counts only: the window is at least the request and under twice it; it overshoots by less
+// than the frames between its last two probes (the stated granularity); the look count stays small and bounded
+// (the remaining time shrinks tenfold per look, so a handful, whatever the speed); the summary says how the
+// window was ended and by how much it overshot, and agrees with the CSV.
+void TestFrameWindowAgreesAcrossModes()
+{
+    gOnlyAttached = true;
+    const int64_t kN = 300;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        const bool bracket = pass == 1;
+        LetFramesPass(60);
+        v3::BenchOptions o = Base(bracket ? "fw_bracket" : "fw_stream", kN);
+        o.warmupFrames = 20;
+        o.durationS = 60.0;   // the default: must not matter with --frames
+        if (bracket) o.mode = v3::Mode::Bracket;
+        const int rc = v3::RunBench(o, stdout);
+        CHECK(rc == v3::kOk);
+        const Csv c = ReadCsv(o.csvPath);
+        const auto s = ReadSummary(o.summaryPath);
+        CHECK(s.count("window_by") && s.at("window_by") == "frames");
+        const int64_t w = s.count("window_frames") ? std::atoll(s.at("window_frames").c_str()) : -1;
+        std::printf("%s: window %lld frames for %lld asked\n", bracket ? "bracket" : "stream", static_cast<long long>(w),
+                    static_cast<long long>(kN));
+        CHECK(w >= kN);
+        CHECK(w < 2 * kN);
+        CHECK(s.count("window_overshoot_frames") && std::atoll(s.at("window_overshoot_frames").c_str()) == w - kN);
+        if (!bracket) continue;
+        const size_t extra = static_cast<size_t>(std::atoll(s.at("bracket_extra_probes").c_str()));
+        const size_t warm = static_cast<size_t>(std::atoll(s.at("bracket_warmup_probes").c_str()));
+        CHECK(c.rows.size() == warm + 2 + extra);
+        CHECK(extra <= 12);   // a handful: logarithmic in the count, bounded in the client by 64
+        if (c.rows.size() >= 2)
+        {
+            const size_t n = c.rows.size();
+            const int64_t step = c.I(n - 1, "frame_no") - c.I(n - 2, "frame_no");
+            CHECK(w - kN < step);   // the second last look was short of the target: the overshoot is within one step
+            CHECK(c.I(n - 2, "frame_no") - c.I(warm, "frame_no") < kN);
+        }
+    }
+    gOnlyAttached = false;
 }
 
 // ---- bracket warm-up counted in frames ----
@@ -875,6 +925,7 @@ int main(int argc, char** argv)
     TestModeMismatchIsInvalid();
     TestBracketSkipsStaleFrame();
     TestBracket();
+    TestFrameWindowAgreesAcrossModes();
     TestWarmupFramesMatchAcrossModes();
     TestWarmupFramesOverrideSeconds();
     TestWarmupTimesOutCleanly();

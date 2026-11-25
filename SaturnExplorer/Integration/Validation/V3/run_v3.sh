@@ -13,17 +13,20 @@
 set -u
 
 EMU=""; GAME=""; SLOT=""; OUT=""; BENCH=""; ENDPOINT=""
-REPS=5; WARMUP=10; DURATION=60; FRAMES=0; WARMUP_FRAMES=0; SETTLE=3; THROTTLE=off; CACHE=""; EXTRA=""; SKIP_PREFLIGHT=0
+REPS=5; WARMUP=10; DURATION=60; FRAMES=1500; WARMUP_FRAMES=300; TIMEOUT=900; SETTLE=3; THROTTLE=off; CACHE=""; EXTRA=""; SKIP_PREFLIGHT=0
+MEDHOME=""; SKIP_STATE_CHECK=0
 usage() {
 cat <<'EOF'
 run_v3.sh --emu PATH --game PATH --slot N --out DIR --bench PATH/se-bench-client [options]
   --reps N          repetitions of the a/b/c block (default 5)
-  --warmup SEC      discarded time before each window (default 10)
-  --duration SEC    measured window (default 60)
-  --frames N        end every window after N emulated frames instead of --duration seconds (a fairer
-                    window than a fixed time: it holds the same amount of emulation at any speed). With
-                    it, --duration is only the minimum gap between config a's two probes
-  --warmup-frames N end the warm-up after N frames instead of --warmup seconds
+  --frames N        measured window in emulated frames (default 1500; 0 = use --duration). Every
+                    configuration then measures the same amount of emulation at any speed, so a run
+                    at 10 fps and one at 100 fps are both valid. --duration is NOT used with it
+  --warmup-frames N discarded frames before the window (default 300; 0 = use --warmup)
+  --timeout SEC     per client run, a window that cannot finish fails (default 900; a frame window of
+                    1500 + 300 frames needs 1800 / fps seconds, so 900 covers down to about 2 fps)
+  --duration SEC    measured window in seconds, only with --frames 0 (default 60)
+  --warmup SEC      discarded seconds, only with --warmup-frames 0 (default 10)
   --settle SEC      wait after the slot load before the warm-up starts (default 3)
   --throttle off|on off: frame limiter disabled so host speed is measurable (default);
                     on: real-time pacing, only CPU-per-frame carries information
@@ -31,7 +34,13 @@ run_v3.sh --emu PATH --game PATH --slot N --out DIR --bench PATH/se-bench-client
                     make the save slot under the same mode
   --endpoint E      live endpoint; default is the driver's default
   --extra "ARGS"    extra emulator arguments, appended after the pinned ones
+  --mednafen-home DIR  run the emulator with MEDNAFEN_HOME=DIR (its config, firmware and states live there).
+                    The Saturn Explorer GUI does this with the emulator's own folder, so states made
+                    through the GUI are in <emulator dir>/mcs
   --skip-preflight  do not check the pinned settings against the emulator's -dump_settings_def
+  --skip-state-check  do not check that a slot state file exists in the emulator's states folder
+Before anything is started the script checks that <home>/mcs/*.mc<slot> exists, <home> being --mednafen-home,
+else $MEDNAFEN_HOME, else the platform default (~/.mednafen; %USERPROFILE%\.mednafen under Git Bash).
 Environment: SDL_VIDEODRIVER, MEDNAFEN_HOME and similar are passed through to the emulator.
 EOF
 }
@@ -47,6 +56,9 @@ while [ $# -gt 0 ]; do
     --duration) DURATION="$2"; shift 2;;
     --frames) FRAMES="$2"; shift 2;;
     --warmup-frames) WARMUP_FRAMES="$2"; shift 2;;
+    --timeout) TIMEOUT="$2"; shift 2;;
+    --mednafen-home) MEDHOME="$2"; shift 2;;
+    --skip-state-check) SKIP_STATE_CHECK=1; shift;;
     --settle) SETTLE="$2"; shift 2;;
     --throttle) THROTTLE="$2"; shift 2;;
     --cache) CACHE="$2"; shift 2;;
@@ -64,6 +76,50 @@ done
 [ -x "$BENCH" ] || { echo "bench client not executable: $BENCH" >&2; exit 1; }
 [ -f "$GAME" ] || { echo "game not found: $GAME" >&2; exit 1; }
 case "$THROTTLE" in on|off) ;; *) echo "--throttle takes on or off" >&2; exit 1;; esac
+case "$SLOT" in ''|*[!0-9]*) echo "--slot takes a slot number 0-9" >&2; exit 1;; esac
+
+# ---- save-state preflight ------------------------------------------------------------------
+# Mednafen reads and writes states in <base>/mcs/, <base> being $MEDNAFEN_HOME when set, else the platform
+# default. The Saturn Explorer GUI launches Mednafen with MEDNAFEN_HOME = the emulator exe's folder
+# (FrontEnd WindowsPlatform.cpp), so a state made through the GUI is in <exe dir>/mcs, where a shell run
+# WITHOUT MEDNAFEN_HOME does not look. The same variable also moves mednafen.cfg and firmware/ (BIOS): with a
+# different base the emulator reads another config and another BIOS folder (and creates a default mednafen.cfg
+# there if none exists). The state file name carries the disc's MD5 (<game>.<md5>.mc<N>), which is not computed
+# here, so the check is that at least one .mc<N> exists, and every candidate is listed. Nothing is copied or moved.
+if [ -n "$MEDHOME" ]; then
+  [ -d "$MEDHOME" ] || { echo "--mednafen-home: not a directory: $MEDHOME" >&2; exit 1; }
+  export MEDNAFEN_HOME="$MEDHOME"
+  HOME_SRC="--mednafen-home"
+elif [ -n "${MEDNAFEN_HOME:-}" ]; then
+  HOME_SRC="MEDNAFEN_HOME"
+else
+  HOME_SRC="platform default"
+fi
+if [ -n "${MEDNAFEN_HOME:-}" ]; then BASE="$MEDNAFEN_HOME"; else BASE="${USERPROFILE:-$HOME}/.mednafen"; fi
+list_states() { # dir -> one line per state file
+  local f
+  for f in "$1"/mcs/*.mc"$SLOT"; do if [ -f "$f" ]; then echo "$f"; fi; done
+}
+STATES="$(list_states "$BASE")"
+if [ "$SKIP_STATE_CHECK" -eq 0 ]; then
+  if [ -z "$STATES" ]; then
+    echo "preflight: no slot $SLOT save state in $BASE/mcs (looked for *.mc$SLOT; base from $HOME_SRC)." >&2
+    echo "  Mednafen reads states from MEDNAFEN_HOME when set, else the platform default. States made through the" >&2
+    echo "  Saturn Explorer GUI are in <mednafen exe dir>/mcs, because the GUI sets MEDNAFEN_HOME to that folder." >&2
+    EMUDIR="$(cd "$(dirname "$EMU")" 2>/dev/null && pwd)"
+    if [ -n "$EMUDIR" ] && [ -n "$(list_states "$EMUDIR")" ]; then
+      echo "  A slot $SLOT state exists in $EMUDIR/mcs: try --mednafen-home \"$EMUDIR\"" >&2
+    else
+      echo "  Try --mednafen-home \"<mednafen exe dir>\" (here: \"${EMUDIR:-$(dirname "$EMU")}\"), or make the state under the folder named above." >&2
+    fi
+    echo "  (Nothing was copied or started. --skip-state-check disables this check.)" >&2
+    exit 1
+  fi
+  echo "state check: base $BASE (from $HOME_SRC); slot $SLOT state candidate(s) in $BASE/mcs:"
+  echo "$STATES" | sed 's/^/  /'
+  echo "  Mednafen loads the one whose name carries this disc's MD5; the others are ignored."
+  [ -f "$BASE/mednafen.cfg" ] || echo "  note: no $BASE/mednafen.cfg: Mednafen will create a default one there and look for the BIOS in $BASE/firmware" >&2
+fi
 mkdir -p "$OUT" || exit 1
 # A directory that already holds a run is refused: a failed attempt would otherwise leave the older
 # CSVs in place under this run's metadata, and the analyzer would report them as this build's result.
@@ -151,6 +207,10 @@ BENCH_EP=()
   echo "duration_s=$DURATION"
   echo "frames=$FRAMES"
   echo "warmup_frames=$WARMUP_FRAMES"
+  echo "timeout_s=$TIMEOUT"
+  echo "mednafen_base=$BASE"
+  echo "mednafen_base_from=$HOME_SRC"
+  echo "slot_state_candidates=$(echo "$STATES" | tr '\n' ';')"
   echo "settle_s=$SETTLE"
   echo "cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null)"
   echo "cpu_model=$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ //')"
@@ -174,6 +234,22 @@ abort_run() {
   exit 1
 }
 
+# The analyzer's floors (frames and seconds in a window) are read from it, not copied: a run under either is
+# reported INVALID there, so say so now, while the operator can still change the window.
+FLOORS="$(python3 -I "$(dirname "$0")/analyze_v3.py" --print-floors 2>/dev/null)"
+floor_note() { # summary
+  [ -n "$FLOORS" ] && [ -f "$1" ] || return 0
+  local fl="${FLOORS%% *}" sl="${FLOORS##* }" wf ws we
+  wf="$(sed -n 's/^window_frames=//p' "$1")"; ws="$(sed -n 's/^window_start_ns=//p' "$1")"; we="$(sed -n 's/^window_end_ns=//p' "$1")"
+  if [ -n "$wf" ] && [ "$wf" -lt "$fl" ] 2>/dev/null; then
+    echo "  note: only $wf frames in the window; the analyzer needs $fl. Raise --frames (now $FRAMES) so the SLOWEST configuration holds at least $fl." >&2
+  fi
+  if [ -n "$ws" ] && [ -n "$we" ] && awk -v a="$ws" -v b="$we" -v m="$sl" 'BEGIN{exit !((b-a)/1e9 < m)}'; then
+    echo "  note: the window lasted under $sl s; the analyzer needs $sl s. Raise --frames (now $FRAMES) so the FASTEST configuration takes at least that long." >&2
+  fi
+  return 0
+}
+
 run_config() { # rep cfg
   local rep="$1" cfg="$2" tag name
   tag=$(printf 'run%02d_%s' "$rep" "$cfg"); name="$OUT/$tag"
@@ -187,26 +263,30 @@ run_config() { # rep cfg
   fi
   sleep "$SETTLE"
   local rc=0
+  # Frame windows take no --duration and frame warm-ups no --warmup (the client ignores them in both modes).
   local COUNT=()
-  [ "$FRAMES" -gt 0 ] && COUNT+=(--frames "$FRAMES")
-  [ "$WARMUP_FRAMES" -gt 0 ] && COUNT+=(--warmup-frames "$WARMUP_FRAMES")
+  if [ "$FRAMES" -gt 0 ]; then COUNT+=(--frames "$FRAMES"); else COUNT+=(--duration "$DURATION"); fi
+  if [ "$WARMUP_FRAMES" -gt 0 ]; then COUNT+=(--warmup-frames "$WARMUP_FRAMES"); else COUNT+=(--warmup "$WARMUP"); fi
+  COUNT+=(--timeout "$TIMEOUT")
   case "$cfg" in
-    a) "$BENCH" --mode bracket --tag a --warmup "$WARMUP" --duration "$DURATION" ${COUNT[@]+"${COUNT[@]}"} --pid "$PID" \
+    a) "$BENCH" --mode bracket --tag a ${COUNT[@]+"${COUNT[@]}"} --pid "$PID" \
          --csv "$name.csv" --summary "$name.summary" ${BENCH_EP[@]+"${BENCH_EP[@]}"} > "$name.client.log" 2>&1 || rc=$?;;
-    b) "$BENCH" --mode stream --attribution off --tag b --warmup "$WARMUP" --duration "$DURATION" ${COUNT[@]+"${COUNT[@]}"} --pid "$PID" \
+    b) "$BENCH" --mode stream --attribution off --tag b ${COUNT[@]+"${COUNT[@]}"} --pid "$PID" \
          --csv "$name.csv" --summary "$name.summary" ${BENCH_EP[@]+"${BENCH_EP[@]}"} > "$name.client.log" 2>&1 || rc=$?;;
-    c) "$BENCH" --mode stream --attribution on --tag c --warmup "$WARMUP" --duration "$DURATION" ${COUNT[@]+"${COUNT[@]}"} --pid "$PID" \
+    c) "$BENCH" --mode stream --attribution on --tag c ${COUNT[@]+"${COUNT[@]}"} --pid "$PID" \
          --csv "$name.csv" --summary "$name.summary" ${BENCH_EP[@]+"${BENCH_EP[@]}"} > "$name.client.log" 2>&1 || rc=$?;;
   esac
   case "$rc" in
     0) echo "  ok";;
-    2) echo "  completed but INVALID (lost samples or similar): $(grep -E '^LOSS' "$name.client.log")";;
+    2) echo "  completed but INVALID (lost samples or similar): $(grep -E '^LOSS' "$name.client.log")"
+       grep -E '^invalid_reason=' "$name.summary" 2>/dev/null | sed 's/^/    /';;
     *) echo "  client error (exit $rc), see $name.client.log" >&2
        # whatever it wrote before failing is not a measurement
        rm -f "$name.csv" "$name.summary"
        cleanup; PID=""; abort_run "$tag: client error (exit $rc)";;
   esac
   cleanup; PID=""
+  floor_note "$name.summary"
   sleep 2   # let the OS and the endpoint settle before the next process
   return 0
 }

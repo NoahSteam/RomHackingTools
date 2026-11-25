@@ -17,6 +17,10 @@ FAKE_FRAME_MS="${FAKE_FRAME_MS:-20}"; export FAKE_FRAME_MS
 # handed a stale frame, which the client must skip.
 FAKE_ONLY_ATTACHED="${FAKE_ONLY_ATTACHED:-1}"; export FAKE_ONLY_ATTACHED
 fail() { echo "FAIL: $*" >&2; exit 1; }
+# The emulator's states folder: run_v3.sh refuses to start when no slot state exists there. Most runs below get it
+# from MEDNAFEN_HOME (the environment path); the state-check tests at the end use --mednafen-home and other folders.
+HOMEOK="$OUT/home_ok"; mkdir -p "$HOMEOK/mcs"; : > "$HOMEOK/mcs/Game.0123456789abcdef.mc0"
+MEDNAFEN_HOME="$HOMEOK"; export MEDNAFEN_HOME
 
 "$HERE/run_v3.sh" --emu "$FAKE" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT" --bench "$BENCH" \
     --endpoint "$SOCK" --reps 2 --frames 120 --warmup-frames 10 --warmup 0.2 --duration 0.5 --settle 0.5 --cache full \
@@ -33,6 +37,9 @@ grep -q '^throttle=off' "$OUT/run_meta.txt" || fail "meta lacks throttle"
 grep -qx 'nothrottle 1' "$OUT/pinned.cfg" || fail "pinned.cfg lacks nothrottle 1"
 grep -qx 'ss.dbg_cem full' "$OUT/pinned.cfg" || fail "pinned.cfg lacks the cache mode"
 grep -q -- '-ovconfig' "$OUT/run_meta.txt" || fail "emulator not given -ovconfig"
+grep -qx "mednafen_base=$HOMEOK" "$OUT/run_meta.txt" || fail "run_meta lacks the states base"
+grep -qx 'mednafen_base_from=MEDNAFEN_HOME' "$OUT/run_meta.txt" || fail "run_meta lacks where the base came from"
+grep -q 'Game.0123456789abcdef.mc0' "$OUT/run.log" || fail "the state candidate was not printed"
 grep -q '^attribution_requested=1' "$OUT/run01_c.summary" || fail "c did not request attribution"
 grep -q '^attribution_requested=0' "$OUT/run01_b.summary" || fail "b requested attribution"
 grep -q '^mode=bracket' "$OUT/run01_a.summary" || fail "a is not a bracket run"
@@ -82,4 +89,44 @@ grep -q "accepts data_cb|data|full|auto" "$OUT/p2.log" || fail "preflight did no
 # an emulator that does not list a pinned setting must stop the script before any run
 "$HERE/run_v3.sh" --emu "$FAKE" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT/x" --bench "$BENCH" \
     --endpoint "$SOCK" --reps 1 --cache 1 --throttle bogus > /dev/null 2>&1 && fail "bad --throttle accepted"
+# ---- save-state preflight: a missing state fails early and names the folder; --mednafen-home is honoured ----
+printf '#!/bin/sh\necho "$MEDNAFEN_HOME" > "%s/seen_home"\nsleep 30\n' "$OUT" > "$OUT/emu_home.sh"; chmod +x "$OUT/emu_home.sh"
+EMPTY="$OUT/home_empty"; mkdir -p "$EMPTY/mcs"; : > "$EMPTY/mcs/Game.0123456789abcdef.mc3"   # a different slot only
+rm -f "$OUT/seen_home"
+"$HERE/run_v3.sh" --emu "$OUT/emu_home.sh" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT/m1" --bench "$OUT/bench_fail.sh" \
+    --mednafen-home "$EMPTY" --reps 1 --settle 0 --skip-preflight > "$OUT/m1.log" 2>&1 && fail "a missing slot state was accepted"
+grep -q "no slot 0 save state in $EMPTY/mcs" "$OUT/m1.log" || { cat "$OUT/m1.log"; fail "the missing state's folder was not named"; }
+grep -q 'mednafen exe dir' "$OUT/m1.log" || fail "no hint about the GUI's states folder"
+grep -q -- '--mednafen-home' "$OUT/m1.log" || fail "no --mednafen-home suggestion"
+[ ! -e "$OUT/m1" ] && [ ! -e "$OUT/seen_home" ] || fail "something was created or started before the state check failed"
+# the platform default is what is looked in when nothing is set (HOME stands in; USERPROFILE is unset)
+mkdir -p "$OUT/fakehome"
+env -u MEDNAFEN_HOME -u USERPROFILE HOME="$OUT/fakehome" "$HERE/run_v3.sh" --emu "$OUT/emu_home.sh" --game "$HERE/run_v3.sh" --slot 0 \
+    --out "$OUT/m2" --bench "$OUT/bench_fail.sh" --reps 1 --settle 0 --skip-preflight > "$OUT/m2.log" 2>&1 && fail "default folder without a state accepted"
+grep -q "no slot 0 save state in $OUT/fakehome/.mednafen/mcs" "$OUT/m2.log" || { cat "$OUT/m2.log"; fail "the default folder was not named"; }
+# a state next to the emulator is pointed out, and not used implicitly
+EXE="$OUT/exedir"; mkdir -p "$EXE/mcs"; : > "$EXE/mcs/Game.0123456789abcdef.mc0"; cp "$OUT/emu_home.sh" "$EXE/mednafen.sh"
+env -u MEDNAFEN_HOME -u USERPROFILE HOME="$OUT/fakehome" "$HERE/run_v3.sh" --emu "$EXE/mednafen.sh" --game "$HERE/run_v3.sh" --slot 0 \
+    --out "$OUT/m3" --bench "$OUT/bench_fail.sh" --reps 1 --settle 0 --skip-preflight > "$OUT/m3.log" 2>&1 && fail "implicit use of the exe folder"
+grep -q "A slot 0 state exists in $EXE/mcs" "$OUT/m3.log" || { cat "$OUT/m3.log"; fail "the exe folder's state was not pointed out"; }
+[ ! -e "$OUT/seen_home" ] || fail "the emulator was started although no state was found"
+# --mednafen-home wins over the environment and is exported to the emulator it launches (the failing client ends the run)
+# (the client waits for the emulator stub to have written what it saw: the stub is a shell that may not have run yet)
+printf '#!/bin/sh\ni=0\nwhile [ ! -s "%s/seen_home" ] && [ $i -lt 400 ]; do sleep 0.05; i=$((i+1)); done\nexit 1\n' "$OUT" > "$OUT/bench_wait.sh"; chmod +x "$OUT/bench_wait.sh"
+MEDNAFEN_HOME="$EMPTY" "$HERE/run_v3.sh" --emu "$OUT/emu_home.sh" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT/m4" --bench "$OUT/bench_wait.sh" \
+    --mednafen-home "$EXE" --reps 1 --settle 0 --skip-preflight > "$OUT/m4.log" 2>&1 && fail "the failing client was not fatal"
+[ "$(cat "$OUT/seen_home" 2>/dev/null)" = "$EXE" ] || { cat "$OUT/m4.log"; fail "the emulator did not get MEDNAFEN_HOME=--mednafen-home"; }
+grep -qx "mednafen_base=$EXE" "$OUT/m4/run_meta.txt" || fail "run_meta lacks the --mednafen-home base"
+grep -qx 'mednafen_base_from=--mednafen-home' "$OUT/m4/run_meta.txt" || fail "run_meta lacks the source"
+"$HERE/run_v3.sh" --emu "$OUT/emu_home.sh" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT/m5" --bench "$OUT/bench_fail.sh" \
+    --mednafen-home "$OUT/no_such_dir" --reps 1 > "$OUT/m5.log" 2>&1 && fail "a nonexistent --mednafen-home was accepted"
+grep -q 'not a directory' "$OUT/m5.log" || fail "no message for a nonexistent --mednafen-home"
+# the documented defaults reach the client: frame windows, no --duration / --warmup, a timeout
+printf '#!/bin/sh\ncase "$*" in *load-slot*) exit 0;; esac\necho "$*" > "%s/bench_args"\nexit 1\n' "$OUT" > "$OUT/bench_args.sh"; chmod +x "$OUT/bench_args.sh"
+"$HERE/run_v3.sh" --emu "$OUT/emu_stub.sh" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT/d1" --bench "$OUT/bench_args.sh" \
+    --reps 1 --settle 0 --skip-preflight > "$OUT/d1.log" 2>&1 && fail "stub client succeeded"
+grep -q -- '--frames 1500 --warmup-frames 300 --timeout 900' "$OUT/bench_args" || { cat "$OUT/bench_args"; fail "default frame window not passed"; }
+if grep -q -e '--duration' -e '--warmup ' "$OUT/bench_args"; then fail "a frame window was given --duration or --warmup"; fi
+# the analyzer's floors are read from it by run_v3.sh, not copied
+[ "$(python3 -I "$HERE/analyze_v3.py" --print-floors)" = "1000 5" ] || fail "analyzer floors changed or unreadable"
 echo ok
