@@ -111,7 +111,9 @@ env -u MEDNAFEN_HOME -u USERPROFILE HOME="$OUT/fakehome" "$HERE/run_v3.sh" --emu
 grep -q "A slot 0 state exists in $EXE/mcs" "$OUT/m3.log" || { cat "$OUT/m3.log"; fail "the exe folder's state was not pointed out"; }
 [ ! -e "$OUT/seen_home" ] || fail "the emulator was started although no state was found"
 # --mednafen-home wins over the environment and is exported to the emulator it launches (the failing client ends the run)
-MEDNAFEN_HOME="$EMPTY" "$HERE/run_v3.sh" --emu "$OUT/emu_home.sh" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT/m4" --bench "$OUT/bench_fail.sh" \
+# (the client waits for the emulator stub to have written what it saw: the stub is a shell that may not have run yet)
+printf '#!/bin/sh\ni=0\nwhile [ ! -s "%s/seen_home" ] && [ $i -lt 400 ]; do sleep 0.05; i=$((i+1)); done\nexit 1\n' "$OUT" > "$OUT/bench_wait.sh"; chmod +x "$OUT/bench_wait.sh"
+MEDNAFEN_HOME="$EMPTY" "$HERE/run_v3.sh" --emu "$OUT/emu_home.sh" --game "$HERE/run_v3.sh" --slot 0 --out "$OUT/m4" --bench "$OUT/bench_wait.sh" \
     --mednafen-home "$EXE" --reps 1 --settle 0 --skip-preflight > "$OUT/m4.log" 2>&1 && fail "the failing client was not fatal"
 [ "$(cat "$OUT/seen_home" 2>/dev/null)" = "$EXE" ] || { cat "$OUT/m4.log"; fail "the emulator did not get MEDNAFEN_HOME=--mednafen-home"; }
 grep -qx "mednafen_base=$EXE" "$OUT/m4/run_meta.txt" || fail "run_meta lacks the --mednafen-home base"
