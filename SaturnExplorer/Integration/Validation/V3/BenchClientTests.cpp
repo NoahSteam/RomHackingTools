@@ -13,6 +13,7 @@
 // turn a hang into a failure, and lower bounds on sleeps. V3_TEST_FRAME_MS=40 (25 fps) must pass too.
 //
 // Socket and port of their own: 6953 and /tmp/saturn_explorer_v3_bench_test.sock.
+#include <algorithm>
 #include <atomic>
 #include <deque>
 #include <chrono>
@@ -88,6 +89,7 @@ extern "C" int FakeSlotLoad(unsigned int slot)
 std::atomic<bool> gStop{ false };
 std::atomic<unsigned long long> gPublished{ 0 };
 std::atomic<unsigned long long> gFrames{ 0 };   // every frame emulated, published or not
+std::atomic<bool> gPaused{ false };             // emulation paused: no frame is published, attached or not
 std::atomic<bool> gOnlyAttached{ false };       // publish only while a client is attached (as the Mednafen glue does)
 std::atomic<unsigned long long> gBurstAt{ 0 };   // publish a burst once gPublished reaches this (0 = never)
 std::atomic<int> gBurstSize{ 0 };
@@ -128,6 +130,7 @@ void Emulator()
 {
     while (!gStop.load())
     {
+        if (gPaused.load()) { SleepMs(gFrameMs); continue; }
         const unsigned long long at = gBurstAt.load();
         if (at != 0 && gPublished.load() >= at)
         {
@@ -398,6 +401,7 @@ void TestBracket()
 {
     v3::BenchOptions o = Base("bracket", 150);   // more than the 0.3 s minimum gap holds at 4 ms a frame: forces a second look
     o.mode = v3::Mode::Bracket;
+    o.warmupFrames = 0;   // this test is about the seconds warm-up (a frame count would take precedence)
     o.warmupS = 0.15;
     o.durationS = 0.3;
     const unsigned long long p0 = gPublished.load();
@@ -410,6 +414,7 @@ void TestBracket()
     // Two probes, plus one more for every time the end probe found fewer than the requested frames.
     const size_t extra = static_cast<size_t>(std::atoll(s.at("bracket_extra_probes").c_str()));
     CHECK(c.rows.size() == 2 + extra);
+    CHECK(s.count("bracket_warmup_probes") && s.at("bracket_warmup_probes") == "0");   // seconds warm-up: no probe before the window's first
     if (c.rows.size() >= 2)
     {
         for (size_t i = 0; i < c.rows.size(); ++i) CHECK(c.rows[i].at("kind") == "probe");
@@ -423,6 +428,166 @@ void TestBracket()
         CHECK(std::atoll(s.at("window_frames").c_str()) == df);
         for (size_t i = 1; i < n; ++i) CHECK(c.U(i, "timeline_id") == c.U(0, "timeline_id"));
     }
+}
+
+// ---- bracket warm-up counted in frames ----
+
+// Frames the emulator emulates with nobody attached: the stale-frame situation of a real run (the load-slot
+// connection's last publication is far behind by the time the warm-up starts).
+void LetFramesPass(unsigned long long n)
+{
+    const unsigned long long target = gFrames.load() + n;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+    while (gFrames.load() < target && std::chrono::steady_clock::now() < deadline) SleepMs(1);
+}
+
+// Where a run's window opened, read from its CSV alone (so the same reading applies to the old and the new
+// client): the origin is the first frame published after the client attached (a first reply that is the
+// previous connection's last publication does not count), the opening is the newest frame observed at the
+// window's first instant, and 'prev' is the newest frame observed before it.
+struct WindowOpen
+{
+    bool    ok = false;
+    int64_t origin = -1, open = -1, prev = -1;
+    int64_t Offset() const { return open - origin; }   // frames of warm-up the window got
+    int64_t Step() const { return open - prev; }       // frames between the last two observations: the granularity
+};
+WindowOpen ReadWindowOpen(const std::string& csv, const std::string& summary)
+{
+    WindowOpen w;
+    const Csv c = ReadCsv(csv);
+    const auto s = ReadSummary(summary);
+    if (c.rows.empty() || !s.count("window_start_ns")) return w;
+    const int64_t ws = std::atoll(s.at("window_start_ns").c_str());
+    const uint64_t first = c.U(0, "newest_seq");
+    const uint64_t base = first ? first : c.U(0, "sample_seq");
+    for (size_t i = 0; i < c.rows.size(); ++i)
+    {
+        if (c.rows[i].at("kind") == "gap" || c.I(i, "frame_no") < 0) continue;
+        // a probe row is by construction a fresh frame; a stream row is fresh once past the first reply's baseline
+        const bool fresh = c.rows[i].at("kind") == "probe" || static_cast<int64_t>(c.U(i, "sample_seq") - base) > 0;
+        if (w.origin < 0 && fresh) w.origin = c.I(i, "frame_no");
+        if (c.I(i, "arrival_ns") < ws) { if (w.origin >= 0) w.prev = (std::max)(w.prev, c.I(i, "frame_no")); }
+        else if (c.I(i, "arrival_ns") == ws) w.open = (std::max)(w.open, c.I(i, "frame_no"));
+    }
+    w.ok = w.origin >= 0 && w.open >= 0 && w.prev >= 0;
+    return w;
+}
+
+// Stream and bracket, the same warm-up in frames and the same window length, the emulator publishing only while
+// attached with a long silent stretch before each run. The window of each must open at the first observation
+// at or after (origin + warm-up frames): never earlier (the old bracket opened it at its first probe, 0 frames
+// in), and never one observation late. The granularity is the number of frames between the last two
+// observations (a drain for the stream, the final sleep plus connection for the bracket), so the two windows
+// differ, relative to their origins, by less than the larger of the two steps. Counts only: no frame rate is
+// assumed, and each run is judged against what the emulator published to it.
+void TestWarmupFramesMatchAcrossModes()
+{
+    gOnlyAttached = true;
+    const int64_t kW = 40;
+    LetFramesPass(60);
+    v3::BenchOptions st = Base("wu_stream", 30);
+    st.warmupFrames = kW;
+    const int rcS = v3::RunBench(st, stdout);
+    LetFramesPass(60);
+    v3::BenchOptions br = Base("wu_bracket", 30);
+    br.mode = v3::Mode::Bracket;
+    br.warmupFrames = kW;
+    br.warmupS = 0.0;
+    br.durationS = 0.05;
+    const int rcB = v3::RunBench(br, stdout);
+    gOnlyAttached = false;
+    CHECK(rcS == v3::kOk);
+    CHECK(rcB == v3::kOk);
+    const WindowOpen ws = ReadWindowOpen(st.csvPath, st.summaryPath);
+    const WindowOpen wb = ReadWindowOpen(br.csvPath, br.summaryPath);
+    CHECK(ws.ok);
+    CHECK(wb.ok);
+    if (!ws.ok || !wb.ok) return;
+    std::printf("warm-up %lld frames: stream opened %lld after its origin (step %lld), bracket %lld (step %lld)\n",
+                static_cast<long long>(kW), static_cast<long long>(ws.Offset()), static_cast<long long>(ws.Step()),
+                static_cast<long long>(wb.Offset()), static_cast<long long>(wb.Step()));
+    CHECK(ws.Offset() >= kW);
+    CHECK(wb.Offset() >= kW);                       // fails on a bracket that warms up by seconds
+    CHECK(ws.prev - ws.origin < kW);                // not one observation late
+    CHECK(wb.prev - wb.origin < kW);
+    const int64_t diff = ws.Offset() > wb.Offset() ? ws.Offset() - wb.Offset() : wb.Offset() - ws.Offset();
+    CHECK(diff < (std::max)(ws.Step(), wb.Step()));
+    // what the summary says about it is what the CSV shows
+    const auto sb = ReadSummary(br.summaryPath);
+    const auto ss = ReadSummary(st.summaryPath);
+    CHECK(sb.count("window_origin_frame") && std::atoll(sb.at("window_origin_frame").c_str()) == wb.origin);
+    CHECK(sb.count("window_open_frame") && std::atoll(sb.at("window_open_frame").c_str()) == wb.open);
+    CHECK(ss.count("window_origin_frame") && std::atoll(ss.at("window_origin_frame").c_str()) == ws.origin);
+    CHECK(ss.count("window_open_frame") && std::atoll(ss.at("window_open_frame").c_str()) == ws.open);
+    CHECK(sb.count("warmup_frames_requested") && sb.at("warmup_frames_requested") == "40");
+    CHECK(sb.count("bracket_warmup_probes") && std::atoll(sb.at("bracket_warmup_probes").c_str()) >= 1);
+    CHECK(sb.count("probe_hold_warmup_ms"));
+    // the origin probe, the warm-up probes, the window's two edges, any extra looks: all short connections
+    const Csv cb = ReadCsv(br.csvPath);
+    CHECK(sb.count("bracket_warmup_probes") && cb.rows.size() == static_cast<size_t>(std::atoll(sb.at("bracket_warmup_probes").c_str())) +
+                                                                  2 + static_cast<size_t>(std::atoll(sb.at("bracket_extra_probes").c_str())));
+}
+
+// Seconds AND frames given: as in stream mode, the frame count decides and the seconds are not slept. A warm-up
+// of 60 s would show as a window opening a minute in; the bound is half of that, not a speed.
+void TestWarmupFramesOverrideSeconds()
+{
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        v3::BenchOptions o = Base(pass ? "wu_sec_bracket" : "wu_sec_stream", 20);
+        o.warmupFrames = 20;
+        o.warmupS = 60.0;
+        if (pass) { o.mode = v3::Mode::Bracket; o.durationS = 0.05; }
+        CHECK(v3::RunBench(o, stdout) == v3::kOk);
+        const auto s = ReadSummary(o.summaryPath);
+        CHECK(s.count("window_start_ns") && std::atoll(s.at("window_start_ns").c_str()) < 30ll * 1000000000ll);
+    }
+}
+
+// Warm-up that cannot finish ends in an error exit with a message, never a hang. Paused emulator: no frame is
+// published, so the origin probe itself fails when its connect timeout expires. Emulator running, count out of
+// reach: the warm-up's own timeout.
+std::string RunCapturingOutput(const v3::BenchOptions& o, int* rc)
+{
+    std::FILE* f = std::tmpfile();
+    CHECK(f != nullptr);
+    if (!f) { *rc = -1; return ""; }
+    *rc = v3::RunBench(o, f);
+    std::rewind(f);
+    char buf[1024] = {};
+    const size_t n = std::fread(buf, 1, sizeof buf - 1, f);
+    buf[n] = 0;
+    std::fclose(f);
+    return buf;
+}
+void TestWarmupTimesOutCleanly()
+{
+    gOnlyAttached = true;
+    gPaused = true;
+    {
+        v3::BenchOptions o = Base("wu_paused", 30);
+        o.mode = v3::Mode::Bracket;
+        o.warmupFrames = 10;
+        o.connectTimeoutS = 1;
+        int rc = 0;
+        const std::string text = RunCapturingOutput(o, &rc);
+        CHECK(rc == v3::kError);
+        CHECK(text.find("error: no frame published") != std::string::npos);
+    }
+    gPaused = false;
+    LetFramesPass(3);   // publication only happens while attached, so wait on frames emulated
+    {
+        v3::BenchOptions o = Base("wu_unreachable", 30);
+        o.mode = v3::Mode::Bracket;
+        o.warmupFrames = 100000000;   // far beyond what any host emulates in the timeout
+        o.timeoutS = 1.0;
+        int rc = 0;
+        const std::string text = RunCapturingOutput(o, &rc);
+        CHECK(rc == v3::kError);
+        CHECK(text.find("error: the warm-up of") != std::string::npos);
+    }
+    gOnlyAttached = false;
 }
 
 // A burst published far faster than the ring holds, at a chosen frame count inside the window. Judged by the
@@ -634,7 +799,10 @@ void TestRewindOffEveryMode()
     br.warmupS = 0.1;
     br.durationS = 0.2;
     CHECK(v3::RunBench(br, stdout) == v3::kOk);
-    const size_t extraProbes = static_cast<size_t>(std::atoll(ReadSummary(br.summaryPath).at("bracket_extra_probes").c_str()));
+    const auto brSum = ReadSummary(br.summaryPath);
+    // the window's two probes are counted separately: the warm-up's (origin included) and one per extra look
+    const size_t extraProbes = static_cast<size_t>(std::atoll(brSum.at("bracket_extra_probes").c_str())) +
+                               static_cast<size_t>(brSum.count("bracket_warmup_probes") ? std::atoll(brSum.at("bracket_warmup_probes").c_str()) : 0);
     v3::BenchOptions ls = Base("rew_slot");
     ls.endpoint = sn.Endpoint();
     ls.mode = v3::Mode::LoadSlot;
@@ -707,6 +875,9 @@ int main(int argc, char** argv)
     TestModeMismatchIsInvalid();
     TestBracketSkipsStaleFrame();
     TestBracket();
+    TestWarmupFramesMatchAcrossModes();
+    TestWarmupFramesOverrideSeconds();
+    TestWarmupTimesOutCleanly();
     TestLossIsCountedAndInvalid();
     TestLoadSlot();
     TestRewindOffEveryMode();

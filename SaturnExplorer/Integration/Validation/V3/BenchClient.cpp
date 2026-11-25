@@ -332,10 +332,77 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     bool haveStatus = false;
     std::vector<std::string> invalid;
 
+    int64_t originFrame = -1, openFrame = -1;
+    uint64_t warmProbes = 0;
+    int64_t holdWarmNs = 0;
+    size_t startIdx = 0;   // bracket: the row of the probe that opens the window
     if (o.mode == Mode::Bracket)
     {
-        SleepUntilNs(t0, warmNs);
-        if (!Probe(o, t0, rows, &cpuStart, &holdStartNs, out, &probeInconsistent)) return kError;
+        if (o.warmupFrames > 0)
+        {
+            // Warm-up in frames, with the stream's meaning (see the stream branch): the origin is the first frame
+            // published after the client attached, the window opens at the first observation that is at least
+            // warmupFrames past it, and the seconds option is not used. The emulator publishes only while a
+            // client is attached and the client stays disconnected between probes, so the progress is read with
+            // short probes: one for the origin, then, after a sleep sized from the frame rate seen so far, one
+            // more, until the count is reached. That probe is the window's start probe (no extra connection).
+            // Granularity: the window opens within (the last sleep + one probe's latency) of frames after the
+            // target, in frames at most the distance between the last two probes' frame numbers; each sleep is
+            // 90 percent of the estimated remaining time (never under kMinSpacingNs), so that shrinks as the
+            // target nears. Bounds: timeoutS for the whole warm-up, kMaxWarmProbes probes, and a probe that
+            // sees no fresh frame fails after connectTimeoutS.
+            const int64_t kMinSpacingNs = 20000000, kFirstSleepNs = 50000000, kStalledSleepNs = 250000000;
+            const uint64_t kMaxWarmProbes = 64;
+            const int64_t deadlineNs = NowNs(t0) + static_cast<int64_t>(o.timeoutS * 1e9);
+            CpuSample cpuTmp;
+            int64_t holdTmp = 0;
+            if (!Probe(o, t0, rows, &cpuTmp, &holdTmp, out, &probeInconsistent)) return kError;
+            const Row org = rows.back();
+            originFrame = org.frameNo;
+            uint64_t probes = 1;
+            for (;;)
+            {
+                const Row cur = rows.back();
+                if (probes > 1 && cur.frameNo - org.frameNo >= o.warmupFrames)
+                {
+                    cpuStart = cpuTmp;
+                    holdStartNs = holdTmp;
+                    break;
+                }
+                holdWarmNs += holdTmp;
+                if (probes >= kMaxWarmProbes || NowNs(t0) >= deadlineNs)
+                {
+                    std::fprintf(out, "error: the warm-up of %lld frames was not reached (origin frame %lld, newest %lld, %llu probes, %.0f s allowed)\n",
+                                 static_cast<long long>(o.warmupFrames), static_cast<long long>(org.frameNo),
+                                 static_cast<long long>(cur.frameNo), static_cast<unsigned long long>(probes), o.timeoutS);
+                    return kError;
+                }
+                int64_t sleepNs = kFirstSleepNs;
+                const int64_t dt = cur.arrivalNs - org.arrivalNs, df = cur.frameNo - org.frameNo;
+                if (probes > 1)
+                    sleepNs = (df > 0 && dt > 0)
+                        ? static_cast<int64_t>(0.9 * static_cast<double>(o.warmupFrames - df) * static_cast<double>(dt) / static_cast<double>(df))
+                        : kStalledSleepNs;
+                sleepNs = (std::max)(sleepNs, kMinSpacingNs);
+                SleepUntilNs(t0, (std::min)(cur.arrivalNs + sleepNs, deadlineNs));
+                if (!Probe(o, t0, rows, &cpuTmp, &holdTmp, out, &probeInconsistent)) return kError;
+                ++probes;
+                if (rows.back().timeline != org.timeline)
+                {
+                    std::fprintf(out, "error: the timeline changed during the warm-up (a state load?); load the slot before the bracket starts\n");
+                    return kError;
+                }
+            }
+            warmProbes = probes - 1;   // the origin probe and the ones after it, not the window's start probe
+        }
+        else
+        {
+            SleepUntilNs(t0, warmNs);
+            if (!Probe(o, t0, rows, &cpuStart, &holdStartNs, out, &probeInconsistent)) return kError;
+            originFrame = rows.back().frameNo;
+        }
+        startIdx = rows.size() - 1;
+        openFrame = rows.back().frameNo;
         windowStartNs = rows.back().arrivalNs;
         SleepUntilNs(t0, windowStartNs + durNs);
         const int64_t startFrame = rows.back().frameNo;
@@ -375,6 +442,12 @@ int RunBench(const BenchOptions& o, std::FILE* out)
         const bool byCount = o.frames > 0 || o.warmupFrames > 0;
         const int64_t timeoutNs = static_cast<int64_t>((byCount ? o.timeoutS : o.warmupS + o.durationS + o.timeoutS) * 1e9);
         const uint32_t wantMode0 = o.functions ? SE_LIVE_PROF_FUNCTIONS : 0u;
+        // The warm-up origin is the first frame published AFTER this connection attached. The first reply carries
+        // the newest publication of an earlier connection (the emulator publishes only while somebody is attached),
+        // so counting from it would credit the warm-up with frames that passed while nobody was connected. Same
+        // rule as Probe.
+        bool haveBase = false;
+        uint64_t base = 0;
         int64_t newest = -1, firstSeen = -1, startFrame = -1;
         uint32_t newestMode = 0;
         se_live_perf_frame b[64];
@@ -389,10 +462,15 @@ int RunBench(const BenchOptions& o, std::FILE* out)
                 {
                     rows.push_back(ToRow(b[i], at));
                     const Row& r = rows.back();
+                    if (!haveBase)
+                    {
+                        base = b[i].newest_seq ? b[i].newest_seq : (b[i].gap_only ? 0 : b[i].sample_seq);
+                        haveBase = true;
+                    }
                     if (r.frameNo >= 0 && std::strcmp(r.kind, "gap") != 0)
                     {
                         if (r.mode != wantMode0) mixedBatch = true;
-                        if (firstSeen < 0) firstSeen = r.frameNo;
+                        if (firstSeen < 0 && static_cast<int64_t>(b[i].sample_seq - base) > 0) firstSeen = r.frameNo;
                         newest = r.frameNo;
                         newestMode = r.mode;
                     }
@@ -407,6 +485,8 @@ int RunBench(const BenchOptions& o, std::FILE* out)
             {
                 windowStartNs = at;
                 startFrame = newest;
+                originFrame = firstSeen;
+                openFrame = newest;
                 cpuStart = SampleCpu(o.pid, t0);
             }
             if (windowStartNs >= 0 && (o.frames > 0 ? newest - startFrame >= o.frames : at >= windowStartNs + durNs))
@@ -480,8 +560,8 @@ int RunBench(const BenchOptions& o, std::FILE* out)
         // The two edges are fresh records of one emulator run: later in publication order AND in frame number.
         // (The sample sequence advances only while somebody is attached, so its distance says nothing about
         // how many frames passed between the probes; the order is all it can tell.)
-        size_t first = rows.size(), last = 0;
-        for (size_t i = 0; i < rows.size(); ++i) if (!std::strcmp(rows[i].kind, "probe")) { if (first == rows.size()) first = i; last = i; }
+        size_t first = startIdx, last = 0;
+        for (size_t i = 0; i < rows.size(); ++i) if (!std::strcmp(rows[i].kind, "probe")) last = i;
         if (first < last && (rows[last].sampleSeq <= rows[first].sampleSeq || rows[last].frameNo <= rows[first].frameNo))
             invalid.push_back("the bracket's end probe is not later than its start probe");
     }
@@ -504,6 +584,16 @@ int RunBench(const BenchOptions& o, std::FILE* out)
     s.Put("frames_requested", static_cast<long long>(o.frames));
     s.Put("bracket_probe_inconsistent", static_cast<unsigned long long>(probeInconsistent));
     s.Put("bracket_extra_probes", static_cast<unsigned long long>(extraProbes));
+    // Warm-up record. origin = first frame published after the client attached; open = the frame the window
+    // opened at. With a frame warm-up, open - origin >= warmup_frames_requested; the excess is the granularity
+    // (one drain for the stream, the last probe interval for the bracket). bracket_warmup_probes counts the
+    // short connections made before the window's start probe (origin probe included), probe_hold_warmup_ms
+    // their summed hold: the perturbation a frame warm-up costs configuration (a).
+    s.Put("warmup_frames_requested", static_cast<long long>(o.warmupFrames));
+    s.Put("window_origin_frame", static_cast<long long>(originFrame));
+    s.Put("window_open_frame", static_cast<long long>(openFrame));
+    s.Put("bracket_warmup_probes", static_cast<unsigned long long>(warmProbes));
+    s.Put("probe_hold_warmup_ms", static_cast<double>(holdWarmNs) / 1e6);
     s.Put("window_rows", static_cast<unsigned long long>(windowRows));
     s.Put("window_first_frame", static_cast<long long>(firstFrame));
     s.Put("window_last_frame", static_cast<long long>(lastFrame));
