@@ -129,7 +129,9 @@ def source(p):
     body += wr(2, 0x25D00000, 0)               # VDP1 TVMR
     body += wr(2, 0x25D00002, 0)               # FBCR: automatic swap every frame
     body += wr(2, 0x25D00004, 0)               # PTMR: no drawing
-    add(fn("hw_init", body, leaf=True))
+    # hw_init ends with a tail jump instead of `rts` (same size: bra + delay slot), so the code and data after
+    # it keep their addresses and alignment; hw_init2 (at the end of the payload) finishes and returns.
+    add(["hw_init:"] + body + ["bra hw_init2", "nop", ".pool"])
     body = (wr(2, 0x25D00004, 0) + wr(4, 0x25FE0010, 0) + wr(4, 0x25FE0014, 0)   # PTMR, D0EN, D0MD
             + wr(4, 0x25FE0030, 0) + wr(4, 0x25FE0050, 0))                     # D1EN, D2EN: BIOS may have left them armed
     add(fn("quiesce", body, leaf=True))
@@ -227,6 +229,21 @@ def source(p):
     add([".align 4", "vtab:"])
     for v in range(0x42):
         S.append(".long %s" % ("vbin" if v == 0x40 else "bad_irq"))
+    # One-time display bring-up, run once from hw_init before the first frame; nothing here repeats in any
+    # measured frame, and it sits after all other code and data so no existing address moves. The display must
+    # be ON for Mednafen to fetch the back colour from VRAM (vdp2_render.cpp: only on lines where it is on);
+    # with every scroll screen and the sprite layer off the back screen is all that is visible. BGON = 0 also
+    # keeps Mednafen's VRAM access penalty (vdp2.cpp RecalcVRAMPenalty) at 0, as it was with the display off.
+    body = []
+    body += wr(2, 0x25F80020, 0x0000)          # BGON: no NBG/RBG screens
+    for reg in (0xF0, 0xF2, 0xF4, 0xF6):
+        body += wr(2, 0x25F80000 + reg, 0x0000)  # PRISA..PRISD: sprite priority 0 = sprite layer never shown
+    body += wr(2, 0x25F800EC, 0x0000)          # CCCTL: no colour calculation on the back screen
+    body += wr(2, 0x25F800E8, 0x0000)          # LNCLEN: no line colour
+    body += wr(2, 0x25F80110, 0x0000)          # CLOFEN: no colour offset
+    body += wr(2, 0x25F80000, 0x8100)          # TVMD: display ON, border = back screen colour
+    add([".align 4"])
+    add(fn("hw_init2", body, leaf=True))
     add(["payload_end:"])
     return "\n".join(S) + "\n"
 
