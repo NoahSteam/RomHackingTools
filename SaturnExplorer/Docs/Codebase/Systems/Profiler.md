@@ -622,7 +622,7 @@ the Windows named-pipe path (`SeWinJoinThread` etc.) and macOS.
 - VDP1 command work leaves out the draw slowdown the `VDP1RWDRAWSLOWDOWN` hack charges for CPU
   access to VDP1 memory during a draw, and what a software `ENDR` leaves unspent. The F4/F5
   component tests drive the real patched `vdp1.cpp`, `m68k.cpp` and `sound.cpp`, but the counter
-  magnitudes on a real game are still unverified (V1/V2 need a BIOS).
+  magnitudes on a real game are still unverified (V1 matched on one real run of a purpose-built guest; V2 needs a BIOS).
 - Function time is self time only, and the raw-PC buckets are not folded into functions
   (`ProfilerPanel::Host::functionContaining` is an unfilled hook for the function finder).
 - VDP2 has no time figure: its raster is fixed-length.
@@ -644,8 +644,12 @@ the Windows named-pipe path (`SeWinJoinThread` etc.) and macOS.
 [Integration/Validation/V1](../../../Integration/Validation/V1/README.md) holds a purpose-built Saturn guest
 program with expected counter values derived from the definitions above (`EXPECTED.md`), a fill-in
 `CHECKLIST.md`, and a BIOS-free test (`SaturnExplorerV1Guest`: emitted code decoded by the repo's SH-2
-decoder, loop cycle arithmetic recomputed, the guest run on a fake machine). Expected values are
-predictions: the guest has not been run on the emulator.
+decoder, loop cycle arithmetic recomputed, the guest run on a fake machine). The expected values were
+written first and were then confirmed on one real run (2026-11-25, Windows, Mednafen 1.32.1, both cache modes,
+48/48 rows; in-range rather than exact: phase 1 busy, func_a/func_b, stall ratio, 68000/SH-2 clock ratio). Not
+covered by that run: the Profiler panel itself (readings came from a headless recorder) and the F5, F9 and F11
+hook-disable checks. In `-ss.dbg_cem full` the steady-state figures were identical to the default; the reason is
+derived from source in the V1 `EXPECTED.md`.
 
 ## Measuring the cost (V3)
 

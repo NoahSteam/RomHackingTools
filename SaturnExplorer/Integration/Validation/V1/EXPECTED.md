@@ -1,7 +1,10 @@
 # V1 guest program: expected profiler observations
 
-Status: **written before the guest program existed and before any run.** Nothing in this file has been
-confirmed on an emulator. Every number is derived from the counter definitions
+Status: **written before the guest program existed and before any run** (that history stands: the numbers
+below were fixed first and were not edited to fit the run). They have since been confirmed on a real run 2026-11-25 (Windows, Mednafen 1.32.1 patched, real BIOS, both cache modes, 48/48 checklist rows matched; exact matches for the phase 0 baseline, the 15 phase-3 bus buckets, VDP1 commands/work, SCU DMA byte counts, slave on-time and the 68000 phases; in-range: phase 1 busy 160,073, func_a/func_b 12,003/4,003, stall ratio 3.98, 68000/SH-2 clock ratio 0.42009).
+Not checked on that run: the readings came through a headless recorder on the live connection, not the Profiler panel; hook-disable checks were done for slave on-time, VDP1 work and the bus buckets only (the F5, F9 and F11 hook checks were not run). The disc needed a manual fix to boot (an empty root directory made the BIOS drop to its CD player); `build_v1.py` now writes a real first file. The guest was changed after that run (see README: display bring-up for the backdrop colour); in the fake-machine simulation every steady frame performs exactly the same accesses at the same addresses as before (the change is one-time start-up code placed after all other payload bytes); not re-run on the emulator.
+
+Every number is derived from the counter definitions
 (`Integration/Common/SePerfCounters.h`, `Docs/Codebase/Systems/Profiler.md`) and from the pinned
 Mednafen source in `_emu/mednafen/src/ss` (the files named in each derivation). A figure marked
 **[derived]** follows from those sources; **[range]** is a tolerance band chosen below; **[qual]** is a
@@ -46,12 +49,27 @@ DMA_DRAW_CMDS=400
   the intended reading.
 * The guest runs forever: after the last phase it re-enters phase 0, so every phase can be read again.
 * Phase identification during a run: the backdrop colour (table below) and a live word in work RAM high
-  at `0x0600FF00` = phase id, `0x0600FF04` = VBlank-IN count (visible in the Memory view).
+  at `0x0600FF00` = phase id, `0x0600FF04` = VBlank-IN count (visible in the Memory view). On the real
+  run the backdrop stayed black because the guest left the VDP2 display off and Mednafen fetches the back
+  colour only on lines where the display is on (`vdp2_render.cpp`); the guest now turns the display on once,
+  at start-up (`hw_init2`), with no scroll screen or sprite layer shown. That is **untested on the emulator**;
+  the phase word at `0x0600FF00` is the reliable indicator.
 * Cache modes. The disc is not in Mednafen's game database, so the default is `data` (instruction
   fetches served from the fast map, data cache emulated, `cacheMode` = OFF on the wire). The second
-  mode is selected with `-ss.dbg_cem full` (`cacheMode` = ON). Expectations are given for `data`;
-  where `full` differs it is stated, and where it is not stated for `full` it is **unverified and
-  expected to be wider** (a cold instruction cache costs line fills in the first frame only).
+  mode is selected with `-ss.dbg_cem full` (`cacheMode` = ON). Expectations are given for `data` and,
+  as observed on the real run, **the steady-state figures are identical in `full`**. The original
+  prediction here ("`full` expected to be wider") was wrong. Why they are identical (from
+  `sh7095.inc`, `ss.cpp` and the patch hook, not measured separately): `full` only changes where an
+  instruction fetch comes from. `ss.cpp` sets `NeedEmuICache` and `CPU[c].Init(EmulateICache, ...)` from the
+  mode; with it off `FetchIF` reads the fast map and costs `timestamp++`, with it on `FetchIF` calls
+  `MemReadInstr`, which on a cache hit also costs only the fetch's `timestamp++` (no extra cycles) and
+  touches no bus. The profiler counts requests in `BSC_BusRead`/`BSC_BusWrite` only (`apply.py`,
+  `SeSsPerfBus`), so a hit is not a request, and the mode flag only labels the sample. The guest's
+  code (about 2 KB) plus its data fit the 4 KB four-way cache with no eviction, so the cold line fills
+  happen once, in the first frame(s) after the cache warms, and never in a steady frame. (The
+  data cache is emulated in every mode and the observed cached work-RAM reads were hits, so the cache
+  is enabled.) The earlier "line fills in steady frames" assumption is what was wrong. `data_cb` also
+  reports `cacheMode` = OFF. Not established: first-frame line-fill counts in `full` were not read.
 * "Exact" means exactly equal in every steady frame. "= x +- t" is an absolute tolerance per frame.
 
 ## Cycle model used for the pure CPU arithmetic
@@ -90,7 +108,7 @@ Backdrop colours are RGB555 so the phase can be told apart on screen without rea
 
 | id | name | what the guest does every frame | backdrop |
 |---|---|---|---|
-| 0 | IDLE | nothing; slave off, 68000 held in reset, VDP1 not drawing | 0x0000 black |
+| 0 | IDLE | nothing; slave off, 68000 held in reset, VDP1 not drawing | 0x0000 black (indistinguishable from "no colour" - read the state word) |
 | 1 | BUSY | runs the pure loop `BUSY_L` times, then sleeps | 0x001F red |
 | 2 | FUNC | calls function A (3000) then function B (1000), then sleeps | 0x03E0 green |
 | 3 | BUS | the bus table below | 0x7C00 blue |
@@ -133,9 +151,9 @@ This phase's bus figures are the **baseline** that the BUS phase is differenced 
 
 Master busy = `F - sleep` = `159,998 + overhead`, overhead in `[30, OV]` -> **busy in [160,028, 160,598]**,
 i.e. master sleep = `F - busy` [derived, range]. Everything else as phase 0 (the loop has no memory
-operation, so the bus counters equal the baseline). In cache mode `full` the same figure is expected
-within +2% (a 2-instruction loop is resident after the first iteration; the first-frame line fill is
-the only addition); unverified.
+operation, so the bus counters equal the baseline). In cache mode `full` the same figure was observed
+(a 2-instruction loop is resident after the first iteration and a hit costs the same one cycle per fetch;
+see "Cache modes").
 
 ### Phase 2 FUNC (function attribution; needs `--enable-debugger` and the Functions tab ticked)
 
@@ -192,8 +210,8 @@ Expected per bucket in a steady frame of this phase:
   writes to devices with no write K stay 0. The SCU baseline is 1 write per frame (the IMS re-arm), so
   the SCU row is reads 120 and writes **1**, not 0. [derived]
 * work RAM high (12): reads `K + (0..8)`, writes `12 + (4..16)` [range]. Not exact because the table
-  walk, the loop code and the dispatcher also touch cached work RAM high; in `full` cache mode add up
-  to 64 more reads per frame (line fills of resident code), unverified.
+  walk, the loop code and the dispatcher also touch cached work RAM high; in `full` cache mode the
+  steady-state figure was observed to be the same (resident code is not refilled; see "Cache modes").
 * The "reads `K + (0..8)`" band assumes the guest's own cached data reads (the bus table words, the
   state block, the exception vector) are data-cache **hits** in steady state, which is why they are not
   requests; the BIOS-free test counts the 77 such reads the table walk makes per frame and does not
