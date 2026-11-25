@@ -14,6 +14,7 @@
 //
 // Socket and port of their own: 6953 and /tmp/saturn_explorer_v3_bench_test.sock.
 #include <atomic>
+#include <deque>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -89,14 +90,28 @@ std::atomic<unsigned long long> gPublished{ 0 };
 std::atomic<unsigned long long> gBurstAt{ 0 };   // publish a burst once gPublished reaches this (0 = never)
 std::atomic<int> gBurstSize{ 0 };
 int gFrameMs = 4;
+// A real emulator applies a profiler request at a frame boundary some frames after it arrives. gModeLag models
+// that: each frame is stamped with the mode that was in force gModeLag frames earlier. gMismatchAt/Count stamp
+// the wrong mode (0) on that many consecutive frames starting at that published count, once.
+std::atomic<int> gModeLag{ 0 };
+std::atomic<unsigned long long> gMismatchAt{ 0 };
+std::atomic<int> gMismatchCount{ 0 };
 void PublishOne(bool snapshot)
 {
+    static std::deque<uint32_t> hist;   // the emulate thread only
     SeExportGateFrame();
     SeExportPerfInfo info;
     std::memset(&info, 0, sizeof info);
     SeExportFrameIdentity(&info.timelineId, &info.frameNo);
     info.valid = SE_PERF_VALID_IDENTITY | SE_PERF_VALID_MODE;
-    info.mode = SeExportProfilerFlags();
+    hist.push_back(SeExportProfilerFlags());
+    while (hist.size() > static_cast<size_t>(gModeLag.load()) + 1) hist.pop_front();
+    info.mode = hist.front();
+    const unsigned long long mm = gMismatchAt.load();
+    if (mm != 0 && gPublished.load() >= mm)
+    {
+        if (gMismatchCount.fetch_sub(1) > 0) info.mode = 0; else gMismatchAt = 0;
+    }
     unsigned long long c[SE_PERF_COUNT] = {};
     SeExportPublishPerf(c, SE_PERF_COUNT, nullptr, nullptr, 0, 0, &info);
     if (snapshot)
@@ -210,7 +225,7 @@ int64_t FrameAt(const Csv& c, int64_t t)
 // the CSV agrees with the summary about how many; the warm-up was at least the requested frames; every
 // frame from the window start on ran in the requested attribution mode.
 void CheckFrames(const Csv& c, const std::map<std::string, std::string>& s, uint32_t wantMode,
-                 unsigned long long publishedDuringRun)
+                 unsigned long long publishedDuringRun, int64_t wantFrames = kWindowFrames)
 {
     const int64_t ws = std::atoll(s.at("window_start_ns").c_str());
     const int64_t we = std::atoll(s.at("window_end_ns").c_str());
@@ -238,7 +253,7 @@ void CheckFrames(const Csv& c, const std::map<std::string, std::string>& s, uint
     // just before the count was read (the stand-in counts a frame after publishing it).
     CHECK(c.rows.size() <= publishedDuringRun + 2);
     const int64_t fws = FrameAt(c, ws), fwe = FrameAt(c, we);
-    CHECK(fwe - fws >= kWindowFrames);                                // the window holds what was asked
+    CHECK(fwe - fws >= wantFrames);                                // the window holds what was asked
     CHECK(std::atoll(s.at("window_frames").c_str()) == fwe - fws);
     CHECK(fws - first >= kWarmFrames);                                // and the warm-up was at least that long
 }
@@ -284,6 +299,48 @@ void TestStreamAttributionOn()
     CHECK(s.at("valid") == "1");
     CHECK(s.at("attribution_requested") == "1");
     CheckFrames(c, s, SE_LIVE_PROF_FUNCTIONS, ran);
+}
+
+// The request is applied some frames after it is sent (modelled by gModeLag, longer than the 10-frame warm-up):
+// a window that opened on the warm-up count alone would hold frames of the old mode. The client must wait for
+// the requested mode, and every frame in the window must carry it, whatever the lag.
+void TestWindowWaitsForRequestedMode()
+{
+    v3::BenchOptions o = Base("lag", 40);
+    o.functions = true;
+    gHookFlags = 0;
+    gModeLag = 30;
+    const unsigned long long p0 = gPublished.load();
+    const int rc = v3::RunBench(o, stdout);
+    const unsigned long long ran = gPublished.load() - p0;
+    gModeLag = 0;
+    CHECK(rc == v3::kOk);
+    const Csv c = ReadCsv(o.csvPath);
+    const auto s = ReadSummary(o.summaryPath);
+    CHECK(s.at("valid") == "1" && s.at("mode_mismatch_window") == "0");
+    CheckFrames(c, s, SE_LIVE_PROF_FUNCTIONS, ran, 40);
+    // Frames of the old mode were delivered, and the window opened after the last of them.
+    size_t old = 0;
+    for (size_t i = 0; i < c.rows.size(); ++i) if (c.U(i, "mode") == 0u) ++old;
+    CHECK(old > 0);
+    CHECK(WaitFrames(40));   // the lag drains: the disconnect is applied and the old mode comes back
+}
+
+// A frame in the window that ran in another mode than requested makes the run invalid, counted exactly.
+void TestModeMismatchIsInvalid()
+{
+    v3::BenchOptions o = Base("mismatch", 150);
+    o.functions = true;
+    gHookFlags = 0;
+    gMismatchCount = 3;
+    gMismatchAt = gPublished.load() + 70;   // inside the window (opens ~10 frames in, 150 long)
+    const int rc = v3::RunBench(o, stdout);
+    gMismatchAt = 0;
+    CHECK(rc == v3::kInvalid);
+    const auto s = ReadSummary(o.summaryPath);
+    CHECK(s.at("valid") == "0");
+    CHECK(s.at("mode_mismatch_window") == "3");
+    CHECK(WaitFrames(5));
 }
 
 void TestBracket()
@@ -595,6 +652,8 @@ int main(int argc, char** argv)
 
     TestStreamAttributionOff();
     TestStreamAttributionOn();
+    TestWindowWaitsForRequestedMode();
+    TestModeMismatchIsInvalid();
     TestBracket();
     TestLossIsCountedAndInvalid();
     TestLoadSlot();
