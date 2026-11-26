@@ -628,6 +628,11 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerSh2AsmTests COMMAND SaturnExplorerSh2AsmTests)
 
+    # The assembler's symbol lookup (function names + sub_XXXXXX): header only, pure.
+    add_executable(SaturnExplorerFunctionSymbolTests FrontEnd/tests/FunctionSymbolTests.cpp)
+    target_include_directories(SaturnExplorerFunctionSymbolTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerFunctionSymbolTests COMMAND SaturnExplorerFunctionSymbolTests)
+
     # Frame Memory Compare's snapshot + diff engine: pure logic over byte vectors, no ImGui.
     add_executable(SaturnExplorerMemoryCompareTests
         FrontEnd/tests/MemoryCompareTests.cpp
@@ -938,6 +943,20 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerHexEditorPanelTests
              COMMAND SaturnExplorerHexEditorPanelTests)
 
+    # The Watch panel's row menu ("View as Struct..." hand-off to the Structs panel).
+    add_executable(SaturnExplorerWatchPanelTests
+        FrontEnd/tests/WatchPanelTests.cpp
+        FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/Debug/WatchList.cpp
+        FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/FileWrite.cpp
+        FrontEnd/src/Theme.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerWatchPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerWatchPanelTests COMMAND SaturnExplorerWatchPanelTests)
+
     # The Structs panel -- the real panel under the app's theme and font against a mock backend:
     # clicks reaching edit boxes, the write path, pointer follow, clipped array reads, persistence.
     add_executable(SaturnExplorerStructPanelTests
@@ -1210,6 +1229,8 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerMemoryBackendTests
         FrontEnd/tests/MemoryBackendTests.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp       # the assembled-write test assembles through the real assembler
+        FrontEnd/src/Debug/Sh2Disasm.cpp
     )
     target_include_directories(SaturnExplorerMemoryBackendTests PRIVATE
         FrontEnd/src Core/tests ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -2236,6 +2257,7 @@ if(WIN32)
         FrontEnd/src/TopBar.cpp
         FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/StructPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/Sh2Dump.cpp
@@ -2251,6 +2273,7 @@ if(WIN32)
         FrontEnd/src/BinaryWriter.cpp
         ${SE_DESKTOP_SHARED_SRC}
         FrontEnd/src/Debug/WatchList.cpp
+        FrontEnd/src/Debug/StructDefs.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Asm.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
@@ -2333,6 +2356,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/TopBar.cpp
         FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/StructPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/Sh2Dump.cpp
@@ -2347,6 +2371,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Debug/WatchList.cpp
+        FrontEnd/src/Debug/StructDefs.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Asm.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
@@ -2454,6 +2479,7 @@ else()
             FrontEnd/src/TopBar.cpp
             FrontEnd/src/NativeMenu.cpp
             FrontEnd/src/WatchPanel.cpp
+            FrontEnd/src/StructPanel.cpp
             FrontEnd/src/AssemblyPanel.cpp
             FrontEnd/src/Sh2Operands.cpp
             FrontEnd/src/Sh2Dump.cpp
@@ -2469,6 +2495,7 @@ else()
             FrontEnd/src/BinaryWriter.cpp
             ${SE_DESKTOP_SHARED_SRC}
             FrontEnd/src/Debug/WatchList.cpp
+            FrontEnd/src/Debug/StructDefs.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp
             FrontEnd/src/Debug/Sh2Asm.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp
