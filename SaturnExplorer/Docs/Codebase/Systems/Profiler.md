@@ -736,8 +736,12 @@ the Windows named-pipe path (`SeWinJoinThread` etc.) and macOS.
   DMA-burst/external-halt stalls are separated out (the panel labels it so).
 - Function rows are retained keys: a function that first appears after a frame's 3,072nd key is Other for
   that frame (flagged). "Not observed" is an estimate from the counters.
-- The panel was only drawn headlessly (text capture through ImGuiHarness); nobody has looked at it in a
-  real window. The history strip's line and ticks are tested through the run-splitting logic and the
+- The panel's tests draw it headlessly (text capture through ImGuiHarness). It was exercised once in a real
+  window (2026-11-25, Windows build, V1 guest, driven by screen control): the Frame, Buses, Memory and Functions
+  tabs showed the V1 values (all 15 phase-3 bus rows exact, the phase 6 / 7 DMA transfers, 12.0 k / 4,003 in
+  phase 2 with the CPU filter working), and a breakpoint, four steps and a resume from the debugger panels left
+  attribution correct. Not looked at there: tracepoints and the native debugger beside the GUI, the second cache
+  mode, and a real game. The history strip's line and ticks are tested through the run-splitting logic and the
   tooltip text, not as pixels.
 - Bus accesses are bus-controller requests (see "Bus classification"): cache hits and
   fast-map instruction fetches are not counted, and the number depends on the cache mode.
