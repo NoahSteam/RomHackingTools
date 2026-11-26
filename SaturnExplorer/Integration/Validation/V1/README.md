@@ -6,7 +6,8 @@ emulator can be compared with `EXPECTED.md` (plan: `Docs/ProfilerFixPlan.md`, Ph
 | File | What |
 |---|---|
 | `EXPECTED.md` | the expected observations and their derivations (written first, before the program) |
-| `CHECKLIST.md` | fill-in table for a run |
+| `EXPECTED_EVENTS.md` | the hardware events each phase should produce (derived, not yet run) |
+| `CHECKLIST.md` | fill-in table for a run (profiler counters and hardware events) |
 | `build_v1.py`, `v1_program.py`, `sh2asm.py` | the guest (SH-2 assembly generated in Python), a tiny assembler, the disc builder |
 | `run_v1.sh`, `run_v1.bat.txt` | build and run instructions |
 | `tests/check_v1.py` (ctest `SaturnExplorerV1Guest`) | what can be checked without a BIOS |

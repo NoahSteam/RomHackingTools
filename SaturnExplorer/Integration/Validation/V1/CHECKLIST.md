@@ -70,6 +70,52 @@ For each, build the emulator with the named hook disabled and confirm the listed
 | F11 DMA counters | phase 6 route 7 | |
 | F9 ownership | phase 2 rows | |
 
+## Hardware events (see `EXPECTED_EVENTS.md`)
+
+Arm all five Log chips. Counts are per steady frame, read as a sum over a 16-frame window divided by 16.
+
+| Phase | Source / kind | Expected | Observed | Pass / fail | Notes |
+|---|---|---|---|---|---|
+| all | SH2_EXCEPTION (master) | 1: vector 0x40, INT, level 15, handler = `vbin`, PC = `main_loop` + 2 | | | |
+| all | SCU_INT_ACCEPT | 1: bit 0, level 15, vector 0x40; IPending bit 0 clear | | | |
+| all | SCU_INT_MASK | 1: new 0xBFFE, old 0xBFFF | | | |
+| all | VDP2_VBLANK | 1 IN + 1 OUT | | | |
+| all | VDP1_FB_SWAP | 1: FBCR 0000, TVMR 0000, FB alternating | | | |
+| all | FB_ERASE, VDP2_DISPLAY, DMAC, SCU_DMA_ILLEGAL, CD, SUPPRESSED, lost row | 0 | | | |
+| all | any other exception | 0 | | | |
+| 0 IDLE | SMPC_COMMAND (first frame) | 0x07, 0x03 | | | |
+| 4 VDP1_ONE | DRAW_START / DRAW_END | 1 / 1 (end address 0x20) | | | |
+| 5 VDP1_MANY | DRAW_START / DRAW_END | 1 / 1 (end address 0x800) | | | |
+| 6 DMA_BIG | SCU_DMA_START | arg0 0x12010000, src 0x06020000, dst 0x05C20000, bytes 16384 | | | |
+| 6 | SCU_DMA_END | 1 (level 0) | | | |
+| 7 DMA_SMALL | SCU_DMA_START bytes / END | 4096 / 1 | | | |
+| 8 DMA_DRAW | SCU_DMA_START / END | as phase 6 | | | |
+| 8 | DRAW_END | one per start; address 0x3200 reason 0, or reason 1 if cut | | | |
+| 9 SSH_ON | SMPC_COMMAND (first frame) | 0x02 | | | |
+| 9 | slave events | not asserted (write down what appears) | | | |
+| 10 SSH_OFF | SMPC_COMMAND (first frame) / slave events after | 0x03 / none | | | |
+| 11 M68K_STOP | SMPC_COMMAND (first frame) | 0x07, 0x06 | | | |
+| 12 M68K_BUSY | SMPC_COMMAND (first frame) | 0x07, 0x06 | | | |
+| 13 M68K_OFF | SMPC_COMMAND (first frame) | 0x07 | | | |
+| 1, 2, 3, 11-13 | any event beyond the common set, 68000 or SCSP events | none | | | |
+
+### Dropping a hardware-event hook (fill in)
+
+| Hook dropped | Row that must change | Changed as expected? |
+|---|---|---|
+| `SE_HWEV_HOOK_EXC_INT` | all phases: no SH2_EXCEPTION | |
+| `SE_HWEV_HOOK_SCU_INT_ACCEPT` | all phases: no SCU_INT_ACCEPT | |
+| `SE_HWEV_HOOK_SCU_INT_MASK` | all phases: no SCU_INT_MASK | |
+| `SE_HWEV_HOOK_VBLANK` | all phases: no VDP2_VBLANK | |
+| `SE_HWEV_HOOK_VDP1_FB_SWAP` | all phases: no VDP1_FB_SWAP | |
+| `SE_HWEV_HOOK_VDP1_DRAW_START` / `_DRAW_END` | phases 4, 5, 8 | |
+| `SE_HWEV_HOOK_SCU_DMA_START` / `_DMA_END` | phases 6, 7, 8 | |
+| `SE_HWEV_HOOK_SMPC_COMMAND` | phases 0, 9-13 first frames | |
+| chips disarmed (mask 0) | no event in any phase | |
+
+Hooks V1 cannot show (NMI and the other exceptions, DMAC, SCU DMA illegal, VDP1 abort and erase, VDP2
+display, CD) are not listed: see `EXPECTED_EVENTS.md`.
+
 ## Findings
 
 (Anything that disagreed: which side is wrong, the profiler or the derivation in EXPECTED.md.)

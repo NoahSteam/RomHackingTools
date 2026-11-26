@@ -32,6 +32,7 @@ than a connected in-app agent workflow; see its subsystem page before assuming U
 | State acquisition | savestate formats, live transport, tap integration, session/restore identities | [State sources](Systems/StateSources.md) |
 | Execution debugger | stepping, stops, breakpoints, tracepoints, disassembly, stack | [Debugger](Systems/Debugger.md) |
 | Profiler | per-frame hardware counters, their wire block, function attribution, memory-pool occupancy | [Profiler](Systems/Profiler.md) |
+| Hardware events | opt-in event stream (exceptions, interrupts, DMA, VDP1/VBlank, CD, SMPC), enable mask, Log chips | [Hardware events](Systems/HardwareEvents.md) |
 | Memory and time | memory backend, watch/search/compare, recorded frames and staged edits | [Memory and history](Systems/MemoryAndHistory.md) |
 | Embedded Ghidra | capture, function finding, worker, pseudocode model and trust | [Decompiler](Systems/Decompiler.md) |
 | Game files | disc parsing/building, file search, PRS, accepted patch locations | [Disc and patching](Systems/DiscAndPatching.md) |
