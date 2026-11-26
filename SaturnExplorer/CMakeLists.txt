@@ -508,9 +508,9 @@ set(SE_IMGUI_CORE
 
 if(BUILD_TESTING)
     add_executable(SaturnExplorerThemeTests
-        FrontEnd/tests/ThemeTests.cpp FrontEnd/src/Theme.cpp FrontEnd/src/LogPanel.cpp
+        FrontEnd/tests/ThemeTests.cpp FrontEnd/src/Theme.cpp FrontEnd/src/LogPanel.cpp FrontEnd/src/HwEventFormat.cpp
         FrontEnd/src/Settings.cpp FrontEnd/src/FileWrite.cpp ${SE_IMGUI_CORE})
-    target_include_directories(SaturnExplorerThemeTests PRIVATE FrontEnd/src ${SE_IMGUI_DIR})
+    target_include_directories(SaturnExplorerThemeTests PRIVATE FrontEnd/src Integration/Common ${SE_IMGUI_DIR})
     add_test(NAME SaturnExplorerThemeTests COMMAND SaturnExplorerThemeTests)
 
     add_executable(SaturnExplorerVdp2Tests
@@ -859,12 +859,25 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerLogPanelTests
         FrontEnd/tests/LogPanelTests.cpp
         FrontEnd/src/LogPanel.cpp
+        FrontEnd/src/HwEventFormat.cpp
+        FrontEnd/src/Settings.cpp
+        FrontEnd/src/FileWrite.cpp   # Settings::Save stages through WriteFileAtomically
         ${SE_IMGUI_CORE}
     )
     target_include_directories(SaturnExplorerLogPanelTests
-        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR})
+        PRIVATE FrontEnd/src FrontEnd/tests Integration/Common ${SE_IMGUI_DIR})
     add_test(NAME SaturnExplorerLogPanelTests COMMAND SaturnExplorerLogPanelTests)
     set_tests_properties(SaturnExplorerLogPanelTests PROPERTIES TIMEOUT 120)
+
+    # Hardware event text: one golden message per kind, the name tables, the fallback for a kind
+    # this build does not know. Pure (no ImGui, no driver).
+    add_executable(SaturnExplorerHwEventFormatTests
+        FrontEnd/tests/HwEventFormatTests.cpp
+        FrontEnd/src/HwEventFormat.cpp
+    )
+    target_include_directories(SaturnExplorerHwEventFormatTests
+        PRIVATE FrontEnd/src Integration/Common)
+    add_test(NAME SaturnExplorerHwEventFormatTests COMMAND SaturnExplorerHwEventFormatTests)
 
     # Profiler: the model's arithmetic (frame shares, bus totals, history window, hot functions,
     # memory-pool occupancy) with no emulator and no UI, then the panel drawn headlessly.
@@ -2190,6 +2203,7 @@ if(WIN32)
         FrontEnd/src/MemoryComparePanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
+        FrontEnd/src/HwEventFormat.cpp
         FrontEnd/src/LayerPanels.cpp
         FrontEnd/src/LayerExport.cpp
         FrontEnd/src/FileWrite.cpp
@@ -2285,6 +2299,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/MemoryComparePanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
+        FrontEnd/src/HwEventFormat.cpp
         FrontEnd/src/LayerPanels.cpp
         FrontEnd/src/LayerExport.cpp
         FrontEnd/src/FileWrite.cpp
@@ -2404,6 +2419,7 @@ else()
             FrontEnd/src/MemoryComparePanel.cpp
             FrontEnd/src/ControllerPanel.cpp
             FrontEnd/src/LogPanel.cpp
+            FrontEnd/src/HwEventFormat.cpp
             FrontEnd/src/LayerPanels.cpp
             FrontEnd/src/LayerExport.cpp
             FrontEnd/src/FileWrite.cpp

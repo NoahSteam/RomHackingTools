@@ -233,6 +233,7 @@ private:
     void Continue();
     void SyncTracepointsToLive();           // push the tracepoint set to the emulator (v8)
     void DrainTraceEvents();                // pull fired tracepoint events into the Log
+    void DrainHwEvents();                   // ask for and pull hardware events into the Log (live only)
     void DrawWorldView(IPlatform& platform);
     void DrawCommandList(IPlatform& platform);
     // Inline size/position editing in the Command List: draw an editable integer cell for one
