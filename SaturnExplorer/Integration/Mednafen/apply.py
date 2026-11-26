@@ -1884,6 +1884,16 @@ HWEV_KEYS = (
 )
 
 
+# key -> the file (under src/ss) that carries it; SE_HWEV_FWD is one per translation unit and is not in it.
+HWEV_KEY_FILE = dict(
+    [(HWEV_DMAC_KEY, "sh7095.inc"), (HWEV_CPU_PC_KEY, "ss.cpp")]
+    + [("SE_HWEV_HOOK_EXC_" + e[0], "sh7095_ops.inc") for e in HWEV_EXC]
+    + [(k, f) for tbl, f in ((HWEV_SCU, "scu.inc"), (HWEV_CD, "cdb.cpp"), (HWEV_SMPC, "smpc.cpp"),
+                             (HWEV_VDP1, "vdp1.cpp"), (HWEV_VDP2, "vdp2.cpp")) for _a, _h, k in tbl]
+)
+HWEV_FWD_FILES = ("ss.cpp", "cdb.cpp", "smpc.cpp", "vdp1.cpp", "vdp2.cpp")
+
+
 def process_hwevents(src_dir, do_write):
     """The hardware event hooks (see above). A miss costs the events of that site; reported like any other."""
     notes = []

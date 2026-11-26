@@ -208,19 +208,7 @@ SYNC_MUTATIONS = {
 
 # The hardware event log hooks: (file, key) for the text checks, from apply.py's own table.
 def hwev_file_of(key):
-    if key == "SE_HWEV_FWD":
-        return None   # one per translation unit, checked separately
-    if key == "SE_HWEV_CPU_PC":
-        return "ss.cpp"
-    if key.startswith("SE_HWEV_HOOK_EXC_"):
-        return "sh7095_ops.inc"
-    if key == "SE_HWEV_HOOK_DMAC":
-        return "sh7095.inc"
-    for prefix, f in (("SE_HWEV_HOOK_SCU_", "scu.inc"), ("SE_HWEV_HOOK_VBLANK", "scu.inc"), ("SE_HWEV_HOOK_CD_", "cdb.cpp"),
-                      ("SE_HWEV_HOOK_SMPC_", "smpc.cpp"), ("SE_HWEV_HOOK_VDP1_", "vdp1.cpp"), ("SE_HWEV_HOOK_VDP2_", "vdp2.cpp")):
-        if key.startswith(prefix):
-            return f
-    return None
+    return None if key == "SE_HWEV_FWD" else cm.load_new().HWEV_KEY_FILE[key]
 
 
 def hwev_text_checks(work, apply_mod):
@@ -245,7 +233,7 @@ def hwev_text_checks(work, apply_mod):
         elif key.startswith("SE_HWEV_HOOK_") and "SeSsHwEvMask &" not in fences[0]:
             print("FAIL: the %s hook does not test SeSsHwEvMask" % key)
             bad += 1
-    for f in ("ss.cpp", "cdb.cpp", "smpc.cpp", "vdp1.cpp", "vdp2.cpp"):
+    for f in apply_mod.HWEV_FWD_FILES:
         t = open(os.path.join(work, "src/ss", f), errors="replace").read()
         n = t.count("/* SE_HWEV_FWD */")
         if n != 1:
@@ -430,7 +418,7 @@ def main():
             print(r.stderr[-500:])
             bad += 1
             failed.add(name)
-    if drops and not mutates and not only:
+    if drops and not mutates:
         bad += hwev_text_checks(work, apply_mod)
     if drops or mutates:
         if hwev_expected:

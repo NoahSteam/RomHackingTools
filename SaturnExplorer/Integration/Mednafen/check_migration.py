@@ -60,8 +60,16 @@ EXPECT = [
     ("src/ss/debug.inc", "SeSsNativeSetCPUCallback,", 1, "DEBUG_NATIVE_EDIT"),
     ("src/ss/ss.cpp", "SeSsNativeSetCPUCallback(void", 1, "DEBUG_NATIVE_EDIT"),
 ]
+def hwev_expect(mod):
+    """Every hardware event fence exactly once, in its file (apply.py's HWEV_KEY_FILE); each declaration fence once per TU."""
+    out = [("src/ss/" + f, key, 1, "HWEV_KEYS") for key, f in getattr(mod, "HWEV_KEY_FILE", {}).items()]
+    out += [("src/ss/" + f, "SE_HWEV_FWD", 1, "HWEV_KEYS") for f in getattr(mod, "HWEV_FWD_FILES", ())]
+    return out
+
+
 GONE = [("src/ss/vdp1.cpp", "SE_PERF_VDP1_DRAW_CYCLES"), ("src/ss/sound.cpp", "se_perf_t0", "M68K_IDLE_STEP")]
-SYNTAX = ["src/ss/vdp1.cpp", "src/ss/sound.cpp", "src/hw_cpu/m68k/m68k.cpp", "src/ss/ss.cpp"]
+SYNTAX = ["src/ss/vdp1.cpp", "src/ss/sound.cpp", "src/hw_cpu/m68k/m68k.cpp", "src/ss/ss.cpp",
+          "src/ss/cdb.cpp", "src/ss/smpc.cpp", "src/ss/vdp2.cpp"]
 
 
 def load_new():
@@ -189,6 +197,11 @@ def make_scratch(root, scratch):
                     continue   # untracked (a patched tree's added files): not pristine
                 with open(os.path.join(work, rel), "wb") as f:
                     f.write(data)
+    # subdirectories of src/ss that sources include by relative path (smpc.cpp: input/gamepad.h) are read-only here
+    for entry in os.listdir(os.path.join(root, "src", "ss")):
+        p = os.path.join(root, "src", "ss", entry)
+        if os.path.isdir(p) and not os.path.exists(os.path.join(work, "src", "ss", entry)):
+            link_or_copy(os.path.abspath(p), os.path.join(work, "src", "ss", entry))
     shutil.copy(os.path.join(root, "configure.ac"), work) if os.path.isfile(os.path.join(root, "configure.ac")) else None
     # headers, config.h and the rest of src/ that the translation units reach by <mednafen/...>.
     if os.path.exists(os.path.join(root, "intl")):
@@ -273,7 +286,7 @@ def main():
                 continue
             if key in open(os.path.join(work, rel), errors="replace").read():
                 fail("%s still contains the retired %s" % (rel, key))
-        for rel, key, n, attr in EXPECT:
+        for rel, key, n, attr in EXPECT + hwev_expect(mod):
             if not hasattr(mod, attr):
                 continue
             c = fences_containing(open(os.path.join(work, rel), errors="replace").read(), key, mod)

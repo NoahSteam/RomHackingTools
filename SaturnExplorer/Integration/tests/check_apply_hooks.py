@@ -390,5 +390,95 @@ if hasattr(mod, "DEBUG_SYNC_EDIT"):
     if open(apply_py).read().count("int SeSsHookNeedsSync = 1;") != 2:
         fail("SeSsHookNeedsSync needs a definition in both the debugger and the non-debugger branch")
 
+# ---- hardware event log hooks (apply.HWEV_*): each key present exactly once and guarded by the mask --------------
+if hasattr(mod, "HWEV_KEYS"):
+    keys = list(mod.HWEV_KEYS)
+    if len(set(keys)) != len(keys):
+        fail("a hardware event key is used twice")
+    for a in keys:
+        for b in keys:
+            if a != b and a in b:
+                fail("hardware event key %r is a substring of %r: upsert() would conflate their fences" % (a, b))
+    sites = ([(h, k) for _a, h, k in mod.HWEV_SCU + mod.HWEV_CD + mod.HWEV_SMPC + mod.HWEV_VDP1 + mod.HWEV_VDP2]
+             + [(mod.HWEV_DMAC_HOOK, mod.HWEV_DMAC_KEY)]
+             + [(h, k) for _a, h, k in [mod.hwev_exception_edit(*e) for e in mod.HWEV_EXC]])
+    if len(sites) + 2 != len(keys):     # + the declarations and the SsDbgCpuPc accessor
+        fail("HWEV_KEYS (%d) does not list every hook (%d + 2)" % (len(keys), len(sites)))
+    for hook, key in sites:
+        if hook.count(key) != 1:
+            fail("hook %s: its key appears %d times in its own text" % (key, hook.count(key)))
+        for other in keys:
+            if other != key and other in hook:
+                fail("hook %s contains the key of another hook (%s)" % (key, other))
+        m = re.search(r"if\(MDFN_UNLIKELY\(SeSsHwEvMask & SE_HWEV_EN_[A-Z0-9_]+\)", hook)
+        if not m or hook.lstrip().find("if(") != 0:
+            fail("hook %s is not guarded by a SeSsHwEvMask test at the start of its statement" % key)
+        # a coroutine body (cdb / smpc / vdp1 command loop) cannot take a declaration: the hook is one statement
+        if re.search(r"\b(const|int|unsigned|bool|auto|uint\d+)\s+\w+\s*=", hook.split("SeMednafenHwEvent(")[0]):
+            fail("hook %s declares a local" % key)
+        # the mask is tested before anything that costs: no call sits ahead of it on the line
+        if "(" in hook[:hook.index("SeSsHwEvMask")].replace("if(MDFN_UNLIKELY(", ""):
+            fail("hook %s evaluates something before the mask" % key)
+        for retired_file, retired_key in mod.RETIRED_FENCES:
+            if retired_key in hook:
+                fail("hook %s contains the retired key %r" % (key, retired_key))
+    # an exception hook lands AFTER the profiler's ownership fence (f2_hook_checks pins that one to the statement),
+    # an old tree gets it in place, a second apply changes nothing, and --revert is exact
+    exc_src = ("void f() {\n\tPC -= 4;\n\tException(EXCEPTION_INT, opexec_vecnum, opexec_new_PC);\n\tSR &= 1;\n"
+               "\tException(EXCEPTION_TRAP, (uint8)instr, opexec_new_PC)\n\tBranch(false, opexec_new_PC);\n}\n")
+    with tempfile.TemporaryDirectory(dir=work) as d:
+        path = os.path.join(d, "sh7095_ops.inc")
+        open(path, "w", newline="").write(exc_src)
+        mod.process_anchored(d, "sh7095_ops.inc", "t", [mod.sh2_exception_edit("INT")], True)
+        with_own = open(path, newline="").read()
+        edits = [mod.hwev_exception_edit(*e) for e in mod.HWEV_EXC]
+        mod.process_anchored(d, "sh7095_ops.inc", "t", edits, True)
+        t = open(path, newline="").read()
+        if not (t.index("SE_OWN_EXC_INT") < t.index("SE_HWEV_HOOK_EXC_INT") < t.index("SR &= 1;")):
+            fail("the INT event hook is not directly after the ownership fence:\n" + t)
+        if not (t.index("Exception(EXCEPTION_TRAP") < t.index("SE_HWEV_HOOK_EXC_TRAP") < t.index("Branch(false")):
+            fail("the TRAPA event hook is not between the Exception statement and the branch:\n" + t)
+        for k in ("SE_HWEV_HOOK_EXC_INT", "SE_HWEV_HOOK_EXC_TRAP"):
+            if t.count(k) != 1:
+                fail("%s appears %d times after one apply" % (k, t.count(k)))
+        mod.process_anchored(d, "sh7095_ops.inc", "t", edits, True)
+        if open(path, newline="").read() != t:
+            fail("a second apply of the exception event hooks changed the file")
+        # applied BEFORE the profiler's fence exists (a tree an older apply.py patched, then this one): same result
+        open(path, "w", newline="").write(exc_src)
+        mod.process_anchored(d, "sh7095_ops.inc", "t", edits, True)
+        mod.process_anchored(d, "sh7095_ops.inc", "t", [mod.sh2_exception_edit("INT")], True)
+        if open(path, newline="").read().count("SE_HWEV_HOOK_EXC_INT") != 1:
+            fail("the INT event hook is duplicated when the ownership fence arrives later")
+        mod.revert(d, d)
+        if open(path, newline="").read() != exc_src:
+            fail("--revert does not restore the exception sites byte for byte")
+    # a prepended declaration fence reverts exactly and is applied once
+    with tempfile.TemporaryDirectory(dir=work) as d:
+        path = os.path.join(d, "vdp2.cpp")
+        src = "#include \"vdp2.h\"\nint x;\n"
+        open(path, "w", newline="").write(src)
+        for _ in range(2):
+            mod.process_anchored(d, "vdp2.cpp", "t", [], True, prepend=(mod.hwev_fwd(mod.HWEV_DECL), mod.HWEV_FWD_KEY))
+        t = open(path, newline="").read()
+        if t.count("SE_HWEV_FWD") != 1 or "SeSsHwEvMask" not in t or "SeMednafenHwEvent" not in t:
+            fail("the declaration fence is not applied exactly once:\n" + t)
+        mod.revert(d, d)
+        if open(path, newline="").read() != src:
+            fail("--revert does not restore a file with a declaration fence")
+    # the declarations compile in C++ and agree with the glue's definitions
+    with tempfile.TemporaryDirectory(dir=work) as d:
+        tu = os.path.join(d, "decl.cpp")
+        open(tu, "w").write(mod.HWEV_DECL_SS + "void f(){ if(SeSsHwEvMask & SE_HWEV_EN_VDP1) SeMednafenHwEvent(SE_HWEV_K_VDP1_FB_SWAP, SE_HWEV_CPU_NONE, 0, 1u, 2u, 3u, 4u);\n"
+                                                "  SeMednafenDmacRecalc(0, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u); }\n")
+        r = subprocess.run([cxx, "-std=gnu++11", "-fsyntax-only", "-I" + COMMON, tu], capture_output=True, text=True)
+        if r.returncode:
+            fail("the hardware event declarations do not compile:\n" + r.stderr[-800:])
+        glue = open(os.path.join(MED, "se_mednafen_glue.c")).read()
+        for sym in ("unsigned int SeSsHwEvMask;", "void SeMednafenHwEvent(unsigned int kind, int cpu, unsigned int pc,",
+                    "void SeMednafenDmacRecalc(int cpu, unsigned int runMask,"):
+            if sym not in glue:
+                fail("the glue does not define " + sym)
+
 print("OK" if not bad else "%d check(s) failed" % bad)
 sys.exit(1 if bad else 0)
