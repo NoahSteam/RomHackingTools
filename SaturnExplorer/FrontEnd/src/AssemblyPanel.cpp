@@ -143,7 +143,9 @@ void CountSharers(IMemoryBackend& backend, uint32_t rowAddr, uint32_t ea, uint32
     count = 0;
     first = 0;
     const uint32_t span = 1032;
-    const uint32_t lo = (ea >= span ? ea - span : 0) & ~1u;
+    // Not before the start of the literal's region: a read across a region edge fails as a whole.
+    const uint32_t regionBase = AsmSpanFor(ea).base;
+    const uint32_t lo = ((ea - regionBase >= span) ? ea - span : regionBase) & ~1u;
     if (ea <= lo) return;
     const MemoryReadResult r = backend.ReadMemoryBatch({ { lo, ea - lo } })[0];
     if (!r.success || r.bytes.size() < ea - lo) return;
