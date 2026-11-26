@@ -520,9 +520,8 @@ void TestBuilder()
     s = Build(cur);
     CHECK(s.lost == 0 && s.first == 1303 && s.count == 512);
     for (uint32_t i = 0; i < 100; ++i) Queue(20000 + i);
-    // Delivered so far: up to 1302 + 512 = 1814. Produced: 1302 + 8192 + 100 = 9594. The ring holds
-    // 1403..9594, so 1815..1402 is nothing and the loss is 1815 - 1403... computed from the ring:
-    // the cursor is at 1814, the oldest retained is 9594 - 8192 + 1 = 1403 <= 1815, so no loss.
+    // The cursor stands at 1814 (1302 + 512). 9594 are produced, so the ring holds 1403..9594 and
+    // 1815 is still in it: nothing lost.
     s = Build(cur);
     CHECK(s.lost == 0 && s.first == 1815);
     // A second connection was never behind: it starts at the newest and says nothing is lost.
