@@ -617,6 +617,17 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerStructDefsTests COMMAND SaturnExplorerStructDefsTests)
 
+    # Inline SH-2 assembler: pure text -> opcode, checked exhaustively against Sh2Disasm (linked here as
+    # the oracle). No ImGui, no emulator.
+    add_executable(SaturnExplorerSh2AsmTests
+        FrontEnd/tests/Sh2AsmTests.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp
+        FrontEnd/src/Debug/Sh2Disasm.cpp
+    )
+    target_include_directories(SaturnExplorerSh2AsmTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerSh2AsmTests COMMAND SaturnExplorerSh2AsmTests)
+
     # Frame Memory Compare's snapshot + diff engine: pure logic over byte vectors, no ImGui.
     add_executable(SaturnExplorerMemoryCompareTests
         FrontEnd/tests/MemoryCompareTests.cpp
