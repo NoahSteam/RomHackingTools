@@ -68,6 +68,18 @@ void Messages()
               "MSH2 TRAPA #35 (vec 0x23) -> handler 06001000");
     CheckText("trapa odd vector", Msg(Ev(1, 5, SE_HWEV_EXC_TRAP, 0, 0x06001000, 0)),
               "MSH2 TRAPA #5 (vec 0x05) -> handler 06001000");
+    // A trap's immediate, and an on-chip interrupt's programmable vector, can equal a fixed exception's or an SCU
+    // interrupt's number: neither the row nor the detail may name them as that event.
+    CheckText("trapa 9", Msg(Ev(1, 9, SE_HWEV_EXC_TRAP, 0, 0x06001000, 0)), "MSH2 TRAPA #9 (vec 0x09) -> handler 06001000");
+    CHECK(DetailHas(Ev(1, 9, SE_HWEV_EXC_TRAP, 0, 0x06001000, 0), "Vector", "TRAPA #9"));
+    CHECK(!DetailHas(Ev(1, 9, SE_HWEV_EXC_TRAP, 0, 0x06001000, 0), "Vector", "address error"));
+    CHECK(DetailHas(Ev(1, 64, SE_HWEV_EXC_TRAP, 0, 0x06001000, 0), "Vector", "TRAPA #64"));
+    CHECK(!DetailHas(Ev(1, 64, SE_HWEV_EXC_TRAP, 0, 0x06001000, 0), "Vector", "VBlank"));
+    CHECK(DetailHas(Ev(1, 255, SE_HWEV_EXC_TRAP, 0, 0x06001000, 0), "Vector", "TRAPA #255"));
+    CHECK(DetailHas(Ev(1, 9, SE_HWEV_EXC_CPUADDR, 0, 0x06000400, 0), "Vector", "CPU address error"));
+    CHECK(DetailHas(Ev(1, 0x40, SE_HWEV_EXC_INT, 15, 0x06000800, 0), "Vector", "VBlank-IN"));
+    CHECK(!DetailHas(Ev(1, 9, SE_HWEV_EXC_INT, 5, 0x06000800, 0), "Vector", "address error"));
+    CHECK(Msg(Ev(1, 9, SE_HWEV_EXC_INT, 5, 0x06000800, 0)).find("address error") == std::string::npos);
     CheckText("unknown class", Msg(Ev(1, 1, 99, 0, 0x10, 0)), "MSH2 exception class 99 (vec 0x01) -> handler 00000010");
     // 2 SCU_INT_ACCEPT
     CheckText("accept", Msg(Ev(2, 0, 15, 0x40, 0)), "SCU interrupt VBlank-IN delivered (vec 0x40, level 15)");

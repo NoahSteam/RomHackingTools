@@ -211,7 +211,9 @@ static std::string Message(const SeHwEvent& e)
             {
                 case SE_HWEV_EXC_INT:
                 {
-                    const std::string n = HwSh2VectorName(a[0]);
+                    // Only the SCU's vectors have a fixed meaning for an interrupt: an on-chip source's vector is
+                    // whatever the game programmed, so a number that happens to equal a fixed exception's is not it.
+                    const std::string n = (a[0] >= 0x40 && a[0] <= 0x5F) ? HwSh2VectorName(a[0]) : std::string();
                     what = "interrupt " + (n.empty() ? std::string("on-chip/other") : n) +
                            Fmt(" (vec 0x%02X, level %u)", a[0], a[2]);
                     break;
@@ -374,7 +376,14 @@ std::vector<std::pair<std::string, std::string>> HwEventDetail(const SeHwEvent& 
     {
         case SE_HWEV_K_SH2_EXCEPTION:
         {
-            r.emplace_back("Vector", Fmt("0x%02X %s", a[0], HwSh2VectorName(a[0]).c_str()));
+            // The name depends on the class: TRAPA's immediate is any of 0..255 and an on-chip interrupt's
+            // vector is programmable, so either can equal a fixed exception's or an SCU interrupt's number
+            // without being that event.
+            std::string vn;
+            if (a[1] == SE_HWEV_EXC_TRAP) vn = Fmt("TRAPA #%u", a[0]);
+            else if (a[1] == SE_HWEV_EXC_INT) vn = (a[0] >= 0x40 && a[0] <= 0x5F) ? HwSh2VectorName(a[0]) : std::string("on-chip/other interrupt");
+            else vn = HwSh2VectorName(a[0]);
+            r.emplace_back("Vector", vn.empty() ? Fmt("0x%02X", a[0]) : Fmt("0x%02X %s", a[0], vn.c_str()));
             r.emplace_back("Class", Fmt("%u", a[1]));
             if (a[1] == SE_HWEV_EXC_INT) r.emplace_back("Level", Fmt("%u", a[2]));
             r.emplace_back("Handler", Fmt("%08X", a[3]));
