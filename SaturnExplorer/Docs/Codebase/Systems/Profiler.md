@@ -337,7 +337,13 @@ attribution-on runs differed from attribution-off runs by 7 cycles of master DMA
 about 153 units of VDP1 discarded work (phase 8); with the guard every non-function counter is identical
 with attribution on and off. Breakpoint, single-step and tracepoint were checked with attribution on
 through the live driver (halt PC exact, one instruction per step, attribution continuing with a tracepoint
-armed and after its removal). At `da6c04d` on the real emulator, native stepping (Alt+D) worked with attribution on and off, attribution-off counters were unchanged (0 of 826 rows), and with attribution on the split froze after the debugger released the callback, which this change fixes; the fix is not yet verified on the real emulator.
+armed and after its removal). At `da6c04d` on the real emulator, native stepping (Alt+D) worked with attribution on and off, attribution-off counters were unchanged (0 of 826 rows), and with attribution on the split froze after the debugger released the callback, which this change fixes. Verified on the real emulator at `94eb518` (V1 guest, one 300 s recording, 0 lost): the
+frame in which the debugger stepped is published as not attributed (mode without functions, no rows), the next
+frame is attributed again with the normal split and no remainder, without re-arming (phase 2 reads 12,003 / 4,003
+in every attributed window before and after); the debugger merely being open takes nothing; a native breakpoint
+left set holds the callback, so every frame is not attributed until it is cleared (4,018 frames in that run).
+Attribution-off counters with native stepping are unchanged (0 of 826 rows), and SE breakpoint, step and
+tracepoint behave as before in the same process afterwards.
 
 **Why skipping it is safe (verified from source, Mednafen 1.32.1 / fork base `783518d`).**
 - *The profile-only hook path reads no device state.* `SeSsBpHook` -> `SeMednafenTraceHook` ->
