@@ -606,6 +606,17 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerMemorySearchTests COMMAND SaturnExplorerMemorySearchTests)
 
+    # Struct views' model: layout, the text format, Emit/Parse identity and field decode/encode.
+    # Pure logic over byte buffers (no ImGui, no emulator); WriteDestText.h only needs the
+    # IMemoryBackend interface header.
+    add_executable(SaturnExplorerStructDefsTests
+        FrontEnd/tests/StructDefsTests.cpp
+        FrontEnd/src/Debug/StructDefs.cpp
+    )
+    target_include_directories(SaturnExplorerStructDefsTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerStructDefsTests COMMAND SaturnExplorerStructDefsTests)
+
     # Frame Memory Compare's snapshot + diff engine: pure logic over byte vectors, no ImGui.
     add_executable(SaturnExplorerMemoryCompareTests
         FrontEnd/tests/MemoryCompareTests.cpp
