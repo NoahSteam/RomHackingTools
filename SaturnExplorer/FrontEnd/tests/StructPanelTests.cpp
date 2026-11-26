@@ -19,6 +19,8 @@
 #include "Theme.h"
 #include "WorkFiles.h"
 
+#include <cstdlib>
+
 using namespace sfe;
 
 namespace
@@ -557,7 +559,15 @@ void RemovedStructLeavesBrokenRow()
 
 std::string TempDir(const char* name)
 {
-    const std::string d = std::string("/tmp/se_structpanel_") + name;
+    // Under the platform's temp folder (TEMP on Windows, TMPDIR elsewhere): "/tmp" does not exist on Windows.
+#ifdef _WIN32
+    const char* base = std::getenv("TEMP");
+#else
+    const char* base = std::getenv("TMPDIR");
+#endif
+    std::string root = base && *base ? base : "/tmp";
+    while (root.size() > 1 && (root.back() == '/' || root.back() == '\\')) root.pop_back();
+    const std::string d = root + "/se_structpanel_" + name;
     MakeDirectory(d);
     return d;
 }
