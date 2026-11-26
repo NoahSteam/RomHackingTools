@@ -38,7 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # is also compiled straight into Saturn Explorer's LiveDriver — one copy, no drift).
 # Applying the patch copies them, plus this folder's Yabause-specific hook edits.
 SHARED_DIR = os.path.normpath(os.path.join(HERE, "..", "Common"))
-COPY_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h"]
+COPY_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h", "SeHwEvents.h"]
 
 BEGIN = "/* --- SE_EXPORT (Saturn Explorer live tap) --- */"
 END = "/* --- end SE_EXPORT --- */"

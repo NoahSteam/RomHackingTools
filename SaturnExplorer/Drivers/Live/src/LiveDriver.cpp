@@ -2686,6 +2686,28 @@ extern "C" int se_live_perf_status_get(const se_data_source* ds, se_live_perf_st
     });
 }
 
+// Hardware event log: interface only for now (T0); the real bodies arrive with the driver task.
+extern "C" void se_live_set_hw_events(const se_data_source* ds, uint32_t mask)
+{
+    (void)ds;
+    (void)mask;
+}
+
+extern "C" uint32_t se_live_drain_hw_events(const se_data_source* ds, se_live_hw_event* out, uint32_t max)
+{
+    (void)ds;
+    (void)out;
+    (void)max;
+    return 0;
+}
+
+extern "C" int se_live_hw_status_get(const se_data_source* ds, se_live_hw_status* out)
+{
+    (void)ds;
+    if (out) { *out = se_live_hw_status(); }
+    return 0;
+}
+
 extern "C" void se_live_set_rewind_enabled(const se_data_source* ds, int enabled)
 {
     if (!ds || !ds->user || ds->close != CbClose) { return; }

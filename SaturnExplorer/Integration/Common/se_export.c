@@ -1111,6 +1111,31 @@ void SeExportSetPerfCapable(int capable)
     SeAtStore(&sPerfCapable, capable ? 1 : 0);
 }
 
+/* Hardware event log: interface only for now (T0). The capability stays clear and the HWE verb
+ * is not handled until the exporter implementation lands, so nothing here is observable. */
+void SeExportSetHwEventHook(void (*set)(unsigned int mask), unsigned int supportedMask)
+{
+    (void)set;
+    (void)supportedMask;
+}
+
+void SeExportQueueHwEvent(const SeHwEvent* ev)
+{
+    (void)ev;
+}
+
+unsigned int SeExportHwEventMask(void)
+{
+    return 0u;
+}
+
+size_t SeExportBuildHwSection(SeExportHwCursor* cursor, unsigned char* out)
+{
+    (void)cursor;
+    (void)out;
+    return 0u;
+}
+
 unsigned int SeExportProfilerFlags(void)
 {
     return (unsigned int)SeAtLoad(&sProfApplied);

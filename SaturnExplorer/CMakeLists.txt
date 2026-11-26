@@ -1568,6 +1568,14 @@ if(BUILD_TESTING)
     target_link_libraries(SaturnExplorerProfilerLifecycleTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerProfilerLifecycleTests COMMAND SaturnExplorerProfilerLifecycleTests)
 
+    # The hardware event record is one 32-byte layout in C and C++ (SeHwEvents.h).
+    add_executable(SaturnExplorerHwEventsHeaderTests
+        Integration/tests/HwEventsHeaderTests.c
+        Integration/tests/HwEventsHeaderCxx.cpp
+    )
+    target_include_directories(SaturnExplorerHwEventsHeaderTests PRIVATE Integration/Common)
+    add_test(NAME SaturnExplorerHwEventsHeaderTests COMMAND SaturnExplorerHwEventsHeaderTests)
+
     # F7: the per-frame function table's Other, per CPU and by cause (not admitted / evicted), with the
     # real glue table and end-of-frame code and the publication replaced by a capture.
     add_executable(SaturnExplorerProfilerOtherTests
