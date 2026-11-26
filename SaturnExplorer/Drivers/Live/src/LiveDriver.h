@@ -52,6 +52,17 @@ uint32_t se_live_connection_generation(const se_data_source* ds);
  * accepted only while this equals the connection generation. */
 uint32_t se_live_captured_generation(const se_data_source* ds);
 
+/* The identity the SERVER stamped on the snapshot the CALLING THREAD last captured (or is
+ * capturing): the machine-state timeline its memory belongs to, and its frame number. Returns 1
+ * and fills both when the server states a timeline for that snapshot (control block +56, sent by
+ * servers built after the field was added; the field is within the v27 control block's tolerated
+ * length, so no version bump). Returns 0 when the capture's timeline is unknown -- an older
+ * server, no capture yet, or a source that is not live -- and then 'frame' is still filled when
+ * a capture exists, 'timeline' is 0. A client that pairs the capture's bytes with an identity must
+ * use THIS one: the perf stream's identity is delivered separately and can belong to a newer
+ * timeline than a lagging capture. */
+int se_live_captured_identity(const se_data_source* ds, uint32_t* timeline, uint64_t* frame);
+
 /* The content revision of the snapshot the CALLING THREAD last captured (the one being captured,
  * inside a begin/end capture pair), or 0 before its first capture or for a source that is not
  * live. Two captures of the same source that report the same non-zero value hold byte-identical
@@ -157,6 +168,114 @@ int se_live_emu_save_slot(const se_data_source* ds, uint32_t slot);
  * connect and on every change; the poll thread ships it (REW) on its next cycle. Harmlessly
  * ignored against a pre-v18 server, which always captures. No-op if 'ds' isn't a live source. */
 void se_live_set_rewind_enabled(const se_data_source* ds, int enabled);
+
+/* ---- Profiler (v26+, record v27) ----
+ *
+ * The emulator counts, for every emulated frame, where the Saturn's time went (SH-2 sleep and
+ * bus-stall cycles, VDP1 drawing, the SCU DSP, the 68000), what crossed its buses (SH-2 accesses
+ * per device, SCU DMA bytes per level and route) -- Integration/Common/SePerfCounters.h lists the
+ * counters and is the index into 'counters' below. These cost the emulator next to nothing and
+ * arrive whenever the server has SE_LIVE_CAP_PROFILER (se_live_poke_info reports the caps).
+ *
+ * One record per completed emulated frame; a frame is never reported twice. A record's frame
+ * is identified by (timeline_id, frame_no) when SE_PERF_VALID_IDENTITY is set -- the producer
+ * stamps it, so it is right whatever snapshots the reply happened to carry. 'frame' (the snapshot
+ * frame number of the reply that delivered the record) is kept only for old callers and is NOT
+ * the record's frame. 'counter_count' is how many leading entries of 'counters' the server filled;
+ * the rest are zero.
+ *
+ * Lost records. sample_seq is the 64-bit publication order within one emulator run; records
+ * arrive in strictly increasing order (a 32-bit v26 sequence is extended wrap-aware, so a wrap is
+ * not a restart). When records were lost between the emulator and this queue -- the server's
+ * 16-deep ring overwrote them before this connection was sent them, or this queue's 600-record
+ * bound evicted them undrained -- the next record that is delivered carries the exact missing
+ * range in gap_first..gap_last (inclusive; both 0 = nothing missing), so gap_last + 1 ==
+ * sample_seq. The range is kept even across replies that carry no record, and eviction
+ * extends it. newest_seq is the server's newest published sample_seq when the record was sent:
+ * a consumer has seen everything up to that point once it holds a record whose sample_seq equals it.
+ *
+ * A v27 client also reads a v26 server. The struct says which fields are real:
+ *   wire_version  26 or 27, the protocol form the record arrived in.
+ *   valid         bitmask of what this record can be trusted for. Every field marked below with
+ *                 a SE_PERF_VALID_* bit (SePerfCounters.h) is "not available" -- present as zero,
+ *                 but not a measurement -- unless that bit is set. A v26 record sets no
+ *                 SE_PERF_VALID_* bit; wire_version < 27 says counters[6] is the elapsed VDP1
+ *                 drawing figure (retired in v27, where counters[6] is always 0). Counter
+ *                 indices >= counter_count are not available
+ *                 whatever 'valid' says. A counter index added in v27 is "not available" unless its
+ *                 own bit is set: SSH2_INT says counter 5 is the integrated figure (54 is reserved), 55+56 VDP1_WORK, 57 M68K_IDLE, 58..61 BUS_X.
+ *   Always valid: seq/sample_seq, flags, counters 0..53 (except 6 as above), the function list. */
+#define SE_LIVE_PERF_COUNTERS 64u   /* room for SePerfCounters.h's SE_PERF_COUNT, with headroom */
+#define SE_LIVE_PERF_FUNCTIONS 64u  /* == SE_LIVE_PERF_FN_MAX */
+typedef struct se_live_perf_frame
+{
+    uint32_t seq;               /* low 32 bits of sample_seq (the whole v26 sequence) */
+    uint32_t flags;             /* SE_LIVE_PROF_* in force for the frame (v27: == mode) */
+    uint32_t frame;             /* snapshot frame of the delivering reply; superseded by frame_no (F3) */
+    uint32_t counter_count;
+    uint64_t counters[SE_LIVE_PERF_COUNTERS];
+    uint32_t fn_count;          /* hottest functions, hottest first (see SE_PERF_FN_* for the key) */
+    uint32_t fn_other_cycles;   /* attributed cycles beyond those fn_count entries */
+    uint32_t fn_key[SE_LIVE_PERF_FUNCTIONS];
+    uint32_t fn_cycles[SE_LIVE_PERF_FUNCTIONS];
+    /* ---- v27 ---- */
+    uint32_t wire_version;      /* 26 or 27 */
+    uint32_t valid;             /* SE_PERF_VALID_*, see above */
+    uint64_t sample_seq;        /* 64-bit; == seq for a v26 record. Always valid */
+    uint32_t timeline_id;       /* SE_PERF_VALID_IDENTITY */
+    uint32_t pad0;
+    uint64_t frame_no;          /* SE_PERF_VALID_IDENTITY: the emulated frame within the timeline */
+    uint32_t mode;              /* SE_PERF_VALID_MODE: attribution mode latched for the frame */
+    uint32_t cache_mode;        /* SE_PERF_VALID_CACHE: SE_PERF_CACHE_* */
+    uint32_t sat_flags;         /* SE_PERF_VALID_OTHER: SE_PERF_SAT_* */
+    uint32_t pad1;
+    uint64_t other_not_admitted[2];   /* SE_PERF_VALID_OTHER: master, slave */
+    uint64_t other_evicted[2];        /* SE_PERF_VALID_OTHER: master, slave */
+    uint64_t newest_seq;        /* the server's newest published sample_seq when this was sent (0 unknown / v26) */
+    uint64_t gap_first;         /* v27: sample_seq range the server dropped for this connection just */
+    uint64_t gap_last;          /*      before this record; both 0 = none (always 0 from a v26 server) */
+    uint64_t evict_first;       /* sample_seq range THIS CLIENT's bounded queue evicted, undrained, just */
+    uint64_t evict_last;        /*      before this record; both 0 = none. Distinct from gap_*: the server */
+                                /*      did deliver these, the application did not drain them in time */
+    uint32_t gap_only;          /* 1 = not a frame: a reply carried a lost range (gap_*) or a newer */
+    uint32_t pad2;              /*     newest_seq and no record to attach it to. Only gap_*, evict_*, */
+                                /*     newest_seq and wire_version are meaningful; sample_seq is 0 */
+    /* Exact COUNTS of records lost just before this one, by cause. gap_* / evict_* above are only the
+     * plot-break span (several losses merge into their enclosing interval, which may contain
+     * delivered records); the number of missing frames is never derived from a span. */
+    uint64_t gap_count;         /* records the server's ring dropped for this connection */
+    uint64_t evict_count;       /* records this client's bounded queue evicted undrained */
+} se_live_perf_frame;
+
+/* Move up to 'max' queued records into 'out', oldest first; returns how many. The queue is
+ * bounded (ten seconds of frames), dropping the oldest, and is emptied on a reconnect. */
+uint32_t se_live_drain_perf(const se_data_source* ds, se_live_perf_frame* out, uint32_t max);
+
+/* Where the perf stream stands, for a consumer that must know it has everything the emulator has
+ * published (a test draining in lockstep, a panel that wants to say "up to date"). All values are
+ * as of the last reply the poll thread has fully ingested.
+ *   newest_seq      the server's newest published sample_seq (0 = none / pre-v27 server)
+ *   queued_seq      the newest sample_seq placed in the queue (0 = none on this connection)
+ *   replies         replies ingested on this connection; counts replies that carried nothing,
+ *                   so "two more replies after I acted" is a deterministic wait
+ *   server_lost     records the server's ring dropped for this connection, in total
+ *   driver_evicted  records this queue evicted undrained, in total
+ * Returns 0 when 'ds' is not a live source. */
+typedef struct se_live_perf_status
+{
+    uint64_t newest_seq;
+    uint64_t queued_seq;
+    uint64_t replies;
+    uint64_t server_lost;
+    uint64_t driver_evicted;
+} se_live_perf_status;
+int se_live_perf_status_get(const se_data_source* ds, se_live_perf_status* out);
+
+/* Set the profiler options: SE_LIVE_PROF_FUNCTIONS (1) asks the emulator to attribute SH-2 time
+ * to functions, which makes it run its per-instruction loop -- several times slower -- for as
+ * long as the flag is set, so pass 0 when the user is not looking. Needs SE_LIVE_CAP_PROF_FUNCTIONS;
+ * ignored by a server without it, and not sent to one older than v26. Restated on reconnect. */
+void se_live_set_profiler(const se_data_source* ds, uint32_t flags);
 
 /* A fired tracepoint event drained from the server (v8+): the tracepoint id, the CPU
  * (0 master / 1 slave), the frame it fired on, and the captured SH-2 register file

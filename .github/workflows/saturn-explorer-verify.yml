@@ -88,7 +88,7 @@ jobs:
       # icacls deny-write ACE was not enforced (TestUnwritableConfigDir, PR #68 run 44640816333), where it is under the default
       # shell. The regex comes in as an expression so the line reads the same in pwsh and bash.
       - name: Run CTest (all but the decompiler suites, which run once in the next step)
-        run: ctest --test-dir build -C Debug --output-on-failure -E "${{ env.SE_DECOMPILER_TESTS }}"
+        run: ctest --test-dir build -C Debug --output-on-failure --output-log build/ctest-main.log -E "${{ env.SE_DECOMPILER_TESTS }}"
 
       # Passing tests print nothing above; the decompiler tests' own output (timings, the
       # decompiled fixture) is what the verification record copies (A7), so show it. They ran in the
@@ -131,6 +131,13 @@ jobs:
           SDL_VIDEODRIVER=dummy build/bin/SaturnExplorerFrontEnd --selftest
           xvfb-run -a build/bin/SaturnExplorerFrontEnd --selftest-window | tee window.txt
           grep -q 'selftest-window ok: x11' window.txt
+
+      # The decompiler steps above print thousands of lines after the main CTest step, which pushes a
+      # failing test's output out of reach of anything that reads the end of the job log. Repeat it last.
+      - name: Main CTest log again, at the end of a failed job
+        if: ${{ failure() }}
+        shell: bash
+        run: cat build/ctest-main.log || true
 
   # build-release.bat: the documented CMake + VS 2022 Release build.
   windows-release-batch:

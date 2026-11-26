@@ -40,8 +40,9 @@ struct CallStackFrame
     // address inside the function -- rather than a sub_XXXXXX that never existed.
     uint32_t        functionAddress = 0;
     bool            functionKnown = false;
-    // An address that really is inside this frame's function: the halted PC for frame #0, the
-    // return address for a caller. Always meaningful, which is what lets the UI navigate and
+    // An address that really is inside this frame's function: the halted PC for frame #0; for a
+    // caller, the return address of the frame below it (its callee), which is where this frame
+    // resumes. Not the frame's own returnAddress -- that is a spot in ITS caller. Always meaningful, which is what lets the UI navigate and
     // label a frame whose entry point is unknown without having to invent one.
     uint32_t        currentAddress = 0;
     uint32_t        returnAddress = 0;       // where this frame returns to

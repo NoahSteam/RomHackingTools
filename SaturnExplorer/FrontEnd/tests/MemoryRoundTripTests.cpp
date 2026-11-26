@@ -36,9 +36,13 @@
 #include "FrameRecorder.h"
 #include "ScrubState.h"
 #include "se_export.h"
+#include "SeLiveProtocol.h"
+#include "SePerfCounters.h"
 
 extern "C" void SeMednafenFrameHook(void);
 extern "C" void SeMednafenEndFrameHook(void);
+extern "C" void SeMednafenTraceHook(int cpu, unsigned int pc);
+extern "C" unsigned long long SeSsPerfC[];   // the glue's profiler counters (the emulator patch adds to them)
 
 // ------------------------------------------------------------------------------------------------
 // Mednafen's storage, and the apply.py accessors compiled against it.
@@ -161,6 +165,12 @@ void SsDbgAddMemBp(int, unsigned int, unsigned int, unsigned int) {}
 void SsDbgClearBps(void) {}
 void SsDbgSetTraceActive(int) {}
 int SsDbgHasDebugger(void) { return 1; }
+// Profiler (v26): the SH-2 cycle counters the glue's sampler reads, and the arming of the
+// per-instruction hook, both driven by the profiler section of main().
+static int gCpuTs[2];
+static int gProfActive;
+int SsDbgCpuTimestamp(int cpu) { return gCpuTs[cpu ? 1 : 0]; }
+void SsDbgSetProfileActive(int active) { gProfActive = active; }
 void SsDbgSetPad(unsigned int, unsigned int) {}
 unsigned short SsDbgReadOpcode(unsigned int) { return 0x0009; }
 int SsDbgQueryKeyMap(unsigned int, int out[13]) { for (int i = 0; i < 13; ++i) out[i] = -1; return 0; }
@@ -624,9 +634,20 @@ int main()
                 for (uint16& w : WorkRAMH) w ^= 0xFFFF;
                 const int loadsBefore = gLoads.load();
                 const std::vector<uint8_t> blob = sfe::EncodeEditBlob(staged);
+                unsigned tlBefore = 0; unsigned long long frBefore = 0;
+                SeExportFrameIdentity(&tlBefore, &frBefore);
                 Check(se_load_state(ctx, 1, state.data(), state.size(), blob.data(), blob.size()) == SE_OK,
                       m + ": Play From Here is accepted");
                 Check(Until([&] { return gLoads.load() == loadsBefore + 1; }), m + ": the state is restored");
+                {
+                    // The restore replaced the machine: a new timeline, and the numbering resumed from
+                    // the loaded frame (1) -- the frame that ran after the load was 2, so 3 is next --
+                    // although frame numbers up to frBefore had already been used on the old timeline.
+                    unsigned tlAfter = 0; unsigned long long frAfter = 0;
+                    SeExportFrameIdentity(&tlAfter, &frAfter);
+                    Check(tlAfter == tlBefore + 1 && frAfter == 3 && frBefore > 3,
+                          m + ": a rewind starts a new timeline and reuses an already-used frame number");
+                }
                 size_t i = 0;
                 for (const Region& reg : kRegions)
                 {
@@ -641,6 +662,156 @@ int main()
                 Check(Until([&] { se_begin_frame(ctx); return ds.write_main_ram(ds.user, 0x06000000u, &z, 1) == 1; }),
                       m + ": editing resumes once the restore has settled");
             }
+        }
+    }
+
+    // ---- Profiler (v26): the glue's own half, through the real server and driver. ----
+    // The emulator patch only adds to SeSsPerfC; everything after that -- the hand-over at the end
+    // of the frame, the reset, and the per-instruction attribution of SH-2 cycles to functions --
+    // is the glue, which is what runs here.
+    {
+        std::vector<se_live_perf_frame> got;
+        auto drain = [&]
+        {
+            se_live_perf_frame b[8];
+            uint32_t n;
+            while ((n = se_live_drain_perf(&ds, b, 8)) != 0) got.insert(got.end(), b, b + n);
+        };
+        // Lockstep with the client. The server keeps the last 16 records and drops what a client that
+        // was scheduled late missed, so a test that ticks freely and sleeps loses the very frame it
+        // is looking for now and then. Every frame of interest is produced by ONE tick, after which
+        // nothing ticks until the driver holds the newest sequence the exporter published (the
+        // section header's newestSeq), so nothing it asserts about can have been dropped.
+        auto settle = [&]() -> bool
+        {
+            const unsigned long long want = SeExportPerfNewestSeq();
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+            while (std::chrono::steady_clock::now() < deadline)
+            {
+                se_live_perf_status st = {};
+                if (se_live_perf_status_get(&ds, &st) && st.queued_seq >= want) return true;
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            return false;
+        };
+        // One frame's counters reach the client, and the next frame starts from zero.
+        Until([&] { drain(); return !got.empty(); });
+        Check(settle(), "profiler: the client has caught up with the exporter");
+        drain();
+        got.clear();
+        SeSsPerfC[SE_PERF_FRAME_CYCLES] = 477000;
+        SeSsPerfC[SE_PERF_VDP1_COMMANDS] = 321;
+        SeSsPerfC[SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2 + 1] = 0x100000002ull;
+        EmulatorTick();
+        Check(SeSsPerfC[SE_PERF_FRAME_CYCLES] == 0 && SeSsPerfC[SE_PERF_VDP1_COMMANDS] == 0,
+              "profiler: the glue zeroes the counters once a frame is handed over");
+        EmulatorTick();   // the next frame, counted from zero
+        Check(settle(), "profiler: both frames reached the client");
+        drain();
+        Check(got.size() == 2, "profiler: exactly the two frames just produced arrived");
+        if (got.size() == 2)
+        {
+            Check(got[0].counters[SE_PERF_FRAME_CYCLES] == 477000 && got[0].counter_count == SE_PERF_COUNT &&
+                      got[0].counters[SE_PERF_VDP1_COMMANDS] == 321 &&
+                      got[0].counters[SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2 + 1] == 0x100000002ull,
+                  "profiler: a frame's counters arrive intact");
+            Check(got[1].counters[SE_PERF_FRAME_CYCLES] == 0 && got[1].counters[SE_PERF_VDP1_COMMANDS] == 0,
+                  "profiler: and belong to that frame alone");
+            Check(got[1].sample_seq == got[0].sample_seq + 1 && got[1].gap_last == 0 &&
+                      (got[0].valid & SE_PERF_VALID_IDENTITY) && (got[1].valid & SE_PERF_VALID_IDENTITY) &&
+                      got[1].timeline_id == got[0].timeline_id && got[1].frame_no == got[0].frame_no + 1,
+                  "profiler: consecutive, with the producer's own consecutive frame numbers");
+        }
+
+        // Function attribution. Off until asked for; the request arms the emulator's hook.
+        Check(gProfActive == 0, "profiler: the per-instruction hook is not armed unasked");
+        se_live_set_profiler(&ds, SE_LIVE_PROF_FUNCTIONS);
+        Check(Until([&] { return gProfActive == 1; }), "profiler: PRF arms the per-instruction hook");
+        EmulatorTick();   // a frame boundary: the sampler starts the next frame unsynchronized
+        Check(settle(), "profiler: the client has caught up before the attributed frame");
+        drain();
+        got.clear();
+
+        // Master: two instructions with no recorded call (charged to a 16-byte PC bucket), then a
+        // call is recorded and the time goes to that function -- less the cycles it slept.
+        gCpuTs[0] = 100; SeMednafenTraceHook(0, 0x06004004u);     // first sample: nothing to charge yet
+        gCpuTs[0] = 110; SeMednafenTraceHook(0, 0x06004006u);     // 10 -> bucket 06004000
+        SeExportPushFrame(0, 0x06004006u, 0x06010000u, 0x0600400Au, 0x06001000u, 0);
+        gCpuTs[0] = 135; SeMednafenTraceHook(0, 0x06010000u);     // 25 -> bucket 06004000 (the call itself)
+        SeSsPerfC[SE_PERF_SH2_SLEEP] += 15;                       // asleep for 15 of the next 45
+        gCpuTs[0] = 180; SeMednafenTraceHook(0, 0x06010002u);     // 30 -> function 06010000
+        // Slave, interleaved on its own clock.
+        gCpuTs[1] = 50;  SeMednafenTraceHook(1, 0x06020008u);
+        gCpuTs[1] = 57;  SeMednafenTraceHook(1, 0x0602000Au);     // 7 -> slave bucket 06020000
+        // A jump that is not an instruction's cost (a rebase, a state load) is not charged.
+        gCpuTs[1] = -400000; SeMednafenTraceHook(1, 0x0602000Cu);
+        SeExportPopFrame(0);
+        SeSsPerfC[SE_PERF_FRAME_CYCLES] = 5000;
+        EmulatorTick();
+        const se_live_perf_frame* f = nullptr;
+        Check(settle(), "profiler: the attributed frame reached the client");
+        drain();
+        for (const se_live_perf_frame& x : got)
+            if (x.counters[SE_PERF_FRAME_CYCLES] == 5000) f = &x;
+        Check(f != nullptr && got.size() == 1, "profiler: the attributed frame arrives, alone");
+        if (f)
+        {
+            Check((f->flags & SE_LIVE_PROF_FUNCTIONS) != 0, "profiler: the frame is flagged as attributed");
+            Check(f->fn_count == 3, "profiler: three functions were charged");
+            Check(f->fn_key[0] == (SE_PERF_FN_RAW_PC | 0x06004000u) && f->fn_cycles[0] == 35,
+                  "profiler: unrecorded code is charged to its PC bucket, hottest first");
+            Check(f->fn_key[1] == 0x06010000u && f->fn_cycles[1] == 30,
+                  "profiler: a recorded call is charged to its entry, sleep excluded");
+            Check(f->fn_key[2] == (SE_PERF_FN_RAW_PC | SE_PERF_FN_SLAVE | 0x06020000u) && f->fn_cycles[2] == 7,
+                  "profiler: the slave is charged separately, and a timestamp jump is not charged");
+            Check(f->fn_other_cycles == 0, "profiler: nothing was left over");
+        }
+        se_live_set_profiler(&ds, 0);
+        Check(Until([&] { return gProfActive == 0; }), "profiler: switching attribution off disarms the hook");
+
+        // The lost-record race, made deterministic. This section used to tick frames freely and then
+        // assert that every one had arrived; the server keeps 16 records, so whenever the client was
+        // scheduled late the oldest were overwritten and the assertion failed -- intermittently. A
+        // section cursor of our own stands in for the client, so how far behind it is is a fact of
+        // the test rather than of the scheduler: left alone for 20 ticks it MUST lose exactly 4
+        // records (and be told which), and read after every tick it must lose none. The first half
+        // is the old logic's outcome (delivered != produced); the second is what lockstep guarantees.
+        {
+            static unsigned char sec[SE_EXPORT_PERF_SECTION_MAX];
+            auto rd32 = [](const unsigned char* q) { return uint32_t(q[0]) | (uint32_t(q[1]) << 8) | (uint32_t(q[2]) << 16) | (uint32_t(q[3]) << 24); };
+            auto rd64 = [&](const unsigned char* q) { return uint64_t(rd32(q)) | (uint64_t(rd32(q + 4)) << 32); };
+            struct Sec { uint32_t count = 0; uint64_t newest = 0, lostFirst = 0, lostLast = 0, firstSeq = 0; };
+            auto build = [&](SeExportPerfCursor& cur) -> Sec
+            {
+                Sec r;
+                const size_t len = SeExportBuildPerfSection(&cur, sec);
+                if (len < SE_EXPORT_PERF_HEADER_LEN) return r;
+                r.count = rd32(sec); r.newest = rd64(sec + 4); r.lostFirst = rd64(sec + 12); r.lostLast = rd64(sec + 20);
+                if (r.count) r.firstSeq = rd64(sec + SE_EXPORT_PERF_HEADER_LEN + 4);
+                return r;
+            };
+            SeExportPerfCursor stalled = {}, stepped = {};
+            const Sec s0 = build(stalled);          // starts at the newest record: not a loss
+            build(stepped);
+            const uint64_t base = SeExportPerfNewestSeq();
+            Check(s0.count == 1 && s0.newest == base && s0.lostLast == 0, "profiler: a connection starts at the newest record");
+            uint32_t deliveredStepped = 0;
+            for (int i = 0; i < 20; ++i)
+            {
+                EmulatorTick();
+                const Sec t = build(stepped);       // the lockstep client: reads after every tick
+                deliveredStepped += t.count;
+                if (t.lostLast != 0) Check(false, "profiler: a client that reads every tick loses nothing");
+            }
+            Check(deliveredStepped == 20, "profiler: lockstep: all 20 produced records delivered");
+            const Sec free1 = build(stalled);       // the free-running client: first look after 20 ticks
+            Check(free1.newest == base + 20, "profiler: 20 more frames were produced");
+            Check(free1.lostFirst == base + 1 && free1.lostLast == base + 4,
+                  "profiler: left behind by 20 ticks the client lost exactly the 4 the 16-slot ring overwrote");
+            Check(free1.count == 8 && free1.firstSeq == base + 5,
+                  "profiler: and its next record is the oldest one the ring still holds");
+            Check(free1.newest - free1.lostLast == 16 && 20 - 4 < 20,
+                  "profiler: so 'every produced frame arrived' is false for a free-running producer: 16 of 20 remain");
         }
     }
 

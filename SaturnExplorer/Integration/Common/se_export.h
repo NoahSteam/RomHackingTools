@@ -18,6 +18,7 @@
 #define SE_EXPORT_H
 
 #include <stddef.h>
+#include "SeLiveProtocol.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,6 +40,48 @@ const char* SeExportTitleSuffix(const char* emu_name, const char* emu_rev);
  * success, non-zero on failure (Yabause keeps running either way). */
 int SeExportInit(void);
 
+/* The same startup in two steps, for an emulator that has hooks to install (F14).
+ *   SeExportPrepare()  locks, state and the savestate machinery, with the server marked running (a
+ *                      save hook registered now can start its worker). No listener exists yet, so
+ *                      nothing can ask for capabilities or race the registrations.
+ *   ... register every hook: SeExportSet*Hook, SeExportSetDebugCaps, SeExportSetPerfCapable ...
+ *   SeExportStart()    admit listeners. The first reply already describes everything registered.
+ * SeExportInit() is Prepare + Start. Prepare clears everything a previous init/deinit cycle left
+ * behind (profiler records and sequence, declared capabilities, the profiler hook). */
+int SeExportPrepare(void);
+int SeExportStart(void);
+
+/* Declare that this build produces profiler counters (SeExportPublishPerf), so
+ * SE_LIVE_CAP_PROFILER is advertised from the first reply instead of after the first sample.
+ * Call between Prepare and Start. A build without counters never calls it. */
+void SeExportSetPerfCapable(int capable);
+
+/* The identity of the emulated frame now executing, for stamping its profiler record
+ * (SeExportPerfInfo.timelineId / frameNo, SE_PERF_VALID_IDENTITY). Emulate thread. The number is
+ * reserved at the top-of-frame gate, after any pending load was applied, and committed when
+ * SeExportEndFrame runs, so it is correct whether the frame took no snapshot, one, or several
+ * halts. Returns 1 (always available once initialized). */
+/* The sampleSeq of the newest profiler record published so far (0 = none). The reply header carries
+ * the same number as newestSeq; this is the producer-side view, for a test that publishes a known
+ * workload and drains the client until it has seen exactly this sequence. */
+unsigned long long SeExportPerfNewestSeq(void);
+
+/* One connection's position in the profiler ring, and the builder of its reply section (the
+ * server's own code path, exposed so a test can drive it without a socket). Zero-initialize a
+ * cursor per connection: 'started' stays 0 until the first reply is built, which is what decides
+ * "this connection starts at the newest record" (not a loss) even when that reply is empty. */
+typedef struct SeExportPerfCursor { unsigned long long sent; int started; } SeExportPerfCursor;
+#define SE_EXPORT_PERF_HEADER_LEN 28u
+#define SE_EXPORT_PERF_SECTION_MAX (SE_EXPORT_PERF_HEADER_LEN + SE_LIVE_PERF_MAX_PER_REPLY * (4u + SE_LIVE_PERF_MAX_LEN))
+size_t SeExportBuildPerfSection(SeExportPerfCursor* cursor, unsigned char* out);
+
+int SeExportFrameIdentity(unsigned int* timelineId, unsigned long long* frameNo);
+
+/* The emulator replaced its machine state by itself (a native savestate load, not one the server
+ * asked for): the next frame belongs to a new timeline. Call from the emulator's post-load path, on
+ * any thread. A load the server itself ordered (rewind, slot load) is recognized and counted once. */
+void SeExportNotifyStateLoaded(void);
+
 /* Non-zero while at least one client (Saturn Explorer) is attached. SeExportSnapshot already
  * skips everything when nothing is attached; this lets the emulator's frame hook also skip the
  * work it does to BUILD the arguments (byte-swapping VRAM into big-endian scratch, serializing
@@ -50,8 +93,14 @@ int SeExportHasClient(void);
  * running the install hooks on the CALLING thread, which must be the emulate thread: the only one
  * that reads what they change. SeExportGateFrame and SeExportSnapshot do this themselves; a glue
  * that returns before reaching either on frames where nothing is attached (so that a client leaving
- * has its breakpoints dropped promptly) calls this first. Cheap when nothing is pending. */
+ * has its breakpoints dropped promptly) calls this first. Cheap when nothing is pending.
+ *
+ * This form declares a FRAME BOUNDARY (F6): a pending profiler request (function attribution on /
+ * off) is applied too, for the next frame. The mode is latched per frame, so a request is never
+ * applied part-way through one: call SeExportApplyInstallsMidFrame from anywhere inside a frame
+ * (a snapshot hook, a halt), which installs everything but leaves the profiler request pending. */
 void SeExportApplyInstalls(void);
+void SeExportApplyInstallsMidFrame(void);
 
 /* Copy the current Saturn memory into the export double-buffer. Call once per
  * frame, e.g. at the end of Vdp2VBlankOUT(), passing Yabause's globals:
@@ -290,12 +339,34 @@ void SeExportPushExceptionFrame(int cpu, unsigned int site, unsigned int handler
                                 unsigned int ret, unsigned int sp, unsigned long long cycle);
 void SeExportPopFrame(int cpu);
 void SeExportPopExceptionFrame(int cpu, unsigned int sp);
+/* The same two, told where the return LANDED (the first PC presented after its delay slot). Function
+ * ownership (F9) is restored to the parent only when the landing is the frame's recorded return
+ * address and the parent was known when the call was made; the plain forms never restore it.
+ * Frames are removed identically by both. */
+void SeExportPopFrameAt(int cpu, unsigned int landing);
+void SeExportPopExceptionFrameAt(int cpu, unsigned int sp, unsigned int landing);
+/* F9. The code running on 'cpu' is no longer provably the innermost frame's function (an exception
+ * was entered, a computed jmp / braf that may be a tail call completed): SeExportCurrentFunction says
+ * 0 until a call or a matching return proves ownership again. 'lostObservation' (instructions ran
+ * unwatched, e.g. the continuous hook was dropped) additionally distrusts every frame recorded so far,
+ * since any of them may have returned unseen. A call pushed while ownership is unknown names the
+ * callee, and a return to that unknown parent makes ownership unknown again. */
+void SeExportOwnershipInvalidate(int cpu, int lostObservation);
+/* F9 follow-up: unconditional jumps (bra / jmp @Rn / braf). SeExportNoteExecuted is called for every
+ * instruction presented while attribution is on (it extends the owner's observed extent);
+ * SeExportUncondJumpLanded when a jump completes at 'landing' (rules in se_export.c). It returns
+ * SE_JUMP_NEED_REGS, with nothing changed, when only SP / PR at the landing can decide: ask again with
+ * haveRegs = 1 and those values. */
+#define SE_JUMP_DONE       0
+#define SE_JUMP_NEED_REGS  1
+void SeExportNoteExecuted(int cpu, unsigned int pc);
+int SeExportUncondJumpLanded(int cpu, unsigned int landing, int haveRegs, unsigned int sp, unsigned int pr);
 void SeExportResetCallStack(int cpu);
 
 /* A number that changes every time a stack is reset. A glue that keeps control flow in flight
  * between two instructions (a call or return waiting out its delay slot) compares it to drop what
  * it was holding when the timeline it belonged to has been replaced. */
-unsigned int SeExportCallStackEpoch(void);
+unsigned int SeExportCallStackEpoch(int cpu);   /* per CPU: moves when THAT CPU's stack is reset */
 
 /* Serialize one CPU's shadow stack into the v9 wire block: u32 frameCount (capped at
  * SE_LIVE_CALLSTACK_MAX) then that many SE_LIVE_CALLFRAME_LEN frames, innermost first.
@@ -326,6 +397,43 @@ int SeExportGateHalt(void);
  * INSN_STEP, TRACEPOINTS). Reported to the client (v24) so it offers only working controls; a
  * build whose hooks compile to stubs passes 0. Call once after SeExportInit. Defaults to 0. */
 void SeExportSetDebugCaps(unsigned int caps);
+
+/* ---- Profiler (v26, record v27). See SePerfCounters.h for the counters and the function key. ----
+ *
+ * SeExportPublishPerf: call once per emulated frame, on the emulate thread, with that frame's
+ * totals. It is what makes the server advertise SE_LIVE_CAP_PROFILER.
+ *
+ * SeExportSetProfilerHook: register the routine that arms or disarms function attribution in the
+ * emulator (flags = SE_LIVE_PROF_*). It is called on the emulate thread, at a frame boundary or a
+ * gate, and only when the flags change. Register it only when the emulator really has a
+ * per-instruction hook: registering is what advertises SE_LIVE_CAP_PROF_FUNCTIONS.
+ *
+ * SeExportProfilerFlags: the flags in force. SeExportCurrentFunction: entry address of the
+ * function the shadow call stack says 'cpu' is in, or 0 when it cannot say; emulate thread only. */
+/* The v27 per-record fields beyond the counters and the function list (layout: SeLiveProtocol.h,
+ * "Perf section"). 'valid' (SE_PERF_VALID_*) says which of the others are real; a producer that
+ * has not implemented one leaves its bit clear and the field zero. sampleSeq is assigned by the
+ * server, not here. */
+typedef struct SeExportPerfInfo
+{
+    unsigned int       valid;            /* SE_PERF_VALID_* */
+    unsigned int       timelineId;       /* SE_PERF_VALID_IDENTITY */
+    unsigned long long frameNo;          /* SE_PERF_VALID_IDENTITY */
+    unsigned int       mode;             /* SE_PERF_VALID_MODE: SE_LIVE_PROF_* latched for the frame */
+    unsigned int       cacheMode;        /* SE_PERF_VALID_CACHE: SE_PERF_CACHE_* */
+    unsigned int       satFlags;         /* SE_PERF_VALID_OTHER: SE_PERF_SAT_* */
+    unsigned long long otherNotAdmitted[2];   /* SE_PERF_VALID_OTHER: master, slave */
+    unsigned long long otherEvicted[2];       /* SE_PERF_VALID_OTHER: master, slave */
+} SeExportPerfInfo;
+
+/* 'info' may be NULL: nothing beyond the counters is available (valid = 0). */
+void SeExportPublishPerf(const unsigned long long* counters, unsigned int count,
+                         const unsigned int* fnKeys, const unsigned int* fnCycles,
+                         unsigned int fnCount, unsigned int fnOtherCycles,
+                         const SeExportPerfInfo* info);
+void SeExportSetProfilerHook(void (*set)(unsigned int flags));
+unsigned int SeExportProfilerFlags(void);
+unsigned int SeExportCurrentFunction(int cpu);
 
 /* Stop the server thread and free resources. */
 void SeExportDeinit(void);

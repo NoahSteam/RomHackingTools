@@ -13,6 +13,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <arpa/inet.h>
@@ -21,9 +22,29 @@
 #include <unistd.h>
 
 #include "SeLiveProtocol.h"
+#include "SePerfCounters.h"
 
 namespace fakelive
 {
+
+// One profiler record the scripted server puts in a reply. Emitted in the v26 form when the reply's
+// version is 26 (only seq, flags, counters, functions, remainder are used) and in the v27 form
+// otherwise (SeLiveProtocol.h, "Perf section").
+struct PerfRec
+{
+    uint64_t sampleSeq = 1;       // v26: the low 32 bits go on the wire
+    uint32_t flags = 0;           // v26 flags / v27 mode
+    uint32_t timelineId = 0;
+    uint64_t frameNo = 0;
+    uint32_t cacheMode = 0;
+    uint32_t valid = 0;           // SE_PERF_VALID_*
+    uint32_t satFlags = 0;
+    uint64_t otherNotAdmitted[2] = {};
+    uint64_t otherEvicted[2] = {};
+    std::vector<uint64_t> counters;                          // SePerfCounters.h order
+    std::vector<std::pair<uint32_t, uint32_t>> fns;          // key, cycles
+    uint32_t fnOther = 0;
+};
 
 // What one reply says. Everything not listed is zero-filled (the driver accepts empty regions).
 struct Reply
@@ -39,17 +60,58 @@ struct Reply
     uint32_t paused = 0;
     uint32_t restoreDone = 0;
     uint32_t restoreFailed = 0;
+    uint32_t ctlLen = 0;         // control block length; 0 = the length of the reply's version (44 from v21)
+    uint32_t snapshotTimeline = 0;   // control block +56 (present only when ctlLen >= 60)
     uint8_t  fill = 0;           // every byte of VDP1 and VDP2 VRAM carries this value
     uint32_t vramLen = 16;
     uint32_t events = 0;         // tracepoint events to attach (zero-filled records)
     uint32_t vdp2StructLen = SE_LIVE_VDP2_STRUCT_LEN;   // 0 = section unavailable
     uint32_t vdp1RegsLen = SE_LIVE_VDP1_REGS_LEN;
     std::vector<uint8_t> cram;   // CRAM section bytes (empty = none)
+    std::vector<PerfRec> perf;   // profiler records (v26+)
+    uint64_t perfNewest = 0;     // v27 section header: newestSeq
+    uint64_t perfLostFirst = 0;  // v27 section header: lost range
+    uint64_t perfLostLast = 0;
 };
 
 inline void Put32(std::vector<uint8_t>& o, uint32_t v)
 {
     for (int i = 0; i < 4; ++i) o.push_back(static_cast<uint8_t>((v >> (8 * i)) & 0xFF));
+}
+
+inline void Put64(std::vector<uint8_t>& o, uint64_t v)
+{
+    Put32(o, static_cast<uint32_t>(v & 0xFFFFFFFFu));
+    Put32(o, static_cast<uint32_t>(v >> 32));
+}
+
+inline void BuildPerf(std::vector<uint8_t>& o, const Reply& r)
+{
+    const bool v27 = r.version >= 27;
+    Put32(o, static_cast<uint32_t>(r.perf.size()));
+    if (v27) { Put64(o, r.perfNewest); Put64(o, r.perfLostFirst); Put64(o, r.perfLostLast); }
+    for (const PerfRec& p : r.perf)
+    {
+        std::vector<uint8_t> b;
+        if (v27)
+        {
+            Put64(b, p.sampleSeq); Put32(b, p.timelineId); Put64(b, p.frameNo);
+            Put32(b, p.flags); Put32(b, p.cacheMode); Put32(b, p.valid); Put32(b, p.satFlags);
+            for (int i = 0; i < 2; ++i) Put64(b, p.otherNotAdmitted[i]);
+            for (int i = 0; i < 2; ++i) Put64(b, p.otherEvicted[i]);
+        }
+        else
+        {
+            Put32(b, static_cast<uint32_t>(p.sampleSeq)); Put32(b, p.flags);
+        }
+        Put32(b, static_cast<uint32_t>(p.counters.size()));
+        for (uint64_t c : p.counters) Put64(b, c);
+        Put32(b, static_cast<uint32_t>(p.fns.size()));
+        for (const auto& fn : p.fns) { Put32(b, fn.first); Put32(b, fn.second); }
+        Put32(b, p.fnOther);
+        Put32(o, static_cast<uint32_t>(b.size()));
+        o.insert(o.end(), b.begin(), b.end());
+    }
 }
 
 inline std::vector<uint8_t> Build(const Reply& r)
@@ -58,7 +120,7 @@ inline std::vector<uint8_t> Build(const Reply& r)
     o.push_back(SE_LIVE_MAGIC0); o.push_back(SE_LIVE_MAGIC1);
     o.push_back(SE_LIVE_MAGIC2); o.push_back(SE_LIVE_MAGIC3);
     Put32(o, r.version);
-    const uint32_t ct = r.version >= 21 ? 44u : (r.version >= 20 ? 40u : (r.version >= 19 ? 32u : 24u));
+    const uint32_t ct = r.ctlLen ? r.ctlLen : r.version >= 21 ? 44u : (r.version >= 20 ? 40u : (r.version >= 19 ? 32u : 24u));
     const uint32_t vs = r.vdp2StructLen;
     const uint32_t vr = r.vdp1RegsLen;
     // Section lengths: v1 v2 cram vdp2struct vdp1regs wramLow wramHigh [fb] ctl [sh2]
@@ -85,6 +147,8 @@ inline std::vector<uint8_t> Build(const Reply& r)
         Put32(o, r.stepPending);
     }
     if (ct >= 44) Put32(o, r.stopSeq);
+    for (uint32_t at = 44; at < ct; at += 4)   // pokes applied/dropped, caps (zero), then the timeline at +56
+        Put32(o, at == SE_LIVE_CONTROL_TIMELINE_OFFSET ? r.snapshotTimeline : 0u);
     if (r.version >= 8)
     {
         Put32(o, r.events);
@@ -98,6 +162,7 @@ inline std::vector<uint8_t> Build(const Reply& r)
     if (r.version >= 15) Put32(o, 0);                            // CD block
     if (r.version >= 16) Put32(o, 0);                            // savestate blocks
     if (r.version >= 17) Put32(o, 0);                            // emulator slots
+    if (r.version >= 26) BuildPerf(o, r);                        // perf section
     return o;
 }
 
@@ -177,6 +242,7 @@ public:
             {
                 const int client = ::accept(listenFd, nullptr, nullptr);
                 if (client < 0) continue;
+                if (!mRunning.load()) { ::close(client); break; }   // Stop()'s wake-up connection
                 const int index = mAccepted.fetch_add(1);
                 mActive.store(client);
                 mHandler(client, index);
@@ -194,6 +260,24 @@ public:
         // the very behaviour the test is exercising.
         const int a = mActive.load();
         if (a >= 0) ::shutdown(a, SHUT_RDWR);
+        // The thread may be parked in accept(). shutdown() on a LISTENING socket wakes it on Linux
+        // but not on macOS / BSD, and closing the descriptor from another thread does not either,
+        // so the join below could wait forever (seen as a 1500 s ctest timeout on the macOS runner
+        // whenever the client's close was handled before Stop() ran). Connect to ourselves first:
+        // accept() returns on every platform, and the loop sees mRunning == false and leaves.
+        if (mFd >= 0)
+        {
+            const int wake = ::socket(AF_INET, SOCK_STREAM, 0);
+            if (wake >= 0)
+            {
+                sockaddr_in addr = {};
+                addr.sin_family = AF_INET;
+                addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                addr.sin_port = htons(static_cast<uint16_t>(mPort));
+                (void)::connect(wake, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+                ::close(wake);
+            }
+        }
         if (mFd >= 0) { ::shutdown(mFd, SHUT_RDWR); ::close(mFd); mFd = -1; }
         if (mThread.joinable()) mThread.join();
     }

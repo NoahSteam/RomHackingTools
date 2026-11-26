@@ -47,7 +47,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SHARED_DIR = os.path.normpath(os.path.join(HERE, "..", "Common"))
 # Copied verbatim from Common; the glue is copied from HERE with SE_MEDNAFEN_WIRED
 # prepended so no per-file build flag is needed.
-COMMON_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h", "SeStateCodec.h"]
+COMMON_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h", "SeStateCodec.h", "SePerfCounters.h"]
 GLUE_FILE = "se_mednafen_glue.c"
 
 BEGIN = "/* --- SE_EXPORT (Saturn Explorer live tap) --- */"
@@ -189,6 +189,10 @@ extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
       does not reach on its own. */
    if (a >= 0x05C00000u && a < 0x05C80000u) SsDbgVdp1LatchPokeByte(a - 0x05C00000u, (unsigned char)val);
 }
+/* An SH-2's cycle counter (v26 profiler): the glue takes the difference between two instructions
+   as the cost of the first. It restarts from near zero every frame (RebaseTS), and reads
+   SS_EVENT_DISABLED_TS while the slave is switched off; the glue discards both jumps. */
+extern "C" int SsDbgCpuTimestamp(int cpu) { return (int)CPU[cpu ? 1 : 0].timestamp; }
 /* SsDbgSoundRam (v13, SCSP RAM read) and SsDbgScspSlots (v14, decoded voices) are NOT here:
    they need the `static SS_SCSP SCSP` instance and scsp.h's private Slots[]/SlotRegs[], which
    are only visible inside sound.cpp. They are injected there instead — see process_sound()
@@ -229,6 +233,7 @@ static void SeSsBpHook(uint32 PC, bool bpoint);   /* fwd: SeSyncCpuHook installs
 static int sSeBpActive = 0;      /* >=1 execution breakpoint installed */
 static int sSeTraceActive = 0;   /* >=1 enabled tracepoint armed */
 static int sSeStepActive = 0;    /* an instruction step is in progress */
+static int sSeProfActive = 0;    /* the profiler is attributing SH-2 time to functions (v26) */
 /* Set while >=1 data (read/write) watchpoint is installed. scu.inc's DMA_Write reads it to
    cheap-gate the SCU-DMA watchpoint check (SeSsDmaWatch); C linkage + a global so scu.inc,
    which is included before debug.inc where DBG lives, can test it without the debugger guts. */
@@ -236,6 +241,20 @@ extern "C" { int SeSsMemWatchArmed = 0; }
 /* SeSsBothCpus: run the debugger handler for whichever SH-2 is executing (see above).
    SeSsExecCpu: the CPU DBG_CPUHandler is currently running for (0 master / 1 slave). */
 extern "C" { int SeSsBothCpus = 0; int SeSsExecCpu = 0; }
+/* SeSsHookNeedsSync: must DBG_CPUHandler bring every device up to date (ForceEventUpdates) before it calls
+   our callback? Upstream does it for every instruction while the callback is continuous. That is only
+   worth its cost (~70% of the emulation thread with function attribution on) when the callback may look
+   at device state: a tracepoint (its action reads memory and registers) or an instruction step (it halts
+   and publishes a snapshot). Profiling alone reads only the CPU's own registers and timestamp and the
+   guest's code bytes, none of which a device update writes, so it does not ask for the sync; a PC / data
+   breakpoint found on THIS instruction does, and debug.inc tests that itself (DBG.FoundBPoint).
+   Maintained by SeSyncCpuHook together with the callback, so the two never disagree; 1 until the first
+   sync, which is upstream's behaviour. */
+extern "C" { int SeSsHookNeedsSync = 1; }
+/* The callback SeSyncCpuHook installed (0 until it has). debug.inc syncs for ANY other continuous callback: the
+   native debugger (drivers/debugger.cpp, UpdateCoreHooks) replaces ours through DebuggerInfo.SetCPUCallback
+   for stepping and trace logging without telling us, and its consumers expect upstream's synchronization. */
+extern "C" { void (*SeSsOwnCpuHook)(uint32 PC, bool bpoint) = 0; }
 /* Install/remove the per-instruction callback to match what is armed: continuous (every
    instruction) when tracepoints OR an instruction step are active so the hook sees every
    PC; non-continuous (fires only when the debugger finds a PC breakpoint) when only
@@ -246,20 +265,73 @@ static int sSeHalted = 0;
 /* DBG_CPUHandler depth (see SeSsActiveCpuScope in debug.inc) and a re-arm it postponed. */
 extern "C" { int SeSsInHandler = 0; }
 static int sSeSyncPending = 0;
+/* What Mednafen's native debugger (Alt+D) last asked for through DebuggerInfo.SetCPUCallback, which
+   process_debug routes to SeSsNativeSetCPUCallback below. It replaces our callback for stepping and trace
+   logging (drivers/debugger.cpp, UpdateCoreHooks) and sets NULL when it is done -- and also on every
+   breakpoint edit or window change while it needs none, so without this record our callback was dropped for
+   good the first time the debugger was opened and nothing ever put it back. While it holds a callback it keeps
+   it (SeSyncCpuHook leaves DBG.CPUHook alone), exactly as upstream would. */
+static void (*sSeNativeCb)(uint32 PC, bool bpoint) = 0;
+/* Our callback is the one DBG.CPUHook holds (SeSyncCpuHook installed it and nothing has replaced it since). */
+static int sSeOursInstalled = 0;
+/* The debugger took the callback away from ours. Sticky until a sync that actually runs has told the glue:
+   the takeover is a change of DBG.CPUHook made at once, but the sync that reports it is deferred inside a
+   DBG_CPUHandler call, and a debugger that asks for NULL again in that same call (a one-shot callback) leaves
+   sSeNativeCb == 0 by the time it runs -- an instruction went to the debugger's callback and nothing would
+   say so. */
+static int sSeNativeLost = 0;
 static void SeSyncCpuHook(void) {
    /* Never change the callback while DBG_CPUHandler is running: it has already decided to call it.
       The handler's scope guard re-runs this as it returns, before the next instruction. */
    if (SeSsInHandler > 0) { sSeSyncPending = 1; return; }
    sSeSyncPending = 0;
-   const int on = sSeBpActive || sSeTraceActive || sSeStepActive;
-   SeSsBothCpus = on;
+   /* Function profiling needs every instruction of both CPUs, exactly like a tracepoint. */
+   const int every = sSeTraceActive || sSeStepActive || sSeProfActive;
+   const int on = sSeBpActive || every;
+   /* The native debugger holds the callback: ours is not installed, whatever we want. The handler then
+      behaves as upstream does for it (the debugger's active CPU only), so SeSsBothCpus is off, and the glue is
+      told that the code runs unobserved (it drops the baseline and, when ours returns, the shadow stack). */
+   const int foreign = on && sSeNativeCb != 0;
+   SeSsBothCpus = on && !foreign;
+   SeSsHookNeedsSync = (sSeTraceActive || sSeStepActive) ? 1 : 0;   /* not sSeProfActive: see above */
    /* A held call/return is completed by the instructions that follow it; if the CPU is about to run
       without presenting them, it must be told (it is not told of an edit made while halted). */
-   if (!sSeHalted) SeMednafenHookMode((sSeTraceActive || sSeStepActive) != 0);
-   if (on)
-      DBG_SetCPUCallback(SeSsBpHook, (sSeTraceActive || sSeStepActive) != 0);
-   else
+   if (!sSeHalted) SeMednafenHookMode(every != 0 && !foreign);
+   /* A takeover that was released before this sync could run is still a gap: the glue is told it began (the
+      next call then ends it), so the frame is not attributed and the stack restarts. Nothing is marked when we
+      want no callback. This is outside any handler call (above), where the glue may be entered. */
+   if (sSeNativeLost) {
+      sSeNativeLost = 0;
+      if (on) SeMednafenForeignHook(1);
+   }
+   SeMednafenForeignHook(foreign);
+   if (sSeNativeCb != 0)
+      return;   /* the native debugger's callback stays; it gets ours back when it releases it */
+   if (on) {
+      SeSsOwnCpuHook = SeSsBpHook;
+      DBG_SetCPUCallback(SeSsBpHook, every != 0);
+      sSeOursInstalled = 1;
+   }
+   else {
       DBG_SetCPUCallback(0, false);
+      sSeOursInstalled = 0;
+   }
+}
+/* DebuggerInfo.SetCPUCallback (debug.inc routes the table entry here). A callback the native debugger asks for
+   is installed exactly as upstream does -- it takes precedence, and DBG.CPUHook != SeSsOwnCpuHook keeps
+   the per-instruction device sync for it. NULL means it is finished with the callback: ours is applied again
+   at once, or at the end of the handler call when it was asked from inside one. */
+extern "C" void SeSsNativeSetCPUCallback(void (*callb)(uint32 PC, bool bpoint), bool continuous) {
+   const int wasHeld = sSeNativeCb != 0;
+   sSeNativeCb = callb;
+   if (callb) {
+      if (sSeOursInstalled) { sSeNativeLost = 1; sSeOursInstalled = 0; }
+      DBG_SetCPUCallback(callb, continuous);
+      SeSyncCpuHook();   /* notes the takeover (and is deferred inside a handler call, like any edit) */
+   }
+   else if (wasHeld)
+      SeSyncCpuHook();   /* released: ours again (installed only if something wants it) */
+   /* NULL while it held nothing: ours (if any) is still installed and stays, which upstream would have dropped */
 }
 extern "C" void SeSsHandlerExit(void) { if (sSeSyncPending) SeSyncCpuHook(); }
 static void SeSsBpHook(uint32 PC, bool bpoint) {
@@ -385,8 +457,15 @@ extern "C" void SsDbgSetTraceActive(int active) {
    advertises breakpoints, watchpoints, instruction steps and tracepoints from it, so a client does
    not offer controls that the no-op stubs below would silently ignore. */
 extern "C" int SsDbgHasDebugger(void) { return 1; }
+/* Arm/disarm per-instruction function profiling (v26): the glue samples in SeMednafenTraceHook,
+   which only runs while the callback is continuous. */
+extern "C" void SsDbgSetProfileActive(int active) {
+   sSeProfActive = active ? 1 : 0;
+   SeSyncCpuHook();
+}
 #else
 extern "C" int SsDbgHasDebugger(void) { return 0; }
+extern "C" void SsDbgSetProfileActive(int active) { (void)active; }
 extern "C" { int SeSsInHandler = 0; }
 extern "C" void SeSsHandlerExit(void) {}
 extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) { (void)cpu; (void)addr; }
@@ -394,6 +473,8 @@ extern "C" void SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, uns
 extern "C" void SsDbgClearBps(void) {}
 extern "C" void SsDbgSetTraceActive(int active) { (void)active; }
 extern "C" { int SeSsBothCpus = 0; int SeSsExecCpu = 0; }
+extern "C" { int SeSsHookNeedsSync = 1; }
+extern "C" { void (*SeSsOwnCpuHook)(uint32 PC, bool bpoint) = 0; }
 #endif
 }"""
 
@@ -890,6 +971,8 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
 SMPC_INPUT_UPDATE = """\
   SeSMPCUpdateInput(vp, time_elapsed);
 """
+# The upstream line it replaces (kept inside the fence, so --revert restores it; see ORIG_OPEN).
+SMPC_UPDATE_ANCHOR = r'[ \t]*VirtualPorts\[vp\]->UpdateInput\(VirtualPortsDPtr\[vp\], time_elapsed\);'
 
 # Files that get an accessor block appended at EOF: (filename, block, key). ss.cpp
 # also gets accessors, but via process_ss (it has hook injections too).
@@ -900,11 +983,241 @@ APPEND_EDITS = [
     ("vdp2.cpp", VDP2_POKE_ACCESSORS, "SsDbgPokeCramByte"),
 ]
 
+# ---- Profiler counters (v26). SeSsPerfC is one array of per-frame totals, defined in the glue and
+#      indexed by SePerfCounters.h (copied into the tree with the other shared files), so the
+#      emulator, the wire and the client agree on its order by construction. The increments below
+#      are unconditional: each sits on a path that already does far more work than one add (a bus
+#      access, a DMA start, a sleeping CPU's idle step), and a flag test would cost what it saves.
+#      Every hook is an INSERTION after an anchor, never a replacement, so --revert restores the
+#      file exactly by deleting the fenced blocks. ----
+PERF_DECL = (
+    "#include \"SePerfCounters.h\"\n"
+    "extern \"C\" unsigned long long SeSsPerfC[];\n"
+    "extern \"C\" unsigned int SeSsCacheMode;   /* SE_PERF_CACHE_*, set where the emulator picks its mode */\n"
+)
+# Which counter an external-bus address belongs to (F8); see the comment inside the helper.
+PERF_BUS_HELPER = """\
+/* Which counter pair an SH-2 external-bus address belongs to, by its top 11 of 27 bits (64 KiB
+   steps: every boundary of the SCU's own decode, scu.inc SCU_FromSH2_BusRW_DB, and of ss.cpp's CS0
+   decode, falls on one). The value is the index of the pair's READ counter; the write counter
+   follows it. Filled once by a static constructor. The windows are the SCU decoder's, not the
+   address map's round numbers:
+     A-bus   0x02000000-0x058FFFFF  (CS0, CS1, the dummy area 0x05000000-0x057FFFFF, CS2/CD)
+     B-bus   0x05A00000-0x05FBFFFF  (SCSP, VDP1 0x05C00000-0x05D7FFFF, VDP2 0x05E00000-0x05FBFFFF)
+     SCU     0x05FE0000-0x05FEFFFF
+   Everything else between 0x02000000 and 0x05FFFFFF is a hole the SCU answers with "unknown
+   access" and is counted as unmapped, not as the device next to it. */
+static unsigned short SeSsBusSlot[2048];
+static struct SeSsBusDevInit {
+   SeSsBusDevInit() {
+      for (unsigned i = 0; i < 2048; ++i) {
+         const unsigned A = i << 16;
+         unsigned short s;
+         if      (A < 0x00100000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_BIOS * 2;
+         else if (A < 0x00180000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_SMPC * 2;
+         else if (A < 0x00200000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_BACKUP * 2;
+         else if (A < 0x00400000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_L * 2;
+         else if (A < 0x02000000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_CS0_OTHER * 2;
+         else if (A < 0x04000000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_ABUS_CS0 * 2;
+         else if (A < 0x05000000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_ABUS_CS1 * 2;
+         else if (A < 0x05800000u) s = SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_ABUS_DUMMY * 2;
+         else if (A < 0x05900000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_ABUS_CD * 2;
+         else if (A < 0x05A00000u) s = SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2;
+         else if (A < 0x05C00000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_SCSP * 2;
+         else if (A < 0x05D80000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_VDP1 * 2;
+         else if (A < 0x05E00000u) s = SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2;
+         else if (A < 0x05FC0000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_VDP2 * 2;
+         else if (A < 0x05FE0000u) s = SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2;
+         else if (A < 0x05FF0000u) s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_SCU * 2;
+         else if (A < 0x06000000u) s = SE_PERF_BUS_ACCESS_X + SE_PERF_XDEV_UNMAPPED * 2;
+         else                      s = SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2;
+         SeSsBusSlot[i] = s;
+      }
+   }
+} sSeSsBusDevInit;
+/* One request to the SH-2's bus state controller (BSC_BusRead / BSC_BusWrite in sh7095.inc: the two
+   places every access that really reaches the bus goes through). The unit is the request, not the
+   bus cycle: a 32-bit access to a 16-bit CS0 region is split inside and is still ONE request; a
+   cache line fill is four (one first-word read and three burst reads); a cache hit and an
+   instruction fetch the fast map serves are none. Cache emulation therefore changes the counts,
+   which is why the mode travels with the sample (SeSsCacheMode). */
+static inline void SeSsPerfBus(unsigned int A, int isWrite) {
+   ++SeSsPerfC[SeSsBusSlot[(A >> 16) & 2047] + isWrite];
+}
+"""
+
+SH2_BUSWRITE_ANCHOR = r'(void INLINE SH7095::BSC_BusWrite\(uint32 A, T V, const bool BurstHax, int32\* SH2DMAHax\)\s*\{[ \t]*\n)'
+SH2_BUSWRITE_HOOK = " SeSsPerfBus(A, 1);   /* SE_PERF_BUS_WRITE */\n"
+SH2_BUSREAD_ANCHOR = r'(T INLINE SH7095::BSC_BusRead\(uint32 A, const bool BurstHax, int32\* SH2DMAHax\)\s*\{[ \t]*\n)'
+SH2_BUSREAD_HOOK = " SeSsPerfBus(A, 0);   /* SE_PERF_BUS_READ */\n"
+
+# sh7095_ops.inc is compiled inside Step<which, ...> and inside the slave's resumable copy
+# (sh7095s_rsu.inc, which defines `which` as an enum), so `which` names the CPU in both.
+# A sleeping CPU re-executes its SLEEP pseudo-instruction every 3 cycles until an interrupt is
+# pending; standby and a DMA-burst / external-halt stall idle the same way in steps of 7.
+SH2_SLEEP_ANCHOR = r'(if\(MDFN_LIKELY\(!EPending\)\)\s*\{\s*\n\s*timestamp \+= 3;[ \t]*\n)'
+SH2_SLEEP_HOOK = "\t SeSsPerfC[SE_PERF_SH2_SLEEP + which] += 3;   /* SE_PERF_SLEEP_HOOK */\n"
+SH2_STANDBY_ANCHOR = r'(if\(MDFN_LIKELY\(Standby\)\)\s*\{\s*\n\s*timestamp \+= 7;[ \t]*\n)'
+SH2_STANDBY_HOOK = "\t SeSsPerfC[SE_PERF_SH2_SLEEP + which] += 7;   /* SE_PERF_STANDBY_HOOK */\n"
+SH2_STALL_ANCHOR = r'(if\(MDFN_LIKELY\(DMA_InBurst\(\) \|\| ExtHalt\)\)\s*\{\s*\n\s*timestamp \+= 7;[ \t]*\n)'
+SH2_STALL_HOOK = "\t SeSsPerfC[SE_PERF_SH2_STALL + which] += 7;   /* SE_PERF_STALL_HOOK */\n"
+
+# scu.inc: one count per transfer started (an indirect DMA starts one per table entry), with the
+# byte count it was started with -- on the cold path, so the per-unit copy loop is untouched.
+SCU_DMA_PERF_ANCHOR = r'(d->ReadFunc = rftab\[rb\];[ \t]*\n)'
+SCU_DMA_PERF_HOOK = (
+    " /* Saturn Explorer profiler: SCU DMA traffic by level and by bus route. */\n"
+    " ++SeSsPerfC[SE_PERF_DMA_TRANSFERS + (d - DMALevel)];\n"
+    " SeSsPerfC[SE_PERF_DMA_LEVEL_BYTES + (d - DMALevel)] += bc;\n"
+    " SeSsPerfC[SE_PERF_DMA_ROUTE_BYTES + rb * 3 + wb] += bc;\n"
+)
+SCU_DSP_PERF_ANCHOR = r'(\(\(void \(\*\)\(void\)\)\(DSP_INSTR_BASE_UIPT[^\n]*\n\s*DSP\.CycleCounter -= 2;[ \t]*\n)'
+SCU_DSP_PERF_HOOK = "  SeSsPerfC[SE_PERF_DSP_CYCLES] += 2;   /* Saturn Explorer profiler */\n"
+
+# vdp1.cpp. Update() advances VDP1 by the cycles since it last ran; while a draw is in progress
+# those are drawing cycles.
+VDP1_PERF_FWD = "/* SE_VDP1_PERF_FWD */\n" + PERF_DECL
+# Index 6 (elapsed VDP1 drawing, v26) is retired: Update() no longer adds the elapsed interval
+# anywhere; the VDP1 figure is the command-work counter below.
+# F4 (v27): VDP1 command work, counted where the command budget is DEBITED (VDP1_EAT_CLOCKS), not
+# as elapsed time. The original macro is
+#     CycleCounter -= (n);  case __COUNTER__:  if(CycleCounter <= 0) { ...; goto Breakout; }
+# and a resumed draw re-enters at the `case` AFTER the debit, so the debit runs once per command phase
+# however many Update() calls the phase spans. We re-define the macro right after the original (an
+# insertion; revert deletes it and the original is back) with the debit routed through a function so
+# `n` -- which at one use is a call that draws -- is still evaluated exactly once. The counter is
+# bumped inside that function, i.e. before the `case` label. A local would be wrong: the label sits
+# inside the macro's block, and jumping past an initialised local into it is ill-formed.
+VDP1_EAT_ANCHOR = (r'(#define VDP1_EAT_CLOCKS\(n\)[ \t]*\\\n'
+                   r'[ \t]*\{[ \t]*\\\n'
+                   r'[ \t]*CycleCounter -= \(n\);[ \t]*\\\n'
+                   r'[ \t]*case __COUNTER__:[ \t]*\\\n'
+                   r'[ \t]*if\(CycleCounter <= 0\)[ \t]*\\\n'
+                   r'[ \t]*\{[ \t]*\\\n'
+                   r'[ \t]*CommandPhase = __COUNTER__ - CommandPhaseBias - 1;[ \t]*\\\n'
+                   r'[ \t]*goto Breakout;[ \t]*\\\n'
+                   r'[ \t]*\}[ \t]*\\\n'
+                   r'[ \t]*\}[ \t]*\\\n[ \t]*\n)')
+VDP1_EAT_HOOK = (
+    "/* Saturn Explorer profiler (F4): the same macro, with the debit counted as command work. */\n"
+    "static INLINE int32 SeSsVdp1Debit(int32 n) { SeSsPerfC[SE_PERF_VDP1_WORK_CYCLES] += (unsigned long long)(n > 0 ? n : 0); return n; }\n"
+    "#undef VDP1_EAT_CLOCKS\n"
+    "#define VDP1_EAT_CLOCKS(n)\t\t\t\t\t\t\t\t\\\n"
+    "\t\t{\t\t\t\t\t\t\t\t\\\n"
+    "\t\t CycleCounter -= SeSsVdp1Debit(n);\t\t\t\t\t\\\n"
+    "\t\t case __COUNTER__:\t\t\t\t\t\t\t\\\n"
+    "\t\t if(CycleCounter <= 0)\t\t\t\t\t\t\\\n"
+    "\t\t {\t\t\t\t\t\t\t\t\\\n"
+    "\t\t  CommandPhase = __COUNTER__ - CommandPhaseBias - 1;\t\t\t\t\\\n"
+    "\t\t  goto Breakout;\t\t\t\t\t\t\\\n"
+    "\t\t }\t\t\t\t\t\t\t\t\\\n"
+    "\t\t}\n"
+)
+# The active draw budget a DMA discards: SCU_CheckVDP1HaltKludge() says a DMA is writing VDP1, and
+# Update() then throws the positive budget away instead of spending it. Counted only while a draw is
+# active (an idle VDP1 has nothing to lose), and as budget, not as elapsed hold time.
+VDP1_PERF_DMA_ANCHOR = r'(//puts\("Kludge"\);[ \t]*\n)'
+VDP1_PERF_DMA_HOOK = "  if(DrawingActive) SeSsPerfC[SE_PERF_VDP1_DMA_DISCARDED] += (unsigned long long)CycleCounter;   /* > 0 here */\n"
+VDP1_PERF_CMD_ANCHOR = r'(memcpy\(CommandData, &VRAM\[CurCommandAddr\], sizeof\(CommandData\)\);[ \t]*\n)'
+VDP1_PERF_CMD_HOOK = "   ++SeSsPerfC[SE_PERF_VDP1_COMMANDS];\n"
+VDP1_PERF_START_ANCHOR = r'(static void StartDrawing\(void\)\s*\{[ \t]*\n)'
+VDP1_PERF_START_HOOK = (
+    " ++SeSsPerfC[SE_PERF_VDP1_DRAW_STARTS];\n"
+    " if(DrawingActive) ++SeSsPerfC[SE_PERF_VDP1_OVERRUNS];   /* the previous table was not finished */\n"
+)
+VDP1_PERF_ABORT_ANCHOR = r'(SS_DBGTI\(SS_DBG_WARNING \| SS_DBG_VDP1, "\[VDP1\] Drawing aborted by framebuffer swap\."\);[ \t]*\n)'
+VDP1_PERF_ABORT_HOOK = "     ++SeSsPerfC[SE_PERF_VDP1_OVERRUNS];   /* SE_PERF_FBSWAP_ABORT */\n"
+
+# F5 (v27): 68000 idle and executed time.
+#
+# Idle is counted where the core spends it. M68K::InternalStep() has one place that burns time
+# without executing an instruction: after the reset / bus-error / interrupt branches have returned,
+# an XPending that is only STOPPED or one of the halt bits falls through to `timestamp += 4`. A
+# per-instance accumulator on the core (no Saturn Explorer linkage: the core is shared with other
+# systems and the SSF player, and just gains one counter) is bumped by the same 4 there, so total
+# time and idle time cannot disagree about a step. The previous scheme sampled "stopped" once before
+# a slice of many steps, so a STOP reached or left partway through a slice was charged wholesale to
+# one side.
+M68K_DIR = os.path.join("src", "hw_cpu", "m68k")
+M68K_FILES = ["m68k.h", "m68k.cpp"]
+M68K_IDLE_MEMBER_ANCHOR = r'( uint32 XPending;[ \t]*\n)'
+M68K_IDLE_MEMBER = (
+    " /* Saturn Explorer profiler (F5): cycles InternalStep() spent stopped or halted, running total\n"
+    "    (unsigned wrap is fine: callers take differences). Not part of the savestate. */\n"
+    " uint32 IdleCycleCount;\n"
+)
+M68K_IDLE_INIT_ANCHOR = r'( timestamp = 0;[ \t]*\n XPending = 0;[ \t]*\n)'
+M68K_IDLE_INIT = " IdleCycleCount = 0;\n"
+M68K_IDLE_STEP_ANCHOR = r'(// STOP and ExtHalted fallthrough:[ \t]*\n[ \t]*timestamp \+= 4;[ \t]*\n)'
+M68K_IDLE_STEP = "  IdleCycleCount += 4;   /* Saturn Explorer profiler (F5): the same 4 cycles, as idle */\n"
+
+# sound.cpp: SOUND_Update() runs the 68000 in slices between SCSP samples, and the CPU's bus handlers
+# abandon an instruction with MDFN_longjmp (four paths: an address error or no-DTACK on a read or a
+# write), which lands back at the MDFN_setjmp at the top of SOUND_Update() -- past anything a slice
+# did after SoundCPU.Run(). So the baselines (entry timestamp, entry idle count) are taken ONCE,
+# before the setjmp, as const locals that nothing writes afterwards (their values therefore
+# survive the longjmp), and both deltas are taken once on the normal exit, whatever route got there.
+# Executed = total - idle. Not in the SSF player, which has no tap.
+SOUND_PERF_FWD = "/* SE_SOUND_PERF_FWD */\n#ifndef MDFN_SSFPLAY_COMPILE\n" + PERF_DECL + "#endif\n"
+SOUND_PERF_PRE_ANCHOR = r'(run_until_time \+= \(\(uint64\)\(timestamp - lastts\) \* clock_ratio\);[ \t]*\n lastts = timestamp;[ \t]*\n)'
+SOUND_PERF_PRE_HOOK = (
+    " const int32 se_perf_ts0 = SoundCPU.timestamp;\n"
+    " const uint32 se_perf_idle0 = SoundCPU.IdleCycleCount;\n"
+)
+SOUND_PERF_POST_ANCHOR = r'(else\s*\{\s*\n\s*while\(next_scsp_time < \(run_until_time >> 32\)\)\s*\n\s*RunSCSP\(\);[ \t]*\n \}[ \t]*\n)'
+SOUND_PERF_POST_HOOK = (
+    "#ifndef MDFN_SSFPLAY_COMPILE\n"
+    " {\n"
+    "  const uint32 se_perf_total = (uint32)(SoundCPU.timestamp - se_perf_ts0);\n"
+    "  const uint32 se_perf_idle = SoundCPU.IdleCycleCount - se_perf_idle0;\n"
+    "  SeSsPerfC[SE_PERF_M68K_TOTAL_CYCLES] += se_perf_total;\n"
+    "  SeSsPerfC[SE_PERF_M68K_IDLE_CYCLES] += se_perf_idle;\n"
+    "  SeSsPerfC[SE_PERF_M68K_CYCLES] += se_perf_total - se_perf_idle;\n"
+    " }\n"
+    "#else\n"
+    " (void)se_perf_ts0; (void)se_perf_idle0;\n"
+    "#endif\n"
+)
+
+# ss.cpp: the instruction-cache emulation mode the emulator picked (F8). The bus request counts depend
+# on it, so it travels with the sample. SE_PERF_CACHE_ON = instruction fetches go through the emulated
+# cache (fills and hits); OFF = they are served from the fast map (the data cache is emulated in
+# every mode). The variable is defined in the glue.
+SS_CACHE_MODE_ANCHOR = r'(NeedEmuICache = \(cpucache_emumode == CPUCACHE_EMUMODE_FULL\);[ \t]*\n)'
+SS_CACHE_MODE_HOOK = " SeSsCacheMode = NeedEmuICache ? SE_PERF_CACHE_ON : SE_PERF_CACHE_OFF;   /* Saturn Explorer profiler (F8) */\n"
+
+# F2 / F9: power edges and resets of the SH-2s, and exception entries. SetActive's two real transitions
+# (a redundant call changes nothing and is no edge), the top of Reset on a powered CPU (watchdog or
+# SetActive's own), and every exception the core takes that the shadow stack cannot see as an
+# instruction. TRAPA is deliberately not hooked: the glue records it as the call it is.
+SH2_SETACTIVE_ON_ANCHOR = (r'(void SH7095::SetActive\(bool active\)\s*\{\s*\n if\(active && timestamp == SS_EVENT_DISABLED_TS\)\s*\{\s*\n'
+                           r'  timestamp = SH7095_mem_timestamp;[ \t]*\n)')
+SH2_SETACTIVE_ON_HOOK = "  if(this == &CPU[1]) SeMednafenSlaveActive(1, (int)timestamp);   /* SE_SLAVE_ON_EDGE */\n"
+SH2_SETACTIVE_OFF_ANCHOR = r'(else if\(!active && timestamp != SS_EVENT_DISABLED_TS\)\s*\{[ \t]*\n)'
+SH2_SETACTIVE_OFF_HOOK = "  if(this == &CPU[1]) SeMednafenSlaveActive(0, (int)timestamp);   /* SE_SLAVE_OFF_EDGE */\n"
+SH2_RESET_ANCHOR = r'(void NO_INLINE SH7095::Reset\(bool power_on_reset, bool from_internal_wdt\)\s*\{\s*\n if\(timestamp == SS_EVENT_DISABLED_TS\)\s*\n  return;[ \t]*\n)'
+SH2_RESET_HOOK = " SeMednafenCpuReset((int)(this - CPU), (int)timestamp);   /* SE_CPU_RESET_HOOK */\n"
+SH2_EXCEPTIONS = ("INT", "NMI", "CPUADDR", "DMAADDR", "ILLINSTR", "ILLSLOT")
+
+
+def sh2_exception_edit(kind):
+    return (r'(\bException\(EXCEPTION_%s, [^;\n]*;[ \t]*\n)' % kind,
+            "\t SeMednafenExceptionEntry((int)(this - CPU));   /* SE_OWN_EXC_%s */\n" % kind,
+            "SE_OWN_EXC_%s" % kind)
+
+
 # File-scope forward declarations (extern "C" is illegal inside a function body, so
 # the call sites below are plain calls that resolve to these). Prepended at BOF.
 FWD_DECLS = (
     "extern \"C\" void SeMednafenFrameHook(void);\n"
     "extern \"C\" void SeMednafenEndFrameHook(void);\n"
+    "extern \"C\" void SeExportNotifyStateLoaded(void);\n"
+    # F2 + F6 + F9 lifecycle (se_mednafen_glue.c): slave power edges, CPU resets, exception entries, loads, frame close.
+    "extern \"C\" void SeMednafenSlaveActive(int on, int ts);\n"
+    "extern \"C\" void SeMednafenCpuReset(int cpu, int ts);\n"
+    "extern \"C\" void SeMednafenExceptionEntry(int cpu);\n"
+    "extern \"C\" void SeMednafenStateLoaded(int slaveOn);\n"
+    "extern \"C\" void SeMednafenFrameClose(int end_ts, int ts0, int ts1, int slaveOn);\n"
     "extern \"C\" int  SeExportGateFrame(void);\n"
     "extern \"C\" int  SeExportGateHalt(void);\n"
     "extern \"C\" void SeExportNotifyStop(int cpu, unsigned int pc);\n"
@@ -914,6 +1227,7 @@ FWD_DECLS = (
     "extern \"C\" int  SeExportInsnStepTick(int cpu, unsigned int pc, int selfBranchTaken);\n"
     "extern \"C\" void SeMednafenTraceHook(int cpu, unsigned int pc);\n"
     "extern \"C\" void SeMednafenHookMode(int continuous);\n"
+    "extern \"C\" void SeMednafenForeignHook(int foreign);\n"
     "extern \"C\" int  SeMednafenSelfBranchTaken(int cpu, unsigned int pc);\n"
     # debug.inc (patched, see process_debug) runs DBG_CPUHandler for the executing CPU while these say so.
     "extern \"C\" int  SeSsBothCpus;\n"
@@ -922,7 +1236,7 @@ FWD_DECLS = (
     # SeSsDmaWatch — defined at EOF after debug.inc — gated on the SeSsMemWatchArmed flag.
     "extern \"C\" int  SeSsMemWatchArmed;\n"
     "extern \"C\" void SeSsDmaWatch(unsigned int A, unsigned int len, int isWrite);\n"
-)
+) + PERF_DECL + PERF_BUS_HELPER
 
 # ---- The slave SH-2 under the debugger. ss/debug.inc's DBG_CPUHandler(which, ...) returns at its first
 #      line when `which != DBG.ActiveCPU`, and ActiveCPU is the debugger UI's "current CPU" -- the master
@@ -946,6 +1260,11 @@ extern "C" int SeSsExecCpu;
    last tracepoint there nulled the hook between the test and the call (a crash on the real fork). */
 extern "C" int SeSsInHandler;
 extern "C" void SeSsHandlerExit(void);
+/* The native debugger's SetCPUCallback request (ss.cpp, SeSsNativeSetCPUCallback): the DebuggerInfo table entry. */
+extern "C" void SeSsNativeSetCPUCallback(void (*callb)(uint32 PC, bool bpoint), bool continuous);
+/* Whether the handler must run ForceEventUpdates before calling the CPU hook (ss.cpp, SeSyncCpuHook). */
+extern "C" int SeSsHookNeedsSync;
+extern "C" void (*SeSsOwnCpuHook)(uint32 PC, bool bpoint);
 template<typename T> struct SeSsActiveCpuScope {
    T& ref; T saved;
    SeSsActiveCpuScope(T& active, unsigned int which) : ref(active), saved(active) {
@@ -961,6 +1280,29 @@ DEBUG_SCOPE_USE = (
 )
 DEBUG_HANDLER_ANCHOR = r'(\bDBG_CPUHandler\s*\([^)]*\)\s*(?:noexcept\s*)?\{[ \t]*\n)'
 DEBUG_FILE = "debug.inc"
+
+# The upstream handler brings EVERY device up to the current timestamp before each call of the CPU hook
+# (`ForceEventUpdates(DBG.eff_ts);` -- CDB, SMPC, SCSP, VDP1/2, SCU DMA, SH-2 DMAC and FRT/WDT, then it
+# reschedules them all), on every instruction of both SH-2s while the hook is continuous. A debugger halting
+# there needs that; function profiling does not (see SeSsHookNeedsSync in ss.cpp). The sync is kept whenever
+# a tracepoint is armed, an instruction step is running, a breakpoint was found on this instruction, or the
+# installed callback is not ours (the native debugger's).
+# Replaces the one upstream line (kept inside the fence, so --revert restores it byte for byte).
+DEBUG_SYNC_ANCHOR = r'[ \t]*ForceEventUpdates\(DBG\.eff_ts\);'
+DEBUG_SYNC_EDIT = (
+    "  /* Saturn Explorer: profile-only instructions skip the device sync (SeSsHookNeedsSync, ss.cpp). */\n"
+    "  if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook)\n"
+    "   ForceEventUpdates(DBG.eff_ts);\n"
+)
+
+# DebuggerInfo.SetCPUCallback is how Mednafen's native debugger (Alt+D) installs and removes its callback
+# (drivers/debugger.cpp, UpdateCoreHooks). Upstream points the table entry at DBG_SetCPUCallback, so opening the
+# debugger and stepping replaced SeSsBpHook and leaving stepping removed it, for good. The entry now goes
+# through SeSsNativeSetCPUCallback (ss.cpp), which installs what the debugger asks for exactly as upstream and
+# puts ours back when it asks for none. The table is the only place that name appears followed by a comma
+# (the definition and our own calls are followed by a parenthesis). The upstream entry stays inside the fence.
+DEBUG_NATIVE_ANCHOR = r'[ \t]*DBG_SetCPUCallback,'
+DEBUG_NATIVE_EDIT = " SeSsNativeSetCPUCallback,   /* Saturn Explorer: the native debugger's callback request (ss.cpp) */\n"
 
 # Per-frame snapshot call, injected after the frame's cycle count is finalized.
 FRAME_HOOK = (
@@ -979,10 +1321,32 @@ FRAME_ANCHOR = r'(espec->MasterCycles\s*=\s*[^;]*;\s*\n)'
 # them, apply.py reports ANCHOR MISS and the build would record pictures but no savestates, so a
 # miss must be treated as a failed install, not a warning.
 END_FRAME_HOOK = (
+    " /* Saturn Explorer profiler: this frame's length. (The slave SH-2's on-time is integrated over its\n"
+    "    real power edges and closed by SeMednafenFrameClose before the rebase.) */\n"
+    " SeSsPerfC[SE_PERF_FRAME_CYCLES] += end_ts;\n"
     " /* Saturn Explorer live tap: the frame is over; take its savestate here (rewind). */\n"
     " SeMednafenEndFrameHook();\n"
 )
 END_FRAME_ANCHOR = r'(\n)\}\n\nstatic void OutputMIDI\(uint8 v\)'
+
+# F2 + F6: the frame's emulation is over and its timestamps are NOT yet rebased. Closes the slave's open
+# on-interval at end_ts and charges each CPU's final sampled interval, both of which the post-rebase end
+# hook above could no longer do exactly. After SMPC_EndFrame (which can still change the slave's power).
+FRAME_CLOSE_HOOK = (
+    " /* Saturn Explorer profiler: close the frame on the pre-rebase clock (slave on-time, last function interval). */\n"
+    " SeMednafenFrameClose(end_ts, (int)CPU[0].timestamp, (int)CPU[1].timestamp, CPU[1].timestamp != SS_EVENT_DISABLED_TS);   /* SE_FRAME_CLOSE_HOOK */\n"
+)
+FRAME_CLOSE_ANCHOR = r'( SMPC_EndFrame\(espec, end_ts\);[ \t]*\n)'
+
+# A native (emulator-initiated) state load replaces the machine: the profiler's frame identity moves
+# to a new timeline. Anchored inside StateAction's `if(load)` block, on the last PostStateLoad. A load
+# the server itself ordered reaches this too and is recognized there (SeExportNotifyStateLoaded).
+STATE_LOADED_HOOK = (
+    "  SeExportNotifyStateLoaded();   /* Saturn Explorer: a new profiler timeline begins */\n"
+    # PostStateLoad does not call SetActive: the slave's on/off state is whatever the file held (F2).
+    "  SeMednafenStateLoaded(CPU[1].timestamp != SS_EVENT_DISABLED_TS);   /* Saturn Explorer: reseed profiler accounting */\n"
+)
+STATE_LOADED_ANCHOR = r'(CPU\[1\]\.PostStateLoad\([^;]*\);\s*\n)'
 
 # Optional pause/step gate at the top of Emulate() (opt-in: can disturb audio timing).
 GATE_HOOK = (
@@ -1093,9 +1457,18 @@ def apply_anchored(text, anchor, code, key):
 
 
 def apply_append(text, code, key):
-    """Append fenced `code` at EOF."""
-    return upsert(text, code, key,
-                  lambda t, block: t + ("" if t.endswith("\n") else "\n") + "\n" + block + "\n")
+    """Append fenced `code` at EOF. The blank line that separates it from the file's own last line
+    is INSIDE the fence (the block starts with an empty line), so --revert, which deletes whole
+    fences, restores the file byte for byte instead of leaving a stray blank line behind."""
+    # A block an older apply.py appended has its separator OUTSIDE the fence; move it inside so this
+    # tree reverts exactly too.
+    for m in FENCE_RE.finditer(text):
+        if key in m.group(0):
+            if not m.group(0).startswith(BEGIN + "\n\n") and text[max(0, m.start() - 2):m.start()] == "\n\n":
+                text = text[:m.start() - 1] + text[m.start():]
+            break
+    return upsert(text, "\n" + code, key,
+                  lambda t, block: t + ("" if t.endswith("\n") else "\n") + block + "\n")
 
 
 def apply_prepend(text, code, key):
@@ -1103,25 +1476,71 @@ def apply_prepend(text, code, key):
     return upsert(text, code, key, lambda t, block: block + "\n" + t)
 
 
+# A fence that REPLACES a line of the upstream file keeps that line inside itself, disabled, so --revert
+# can put it back byte for byte (a plain fence is just deleted by --revert, which would lose the line):
+#
+#   /* --- SE_EXPORT ... --- */
+#   <replacement code>
+#   #if 0 /* SE_ORIGINAL */
+#   <the upstream text, verbatim, including its leading indentation>
+#   #endif
+#   /* --- end SE_EXPORT --- */
+ORIG_OPEN = "\n#if 0 /* SE_ORIGINAL */\n"
+ORIG_CLOSE = "\n#endif"
+
+# Fences written by apply.py versions that replaced a line WITHOUT keeping it (the upstream text is
+# gone from such a tree): the exact old fence body -> the upstream text it replaced. Recognised on
+# re-apply (the original is put back inside the new-style fence) and on --revert (put back in place).
+LEGACY_REPLACED = {
+    "SeSMPCUpdateInput(vp, time_elapsed);\n":     # compared after strip()
+        "  VirtualPorts[vp]->UpdateInput(VirtualPortsDPtr[vp], time_elapsed);",
+}
+
+
+def fence_original(fence_text):
+    """The upstream text a replacing fence stands for, or None for a plain (insert-only) fence."""
+    body = fence_text[len(BEGIN):len(fence_text) - len(END)] if fence_text.endswith(END) else fence_text[len(BEGIN):]
+    body = body.strip("\n") + "\n"
+    i = body.find(ORIG_OPEN)
+    if i >= 0 and body.endswith(ORIG_CLOSE + "\n"):
+        return body[i + len(ORIG_OPEN):-len(ORIG_CLOSE) - 1]
+    return LEGACY_REPLACED.get(body.strip() + "\n")
+
+
 def apply_replace(text, anchor, code, key):
-    """Replace one regex match with fenced `code` (or update its existing fence)."""
-    def place(t, block):
-        m = re.search(anchor, t)
-        return t[:m.start()] + block + t[m.end():] if m else None
-    return upsert(text, code, key, place)
+    """Replace one regex match with fenced `code`, keeping the matched text inside the fence (see
+    ORIG_OPEN) so --revert restores it exactly; an existing fence is updated in place."""
+    existing = next((m.group(0) for m in FENCE_RE.finditer(text) if key in m.group(0)), None)
+    if existing is not None:
+        original = fence_original(existing)
+        if original is None:
+            return text, f"  ANCHOR MISS   {key}  <-- fence without a recoverable original (revert, then re-apply)"
+        block = fence(code.rstrip("\n") + ORIG_OPEN + original + ORIG_CLOSE)
+        if existing == block:
+            return text, f"  ok (already)  {key}"
+        return text.replace(existing, block, 1), f"  ~ updated     {key}"
+    m = re.search(anchor, text)
+    if not m:
+        return text, f"  ANCHOR MISS   {key}  <-- add by hand (see README)"
+    block = fence(code.rstrip("\n") + ORIG_OPEN + m.group(0) + ORIG_CLOSE)
+    return text[:m.start()] + block + text[m.end():], f"  + applied     {key}"
 
 
 def process_ss(src_dir, do_write, with_pause):
     path = os.path.join(src_dir, "ss.cpp")
     if not os.path.isfile(path):
         return ["MISSING  ss.cpp"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     notes = ["ss.cpp:"]
     text, n = apply_prepend(text, FWD_DECLS, "SeMednafenFrameHook(void)")
     notes.append(n)
     text, n = apply_anchored(text, FRAME_ANCHOR, FRAME_HOOK, "SeMednafenFrameHook();")
     notes.append(n)
     text, n = apply_anchored(text, END_FRAME_ANCHOR, END_FRAME_HOOK, "SeMednafenEndFrameHook();")
+    notes.append(n)
+    text, n = apply_anchored(text, FRAME_CLOSE_ANCHOR, FRAME_CLOSE_HOOK, "SE_FRAME_CLOSE_HOOK")
+    notes.append(n)
+    text, n = apply_anchored(text, STATE_LOADED_ANCHOR, STATE_LOADED_HOOK, "SeExportNotifyStateLoaded();")
     notes.append(n)
     if with_pause:
         text, n = apply_anchored(text, GATE_ANCHOR, GATE_HOOK, "while (!SeExportGateFrame())")
@@ -1133,7 +1552,7 @@ def process_ss(src_dir, do_write, with_pause):
     text, n = apply_append(text, EMU_SLOT_ACCESSORS, "SsDbgEmuSlotInfo")
     notes.append(n)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return notes
 
 
@@ -1146,11 +1565,126 @@ def process_scu(src_dir, do_write):
     if not os.path.isfile(path):
         return ["scu.inc (DMA watchpoint):", "  MISSING  scu.inc"]
     notes = ["scu.inc (DMA watchpoint):"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     text, n = apply_anchored(text, SCU_DMA_ANCHOR, SCU_DMA_HOOK, "SeSsDmaWatch(A,")
     notes.append(n)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
+    return notes
+
+
+def process_anchored(src_dir, fname, title, edits, do_write, prepend=None):
+    """Apply a list of (anchor, code, key) insertions to one file, with an optional
+    (code, key) block prepended first."""
+    path = os.path.join(src_dir, fname)
+    notes = [f"{fname} ({title}):"]
+    if not os.path.isfile(path):
+        return notes + [f"  MISSING  {fname}"]
+    text = original = read_src(path)
+    if prepend:
+        text, n = apply_prepend(text, prepend[0], prepend[1])
+        notes.append(n)
+    for anchor, code, key in edits:
+        text, n = apply_anchored(text, anchor, code, key)
+        notes.append(n)
+    if do_write and text != original:
+        write_src(path, text)
+    return notes
+
+
+# Fences an EARLIER apply.py (v26, 4b6cd9e) inserted that this one no longer wants. upsert() finds a
+# fence by key and leaves it alone ("ok (already)"), so a tree that was patched once and is patched
+# again incrementally (Integration/install.py keeps the checkout) would keep the stale text; for the
+# VDP1 one that is a compile error (SE_PERF_VDP1_DRAW_CYCLES no longer exists). Each entry is
+# (file, substring that identifies the fence and no fence we still write). Removed before any hook is
+# applied. A rename of a key is a retirement of the old key plus a new key.
+#   vdp1.cpp  SE_PERF_VDP1_DRAW_CYCLES  index 6, elapsed drawing -- retired in v27, never aliased
+#   sound.cpp se_perf_t0                the v26 per-slice 68000 hooks (baseline taken after the setjmp,
+#                                       so a longjmp skipped the increments); v27 uses se_perf_ts0
+#   ss.cpp    SSH2_ON_CYCLES += end_ts  the all-or-nothing slave on-time in the end-of-frame fence
+RETIRED_FENCES = [
+    ("vdp1.cpp", "SE_PERF_VDP1_DRAW_CYCLES"),
+    ("sound.cpp", "se_perf_t0"),
+    # The end-of-frame fence of 3269140 and earlier counted the slave all-or-nothing after the rebase
+    # (F2 replaces it with SeMednafenFrameClose before the rebase); same key, different text.
+    ("ss.cpp", "SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] += end_ts"),
+]
+
+
+def retire_fences_text(text, key):
+    """Remove every fenced block containing `key`. Returns (text, count)."""
+    pat = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
+    n = 0
+    def drop(m):
+        nonlocal n
+        if key in m.group(0):
+            n += 1
+            return ""
+        return m.group(0)
+    return pat.sub(drop, text), n
+
+
+def process_retired(src_dir, do_write):
+    notes = []
+    for fname, key in RETIRED_FENCES:
+        path = os.path.join(src_dir, fname)
+        if not os.path.isfile(path):
+            continue
+        text = read_src(path)
+        new, n = retire_fences_text(text, key)
+        if n:
+            notes.append(f"  - retired     {fname}: {n} obsolete block(s) containing {key}")
+            if do_write:
+                write_src(path, new)
+    return ["retired v26 hooks:"] + notes if notes else []
+
+
+def process_profiler(src_dir, do_write):
+    """The profiler's counters (v26 hooks; v27 layout, see SePerfCounters.h): see PERF_DECL. A miss here costs one figure in the Profiler
+    panel, which then reads zero -- it is reported like any other miss so it is not shipped unnoticed."""
+    notes = process_retired(src_dir, do_write)
+    notes += process_anchored(src_dir, "sh7095.inc", "profiler: bus accesses", [
+        (SH2_BUSWRITE_ANCHOR, SH2_BUSWRITE_HOOK, "SE_PERF_BUS_WRITE"),
+        (SH2_BUSREAD_ANCHOR, SH2_BUSREAD_HOOK, "SE_PERF_BUS_READ"),
+    ], do_write)
+    notes += process_anchored(src_dir, "sh7095_ops.inc", "profiler: SH-2 idle time", [
+        (SH2_SLEEP_ANCHOR, SH2_SLEEP_HOOK, "SE_PERF_SLEEP_HOOK"),
+        (SH2_STANDBY_ANCHOR, SH2_STANDBY_HOOK, "SE_PERF_STANDBY_HOOK"),
+        (SH2_STALL_ANCHOR, SH2_STALL_HOOK, "SE_PERF_STALL_HOOK"),
+    ], do_write)
+    notes += process_anchored(src_dir, "sh7095.inc", "profiler: slave power + CPU reset", [
+        (SH2_SETACTIVE_ON_ANCHOR, SH2_SETACTIVE_ON_HOOK, "SE_SLAVE_ON_EDGE"),
+        (SH2_SETACTIVE_OFF_ANCHOR, SH2_SETACTIVE_OFF_HOOK, "SE_SLAVE_OFF_EDGE"),
+        (SH2_RESET_ANCHOR, SH2_RESET_HOOK, "SE_CPU_RESET_HOOK"),
+    ], do_write)
+    notes += process_anchored(src_dir, "sh7095_ops.inc", "profiler: exception entries (function ownership)",
+                              [sh2_exception_edit(k) for k in SH2_EXCEPTIONS], do_write)
+    notes += process_anchored(src_dir, "scu.inc", "profiler: DMA + DSP", [
+        (SCU_DMA_PERF_ANCHOR, SCU_DMA_PERF_HOOK, "SE_PERF_DMA_ROUTE_BYTES"),
+        (SCU_DSP_PERF_ANCHOR, SCU_DSP_PERF_HOOK, "SE_PERF_DSP_CYCLES"),
+    ], do_write)
+    notes += process_anchored(src_dir, "vdp1.cpp", "profiler: draw time", [
+        (VDP1_PERF_CMD_ANCHOR, VDP1_PERF_CMD_HOOK, "SE_PERF_VDP1_COMMANDS"),
+        (VDP1_PERF_START_ANCHOR, VDP1_PERF_START_HOOK, "SE_PERF_VDP1_DRAW_STARTS"),
+        (VDP1_PERF_ABORT_ANCHOR, VDP1_PERF_ABORT_HOOK, "SE_PERF_FBSWAP_ABORT"),
+        (VDP1_EAT_ANCHOR, VDP1_EAT_HOOK, "SeSsVdp1Debit"),
+        (VDP1_PERF_DMA_ANCHOR, VDP1_PERF_DMA_HOOK, "SE_PERF_VDP1_DMA_DISCARDED"),
+    ], do_write, prepend=(VDP1_PERF_FWD, "SE_VDP1_PERF_FWD"))
+    notes += process_anchored(src_dir, "sound.cpp", "profiler: 68000 time", [
+        (SOUND_PERF_PRE_ANCHOR, SOUND_PERF_PRE_HOOK, "se_perf_idle0 ="),
+        (SOUND_PERF_POST_ANCHOR, SOUND_PERF_POST_HOOK, "SE_PERF_M68K_IDLE_CYCLES"),
+    ], do_write, prepend=(SOUND_PERF_FWD, "SE_SOUND_PERF_FWD"))
+    m68k_dir = os.path.normpath(os.path.join(src_dir, "..", "hw_cpu", "m68k"))
+    notes += process_anchored(m68k_dir, "m68k.h", "profiler: 68000 idle accumulator", [
+        (M68K_IDLE_MEMBER_ANCHOR, M68K_IDLE_MEMBER, "IdleCycleCount;"),
+    ], do_write)
+    notes += process_anchored(m68k_dir, "m68k.cpp", "profiler: 68000 idle accumulator", [
+        (M68K_IDLE_INIT_ANCHOR, M68K_IDLE_INIT, "IdleCycleCount = 0;"),
+        (M68K_IDLE_STEP_ANCHOR, M68K_IDLE_STEP, "IdleCycleCount += 4;"),
+    ], do_write)
+    notes += process_anchored(src_dir, "ss.cpp", "profiler: cache mode", [
+        (SS_CACHE_MODE_ANCHOR, SS_CACHE_MODE_HOOK, "SeSsCacheMode ="),
+    ], do_write)
     return notes
 
 
@@ -1164,13 +1698,17 @@ def process_debug(src_dir, do_write):
     if not os.path.isfile(path):
         return ["debug.inc (slave SH-2 handler):", "  MISSING  debug.inc"]
     notes = ["debug.inc (slave SH-2 handler):"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     text, n = apply_prepend(text, DEBUG_SCOPE_HELPER, "SeSsActiveCpuScope {")
     notes.append(n)
     text, n = apply_anchored(text, DEBUG_HANDLER_ANCHOR, DEBUG_SCOPE_USE, "SeSsActiveCpuScope<decltype")
     notes.append(n)
+    text, n = apply_replace(text, DEBUG_SYNC_ANCHOR, DEBUG_SYNC_EDIT, "profile-only instructions skip the device sync")
+    notes.append(n)
+    text, n = apply_replace(text, DEBUG_NATIVE_ANCHOR, DEBUG_NATIVE_EDIT, "SeSsNativeSetCPUCallback,")
+    notes.append(n)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return notes
 
 
@@ -1182,7 +1720,7 @@ def process_vdp1_drawend(src_dir, do_write):
     if not os.path.isfile(path):
         return ["vdp1.cpp (draw-end latch):", "  MISSING  vdp1.cpp"]
     notes = ["vdp1.cpp (draw-end latch):"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     text, n = apply_prepend(text, VDP1_DRAWEND_FWD, "SE_VDP1_LATCH_FWD")
     notes.append(n)
     text, n = apply_anchored(text, VDP1_DRAWEND_ANCHOR, VDP1_DRAWEND_HOOK, "SsDbgVdp1LatchDrawEnd();")
@@ -1192,7 +1730,7 @@ def process_vdp1_drawend(src_dir, do_write):
     text, n = apply_anchored(text, VDP1_LOAD_ANCHOR, VDP1_LOAD_HOOK, "SE_VDP1_LATCH_LOAD")
     notes.append(n)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return notes
 
 
@@ -1207,17 +1745,17 @@ def process_sound(src_dir, do_write):
     if not os.path.isfile(h_path) or not os.path.isfile(cpp_path):
         return notes + ["  MISSING  scsp.h or sound.cpp"]
 
-    text = original = open(h_path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(h_path)
     text, n = apply_anchored(text, SCSP_RAMPTR_ANCHOR, SCSP_SLOT_METHOD, "SeDbgReadSlots")
     notes.append(n)
     if do_write and text != original:
-        open(h_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(h_path, text)
 
-    text = original = open(cpp_path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(cpp_path)
     text, n = apply_append(text, SOUND_ACCESSORS, "SsDbgScspSlots")
     notes.append(n)
     if do_write and text != original:
-        open(cpp_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(cpp_path, text)
     return notes
 
 
@@ -1230,11 +1768,11 @@ def process_cd(src_dir, do_write):
     notes = ["cdb.cpp:"]
     if not os.path.isfile(cpp_path):
         return notes + ["  MISSING  cdb.cpp"]
-    text = original = open(cpp_path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(cpp_path)
     text, n = apply_append(text, CD_ACCESSORS, "SsDbgCdStatus")
     notes.append(n)
     if do_write and text != original:
-        open(cpp_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(cpp_path, text)
     return notes
 
 
@@ -1245,7 +1783,7 @@ def process_smpc(src_dir, do_write):
     if not os.path.isfile(cpp_path) or not os.path.isfile(h_path):
         return notes + ["  MISSING  smpc.cpp or smpc.h"]
 
-    text = original = open(cpp_path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(cpp_path)
     # Early versions of this hook prepended <atomic>, but Mednafen requires types.h
     # (pulled in by ss.h) to precede standard integer headers. Remove that exact legacy
     # fence once, then keep the include anchored immediately after ss.h.
@@ -1259,19 +1797,17 @@ def process_smpc(src_dir, do_write):
                              SMPC_INPUT_STATE, "SeInjectedPad[2]")
     notes.append(n)
     text, n = apply_replace(
-        text,
-        r'[ \t]*VirtualPorts\[vp\]->UpdateInput\(VirtualPortsDPtr\[vp\], time_elapsed\);',
-        SMPC_INPUT_UPDATE, "SeSMPCUpdateInput(vp, time_elapsed)")
+        text, SMPC_UPDATE_ANCHOR, SMPC_INPUT_UPDATE, "SeSMPCUpdateInput(vp, time_elapsed)")
     notes.append(n)
     if do_write and text != original:
-        open(cpp_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(cpp_path, text)
 
-    text = original = open(h_path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(h_path)
     text, n = apply_anchored(text, r'(void SMPC_SetInput\([^;]+;\s*\n)',
                              SMPC_INPUT_DECL, "SMPC_SetInjectedInput")
     notes.append(n)
     if do_write and text != original:
-        open(h_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(h_path, text)
     return notes
 
 
@@ -1279,10 +1815,10 @@ def process_append_file(src_dir, fname, block, key, do_write):
     path = os.path.join(src_dir, fname)
     if not os.path.isfile(path):
         return [f"MISSING  {fname}"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     text, note = apply_append(text, block, key)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return [f"{fname}:", note]
 
 
@@ -1292,14 +1828,14 @@ def process_title(root, do_write):
     path = os.path.join(root, TITLE_FILE)
     if not os.path.isfile(path):
         return [f"{TITLE_FILE}:", "  (not found — window-title mark skipped; non-SDL build?)"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     notes = [f"{TITLE_FILE}:"]
     text, n = apply_prepend(text, TITLE_FWD, "SeExportTitleSuffix(const char*")
     notes.append(n)
     text, n = apply_anchored(text, TITLE_ANCHOR, TITLE_HOOK, 'SeExportTitleSuffix("Mednafen"')
     notes.append(n)
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return notes
 
 
@@ -1309,11 +1845,40 @@ def process_input(root, do_write):
     path = os.path.join(root, INPUT_FILE)
     if not os.path.isfile(path):
         return [f"{INPUT_FILE}:", "  (not found — keyboard-map hook skipped; non-SDL build?)"]
-    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text = original = read_src(path)
     text, note = apply_append(text, INPUT_ACCESSORS, "SsDbgQueryKeyMap")
     if do_write and text != original:
-        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+        write_src(path, text)
     return [f"{INPUT_FILE}:", note]
+
+
+def read_src(path):
+    """Source text of a file we patch, with CRLF folded to LF in memory (the anchors and fences are all LF).
+    Binary I/O: no platform newline translation, so what write_src() writes back is exactly what was read."""
+    with open(path, "rb") as f:
+        data = f.read()
+    text = data.decode("utf-8", errors="surrogateescape")
+    return text.replace("\r\n", "\n") if _is_crlf(data) else text
+
+
+def _is_crlf(data):
+    """A file that uses CRLF throughout (every LF preceded by CR); mixed or LF files are left as they are."""
+    return b"\r\n" in data and data.count(b"\n") == data.count(b"\r\n")
+
+
+def write_src(path, text):
+    """Write patched text back in the file's own line-ending style (decided from what is on disk right now,
+    i.e. the pre-edit bytes). A CRLF file stays pure CRLF, an LF file stays pure LF."""
+    eol_crlf = False
+    try:
+        with open(path, "rb") as f:
+            eol_crlf = _is_crlf(f.read())
+    except OSError:
+        pass
+    if eol_crlf:
+        text = text.replace("\n", "\r\n")
+    with open(path, "wb") as f:
+        f.write(text.encode("utf-8", errors="surrogateescape"))
 
 
 def write_if_changed(destpath, data):
@@ -1377,7 +1942,7 @@ def process_build(root, do_write):
         path = os.path.join(root, rel)
         if not os.path.isfile(path):
             continue
-        text = open(path, encoding="utf-8", errors="surrogateescape").read()
+        text = read_src(path)
         if "se_mednafen_glue.c" in text:
             return [f"{rel}:", "  ok (already)  se_export.c + se_mednafen_glue.c"]
         m = VDP1_SRC_RE.search(text)
@@ -1394,22 +1959,35 @@ def process_build(root, do_write):
             ins = "".join(f"{prefix}{s} " for s in NEW_SOURCES)
         new = text[: m.start()] + ins + text[m.start():]
         if do_write:
-            open(path, "w", encoding="utf-8", errors="surrogateescape").write(new)
+            write_src(path, new)
         return [f"{rel}:", f"  + inserted    {', '.join(NEW_SOURCES)}"]
     return ["build file:",
             "  ANCHOR MISS   add se_export.c + se_mednafen_glue.c to the ss build by hand"]
 
 
+def revert_fence(m):
+    """What --revert leaves where a fence was: nothing, or -- for a fence that replaced upstream text --
+    that text. The fence's own trailing newline (matched by the caller's regex) is the upstream
+    line's, so it is kept in the second case."""
+    text = m.group(0)
+    nl = text.endswith("\n")
+    original = fence_original(text[:-1] if nl else text)
+    return "" if original is None else original + ("\n" if nl else "")
+
+
 def revert(src_dir, root):
     fence_re = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
     edited = [os.path.join(src_dir, f) for f in
-              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "scu.inc", "debug.inc", "sound.cpp", "scsp.h", "cdb.cpp", "smpc.cpp", "smpc.h")]
+              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "scu.inc", "debug.inc", "sound.cpp", "scsp.h", "cdb.cpp", "smpc.cpp", "smpc.h",
+               "sh7095.inc", "sh7095_ops.inc")]
+    for f in M68K_FILES:   # the shared 68000 core (F5), outside src/ss
+        edited.append(os.path.join(root, M68K_DIR, f))
     edited.append(os.path.join(root, TITLE_FILE))   # window-title mark (SDL frontend)
     edited.append(os.path.join(root, INPUT_FILE))   # keyboard-map hook (SDL frontend)
     for path in edited:
         if os.path.isfile(path):
-            t = open(path, encoding="utf-8", errors="surrogateescape").read()
-            open(path, "w", encoding="utf-8", errors="surrogateescape").write(fence_re.sub("", t))
+            t = read_src(path)
+            write_src(path, fence_re.sub(revert_fence, t))
     for name in COMMON_FILES + [GLUE_FILE]:
         p = os.path.join(src_dir, name)
         if os.path.isfile(p):
@@ -1417,12 +1995,12 @@ def revert(src_dir, root):
     for rel in BUILD_CANDIDATES:
         path = os.path.join(root, rel)
         if os.path.isfile(path):
-            t = open(path, encoding="utf-8", errors="surrogateescape").read()
+            t = read_src(path)
             for s in NEW_SOURCES:
                 # Remove the inline token we inserted before vdp1 (quoted or not, with
                 # any path prefix and a trailing comma/space).
                 t = re.sub(r'''["']?(?:\S+/)?''' + re.escape(s) + r'''["']?,?[ \t]*''', "", t)
-            open(path, "w", encoding="utf-8", errors="surrogateescape").write(t)
+            write_src(path, t)
     print("Reverted: removed SE_EXPORT edits and copied files.")
 
 
@@ -1483,6 +2061,7 @@ def main():
     notes += process_vdp1_drawend(src_dir, do_write)
     notes += process_sound(src_dir, do_write)
     notes += process_cd(src_dir, do_write)
+    notes += process_profiler(src_dir, do_write)
     notes += process_title(root, do_write)
     notes += process_input(root, do_write)
     notes += process_build(root, do_write)

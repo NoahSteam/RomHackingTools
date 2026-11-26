@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Saturn Explorer — Profiler</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Layout: one reading column (about 68ch). Diagrams and tables sit in the same column and scroll on their own if wide. */
+  /* Same neutrals as the other guides; the accent is the oscilloscope cyan the audio guide uses for data. */
+  :root {
+    --bg: #e9edf1; --surface: #ffffff; --ink: #17212a; --muted: #4c5d6a; --rule: #d5dde3;
+    --accent: #0d7f8f; --accent-soft: #d8eef1; --warn: #8a5a00; --warn-soft: #f4e6cc;
+    --bar-off: #7a8a97; --bar-on: #0d7f8f; --bar-old: #b26a10;
+    --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+    --bg: #0d1216; --surface: #141b21; --ink: #e7eef3; --muted: #9db0bd; --rule: #26313a;
+    --accent: #5bd0c4; --accent-soft: #102b2c; --warn: #e8a33d; --warn-soft: #33240f;
+    --bar-off: #7f909d; --bar-on: #5bd0c4; --bar-old: #e8a33d;
+    color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1216; --surface: #141b21; --ink: #e7eef3; --muted: #9db0bd; --rule: #26313a;
+    --accent: #5bd0c4; --accent-soft: #102b2c; --warn: #e8a33d; --warn-soft: #33240f;
+    --bar-off: #7f909d; --bar-on: #5bd0c4; --bar-old: #e8a33d;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+body {
+  margin: 0; -webkit-font-smoothing: antialiased;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 1rem; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 2.5rem 4rem;
+}
+main { max-width: 44rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2.75rem; }
+section { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.01em; }
+h2 { font-size: 1.45rem; font-weight: 750; padding-top: 1.5rem; border-top: 1px solid var(--rule); }
+h3 { font-size: 1.05rem; font-weight: 700; }
+p, ul, ol { margin: 0; }
+ul { padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.lede { font-size: 1.13rem; color: var(--muted); }
+.kicker { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+code, .num { font-family: var(--font-mono); font-size: 0.9em; font-variant-numeric: tabular-nums; }
+code { background: var(--accent-soft); padding: 0.05em 0.35em; border-radius: 4px; }
+header { display: flex; flex-direction: column; gap: 0.9rem; }
+
+/* pipeline */
+.pipe { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: stretch; }
+.pipe .step { flex: 1 1 9.5rem; min-width: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.75rem 0.85rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.pipe .step b { font-family: var(--font-display); font-weight: 600; }
+.pipe .step span { font-size: 0.88rem; color: var(--muted); line-height: 1.45; }
+.pipe .where { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+
+/* tables */
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 0.55rem 0.75rem 0.55rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: var(--font-mono); font-weight: 500; font-size: 0.74rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+td.num, th.num { text-align: right; white-space: nowrap; padding-right: 0; }
+td:first-child { white-space: nowrap; }
+
+/* cost chart */
+.chart { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 1.1rem 1.1rem 0.9rem; display: flex; flex-direction: column; gap: 0.8rem; }
+.row { display: grid; grid-template-columns: 1fr; gap: 0.25rem; }
+.row .label { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.92rem; }
+.row .label .num { color: var(--ink); font-weight: 500; }
+.track { height: 0.9rem; background: var(--bg); border-radius: 3px; }
+.bar { height: 100%; border-radius: 3px; }
+.chart figcaption, .note { font-size: 0.86rem; color: var(--muted); }
+figure { margin: 0; }
+
+.limits { background: var(--warn-soft); border-radius: 6px; padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.limits h3 { color: var(--warn); }
+dl { margin: 0; display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr); gap: 0.6rem 1.25rem; }
+dt { font-weight: 600; }
+dd { margin: 0; color: var(--muted); }
+@media (max-width: 34rem) {
+  h1 { font-size: 1.7rem; }
+  dl { grid-template-columns: 1fr; gap: 0.15rem; }
+  dd { margin-bottom: 0.6rem; }
+}
+footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 1rem; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.back { font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <a class="back" href="index.html">← All guides</a>
+  <span class="kicker">Saturn Explorer · profiler</span>
+  <h1>How the profiler works, and how we know its numbers are right</h1>
+  <p class="lede">Saturn Explorer's profiler shows where a running Sega Saturn game spends each frame: which processor is busy, what crosses the buses, how full memory is, and which functions cost the most. This page explains how it gets those numbers and what was done to check them.</p>
+</header>
+
+<section>
+  <h2>What it shows</h2>
+  <dl>
+    <dt>Frame time</dt>
+    <dd>For each of the two SH-2 processors: time busy, stalled waiting on the bus, asleep, or switched off. Also VDP1 drawing work, the SCU DSP and the 68000 sound processor.</dd>
+    <dt>Bus traffic</dt>
+    <dd>How many requests each device received (work RAM, VDP1, VDP2, sound, CD, cartridge), and how many bytes each DMA level moved and between which buses.</dd>
+    <dt>Memory</dt>
+    <dd>For each fixed RAM area, how much holds data and what is being rewritten.</dd>
+    <dt>Functions (optional)</dt>
+    <dd>The game's functions ranked by the processor time each one uses per frame.</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>How it works</h2>
+  <p>The profiler lives in two places: a patched copy of the Mednafen emulator, which does the counting, and Saturn Explorer, which displays it. They talk over a local connection.</p>
+  <div class="pipe">
+    <div class="step"><span class="where">Emulator</span><b>Count</b><span>Small counters are added at the exact points where work happens: a bus request, a DMA start, a VDP1 command, a processor going to sleep.</span></div>
+    <div class="step"><span class="where">Emulator</span><b>Close the frame</b><span>At the end of every frame the counters are packed into one numbered record and reset to zero.</span></div>
+    <div class="step"><span class="where">Connection</span><b>Send</b><span>Each record is delivered once. If any are lost, the gap is counted and reported instead of hidden.</span></div>
+    <div class="step"><span class="where">Saturn Explorer</span><b>Show</b><span>The panel keeps a history of frames and draws shares, tables and a strip you can scrub through.</span></div>
+  </div>
+
+  <h3>Counters are always on and cheap</h3>
+  <p>Each counter is one addition placed on a code path that already does far more work, so counting costs almost nothing. The patch only inserts code; removing it restores every emulator file byte for byte.</p>
+
+  <h3>Function timing is opt-in and costs speed</h3>
+  <p>To know which function is running, the profiler has to look at every instruction both processors execute. It follows calls and returns to keep track of the current function, and charges the cycles since the previous instruction to it. Time spent asleep or stalled is not charged to any function.</p>
+  <p>When the profiler cannot be sure which function owns some code (for example code that was already running when profiling began, or an interrupt handler), it files that time under the raw address instead of guessing. Time it could not assign at all appears in separate rows labelled <em>Other</em> and <em>Not observed</em>.</p>
+
+  <h3>It says when it does not know</h3>
+  <p>Every record carries flags for which measurements it actually contains. The panel shows "not available" or "1 of 4 frames" where a value was not measured, and never treats a missing measurement as zero.</p>
+</section>
+
+<section>
+  <h2>How it was verified</h2>
+  <p>The checks run from small to large. Each one covers something the one before it cannot.</p>
+
+  <h3>Tests that run the real emulator code</h3>
+  <p>The component tests compile the actual patched Mednafen source files, with only the surrounding devices replaced by stand-ins. Expected values are derived by hand first. For example, a cache miss must count as exactly <span class="num">4</span> bus requests, a cache hit as <span class="num">0</span>, and a write as <span class="num">1</span>.</p>
+
+  <h3>Tests that prove the tests can fail</h3>
+  <p>A test that always passes proves nothing. So the suite also breaks the code on purpose, one small change at a time, and requires a test to fail each time. More than 50 such deliberate breaks are checked across the counting code, the call tracking and the emulator hooks, and every one is caught.</p>
+
+  <h3>A purpose-built Saturn program with known answers</h3>
+  <p>The main proof is a small Saturn program, called V1, written for this purpose. It runs through 14 phases. Each phase does one known thing, so the numbers the profiler should report can be worked out in advance. Those expected values were written down before the program was run.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Phase</th><th>What the program does</th><th>What the profiler must report</th></tr></thead>
+    <tbody>
+      <tr><td>Idle</td><td>Sleeps all frame</td><td>A baseline: nearly the whole frame asleep</td></tr>
+      <tr><td>Busy</td><td>Runs a loop of fixed length</td><td>Busy time matching the loop's cycle count</td></tr>
+      <tr><td>Functions</td><td>Calls two functions of known length</td><td><span class="num">12,003</span> and <span class="num">4,003</span> cycles</td></tr>
+      <tr><td>Bus</td><td>A fixed number of reads and writes per device</td><td>The same counts, device by device</td></tr>
+      <tr><td>VDP1</td><td>Draws one command, then many</td><td>Command counts and drawing work</td></tr>
+      <tr><td>DMA</td><td>Transfers of known size, alone and during a draw</td><td>Transfer counts, bytes, and processor stall time</td></tr>
+      <tr><td>Second CPU</td><td>Switches the slave SH-2 on, then off</td><td>The exact time it was powered within the frame</td></tr>
+      <tr><td>Sound CPU</td><td>Runs, idles and stops the 68000</td><td>Executed versus idle cycles</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Run on a real Saturn BIOS in the patched emulator, <strong>all 48 checklist rows matched</strong>, in both of the emulator's cache modes. Switching individual counters off made the matching rows fail, which shows the checklist can tell a working profiler from a broken one.</p>
+
+  <h3>Checking that measuring does not change the result</h3>
+  <p>The same program was recorded with function timing off and on. Every counter other than the function table is identical in both recordings. An earlier build did not pass this check: turning function timing on shifted two figures slightly. That was traced to the emulator updating every device before each instruction, and fixed.</p>
+
+  <h3>Working alongside the debugger</h3>
+  <p>Breakpoints, single-stepping and tracepoints were exercised with the profiler running, including Mednafen's own built-in debugger. One real bug was found this way: after stepping in the built-in debugger, the function table froze on one function. It now recovers on the next frame, and a frame the profiler could not observe fully is reported as "not attributed" instead of showing a wrong split.</p>
+
+  <h3>Measuring the cost on a real game</h3>
+  <figure class="chart">
+    <div class="row">
+      <div class="label"><span>Function timing off</span><span class="num">12.2 ms</span></div>
+      <div class="track"><div class="bar" style="width:10.6%;background:var(--bar-off)"></div></div>
+    </div>
+    <div class="row">
+      <div class="label"><span>Function timing on</span><span class="num">31.6 ms</span></div>
+      <div class="track"><div class="bar" style="width:27.6%;background:var(--bar-on)"></div></div>
+    </div>
+    <div class="row">
+      <div class="label"><span>Function timing on, before the fix</span><span class="num">114.7 ms</span></div>
+      <div class="track"><div class="bar" style="width:100%;background:var(--bar-old)"></div></div>
+    </div>
+    <figcaption>Processor time the emulation thread needs per frame, on one scene of a commercial game. Function timing now costs about 2.6 times a normal frame, down from 9.5 times. Measured on a desktop that was not idle, so treat the figures as provisional.</figcaption>
+  </figure>
+  <p>A separate benchmark on an idle machine measured overall speed with the frame limiter off, five runs of each setup, on the same scene:</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Setup</th><th class="num">Speed</th><th class="num">Extra time per frame</th></tr></thead>
+    <tbody>
+      <tr><td>Profiler not connected</td><td class="num">116 fps</td><td class="num">baseline</td></tr>
+      <tr><td>Connected, function timing off</td><td class="num">101 fps</td><td class="num">+15%</td></tr>
+      <tr><td>Connected, function timing on</td><td class="num">38 fps</td><td class="num">+206%</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">The Saturn runs at 60 fps, so a game that reaches these speeds stays at full speed with the counters on, and drops below it with function timing on. One of the five baseline runs was about 6% slower than the rest, so the +15% figure carries a range of roughly +8.5% to +16%.</p>
+
+  <h3>Everything else</h3>
+  <ul>
+    <li>The full automated suite of 140 tests passes on the current code.</li>
+    <li>A race detector was run over the connection code. It found one real race in how listening sockets were closed, which was fixed.</li>
+    <li>Each change was reviewed independently, and several review findings were reproduced and fixed before merging.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What has not been verified</h2>
+  <div class="limits">
+    <h3>Read the numbers with these limits in mind</h3>
+    <ul>
+      <li><strong>Real games are checked less than the test program.</strong> V1 proves the counters on known inputs. On a commercial game the numbers are plausible and consistent, but there is no independent answer key.</li>
+      <li><strong>It measures the emulator, not the console.</strong> The figures are faithful to what Mednafen emulates. They were not compared with real Saturn hardware.</li>
+      <li><strong>"Busy" includes slow bus waits.</strong> Only sleep and DMA stalls are separated out.</li>
+      <li><strong>Function time is self time.</strong> Time in a function's callees is charged to the callees.</li>
+      <li><strong>A breakpoint left set in Mednafen's own debugger pauses function timing</strong> until it is cleared. Those frames are marked as not attributed.</li>
+      <li><strong>The panel was checked by hand once,</strong> on the test program: every tab showed the expected values, and breakpoints and stepping worked alongside it. Its automated tests run without a display.</li>
+    </ul>
+  </div>
+</section>
+
+<footer><a href="index.html">← All guides</a> · Part of <a href="https://github.com/NoahSteam/RomHackingTools">Saturn Explorer</a>. Details, derivations and test names are in the repository under <code>SaturnExplorer/Docs/Codebase/Systems/Profiler.md</code> and <code>SaturnExplorer/Integration/Validation/</code>.</footer>
+</main>
+</body>
+</html>

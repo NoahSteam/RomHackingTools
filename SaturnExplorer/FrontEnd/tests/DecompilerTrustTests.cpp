@@ -1675,6 +1675,8 @@ bool CopyFrom(MiniRig& m, int line, const char* item, std::string& text)
     ImVec2 ma, mb;
     if (!m.panel.ItemRect(item, ma, mb)) return false;
     const ImVec2 c((ma.x + mb.x) * 0.5f, (ma.y + mb.y) * 0.5f);
+    // The harness's private clipboard must still be the one installed: a Win32 default handler would read the desktop's.
+    MiniCheck("the harness clipboard is in memory, not the OS one", m.h.ClipboardIsInMemory(), "");
     ImGui::SetClipboardText("");
     m.h.Hover(c);
     m.h.Click(c);

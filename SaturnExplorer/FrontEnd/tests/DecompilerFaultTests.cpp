@@ -2664,7 +2664,7 @@ const Pin kPins[] = {
     { "mailbox", "followFlow", 0, 24, 72, "PcodeOpBank::markAlive;Funcdata::opInsert#0", "A6-8 PcodeOpBank::markAlive: the op is not lost when the alive list cannot take it" },
     { "jumptable", "followFlow", 0, 24, 60, "PcodeOpBank::create;Funcdata::cloneOp#0", "A6-8 PcodeOpBank::create (by cloneOp), on the jumptable fixture" },
     { "jumptable", "followFlow", 0, 24, 124, "PcodeOpBank::markAlive;Funcdata::opInsert#0", "A6-8 PcodeOpBank::markAlive, on the jumptable fixture" },
-    { "mailbox", "followFlow", 0, 40, 0, "VarnodeBank::xref;VarnodeBank::createDef#0", "A6-8 VarnodeBank::createDef (xref): the Varnode is freed when it cannot be inserted" },
+    { "mailbox", "followFlow", 0, 40, 0, "VarnodeBank::xref|_M_insert_unique;VarnodeBank::createDef#0", "A6-8 VarnodeBank::createDef (xref): the Varnode is freed when it cannot be inserted" },
     { "mailbox", "followFlow", 0, 40, 2, "VarnodeBank::create(;Funcdata::newVarnode#0", "A6-8 VarnodeBank::create: the same" },
     { "mailbox", "actions", 0, 40, 0, "VarnodeBank::create(;Funcdata::newConstant#0", "A6-9 Funcdata::newConstant (VarnodeBank::create), in ActionPrototypeTypes" },
     { "mailbox", "actions", 0, 24, 169, "BlockGraph::newBlockCopy;BlockGraph::buildCopy#0", "A6-9 BlockGraph::newBlockCopy: the copy is freed when it cannot be added" },
@@ -2690,8 +2690,8 @@ const Pin kPins[] = {
     { "stack", "actions", 0, 40, 19, "VarnodeBank::xref;VarnodeBank::setInput#0", "A6-14 VarnodeBank::setInput: a Varnode taken out of the lists is kept if it cannot be put back" },
     { "stack", "actions", 0, 40, 213, "VarnodeBank::xref;VarnodeBank::setDef#0", "A6-14 VarnodeBank::setDef: the same" },
     { "stack", "actions", 0, 40, 60, "VarnodeBank::makeFree;Funcdata::clearDeadVarnodes#0", "A6-14 VarnodeBank::makeFree: the same" },
-    { "stack", "actions", 0, 24, 26, "PcodeOpBank::destroy;PcodeOpBank::destroyDead#0", "A6-14 PcodeOpBank::destroy: the op is put on the final list before it leaves the others" },
-    { "stack", "actions", 0, 8, 58, "MapState::addRange#0", "A6-14 MapState::addRange: the hint is freed when the list cannot take it" },
+    { "stack", "actions", 0, 24, 26, "PcodeOpBank::destroy;PcodeOpBank::destroyDead|#0", "A6-14 PcodeOpBank::destroy: the op is put on the final list before it leaves the others" },
+    { "stack", "actions", 0, 8, 58, "vector<ghidra::RangeHint*;MapState::addRange|MapState::gatherOpen#0", "A6-14 MapState::addRange: the hint is freed when the list cannot take it" },
     { "stack", "actions", 0, 40, 328, "ScopeInternal::insertNameTree;ScopeInternal::renameSymbol#0", "A6-15 ScopeInternal::renameSymbol: a Symbol that cannot return to the name tree is kept" },
     { "stack", "actions", 0, 40, 83, "ScopeInternal::insertNameTree;ScopeInternal::addSymbolInternal#0", "A6-15 ScopeInternal::addSymbolInternal: a Symbol the name tree cannot take is freed (ScopeLocal::createEntry)" },
     { "stack", "actions", 0, 8, 59, "ScopeInternal::addMapInternal;Scope::addMapPoint#0", "A6-15 Scope::addMapPoint: the map entry is freed when the Symbol cannot list it" },
@@ -2700,8 +2700,8 @@ const Pin kPins[] = {
     { "mailbox", "followFlow", 0, 8, 13, "BlockGraph::addBlock;BlockGraph::newBlockBasic#0", "A6-8 BlockGraph::newBlockBasic: the block is freed when the graph cannot take it" },
     { "mailbox", "actions", 0, 24, 234, "BlockGraph::createVirtualRoot#0", "A6-9 BlockGraph::createVirtualRoot: the virtual root is freed when an edge cannot be made" },
     { "mailbox", "print", 0, 32, 3, "PackedDecode::ingestStream#0", "A6-9 PackedDecode::allocateNextInputBuffer: the buffer is freed when the stream cannot hold it" },
-    { "jumptable", "followFlow", 0, 144, 0, "ActionRestartGroup::clone;ActionDatabase::deriveAction#0", "A6-7 ActionRestartGroup::clone: the copy of the action tree is freed when it cannot be completed" },
-    { "jumptable", "followFlow", 0, 8, 42, "ActionRestartGroup::clone;ActionDatabase::deriveAction#0", "A6-7 the same, the member in hand when the group's list cannot grow" },
+    { "jumptable", "followFlow", 0, 144, 0, "ActionRestartGroup::clone;ActionDatabase::deriveAction|ActionDatabase::setCurrent#0", "A6-7 ActionRestartGroup::clone: the copy of the action tree is freed when it cannot be completed" },
+    { "jumptable", "followFlow", 0, 8, 42, "ActionRestartGroup::clone;ActionDatabase::deriveAction|ActionDatabase::setCurrent#0", "A6-7 the same, the member in hand when the group's list cannot grow" },
     { "jumptable", "followFlow", 0, 16, 23, "ActionGroup::clone;ActionRestartGroup::clone#0", "A6-7 ActionGroup::clone: the same, in a nested group" },
     { "jumptable", "followFlow", 0, 8, 44, "ActionPool::addRule;ActionPool::clone#0", "A6-7 ActionPool::clone: the rule in hand when the pool's list cannot grow" },
     { "jumptable", "followFlow", 0, 24, 175, "RuleIdentityEl::getOpList;ActionPool::addRule#0", "A6-7 ActionPool::clone: the rule is the pool's already when its op-code index cannot grow (not freed twice)" },
@@ -2772,6 +2772,25 @@ int SiteOrdinal(const char* site)
 }
 
 #ifdef SE_FAULT_BACKTRACE
+// A function of a site may be written as alternatives, 'A|B': the frame is A or B. A backtrace holds the physical frames only, so
+// a callee an optimiser inlines (GCC at -O3 inlines ActionDatabase::deriveAction into setCurrent, VarnodeBank::xref into
+// createDef, PcodeOpBank::destroy into destroyDead, MapState::addRange into gatherOpen) has no frame of its own, and its
+// allocation is seen made by the function it was inlined into. The pin then names both: the callee and the function that may
+// have absorbed it. An empty alternative ('A|') makes the frame optional (the callee that is a frame in one build and not in
+// another, and whose name is a substring of its caller's). The ordinal '#n' and the coordinates still say which allocation it is.
+bool FrameIs(const std::string& frame, const std::string& alternatives)
+{
+    for (size_t pos = 0; pos <= alternatives.size();)
+    {
+        size_t bar = alternatives.find('|', pos);
+        if (bar == std::string::npos) bar = alternatives.size();
+        const std::string one = alternatives.substr(pos, bar - pos);
+        pos = bar + 1;
+        if (!one.empty() && frame.find(one) != std::string::npos) return true;
+    }
+    return false;
+}
+
 bool SiteMatches(const std::vector<std::string>& names, const char* site)
 {
     size_t at = 0;
@@ -2784,9 +2803,15 @@ bool SiteMatches(const std::vector<std::string>& names, const char* site)
         const std::string want = rest.substr(pos, semi - pos);
         pos = semi + 1;
         if (want.empty()) continue;
-        while (at < names.size() && names[at].find(want) == std::string::npos) ++at;
-        if (at == names.size()) return false;
-        ++at;
+        const bool optional = want.back() == '|';
+        size_t found = at;
+        while (found < names.size() && !FrameIs(names[found], want)) ++found;
+        if (found == names.size())
+        {
+            if (optional) continue;
+            return false;
+        }
+        at = found + 1;
     }
     return true;
 }

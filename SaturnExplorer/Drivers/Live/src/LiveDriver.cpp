@@ -20,6 +20,7 @@
 #include "ByteQueue.h"
 #include "SaturnStateShared.h"
 #include "SeLiveProtocol.h"
+#include "SePerfCounters.h"
 #include "saturnexplorer/SeGuard.h"
 
 #if defined(_WIN32)
@@ -29,6 +30,8 @@
 #include <cstdlib>
 #include <fcntl.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -87,6 +90,10 @@ struct LiveSnapshot
     // that belong to the VRAM it read -- rather than whatever the emulator reached since.
     uint32_t             generation = 0;     // the connection generation this frame belongs to
     uint64_t             frame = 0;          // frame number of the frame served
+    // The machine-state timeline the memory above was captured on, as the SERVER stamped the slot
+    // (control block +56). 0 = the server did not say (it predates the field, or sent 0). A load
+    // starts a new timeline and reuses frame numbers, so (frame) alone does not identify a capture.
+    uint32_t             timeline = 0;
     bool                 paused = false;
     StopInfo             stop;
     LiveCallStacks       callStacks;         // v9+; empty on an older server
@@ -125,7 +132,7 @@ static bool SameContent(const LiveSnapshot& a, const LiveSnapshot& b)
     if (!(a.valid == b.valid && a.generation == b.generation && a.frame == b.frame &&
           a.paused == b.paused && a.latestFrame == b.latestFrame &&
           a.stepPending == b.stepPending && a.hasStepInfo == b.hasStepInfo &&
-          a.hasCdStatus == b.hasCdStatus && a.restoreDone == b.restoreDone &&
+          a.hasCdStatus == b.hasCdStatus && a.timeline == b.timeline && a.restoreDone == b.restoreDone &&
           a.restoreFailed == b.restoreFailed && a.hasRestoreInfo == b.hasRestoreInfo &&
           a.stop.reason == b.stop.reason && a.stop.cpu == b.stop.cpu && a.stop.pc == b.stop.pc &&
           a.stop.seq == b.stop.seq && a.stop.hasSeq == b.stop.hasSeq &&
@@ -182,6 +189,144 @@ struct LiveEmuSlots
     bool     valid = false;   // false on a pre-v17 server, or a build with no slot hook
 };
 
+// The profiler records one reply carried (v26 perf section): one per emulated frame completed
+// since the previous reply, oldest first. Empty on an older server or a build without counters.
+// 'gapFirst..gapLast' is the sampleSeq range the server says it dropped for this connection just
+// before the first record of the reply (0, 0 = none). It is kept here, apart from the records,
+// because a reply can carry the range with no record to attach it to.
+struct LivePerf
+{
+    std::vector<se_live_perf_frame> frames;
+    uint64_t newest = 0;
+    uint64_t gapFirst = 0, gapLast = 0;
+    void clear() { frames.clear(); newest = gapFirst = gapLast = 0; }
+    bool empty() const { return frames.empty() && gapLast == 0; }
+};
+
+// ---- Perf queue ingestion (F3) ----
+// Two things lose records between the emulator and the panel: the server's 16-deep ring (reported
+// in the section header) and this queue's own bound. Both leave an exact range on the first record
+// that follows, so a consumer can break its plot there and say how many frames are missing.
+void MergeGap(uint64_t& first, uint64_t& last, uint64_t addFirst, uint64_t addLast)
+{
+    if (addLast == 0) return;
+    if (last == 0) { first = addFirst; last = addLast; return; }
+    first = (std::min)(first, addFirst);
+    last = (std::max)(last, addLast);
+}
+
+// The ingestion state of one connection's perf queue (the caller holds the lock guarding it).
+struct PerfIngest
+{
+    std::deque<se_live_perf_frame>* q;
+    uint64_t* seen;          // newest sampleSeq queued (0 = none)
+    uint64_t* pendFirst;     // server-reported lost range not yet attached to a queued entry
+    uint64_t* pendLast;
+    uint64_t* pendCount;     // exact number of records the server lost that the range stands for
+    uint64_t* newestReported;   // newest_seq already visible to the consumer through the queue
+    uint64_t* serverLost;
+    uint64_t* driverEvicted;
+};
+
+// A record that is not newer than 'seen' is ignored; a v26 record only has a 32-bit sequence, which
+// is extended to 64 bits by wrap-aware comparison (a wrap is not a restart; going backwards is a
+// duplicate). A reply that carries a lost range or a newer newest_seq but no record to carry it
+// becomes a gap-only entry, so the consumer hears about it in order.
+void IngestPerf(const PerfIngest& st, LivePerf& in, uint32_t deliveringFrame, size_t bound)
+{
+    std::deque<se_live_perf_frame>& q = *st.q;
+    uint64_t& seen = *st.seen;
+    if (in.gapLast != 0 && in.gapLast >= in.gapFirst)
+    {
+        const uint64_t n = in.gapLast - in.gapFirst + 1;
+        *st.serverLost += n;
+        *st.pendCount += n;
+    }
+    MergeGap(*st.pendFirst, *st.pendLast, in.gapFirst, in.gapLast);
+    size_t queued = 0;
+    for (se_live_perf_frame& f : in.frames)
+    {
+        if (f.wire_version < 27)
+        {
+            if (seen != 0)
+            {
+                const int32_t delta = static_cast<int32_t>(f.seq - static_cast<uint32_t>(seen));
+                if (delta <= 0) continue;
+                f.sample_seq = seen + static_cast<uint64_t>(delta);
+            }
+            else
+            {
+                f.sample_seq = f.seq;
+            }
+        }
+        else if (f.sample_seq <= seen)
+        {
+            continue;
+        }
+        // A jump the server did not report (a record this client could not read, or a v26 server,
+        // which cannot report one) is a loss all the same.
+        const uint64_t covered = (std::max)(seen, *st.pendLast);   // what a range already accounts for
+        if (seen != 0 && f.sample_seq > covered + 1)
+        {
+            *st.serverLost += f.sample_seq - covered - 1;
+            *st.pendCount += f.sample_seq - covered - 1;
+            MergeGap(*st.pendFirst, *st.pendLast, covered + 1, f.sample_seq - 1);
+        }
+        f.gap_first = *st.pendFirst;
+        f.gap_last = *st.pendLast;
+        f.gap_count = *st.pendCount;
+        *st.pendFirst = *st.pendLast = *st.pendCount = 0;
+        seen = f.sample_seq;
+        f.frame = deliveringFrame;
+        q.push_back(f);
+        ++queued;
+    }
+    if (queued != 0)
+    {
+        if (in.newest > *st.newestReported) *st.newestReported = in.newest;
+    }
+    else if (*st.pendLast != 0 || in.newest > (std::max)(*st.newestReported, seen))
+    {
+        // Header only: nothing to attach the range or the newer sequence to. It still has to reach
+        // the consumer, in order.
+        se_live_perf_frame g = {};
+        g.wire_version = 27;
+        g.gap_only = 1;
+        g.gap_first = *st.pendFirst;
+        g.gap_last = *st.pendLast;
+        g.gap_count = *st.pendCount;
+        g.newest_seq = in.newest;
+        g.frame = deliveringFrame;
+        // The lost records will never arrive: the stream has moved past them.
+        if (*st.pendLast > seen) seen = *st.pendLast;
+        *st.pendFirst = *st.pendLast = *st.pendCount = 0;
+        if (in.newest > *st.newestReported) *st.newestReported = in.newest;
+        q.push_back(g);
+    }
+    while (q.size() > bound)
+    {
+        // The oldest goes, and the entry that becomes the oldest says so, in the eviction range
+        // (the server did deliver these). What the evicted entry itself reported is passed on:
+        // its server gap to the next entry's server gap, its own record to the eviction range.
+        const se_live_perf_frame gone = q.front();
+        q.pop_front();
+        if (q.empty()) break;
+        se_live_perf_frame& next = q.front();
+        if (!gone.gap_only)
+        {
+            ++*st.driverEvicted;
+            ++next.evict_count;
+            MergeGap(next.evict_first, next.evict_last, gone.sample_seq, gone.sample_seq);
+        }
+        next.evict_count += gone.evict_count;
+        next.gap_count += gone.gap_count;
+        if (gone.evict_last != 0)
+            MergeGap(next.evict_first, next.evict_last, gone.evict_first, gone.evict_last);
+        if (gone.gap_last != 0)
+            MergeGap(next.gap_first, next.gap_last, gone.gap_first, gone.gap_last);
+    }
+}
+
 // One received savestate block (v16): a keyframe or a delta-vs-keyframe, frame-tagged. The
 // payload is the opaque, RLE-compressed emulator image (the client never interprets it, only
 // stores it and reconstructs a full image to hand back via LST). Blocks arrive lagging.
@@ -222,6 +367,7 @@ static uint32_t MinVerFor(const char* verb)
     if (is(SE_LIVE_VERB_TRACE))     return SE_LIVE_MINVER_TRACE;
     if (is(SE_LIVE_VERB_REWIND))    return SE_LIVE_MINVER_REWIND;
     if (is(SE_LIVE_VERB_EMUSAVE))   return SE_LIVE_MINVER_EMUSAVE;
+    if (is(SE_LIVE_VERB_PROFILE))   return SE_LIVE_MINVER_PROFILE;
     return 0u;
 }
 
@@ -386,6 +532,21 @@ struct LiveState
     // Guarded by ctlMtx.
     bool                  rewindWanted = true;
     bool                  rewindDirty = false;
+    // Profiler (v26). The flags follow the rewind pattern: a fresh server starts with function
+    // attribution off, so a reconnect restates them. 'perf' queues one record per completed
+    // emulated frame for the UI to drain; 'perfSeqSeen' is the server's sequence number of the
+    // newest one queued, so a record that somehow arrives twice is not counted twice.
+    // Guarded by ctlMtx (perfSeqSeen: poll thread only).
+    uint32_t              profFlags = 0;
+    bool                  profDirty = false;
+    std::deque<se_live_perf_frame> perf;
+    uint64_t              perfSeqSeen = 0;
+    // A lost range reported (or inferred) and not yet attached to a record that was queued: it
+    // rides on the next one, however many empty replies come first. Guarded by ctlMtx.
+    uint64_t              perfPendFirst = 0, perfPendLast = 0, perfPendCount = 0;
+    // Totals and the newest sequence the server reported, for se_live_perf_status_get.
+    uint64_t              perfNewest = 0, perfReplies = 0, perfServerLost = 0, perfDriverEvicted = 0;
+    uint64_t              perfNewestReported = 0;   // newest_seq already reflected in the stream
 };
 
 // The snapshot a capture on this thread is pinned to (between begin_capture and end_capture),
@@ -712,7 +873,15 @@ bool ConnOpenTcp(Conn& c, const char* endpoint, int)
     {
         int fd = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
         if (fd < 0) { continue; }
-        if (::connect(fd, ai->ai_addr, ai->ai_addrlen) == 0) { c.fd = fd; break; }
+        if (::connect(fd, ai->ai_addr, ai->ai_addrlen) == 0)
+        {
+            // Requests are small and replies are acknowledged by the next request: without this,
+            // Nagle's algorithm and delayed ACKs stretch every poll (see the exporter's accept loop).
+            int on = 1;
+            ::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+            c.fd = fd;
+            break;
+        }
         ::close(fd);
     }
     ::freeaddrinfo(res);
@@ -911,7 +1080,8 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                   StopInfo& outStop, std::vector<LiveEvent>& outEvents,
                   LiveCallStacks& outCallStacks, LiveKeyMap& outKeyMap,
                   std::vector<std::string>& outLog,
-                  std::vector<LiveStateBlock>& outStateBlocks, LiveEmuSlots& outEmuSlots)
+                  std::vector<LiveStateBlock>& outStateBlocks, LiveEmuSlots& outEmuSlots,
+                  LivePerf& outPerf)
 {
     if (!SendCommand(c, verb, arg))
     {
@@ -1193,6 +1363,89 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         outEmuSlots.valid = count != 0u;
     }
 
+    // v26 / v27: the profiler records of the emulated frames completed since this connection's
+    // last reply (layout: SeLiveProtocol.h, "Perf section"). Each record states its own length, so
+    // a newer server's extra counters or trailing fields are read and ignored rather than
+    // desynchronizing the stream; a count or length this protocol could never produce is a broken
+    // stream. A v26 server's records are presented with every v27-only field "not available".
+    outPerf.clear();
+    if (version >= SE_LIVE_MINVER_PROFILE)
+    {
+        const bool v27 = version >= SE_LIVE_MINVER_PERF27;
+        uint8_t hdrb[28];
+        if (!ConnReadFull(c, hdrb, v27 ? 28 : 4)) return false;
+        const uint32_t records = Rd32LE(hdrb);
+        if (records > SE_LIVE_PERF_MAX_PER_REPLY) return false;
+        const uint64_t newestSeq = v27 ? Rd64LE(hdrb + 4) : 0;
+        outPerf.newest = newestSeq;
+        // Kept on the section, not on its first record: that one may be skipped, or absent.
+        if (v27) { outPerf.gapFirst = Rd64LE(hdrb + 12); outPerf.gapLast = Rd64LE(hdrb + 20); }
+        std::vector<uint8_t> blk;
+        for (uint32_t rec = 0; rec < records; ++rec)
+        {
+            uint8_t lenb[4];
+            if (!ConnReadFull(c, lenb, 4)) return false;
+            const uint32_t len = Rd32LE(lenb);
+            if (len > SE_LIVE_PERF_MAX_LEN) return false;
+            blk.resize(len);
+            if (len && !ConnReadFull(c, blk.data(), len)) return false;
+            size_t off = 0;
+            auto u32 = [&](uint32_t& v) -> bool
+            {
+                if (blk.size() - off < 4) return false;
+                v = Rd32LE(blk.data() + off); off += 4; return true;
+            };
+            auto u64 = [&](uint64_t& v) -> bool
+            {
+                if (blk.size() - off < 8) return false;
+                v = Rd64LE(blk.data() + off); off += 8; return true;
+            };
+            se_live_perf_frame f = {};
+            uint32_t counters = 0, fns = 0;
+            if (v27)
+            {
+                f.wire_version = 27;
+                if (!(u64(f.sample_seq) && u32(f.timeline_id) && u64(f.frame_no) && u32(f.mode) &&
+                      u32(f.cache_mode) && u32(f.valid) && u32(f.sat_flags) &&
+                      u64(f.other_not_admitted[0]) && u64(f.other_not_admitted[1]) &&
+                      u64(f.other_evicted[0]) && u64(f.other_evicted[1])))
+                    continue;   // a record this client cannot read: skipped, the stream stays aligned
+                f.valid &= SE_PERF_VALID_ALL;
+                f.seq = static_cast<uint32_t>(f.sample_seq);
+                f.flags = f.mode;
+                f.newest_seq = newestSeq;
+            }
+            else
+            {
+                f.wire_version = 26;
+                if (!u32(f.seq) || !u32(f.flags)) continue;
+                f.sample_seq = f.seq;
+                f.mode = f.flags;
+            }
+            if (!(u32(counters) && counters <= SE_LIVE_PERF_MAX_COUNTERS && (blk.size() - off) / 8 >= counters))
+                continue;
+            for (uint32_t i = 0; i < counters; ++i, off += 8)
+                if (i < SE_LIVE_PERF_COUNTERS) f.counters[i] = Rd64LE(blk.data() + off);
+            f.counter_count = counters < SE_LIVE_PERF_COUNTERS ? counters : SE_LIVE_PERF_COUNTERS;
+            if (!(u32(fns) && fns <= SE_LIVE_PERF_FN_MAX &&
+                  (blk.size() - off) / SE_LIVE_PERF_FN_LEN >= fns))
+                continue;
+            for (uint32_t i = 0; i < fns; ++i, off += SE_LIVE_PERF_FN_LEN)
+            {
+                f.fn_key[i] = Rd32LE(blk.data() + off);
+                f.fn_cycles[i] = Rd32LE(blk.data() + off + 4);
+            }
+            f.fn_count = fns;
+            if (!u32(f.fn_other_cycles) || f.sample_seq == 0u) continue;
+            // A counter the record is too short to carry is "not available" whatever the bits say.
+            if (f.counter_count <= SE_PERF_SSH2_ON_CYCLES)     f.valid &= ~SE_PERF_VALID_SSH2_INT;   // index 5 is the integrated figure
+            if (f.counter_count <= SE_PERF_VDP1_DMA_DISCARDED) f.valid &= ~SE_PERF_VALID_VDP1_WORK;
+            if (f.counter_count <= SE_PERF_M68K_IDLE_CYCLES)   f.valid &= ~SE_PERF_VALID_M68K_IDLE;
+            if (f.counter_count < SE_PERF_COUNT)               f.valid &= ~SE_PERF_VALID_BUS_X;
+            outPerf.frames.push_back(f);
+        }
+    }
+
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     if (ct >= 32)
@@ -1228,6 +1481,8 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         snap.serverCaps   = Rd32LE(ctl.data() + 52);
         snap.hasPokeInfo  = true;
     }
+    if (ct >= SE_LIVE_CONTROL_TIMELINE_OFFSET + 4u)
+        snap.timeline = Rd32LE(ctl.data() + SE_LIVE_CONTROL_TIMELINE_OFFSET);   // 0 stays "unknown"
 
     // SH-2 state (v5+): master then slave, each a 92-byte sh2regs_struct.
     for (int cpu = 0; cpu < 2; ++cpu)
@@ -1399,6 +1654,13 @@ void PollLoop(LiveState* st)
                 arg = st->rewindWanted ? 1 : 0;
                 st->rewindDirty = false;
             }
+            else if (st->profDirty)
+            {
+                // Like REW: it decides whether the emulator runs its slow per-instruction loop.
+                verb = SE_LIVE_VERB_PROFILE;
+                arg = static_cast<int32_t>(st->profFlags);
+                st->profDirty = false;
+            }
             else if (st->bkptsDirty)
             {
                 verb = SE_LIVE_VERB_BKPTS;
@@ -1490,6 +1752,7 @@ void PollLoop(LiveState* st)
         std::vector<std::string> logLines;
         std::vector<LiveStateBlock> stateBlocks;
         LiveEmuSlots emuSlots;
+        LivePerf perf;
 
         // One version gate, at the only point a request leaves. A server that does not know a
         // verb ignores it and never consumes the attached payload, so its next reply is read
@@ -1507,7 +1770,7 @@ void PollLoop(LiveState* st)
         }
         if (!ReadSnapshot(conn, verb, arg, payload.data(), payload.size(),
                           snap, paused, frame, sver, stop, events, callStacks, keyMap,
-                          logLines, stateBlocks, emuSlots))
+                          logLines, stateBlocks, emuSlots, perf))
         {
             // Whatever was queued belonged to this connection, and it is gone (ForgetConnection counts
             // those as lost: they were never sent). The poke that was on its way out is different: the
@@ -1608,7 +1871,32 @@ void PollLoop(LiveState* st)
             // full savestate per frame on a feature the user switched off. Unconditional: the
             // value we want is the value this connection has not been told.
             st->rewindDirty = true;
+            // Function attribution is per connection on the server (F1): this connection starts with
+            // no request whatever the last one said, so the setting is restated unconditionally,
+            // "off" included, rather than inferred from the server's start-up default.
+            st->profDirty = true;
             st->connected = true;
+        }
+        {
+            // Every reply, even one with nothing in it: a header-only reply can carry a lost range or
+            // a newer newest_seq, and a reply count is what a lockstep consumer waits on.
+            std::lock_guard<std::mutex> lk(st->ctlMtx);
+            if (firstOnConnection)
+            {
+                // A new emulator run counts from 1 again; the previous one's frames, and any lost
+                // range that was waiting for its next record, belong to it.
+                st->perf.clear();
+                st->perfSeqSeen = 0;
+                st->perfPendFirst = st->perfPendLast = st->perfPendCount = 0;
+                st->perfNewest = st->perfNewestReported = 0;
+                st->perfReplies = st->perfServerLost = st->perfDriverEvicted = 0;
+            }
+            // Bounded: ten seconds nobody drained.
+            const PerfIngest pi = { &st->perf, &st->perfSeqSeen, &st->perfPendFirst, &st->perfPendLast, &st->perfPendCount,
+                                    &st->perfNewestReported, &st->perfServerLost, &st->perfDriverEvicted };
+            IngestPerf(pi, perf, static_cast<uint32_t>(frame), 600);
+            if (perf.newest > st->perfNewest) st->perfNewest = perf.newest;
+            ++st->perfReplies;   // after the queue holds everything this reply carried
         }
         if (!events.empty())
         {
@@ -1661,7 +1949,8 @@ void PollLoop(LiveState* st)
         std::vector<std::string> lg;
         std::vector<LiveStateBlock> sb;
         LiveEmuSlots es;
-        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km, lg, sb, es);  // best-effort
+        LivePerf pf;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km, lg, sb, es, pf);  // best-effort
     }
     ConnClose(conn);
 }
@@ -2107,6 +2396,24 @@ extern "C" uint32_t se_live_captured_generation(const se_data_source* ds)
     });
 }
 
+extern "C" int se_live_captured_identity(const se_data_source* ds, uint32_t* timeline, uint64_t* frame)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return 0; }
+    return se::Guard(0, [&]() -> int
+    {
+        LiveState* st = St(ds->user);
+        // The snapshot the calling thread is capturing or last captured: the one whose memory the
+        // caller is reading, never the newest publish.
+        const LiveSnapshot* snap = nullptr;
+        if (gPinned.id == st->id && gPinned.depth > 0) { snap = gPinned.snap.get(); }
+        else if (gLastCaptured.id == st->id) { snap = gLastCaptured.snap.get(); }
+        if (!snap || !snap->valid) { return 0; }
+        if (frame) *frame = snap->frame;
+        if (timeline) *timeline = snap->timeline;
+        return snap->timeline != 0 ? 1 : 0;
+    });
+}
+
 extern "C" uint64_t se_live_captured_revision(const se_data_source* ds)
 {
     if (!ds || !ds->user || ds->close != CbClose) { return 0; }
@@ -2331,6 +2638,51 @@ extern "C" int se_live_emu_save_slot(const se_data_source* ds, uint32_t slot)
             return SE_LIVE_EMUSAVE_LOADING;
         st->emuSaveMask |= 1u << slot;   // poll thread ships ESV next cycle
         return 0;
+    });
+}
+
+extern "C" void se_live_set_profiler(const se_data_source* ds, uint32_t flags)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return; }
+    se::GuardVoid([&]
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        // Only on a change, and never clearing the flag: see se_live_set_rewind_enabled.
+        if (flags != st->profFlags) { st->profFlags = flags; st->profDirty = true; }
+    });
+}
+
+extern "C" uint32_t se_live_drain_perf(const se_data_source* ds, se_live_perf_frame* out, uint32_t max)
+{
+    if (!ds || !ds->user || ds->close != CbClose || !out || !max) { return 0; }
+    return se::Guard(0u, [&]() -> uint32_t
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        uint32_t n = 0;
+        for (; n < max && !st->perf.empty(); ++n)
+        {
+            out[n] = st->perf.front();
+            st->perf.pop_front();
+        }
+        return n;
+    });
+}
+
+extern "C" int se_live_perf_status_get(const se_data_source* ds, se_live_perf_status* out)
+{
+    if (!ds || !ds->user || ds->close != CbClose || !out) { return 0; }
+    return se::Guard(0, [&]() -> int
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        out->newest_seq = st->perfNewest;
+        out->queued_seq = st->perfSeqSeen;
+        out->replies = st->perfReplies;
+        out->server_lost = st->perfServerLost;
+        out->driver_evicted = st->perfDriverEvicted;
+        return 1;
     });
 }
 

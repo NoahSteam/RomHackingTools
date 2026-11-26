@@ -264,7 +264,30 @@ static std::vector<CallStackFrame> ReconstructHeuristic(int cpu, const se_sh2_re
         CallStackFrame fr;
         fr.cpu = cpu;
         fr.returnAddress   = c.ret;
-        fr.currentAddress  = c.ret;
+        // Where THIS frame is: execution resumes in it at the return address of the frame below
+        // (its callee) -- frame #0's PR for the first caller, else the previous KEPT frame's
+        // return address, so a candidate dropped as data below is skipped. c.ret is this frame's
+        // own return address, i.e. a spot in ITS caller, so using it put every "At" one frame too
+        // high. Same convention as returnAddress: a return address, not the call site. When the
+        // callee's return is not a code address (PR unset or clobbered) the walk knows nothing
+        // better; c.ret keeps the frame navigable, as before.
+        //
+        // Two cases PR cannot tell apart from a leaf, because that needs the function's prologue:
+        //  - PR already pushed and no inner call made yet: PR == the first stack word, so that word
+        //    is frame #0's OWN return address and this row is frame #0's function, not a caller.
+        //    It is "at" the PC. Detected by value (cache/mirror bits ignored). The row is kept
+        //    apart from frame #0 rather than merged: it carries the call site and entry that the
+        //    stack word decodes, and the tail graft and Step Out refusal rely on frame #0 being
+        //    the PC-only row.
+        //  - PR pushed and an inner call has since returned: PR is stale, pointing inside frame #0's
+        //    own function, so row #1's At is in the right function but a stale position. Known
+        //    limit; not guessed at.
+        const uint32_t calleeRet = out.back().returnAddress;
+        const bool framesOwnReturn = out.size() == 1 &&
+            (c.ret & 0x0FFFFFFFu) == (regs.pr & 0x0FFFFFFFu);
+        if (framesOwnReturn)                         fr.currentAddress = regs.pc;
+        else if (IsPlausibleCodeAddress(calleeRet))  fr.currentAddress = calleeRet;
+        else                                         fr.currentAddress = c.ret;
         fr.stackPointer    = c.at;
 
         const MemoryReadResult& o = (i < opRes.size()) ? opRes[i] : MemoryReadResult{};
@@ -309,9 +332,17 @@ void CallStack::ReconcileHeuristicTail(int cpu, const se_sh2_regs& regs, IMemory
     // deepest confirmed frame — those predate when recording started.
     const uint32_t deepestSp = mFrames[idx].back().stackPointer;
     std::vector<CallStackFrame> heur = ReconstructHeuristic(cpu, regs, mem);
+    bool first = true;
     for (const CallStackFrame& h : heur)
         if (h.stackPointer > deepestSp && h.confidence != FrameConfidence::Confirmed)
+        {
             mFrames[idx].push_back(h);
+            // The heuristic chain started from PR, not from the recorded frames; the first grafted
+            // caller is really at the deepest recorded frame's return address.
+            if (first && IsPlausibleCodeAddress(mFrames[idx][mFrames[idx].size() - 2].returnAddress))
+                mFrames[idx].back().currentAddress = mFrames[idx][mFrames[idx].size() - 2].returnAddress;
+            first = false;
+        }
 }
 
 void CallStack::SetConfirmed(int cpu, std::vector<CallStackFrame> frames)

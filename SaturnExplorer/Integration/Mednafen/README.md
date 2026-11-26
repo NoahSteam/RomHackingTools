@@ -315,6 +315,60 @@ file. If your fork spells the definition differently, `apply.py` reports `ANCHOR
 `SeSsActiveCpuScope<decltype`; add the one line it prints by hand. Without it, slave
 breakpoints silently do nothing.
 
+### The device sync in the continuous hook (`SeSsHookNeedsSync`)
+
+Upstream's `DBG_CPUHandler` does `ForceEventUpdates(DBG.eff_ts)` before **every** call of the CPU hook
+while the hook is continuous: every device (CDB, SMPC, SCSP, VDP1/VDP2, SCU DMA and DSP, both SH-2 DMACs,
+FRT/WDT) is run up to the current timestamp and rescheduled, once per instruction of both SH-2s. A
+debugger halting at that instruction needs it. Function attribution does not, and measured on a real
+title (Panzer Dragoon II, ~9,900 sampled frames) that sync was 69 % of the emulation thread's time with
+attribution on (127 ms of CPU per frame against 13.5 ms with it off). With the guard below the same
+scene measured 31.6 ms against 12.2 ms, with no sample in `ForceEventUpdates` under the handler.
+
+`process_debug` therefore replaces that one line (upstream text kept inside the fence, so `--revert` is
+byte exact) by `if(DBG.FoundBPoint || SeSsHookNeedsSync || DBG.CPUHook != SeSsOwnCpuHook) ForceEventUpdates(DBG.eff_ts);`
+(`SeSsOwnCpuHook` is the callback `SeSyncCpuHook` installed, so a callback the native debugger installs gets
+the upstream sync).
+`SeSsHookNeedsSync` is defined in the `ss.cpp` block (1 until first set: upstream's behaviour) and
+maintained by `SeSyncCpuHook` next to the callback it describes: **set while a tracepoint is armed or an
+instruction step is in progress, clear for profiling alone**. A PC or data breakpoint found on this very
+instruction (`DBG.FoundBPoint`) always syncs. So the sync still happens wherever the callback may read
+device state or halt; it is skipped only for an instruction whose hook does the profile and the shadow
+call stack. Because the flag is written in `SeSyncCpuHook`, it obeys the same deferral
+(`SeSsInHandler` / `sSeSyncPending`) as the callback itself: the two change together, at the end of the
+handler call that postponed them. Why that is safe, and what the profile-only path reads, is in
+`Docs/Codebase/Systems/Profiler.md` ("Cost of attribution"). `check_component.py` (f2_sh2) counts the
+real `ForceEventUpdates`'s device calls in each mode, and `--mutate sync-guard-removed|sync-never|
+sync-no-breakpoint|sync-flag-only|sync-flag-profile` must make it fail.
+
+### The native debugger and our callback (`SeSsNativeSetCPUCallback`)
+
+Mednafen's own debugger (Alt+D) installs and removes its CPU callback through `DebuggerInfo.SetCPUCallback`
+(`drivers/debugger.cpp`, `UpdateCoreHooks`: NULL on every breakpoint edit, window change and end of stepping
+while it needs none). Upstream points that table entry at `DBG_SetCPUCallback`, so the first time the debugger
+was opened it replaced `SeSsBpHook` and a later NULL removed it for good: nothing reinstalled it until an SE
+install event ran `SeSyncCpuHook`. Function attribution then froze (records kept arriving with mode 1 and rows,
+the whole busy total on one function). `process_debug` now replaces the table entry with
+`SeSsNativeSetCPUCallback` (fenced, upstream entry kept under the fence; the extern lives in the
+`SeSsActiveCpuScope` helper block, so a tree patched by the previous `apply.py` is upgraded in place):
+
+- a callback the debugger asks for is installed as upstream does, and **it keeps it**: `SeSyncCpuHook` no longer
+  writes `DBG.CPUHook` while the debugger holds one (before, any SE install edit during native stepping took the
+  callback from it), and `SeSsBothCpus` is off so the handler behaves as upstream for it. Our breakpoints and
+  tracepoints do not fire for the other SH-2 meanwhile; that is the price of the debugger taking precedence;
+- NULL while it held a callback: our mode is applied again by `SeSyncCpuHook` (deferred to `SeSsHandlerExit` when
+  asked from inside `DBG_CPUHandler`, like every edit); NULL while it held nothing changes nothing;
+- `SeSyncCpuHook` tells the glue (`SeMednafenForeignHook`) whether we want a callback and it is not ours; the glue
+  withdraws ownership and drops the sampling baseline, resets both shadow stacks when ours returns, and publishes
+  every frame touched by the gap as not attributed (`Docs/Codebase/Systems/Profiler.md`, "Cost of attribution").
+- a callback taken and released inside one `DBG_CPUHandler` call (a one-shot) is still a gap: the takeover is
+  recorded when it happens (`sSeNativeLost`) and the next sync that actually runs reports it to the glue before the
+  release, so the frame is not attributed and the stack restarts; nothing is marked if we wanted no callback then.
+
+`check_component.py` (f2_sh2) drives the real table entry; `--mutate native-table-upstream|native-null-not-reapplied|
+native-not-installed|native-stolen-by-edit|native-both-cpus|native-not-noted|native-in-handler|native-null-always-drops|native-transient-lost|native-transient-undelivered|native-transient-unconditional|native-transient-kept`
+must each make it fail. Verified on the pinned source and in the harness; not yet on the real emulator.
+
 ### Installs run on the emulate thread
 
 Breakpoint, watchpoint and tracepoint sets arrive on a server thread, but what they install —
@@ -678,6 +732,99 @@ changed define, `--disable-*` set or Homebrew prefix all re-trigger it with noth
 
 The tuning constants (keyframe threshold, max keyframe interval, raw-queue depth, client state
 budget) live in `se_export.c` / `FrameRecorder.*` and can be measured/adjusted on-emulator.
+
+## Profiler counters (v27)
+
+`apply.py` (`process_profiler`) inserts counter increments into `sh7095.inc` (external-bus
+requests), `sh7095_ops.inc` (SH-2 sleep / standby / bus-stall cycles), `scu.inc` (SCU DMA
+transfers and bytes, DSP cycles), `vdp1.cpp` (commands, starts, unfinished draws, command-work
+cycles, budget discarded by a DMA), `sound.cpp` and the shared 68000 core `hw_cpu/m68k` (68000
+total / idle / executed cycles), `ss.cpp` (cache emulation mode) plus the frame length at the end of
+`Emulate()`. They add to one array, `SeSsPerfC`, defined in the glue and indexed by
+`SePerfCounters.h` (copied into the tree with the other shared files). The glue hands the array to
+the server at the end of every frame (`SeMdfnPerfEndFrame`), sets the `SE_PERF_VALID_*` bit for each
+v27 counter the hooks produce, and zeroes it. The increments are unconditional and cheap; every hook
+is an insertion after an anchor, so `--revert` removes them cleanly (appended blocks keep their
+separating blank line inside the fence, so the file comes back byte for byte). The one hook that
+REPLACES a line, the `UpdateInput` call in `smpc.cpp`, keeps the upstream line inside its fence under
+`#if 0 /* SE_ORIGINAL */`, and `--revert` puts that text back; a tree patched by an older `apply.py`,
+which dropped the line, is recognised, migrated on re-apply and restored on revert. `check_migration.py`
+asserts that the whole tree is byte-identical to the pristine one after `--revert`.
+An `ANCHOR MISS` here costs one figure in the
+Profiler panel (it reads zero) and is reported like any other miss. What each counter means is in
+`Docs/Codebase/Systems/Profiler.md`.
+
+**Frame lifecycle (F2 + F6) and function ownership (F9).** Hooks added for them: `sh7095.inc`
+`SH7095::SetActive` (the slave's power edges, `SE_SLAVE_ON_EDGE` / `SE_SLAVE_OFF_EDGE`) and the top of
+`SH7095::Reset` (`SE_CPU_RESET_HOOK`, after the early return for a switched-off CPU); `sh7095_ops.inc` one
+`SeMednafenExceptionEntry` call after each `Exception(EXCEPTION_INT / NMI / CPUADDR / DMAADDR / ILLINSTR /
+ILLSLOT, ...)` statement (`SE_OWN_EXC_*`; TRAPA is deliberately not hooked, its flow is observed); `ss.cpp`
+`SeMednafenFrameClose(end_ts, ...)` in `Emulate()` after `SMPC_EndFrame` and **before** the rebase
+(`SE_FRAME_CLOSE_HOOK`), and `SeMednafenStateLoaded` in the `StateAction` load path beside the timeline
+notification (neither `PostStateLoad` nor a load calls `SetActive`). The slave on-time (counter 5) is
+integrated over those edges by the glue; the old all-or-nothing line in the end-of-frame fence is gone.
+
+**Re-applying over a tree an older `apply.py` patched.** `upsert` leaves a fence whose key is
+already present alone, so a hook this version drops or renames has to be deleted explicitly:
+`RETIRED_FENCES` in `apply.py` lists them and `process_retired` removes them before anything else
+is applied. Currently the v26 elapsed-VDP1 hook (`SE_PERF_VDP1_DRAW_CYCLES`, which no longer
+compiles: index 6 is retired and is never aliased), the v26 per-slice 68000 hooks (`se_perf_t0`) and the
+all-or-nothing slave on-time line of the end-of-frame fence (`SSH2_ON_CYCLES += end_ts`; the same fence is
+re-inserted without it).
+Any future rename needs a new entry there. Checks:
+
+* `Integration/tests/check_apply_hooks.py` (ctest `SaturnExplorerMednafenProfilerHooks`, no
+  Mednafen source needed): the retirement on synthetic fences, exact revert (also of the replaced `smpc.cpp` line, and of the block an older `apply.py` wrote), the F4 debit macro
+  compiled around a copy of Mednafen's, and the F8 address table compiled and checked at both ends of
+  every range.
+* `Integration/tests/check_apply_newlines.py` (ctest `SaturnExplorerMednafenApplyNewlines`, no checkout): apply and
+  `--revert` on a synthetic LF tree and its CRLF copy are byte-exact, an LF tree gains no CR, a CRLF tree stays
+  pure CRLF; Windows' text-mode newline translation is simulated by wrapping `open`. `apply.py` reads and
+  writes patched files as bytes (`read_src` / `write_src`), folding a pure-CRLF file to LF only in memory.
+  A file mixing LF and CRLF is patched as-is (its anchors may then miss).
+* `Integration/tests/check_scratch_includes.py` (ctest `SaturnExplorerMednafenScratchIncludes`, no checkout): the
+  scratch tree of `check_migration.py` / `check_component.py` resolves `<mednafen/...>` to the PATCHED `work/src`
+  both with symlinks and with `os.symlink` forced to fail (then `include/mednafen` is a mirror that
+  `include_flags()` re-syncs before every compile). Checks compile with `check_migration.include_flags(work)`.
+* `Integration/Mednafen/check_migration.py <checkout> <scratch> <old apply.py>...` (needs the
+  checkout; `git show 4b6cd9e:SaturnExplorer/Integration/Mednafen/apply.py > old.py`): patches
+  pristine copies with each old `apply.py`, then with this one, and asserts the retired text is gone,
+  every hook is present exactly once, a third apply changes nothing, `vdp1.cpp` / `sound.cpp` /
+  `m68k.cpp` / `ss.cpp` still parse, and `--revert` restores the WHOLE tree byte for byte (a snapshot of
+  every file, so an unlisted file is caught too), with and without `--with-pause`; applying again
+  gives the migrated tree.
+* `Integration/Mednafen/check_component.py <checkout> <scratch>` (needs the checkout): builds the
+  *real* patched `vdp1.cpp` (F4: `VDP1::Update` / `DoDrawing` over a tiny VRAM command list), the
+  patched 68000 core and `sound.cpp` (F5: real STOP / interrupt wake / external halt, and a real
+  faulting sound-bus read whose `MDFN_longjmp` lands in `SOUND_Update`) into small harnesses with
+  only the surrounding devices stubbed, and checks the SCU / CS0 decode windows and the DMA / DSP hook
+  placement in `scu.inc`. F2 / F9: the **real** `SH7095::SetActive` / `SH7095::Reset` (whole patched `ss.cpp`
+  included, hidden-visibility data stubbed) calling the real glue, plus where the frame-close, state-load
+  and exception hooks sit. `--drop KEY` removes one hook and must make it fail (`SE_SLAVE_ON_EDGE`,
+  `SE_SLAVE_OFF_EDGE`, `SE_CPU_RESET_HOOK` among them). F8: `component/perf_bus_harness.cpp` drives the
+  real patched SH-2 core (cache fills in both instruction-cache modes, CCR.CE / ID / OD, purge and refill,
+  uncached mirror, the on-chip DMAC for each unit size, burst and cycle-steal, cross-device and the
+  dummy / unmapped buckets) and asserts the exact request counts of `component/BUS_EXPECTED.md`;
+  `--only f8_bus` runs just it (also registered as ctest `SaturnExplorerMednafenBusComponent`, skipped when
+  there is no checkout: exit status 77) and `--mutate bus-burst|bus-dma-read|bus-dma-write` must make it fail.
+  The `debug.inc` device-sync guard is checked in the f2_sh2 harness (`--mutate sync-guard-removed|sync-never|
+  sync-no-breakpoint|sync-flag-only|sync-flag-profile`).
+
+Function attribution is separate and opt-in: the client's `PRF` verb makes `SeSyncCpuHook` keep
+the continuous per-instruction callback installed (`SsDbgSetProfileActive`), and
+`SeMdfnProfSampleAt` charges each instruction's cycles (`SsDbgCpuTimestamp` deltas, less the
+sleep/stall cycles counted meanwhile) to the innermost shadow-call-stack frame while its ownership is
+known, else to a raw-PC bucket (F9). The mode only changes between frames (the server applies the request
+at the top-of-frame gate or the end-of-frame hook, never at a halt or snapshot) and is published with
+the record. It therefore needs
+`--enable-debugger`, runs the debug run loop (several times slower than the fast one; the device sync
+upstream's handler does per instruction is skipped for profiling alone, see "The device sync in the
+continuous hook"), and is switched off by the server when the client disconnects.
+
+**Not yet verified against a running game**: the patched 1.32.1 tree compiles and links with
+these hooks, and the wire path is tested end to end with the real server and driver, but the
+counter magnitudes have not been compared with a known workload. See
+`Docs/Codebase/Systems/Profiler.md`.
 
 ## Saturn-only build (skip the other console cores)
 

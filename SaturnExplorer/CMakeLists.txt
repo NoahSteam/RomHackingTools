@@ -25,6 +25,17 @@ endif()
 
 include(CTest)
 
+# Opt-in sanitizer build (default off, no effect on normal builds). SE_SANITIZE=thread instruments every target
+# (C and C++, compile and link) with ThreadSanitizer, for the live socket tap's threads; see
+# Docs/Codebase/Systems/Profiler.md "Race-detector run". Use a separate build directory.
+set(SE_SANITIZE "" CACHE STRING "Sanitizer for every target: empty (off) or 'thread'")
+if(SE_SANITIZE STREQUAL "thread")
+    add_compile_options(-fsanitize=thread -g -O1 -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
+elseif(NOT SE_SANITIZE STREQUAL "")
+    message(FATAL_ERROR "SE_SANITIZE must be empty or 'thread' (got '${SE_SANITIZE}')")
+endif()
+
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -217,6 +228,18 @@ if(BUILD_TESTING AND NOT WIN32 AND NOT EMSCRIPTEN)
     target_link_libraries(SaturnExplorerExportAttachTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerExportAttachTests
              COMMAND SaturnExplorerExportAttachTests)
+
+    # Start/stop churn of the listener threads: the published listening descriptors (TSan, double close).
+    add_executable(SaturnExplorerExportStartStopTests
+        Integration/Common/tests/SeExportStartStopTests.c
+        Integration/Common/se_export.c)
+    target_include_directories(SaturnExplorerExportStartStopTests
+        PRIVATE Integration/Common)
+    target_link_libraries(SaturnExplorerExportStartStopTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerExportStartStopTests
+             COMMAND SaturnExplorerExportStartStopTests)
+    # Starts and stops the exporter on the default socket path and port, like the live tests.
+    set_tests_properties(SaturnExplorerExportStartStopTests PROPERTIES RESOURCE_LOCK live_tap_socket)
 endif()
 
 # The shared normalization helpers: what they do with input that is not the shape the
@@ -831,6 +854,37 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR})
     add_test(NAME SaturnExplorerLogPanelTests COMMAND SaturnExplorerLogPanelTests)
     set_tests_properties(SaturnExplorerLogPanelTests PROPERTIES TIMEOUT 120)
+
+    # Profiler: the model's arithmetic (frame shares, bus totals, history window, hot functions,
+    # memory-pool occupancy) with no emulator and no UI, then the panel drawn headlessly.
+    add_executable(SaturnExplorerProfilerModelTests
+        FrontEnd/tests/ProfilerModelTests.cpp
+        FrontEnd/src/Debug/ProfilerModel.cpp
+    )
+    target_include_directories(SaturnExplorerProfilerModelTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    add_test(NAME SaturnExplorerProfilerModelTests COMMAND SaturnExplorerProfilerModelTests)
+
+    # The F4 / F5 / F8 counters as the model presents them (unclamped command work, idle-based 68000
+    # share, bus buckets that are no device).
+    add_executable(SaturnExplorerProfilerHookModelTests
+        FrontEnd/tests/ProfilerHookModelTests.cpp
+        FrontEnd/src/Debug/ProfilerModel.cpp
+    )
+    target_include_directories(SaturnExplorerProfilerHookModelTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    add_test(NAME SaturnExplorerProfilerHookModelTests COMMAND SaturnExplorerProfilerHookModelTests)
+
+    add_executable(SaturnExplorerProfilerPanelTests
+        FrontEnd/tests/ProfilerPanelTests.cpp
+        FrontEnd/src/ProfilerPanel.cpp
+        FrontEnd/src/Debug/ProfilerModel.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerProfilerPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    add_test(NAME SaturnExplorerProfilerPanelTests COMMAND SaturnExplorerProfilerPanelTests)
+    set_tests_properties(SaturnExplorerProfilerPanelTests PROPERTIES TIMEOUT 120)
 
     # The Memory panel -- the real panel under the app's real theme and font, against a mock
     # backend: typed digits, edit-box fit, row-height/scroll agreement, and click gating.
@@ -1500,6 +1554,30 @@ if(BUILD_TESTING)
         PRIVATE Integration/Common Integration/Mednafen)
     target_link_libraries(SaturnExplorerShadowCallStackTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerShadowCallStackTests COMMAND SaturnExplorerShadowCallStackTests)
+
+    # The profiler's frame-lifecycle contract (F2 + F6: slave on-time integrated over its power edges,
+    # the latched attribution mode, a last interval charged exactly) and function ownership (F9: a
+    # function is charged only while ownership is known; the positive oracle), on the same footing:
+    # the real glue accounting and the real shadow stack, a clock the test controls, no emulator.
+    add_executable(SaturnExplorerProfilerLifecycleTests
+        Integration/tests/ProfilerLifecycleTests.c
+        Integration/Common/se_export.c
+    )
+    target_include_directories(SaturnExplorerProfilerLifecycleTests
+        PRIVATE Integration/Common Integration/Mednafen)
+    target_link_libraries(SaturnExplorerProfilerLifecycleTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerProfilerLifecycleTests COMMAND SaturnExplorerProfilerLifecycleTests)
+
+    # F7: the per-frame function table's Other, per CPU and by cause (not admitted / evicted), with the
+    # real glue table and end-of-frame code and the publication replaced by a capture.
+    add_executable(SaturnExplorerProfilerOtherTests
+        Integration/tests/ProfilerOtherTests.c
+        Integration/Common/se_export.c
+    )
+    target_include_directories(SaturnExplorerProfilerOtherTests
+        PRIVATE Integration/Common Integration/Mednafen)
+    target_link_libraries(SaturnExplorerProfilerOtherTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerProfilerOtherTests COMMAND SaturnExplorerProfilerOtherTests)
     find_package(Python3 COMPONENTS Interpreter)
     if(Python3_FOUND)
         # Release packaging, offline: the MSYS2 library manifest against canned pacman output, the rule that a
@@ -1510,6 +1588,40 @@ if(BUILD_TESTING)
         add_test(NAME SaturnExplorerBuildInfo
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_build_info.py
                          ${CMAKE_COMMAND} ${CMAKE_CURRENT_SOURCE_DIR})
+        # The profiler hooks apply.py injects, as far as they can be checked without a Mednafen tree:
+        # retirement of an older apply.py's fences, exact revert of appended blocks, the F4 debit macro
+        # and the F8 address table compiled. check_migration.py / check_component.py (Integration/Mednafen)
+        # run the same hooks against the real source and need the checkout, so they are scripts.
+        find_program(SE_CXX_FOR_HOOKTEST NAMES g++ c++ clang++)
+        if(SE_CXX_FOR_HOOKTEST)
+            add_test(NAME SaturnExplorerMednafenProfilerHooks
+                     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_apply_hooks.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
+                             ${CMAKE_CURRENT_BINARY_DIR}/profiler_hooks_test ${SE_CXX_FOR_HOOKTEST})
+            # F8 bus counts of cache fills and the SH-2 DMAC, on the real patched SH-2 core (about a minute of
+            # compiling ss.cpp). Needs the Mednafen checkout (untracked _emu/mednafen, or -DSE_MEDNAFEN_ROOT=...):
+            # without one check_component.py exits 77 and CTest reports the test as skipped, not passed.
+            set(SE_MEDNAFEN_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/_emu/mednafen" CACHE PATH
+                "Mednafen checkout for the component tests that run the real patched source")
+            add_test(NAME SaturnExplorerMednafenBusComponent
+                     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/check_component.py
+                             ${SE_MEDNAFEN_ROOT} ${CMAKE_CURRENT_BINARY_DIR}/bus_component_test ${SE_CXX_FOR_HOOKTEST}
+                             --only f8_bus --skip-if-missing)
+            set_tests_properties(SaturnExplorerMednafenBusComponent PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+        endif()
+        # apply.py's line endings: apply/--revert byte-exact on an LF and a CRLF tree, no CR added to LF, with
+        # Windows' text-mode newline translation simulated (so the Windows bug is caught on Linux).
+        add_test(NAME SaturnExplorerMednafenApplyNewlines
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_apply_newlines.py
+                         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
+                         ${CMAKE_CURRENT_BINARY_DIR}/apply_newlines_test)
+        # The patcher checks' scratch tree: <mednafen/...> must resolve to the patched sources with or without
+        # symlinks (a copy made before apply.py ran left the compile checks on pristine headers).
+        add_test(NAME SaturnExplorerMednafenScratchIncludes
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_scratch_includes.py
+                         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen
+                         ${CMAKE_CURRENT_BINARY_DIR}/scratch_includes_test)
+        se_skip_code_77(SaturnExplorerMednafenScratchIncludes)   # exits 77 with no C++ compiler on PATH
         add_test(NAME SaturnExplorerMednafenHaltOrdering
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_halt_ordering.py
                          ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py)
@@ -1539,6 +1651,16 @@ if(BUILD_TESTING)
                                      ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${SE_CXX_FOR_PADTEST_DIR}")
             endif()
         endif()
+        # V1 validation guest (Integration/Validation/V1): builds without an SH-2 toolchain, so what can be
+        # checked without a BIOS is checked here -- the emitted instructions decoded by the repository's own
+        # SH-2 decoder, the pure-loop cycle arithmetic of EXPECTED.md, and the guest run on a fake machine.
+        # Skipped when Python is missing (this whole block); it asserts nothing about profiler counters.
+        add_executable(SaturnExplorerV1Disasm Integration/Validation/V1/tests/v1_disasm.cpp
+                       FrontEnd/src/Debug/Sh2Disasm.cpp)
+        target_include_directories(SaturnExplorerV1Disasm PRIVATE FrontEnd/src)
+        add_test(NAME SaturnExplorerV1Guest
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Validation/V1/tests/check_v1.py
+                         $<TARGET_FILE:SaturnExplorerV1Disasm>)
     endif()
 endif()
 
@@ -1596,6 +1718,29 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
                  COMMAND SaturnExplorerByteQueueTests)
     endif()
 
+    # V3 benchmark client (Docs/ProfilerFixPlan.md V3; Integration/Validation/V3/PROCEDURE.md): a headless
+    # client that records the profiler stream to CSV through the real driver. Native only; CPU-time columns
+    # are Linux-only, everything else is portable.
+    if(NOT EMSCRIPTEN)
+        add_library(SaturnExplorerV3Bench STATIC Integration/Validation/V3/BenchClient.cpp)
+        target_include_directories(SaturnExplorerV3Bench PUBLIC
+            Integration/Validation/V3
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        target_link_libraries(SaturnExplorerV3Bench PUBLIC SaturnExplorerLiveDriver SaturnExplorerCore)
+        add_executable(se-bench-client Integration/Validation/V3/bench_client_main.cpp)
+        target_link_libraries(se-bench-client PRIVATE SaturnExplorerV3Bench)
+    endif()
+
+    # V3 analyzer on synthetic runs with known answers (invalid-run, drift and overhead cases).
+    if(BUILD_TESTING AND Python3_FOUND)
+        add_test(NAME SaturnExplorerV3AnalyzeTests
+                 COMMAND ${Python3_EXECUTABLE} -I
+                         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Validation/V3/test_analyze_v3.py)
+        add_test(NAME SaturnExplorerV3CheckSettingsTests
+                 COMMAND ${Python3_EXECUTABLE} -I
+                         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Validation/V3/test_check_settings.py)
+    endif()
+
     # The driver's reconnect counter — how a client notices the emulator on the other end
     # was replaced. Stands up a loopback listener, so POSIX sockets only; the Windows
     # driver speaks a named pipe and would need its own harness.
@@ -1624,6 +1769,171 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerLiveRestoreSignalTests
                  COMMAND SaturnExplorerLiveRestoreSignalTests)
+
+        # The profiler's wire record in both forms (v26 and v27) against a scripted server on an
+        # ephemeral loopback port: a v26 section still parses, a v27 record round-trips every field.
+        add_executable(SaturnExplorerLiveProfilerFormatTests
+            FrontEnd/tests/LiveProfilerFormatTests.cpp)
+        target_include_directories(SaturnExplorerLiveProfilerFormatTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveProfilerFormatTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveProfilerFormatTests
+                 COMMAND SaturnExplorerLiveProfilerFormatTests)
+
+        # The control block's snapshot timeline (+56): stamped, unstated, absent (a 56-byte block from a
+        # server older than the field) and longer, against a scripted server on an ephemeral port.
+        add_executable(SaturnExplorerLiveCaptureTimelineCompatTests
+            FrontEnd/tests/LiveCaptureTimelineCompatTests.cpp)
+        target_include_directories(SaturnExplorerLiveCaptureTimelineCompatTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveCaptureTimelineCompatTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveCaptureTimelineCompatTests
+                 COMMAND SaturnExplorerLiveCaptureTimelineCompatTests)
+
+        # The profiler's wire path (v27 record): the real exporter hands over per-frame counters, the
+        # real driver must deliver each frame once and intact, and function attribution must be
+        # armed on request and disarmed on disconnect. Shares the default socket.
+        add_executable(SaturnExplorerLiveProfilerTests
+            FrontEnd/tests/LiveProfilerTests.cpp
+            Integration/Common/se_export.c)
+        target_include_directories(SaturnExplorerLiveProfilerTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveProfilerTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveProfilerTests
+                 COMMAND SaturnExplorerLiveProfilerTests)
+
+        # F6: the attribution mode is latched per frame. A request that arrives during a frame (halt,
+        # snapshot) is applied at the boundary, in both directions; each record carries the mode it ran in.
+        add_executable(SaturnExplorerLiveProfilerModeTests
+            FrontEnd/tests/LiveProfilerModeTests.cpp
+            Integration/Common/se_export.c)
+        target_include_directories(SaturnExplorerLiveProfilerModeTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveProfilerModeTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveProfilerModeTests
+                 COMMAND SaturnExplorerLiveProfilerModeTests)
+
+        # F10: the Memory tab's tracker is told the timeline of the capture's own bytes (the server stamps
+        # each snapshot), not the perf stream's. Real exporter + real driver; port and socket of its own.
+        add_executable(SaturnExplorerMemoryTimelineTests
+            FrontEnd/tests/MemoryTimelineTests.cpp
+            FrontEnd/src/Debug/ProfilerModel.cpp
+            FrontEnd/src/Debug/MemoryBackend.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerMemoryTimelineTests PRIVATE
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_memory_timeline_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6956)
+        target_include_directories(SaturnExplorerMemoryTimelineTests PRIVATE
+            FrontEnd/src
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerMemoryTimelineTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerMemoryTimelineTests COMMAND SaturnExplorerMemoryTimelineTests)
+        set_tests_properties(SaturnExplorerMemoryTimelineTests PROPERTIES TIMEOUT 120 RESOURCE_LOCK live_tap_socket)
+
+        # Frame identity and lost records of the profiler stream (F3) and the first reply's capability
+        # bits (F14): the exporter's section builder without a socket, the driver against a scripted
+        # server, and the real pair end to end on a socket and port of their own.
+        add_executable(SaturnExplorerLivePerfLossTests
+            FrontEnd/tests/LivePerfLossTests.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerLivePerfLossTests PRIVATE
+            SE_EXPORT_TEST_HOOKS=1
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_perf_loss_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6951)
+        target_include_directories(SaturnExplorerLivePerfLossTests PRIVATE
+            Drivers/Live/src
+            FrontEnd/tests
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLivePerfLossTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLivePerfLossTests COMMAND SaturnExplorerLivePerfLossTests)
+
+        # F1: the profiler request is per connection. Real exporter and driver with two clients at
+        # once, on a socket and port of their own, plus the driver's restate on reconnect.
+        add_executable(SaturnExplorerLiveProfilerRequestTests
+            FrontEnd/tests/LiveProfilerRequestTests.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerLiveProfilerRequestTests PRIVATE
+            SE_EXPORT_TEST_HOOKS=1
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_prof_request_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6952)
+        target_include_directories(SaturnExplorerLiveProfilerRequestTests PRIVATE
+            Drivers/Live/src
+            FrontEnd/tests
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveProfilerRequestTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveProfilerRequestTests COMMAND SaturnExplorerLiveProfilerRequestTests)
+
+        # V3 harness: se-bench-client against the real exporter and driver (own socket and port 6953), in
+        # process and through the executable. Measures nothing about the emulator; see PROCEDURE.md.
+        add_executable(SaturnExplorerV3BenchClientTests
+            Integration/Validation/V3/BenchClientTests.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerV3BenchClientTests PRIVATE
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_v3_bench_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6953)
+        target_include_directories(SaturnExplorerV3BenchClientTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerV3BenchClientTests PRIVATE
+            SaturnExplorerV3Bench SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_dependencies(SaturnExplorerV3BenchClientTests se-bench-client)
+        add_test(NAME SaturnExplorerV3BenchClientTests
+                 COMMAND SaturnExplorerV3BenchClientTests $<TARGET_FILE:se-bench-client>)
+        set_tests_properties(SaturnExplorerV3BenchClientTests PROPERTIES TIMEOUT 300)
+
+        # run_v3.sh end to end against a stand-in emulator built on the real exporter (own socket and port 6954).
+        add_executable(SaturnExplorerV3FakeEmulator
+            Integration/Validation/V3/FakeEmulator.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerV3FakeEmulator PRIVATE
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_v3_script_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6954)
+        target_include_directories(SaturnExplorerV3FakeEmulator PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerV3FakeEmulator PRIVATE Threads::Threads)
+
+        # Diagnostic (not a test): poll period and loss over the unix socket versus TCP (own socket, port 6955).
+        add_executable(se-v3-poll-probe
+            Integration/Validation/V3/PollPeriodProbe.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(se-v3-poll-probe PRIVATE
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_v3_poll_probe.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6955)
+        target_include_directories(se-v3-poll-probe PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(se-v3-poll-probe PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        find_program(SE_BASH bash)
+        if(SE_BASH AND Python3_FOUND)
+            add_test(NAME SaturnExplorerV3RunScriptTests
+                     COMMAND ${SE_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Validation/V3/test_run_v3.sh
+                             $<TARGET_FILE:SaturnExplorerV3FakeEmulator> $<TARGET_FILE:se-bench-client>
+                             /tmp/saturn_explorer_v3_script_test.sock)
+            set_tests_properties(SaturnExplorerV3RunScriptTests PROPERTIES TIMEOUT 600)
+        endif()
 
         # A1-7: a paused emulator that is captured every UI frame (a state load nobody confirms)
         # must not make the SH-2 Pseudocode panel ask again every frame. The real exporter withholds
@@ -1773,8 +2083,18 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
         target_link_libraries(SaturnExplorerLiveHaltRaceTests PRIVATE Threads::Threads)
         add_test(NAME SaturnExplorerLiveHaltRaceTests COMMAND SaturnExplorerLiveHaltRaceTests)
-        set_tests_properties(SaturnExplorerLiveRestoreSignalTests SaturnExplorerExportAttachTests
-                             SaturnExplorerLiveExporterRobustnessTests SaturnExplorerLiveHaltRaceTests
+        # The ring's snapshot delivery sequence: a first halt, halts inside one frame, a halt in a later
+        # frame and a rewind after a halt, each followed by normal frames that are already queued.
+        add_executable(SaturnExplorerLiveSnapshotDeliveryTests
+            FrontEnd/tests/LiveSnapshotDeliveryTests.cpp
+            Integration/Common/se_export.c)
+        target_include_directories(SaturnExplorerLiveSnapshotDeliveryTests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveSnapshotDeliveryTests PRIVATE Threads::Threads)
+        add_test(NAME SaturnExplorerLiveSnapshotDeliveryTests COMMAND SaturnExplorerLiveSnapshotDeliveryTests)
+        set_tests_properties(SaturnExplorerLiveRestoreSignalTests SaturnExplorerLiveProfilerTests SaturnExplorerLivePerfLossTests SaturnExplorerLiveProfilerRequestTests SaturnExplorerExportAttachTests
+                             SaturnExplorerLiveExporterRobustnessTests SaturnExplorerLiveHaltRaceTests SaturnExplorerLiveSnapshotDeliveryTests
                              PROPERTIES RESOURCE_LOCK live_tap_socket)
     endif()
 endif()
@@ -1850,6 +2170,8 @@ if(WIN32)
         FrontEnd/src/Debug/MemorySearchRunner.cpp
         FrontEnd/src/Debug/BytePatternSearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
+        FrontEnd/src/Debug/ProfilerModel.cpp
+        FrontEnd/src/ProfilerPanel.cpp
         FrontEnd/src/Debug/M68kDisasm.cpp
         FrontEnd/src/Disc/IsoFs.cpp
         FrontEnd/src/Disc/DiscImage.cpp
@@ -1942,6 +2264,8 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/MemorySearchRunner.cpp
         FrontEnd/src/Debug/BytePatternSearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
+        FrontEnd/src/Debug/ProfilerModel.cpp
+        FrontEnd/src/ProfilerPanel.cpp
         FrontEnd/src/Debug/M68kDisasm.cpp
         FrontEnd/src/Disc/IsoFs.cpp
         FrontEnd/src/Disc/DiscImage.cpp
@@ -2060,6 +2384,8 @@ else()
             FrontEnd/src/Debug/MemorySearchRunner.cpp
             FrontEnd/src/Debug/BytePatternSearch.cpp
             FrontEnd/src/Debug/AccessLog.cpp
+            FrontEnd/src/Debug/ProfilerModel.cpp
+            FrontEnd/src/ProfilerPanel.cpp
             FrontEnd/src/Debug/M68kDisasm.cpp
             FrontEnd/src/Disc/IsoFs.cpp
             FrontEnd/src/Disc/DiscImage.cpp

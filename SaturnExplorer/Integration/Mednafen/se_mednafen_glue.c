@@ -30,10 +30,20 @@
  */
 #include "se_export.h"
 #include "SeLiveProtocol.h"
+#include "SePerfCounters.h"
 
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
+
+/* The profiler's per-frame totals (v26, v27 layout), in SePerfCounters.h order. The code apply.py injects
+ * into the ss core adds to these where the work happens; SeMdfnPerfEndFrame hands them over and
+ * zeroes them. Defined here, outside SE_MEDNAFEN_WIRED, because the injected code references it
+ * in every build. Written by the emulate thread only. */
+unsigned long long SeSsPerfC[SE_PERF_COUNT];
+/* SE_PERF_CACHE_* the emulator was configured with; set by the code apply.py injects where Mednafen
+ * picks its cache emulation mode (F8), UNKNOWN until a game has loaded. */
+unsigned int SeSsCacheMode = SE_PERF_CACHE_UNKNOWN;
 
 /* ---- Accessors the patcher injects into Mednafen ss (C linkage). Each reaches a
  *      file-scope static the glue can't see directly. Pointer accessors return the
@@ -67,6 +77,8 @@ extern void            SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int si
 extern void            SsDbgClearBps(void);                        /* Tier 3: clear PC + data breakpoints */
 extern void            SsDbgSetTraceActive(int active);           /* arm per-insn tracepoint scan */
 extern int             SsDbgHasDebugger(void);                    /* 1 in a --enable-debugger build: the CPU hooks are real */
+extern void            SsDbgSetProfileActive(int active);         /* v26: keep the per-insn hook on for function profiling */
+extern int             SsDbgCpuTimestamp(int cpu);                /* v26: an SH-2's cycle counter (rebased every frame) */
 /* Controller injection (v7+). apply.py implements this accessor through the SMPC
  * gamepad path, translating SE_PAD_* to Mednafen's bit order and atomically overlaying
  * it after each host-input refresh. `port` is 0-based (0 = controller 1). */
@@ -167,7 +179,7 @@ void SeMednafenSnapshot(void)
      * which is most of the cost of preparing a frame. */
     /* Even with nobody attached: the breakpoints of a client that just left are dropped on this
      * thread, here, and they must go before one of them halts a game nobody can resume. */
-    SeExportApplyInstalls();
+    SeExportApplyInstallsMidFrame();   /* a snapshot runs inside a frame: leave the profiler mode alone (F6) */
     if (!SeExportHasClient()) return;
     /* Prefer the draw-end latch (the command table as it was actually plotted) over live
      * VRAM, which at this video-frame boundary may already be a half-rebuilt next-frame
@@ -482,9 +494,11 @@ static int SeMdfnTpFires(unsigned int i)
  * invisible from here. se_export.h has the why — in particular why an rte must not be
  * allowed to unwind a call frame.
  *
- * Deliberately not tracked: `jmp @Rn` — a tail call after restoring PR — pushes nothing,
- * and the callee's rts unwinds the original caller's frame, which is the right depth;
- * `braf Rn`, `bra`, `bt`, `bf` and friends never create or destroy a frame. */
+ * Unconditional jumps (`bra disp`, `jmp @Rn`, `braf Rn`) never create or destroy a frame -- a tail
+ * call pushes nothing and the callee's rts unwinds the original caller's frame, which is the right
+ * depth -- but they are held and completed like a call (delay slot first), because where they LAND
+ * says whether the function that is running changed (se_export.c, SeExportUncondJumpLanded).
+ * `bt`, `bf` and friends neither create nor destroy a frame and are not tracked. */
 typedef enum
 {
     SeFlowNone = 0,
@@ -493,7 +507,8 @@ typedef enum
     SeFlowCallReg,      /* jsr  @Rn   */
     SeFlowReturn,       /* rts        */
     SeFlowTrap,         /* trapa #imm */
-    SeFlowExcReturn     /* rte        */
+    SeFlowExcReturn,    /* rte        */
+    SeFlowJump          /* bra disp, jmp @Rn, braf Rn: an unconditional jump, a switch or a tail call (F9) */
 } SeFlowKind;
 
 static SeFlowKind SeMdfnClassifyFlow(unsigned short op)
@@ -504,7 +519,30 @@ static SeFlowKind SeMdfnClassifyFlow(unsigned short op)
     if ((op & 0xFF00u) == 0xC300u) return SeFlowTrap;
     if (op == 0x000Bu)             return SeFlowReturn;
     if (op == 0x002Bu)             return SeFlowExcReturn;
+    if ((op & 0xF000u) == 0xA000u || (op & 0xF0FFu) == 0x402Bu || (op & 0xF0FFu) == 0x0023u) return SeFlowJump;
     return SeFlowNone;
+}
+
+#if !defined(SE_MEDNAFEN_WIRED)
+/* Test seam: the registers the wired build reads from the CPU at the moment an unconditional jump lands
+ * (SeMdfnLandingRegs). A host test sets them with the instruction stream it presents. */
+static unsigned int sSeMdfnTestSp[2], sSeMdfnTestPr[2];
+#endif
+
+/* R15 and PR as they are NOW on 'cpu' -- read when an unconditional jump lands, so the delay slot's own
+ * effect (the usual `add #n, r15` of a tail call's epilogue) is included. The wired build asks the CPU;
+ * a host test sets the seam. Only asked when se_export cannot decide without it. */
+static void SeMdfnLandingRegs(int cpu, unsigned int* sp, unsigned int* pr)
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    unsigned int raw[23];
+    SsDbgSh2Regs(cpu, raw);
+    *sp = raw[15];
+    *pr = raw[21];   /* SsDbgSh2Regs order: R[16], SR, GBR, VBR, MACH, MACL, PR, PC */
+#else
+    *sp = sSeMdfnTestSp[cpu ? 1 : 0];
+    *pr = sSeMdfnTestPr[cpu ? 1 : 0];
+#endif
 }
 
 /* Apply one instruction's effect on the shadow stack. Split from SeMdfnTrackFlow — which
@@ -514,39 +552,85 @@ static SeFlowKind SeMdfnClassifyFlow(unsigned short op)
  * 'rn' is the source register for bsrf/jsr, 'sp' is R15 as the instruction sees it,
  * 'handler' the trapa vector's target. */
 static void SeMdfnApplyFlow(int cpu, SeFlowKind kind, unsigned int pc, unsigned short op,
-                            unsigned int rn, unsigned int sp, unsigned int handler)
+                            unsigned int rn, unsigned int sp, unsigned int handler,
+                            unsigned int landing, int haveLanding)
 {
     const unsigned int ret = pc + 4;   /* past the delay slot: where a call comes back to */
+    unsigned int target = 0;
+    int isCall = 1;
     switch (kind)
     {
         case SeFlowCallDisp:
         {
             int disp = (int)(op & 0x0FFFu);
             if (disp & 0x0800) disp -= 0x1000;         /* sign-extend 12-bit */
-            SeExportPushFrame(cpu, pc, pc + 4 + (unsigned int)(disp << 1), ret, sp, 0);
+            target = pc + 4 + (unsigned int)(disp << 1);
+            SeExportPushFrame(cpu, pc, target, ret, sp, 0);
             break;
         }
         case SeFlowCallPcRelReg:
-            SeExportPushFrame(cpu, pc, pc + 4 + rn, ret, sp, 0);
+            target = pc + 4 + rn;
+            SeExportPushFrame(cpu, pc, target, ret, sp, 0);
             break;
         case SeFlowCallReg:
-            SeExportPushFrame(cpu, pc, rn, ret, sp, 0);
+            target = rn;
+            SeExportPushFrame(cpu, pc, target, ret, sp, 0);
             break;
         case SeFlowReturn:
-            SeExportPopFrame(cpu);
+            isCall = 0;
+            if (haveLanding) SeExportPopFrameAt(cpu, landing); else SeExportPopFrame(cpu);
             break;
         case SeFlowTrap:
             /* The entry pushes SR then PC+2, so the handler — and the rte that ends it —
              * run with R15 - 8. Record that as the frame's SP so the rte can be matched
              * to this frame and to no other. */
+            target = handler;
             SeExportPushExceptionFrame(cpu, pc, handler, pc + 2, sp - 8, 0);
             break;
         case SeFlowExcReturn:
-            SeExportPopExceptionFrame(cpu, sp);
+            isCall = 0;
+            if (haveLanding) SeExportPopExceptionFrameAt(cpu, sp, landing); else SeExportPopExceptionFrame(cpu, sp);
+            break;
+        case SeFlowJump:
+            /* bra / jmp @Rn / braf Rn, now complete: a switch or skip inside the function, or a tail call
+             * into another one. Only where it landed can say which, and se_export decides from observed
+             * evidence (a known entry, the function's executed extent, SP / PR at the landing); anything it
+             * cannot prove is unknown. The stack never changes shape here: a tail callee's rts returns
+             * through the same frame. A landing other than the jump's own target means something ran in
+             * between (an interrupt was taken after the slot): nothing is claimed. */
+            isCall = 0;
+            if (!haveLanding)
+            {
+                SeExportOwnershipInvalidate(cpu, 0);
+            }
+            else
+            {
+                unsigned int jt;
+                if ((op & 0xF000u) == 0xA000u)
+                {
+                    int disp = (int)(op & 0x0FFFu);
+                    if (disp & 0x0800) disp -= 0x1000;
+                    jt = pc + 4 + (unsigned int)(disp << 1);                  /* bra */
+                }
+                else if ((op & 0xF0FFu) == 0x0023u) jt = pc + 4 + rn;           /* braf Rn */
+                else jt = rn;                                                   /* jmp @Rn */
+                if (jt != landing) SeExportOwnershipInvalidate(cpu, 0);
+                else if (SeExportUncondJumpLanded(cpu, landing, 0, 0, 0) == SE_JUMP_NEED_REGS)
+                {
+                    unsigned int lsp = 0, lpr = 0;
+                    SeMdfnLandingRegs(cpu, &lsp, &lpr);                         /* post-delay-slot SP / PR */
+                    SeExportUncondJumpLanded(cpu, landing, 1, lsp, lpr);
+                }
+            }
             break;
         case SeFlowNone:
+            isCall = 0;
             break;
     }
+    /* A call or trap whose target is not where execution actually arrived: something ran in between
+     * (an interrupt was taken before the target's first instruction), so the callee name is not what
+     * is executing. */
+    if (isCall && haveLanding && landing != target) SeExportOwnershipInvalidate(cpu, 0);
 }
 
 /* Control flow takes effect when it COMPLETES, not when it is first seen. The per-instruction hook
@@ -575,7 +659,7 @@ typedef struct
     SeFlowKind   kind;
     unsigned short op;
     unsigned int rn, sp, handler;
-    unsigned int epoch;          /* SeExportCallStackEpoch when it was seen */
+    unsigned int epoch;          /* SeExportCallStackEpoch(cpu) when it was seen */
 } SeMdfnFlowPending;
 static SeMdfnFlowPending sFlowPending[2];
 
@@ -586,7 +670,7 @@ static int SeMdfnFlowAdvance(int cpu, unsigned int pc)
 {
     SeMdfnFlowPending* p = &sFlowPending[cpu ? 1 : 0];
     if (p->stage == 0) return 0;
-    if (p->epoch != SeExportCallStackEpoch())
+    if (p->epoch != SeExportCallStackEpoch(cpu))
     {
         p->stage = 0;   /* the stacks were reset under it: it belongs to a timeline that is gone */
         return 0;
@@ -601,7 +685,7 @@ static int SeMdfnFlowAdvance(int cpu, unsigned int pc)
         return 1;                                               /* the slot again (bus stall) */
     }
     /* The transfer has completed: this PC is where it landed (or a later one, if the hook missed it). */
-    SeMdfnApplyFlow(cpu, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler);
+    SeMdfnApplyFlow(cpu, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler, pc, 1);
     p->stage = 0;
     return 0;
 }
@@ -626,9 +710,10 @@ void SeMednafenHookMode(int continuous)
     for (c = 0; c < 2; ++c)
     {
         SeMdfnFlowPending* p = &sFlowPending[c];
-        if (p->stage != 0 && p->epoch == SeExportCallStackEpoch() &&
+        SeExportOwnershipInvalidate(c, 1);   /* F9: the code now runs unwatched; no recorded frame can be trusted again */
+        if (p->stage != 0 && p->epoch == SeExportCallStackEpoch(c) &&
             (p->kind == SeFlowReturn || p->kind == SeFlowExcReturn))
-            SeMdfnApplyFlow(c, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler);
+            SeMdfnApplyFlow(c, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler, 0, 0);
         p->stage = 0;
     }
 }
@@ -640,7 +725,7 @@ static void SeMdfnFlowDefer(int cpu, unsigned int pc, SeFlowKind kind, unsigned 
     SeMdfnFlowPending* p = &sFlowPending[cpu ? 1 : 0];
     p->kind = kind; p->op = op; p->rn = rn; p->sp = sp; p->handler = handler;
     p->flowPc = pc;
-    p->epoch = SeExportCallStackEpoch();
+    p->epoch = SeExportCallStackEpoch(cpu);
     if (kind == SeFlowTrap) { p->stage = 2; p->waitPc = pc; }   /* no delay slot */
     else                    { p->stage = 1; p->waitPc = pc + 2; }
 }
@@ -658,8 +743,8 @@ static void SeMdfnTrackFlow(int cpu, unsigned int pc)
     op = SsDbgReadOpcode(pc);
     kind = SeMdfnClassifyFlow(op);
     if (kind == SeFlowNone) return;     /* the overwhelmingly common case */
-    if (kind != SeFlowReturn)           /* rts needs no register read; everything else does */
-    {
+    if (kind != SeFlowReturn && !(kind == SeFlowJump && (op & 0xF000u) == 0xA000u))
+    {   /* rts and bra (its target is in the opcode) need no register read; everything else does */
         unsigned int raw[23];
         SsDbgSh2Regs(cpu, raw);
         sp = raw[15];
@@ -716,6 +801,8 @@ int SeMednafenSelfBranchTaken(int cpu, unsigned int pc)
  * (2) mirror calls/returns into the v9 shadow call stack. SsDbgSh2Regs returns
  * R0..R15,SR,GBR,VBR,MACH,MACL,PR,PC; reorder into se_sh2_regs order
  * (r[0..15],pc,pr,sr,gbr,vbr,mach,macl) which is what the event carries. */
+static int sProfOn;   /* the profiler section below owns these; the hook needs them first */
+static void SeMdfnProfSampleAt(int cpu, unsigned int pc, int ts);
 void SeMednafenTraceHook(int cpu, unsigned int pc)
 {
 #if defined(SE_MEDNAFEN_WIRED)
@@ -740,9 +827,382 @@ void SeMednafenTraceHook(int cpu, unsigned int pc)
         }
     }
     SeMdfnTrackFlow(cpu, pc);   /* v9 shadow call stack */
+    if (sProfOn) SeMdfnProfSampleAt(cpu, pc, SsDbgCpuTimestamp(cpu ? 1 : 0));   /* after the stack: it names the function */
 #else
     (void)cpu; (void)pc;
 #endif
+}
+
+/* ============================ profiler (v26) ============================== */
+/* Function attribution. While it is on, the per-instruction hook hands every PC of both SH-2s to
+ * SeMdfnProfSample, which charges the cycles since the previous instruction of that CPU to the
+ * function that instruction was in. Which function that is comes from the shadow call stack the
+ * same hook maintains (the entry address a real bsr/jsr recorded), so it needs no symbol table
+ * and no guessing at function boundaries; code with no recorded frame -- whatever was already
+ * running when profiling began, typically the main loop -- is charged to a 16-byte bucket of
+ * its PC instead, and the client resolves that with its own function finder.
+ *
+ * The table is per frame: open addressing over SE_PROF_SLOTS keys, emptied when the frame is
+ * handed over. A game touches a few hundred functions a frame; if the table ever fills, the
+ * excess is counted in the "other" total rather than dropped silently. */
+#define SE_PROF_SLOTS 4096u    /* power of two */
+#define SE_PROF_FILL  3072u    /* stop inserting new keys at 75% so probes stay short */
+typedef struct { unsigned int key, cycles; } SeProfSlot;
+static SeProfSlot sProfTab[SE_PROF_SLOTS];
+static unsigned int sProfUsed;
+static unsigned int sProfOther;        /* cycles that found no slot (both CPUs; sProfNotAdmitted splits it) */
+/* F7: Other, kept PER CPU and by cause, in 64 bits so a long frame cannot wrap it. A key's CPU is its
+ * SE_PERF_FN_SLAVE bit. The sum of these four is what the frame attributed beyond the published rows. */
+static unsigned long long sProfNotAdmitted[2];   /* the table refused the key (SE_PROF_FILL reached) */
+static unsigned long long sProfEvicted[2];       /* admitted, but below the top SE_LIVE_PERF_FN_MAX */
+static unsigned int sProfSat;                    /* SE_PERF_SAT_* seen this frame */
+static int sProfOn;                    /* SE_LIVE_PROF_FUNCTIONS is in force */
+static int sProfSynced[2];             /* sProfLastTs / sProfKey hold a previous instruction */
+static int sProfLastTs[2];
+static unsigned long long sProfLastIdle[2];
+static unsigned int sProfKey[2];       /* the function the previous instruction was in */
+
+static void SeMdfnProfAdd(unsigned int key, unsigned int cycles)
+{
+    unsigned int i = (key * 2654435761u) >> 20;   /* 12 bits: SE_PROF_SLOTS */
+    unsigned int probes;
+    for (probes = 0; probes < SE_PROF_SLOTS; ++probes, i = (i + 1u) & (SE_PROF_SLOTS - 1u))
+    {
+        if (sProfTab[i].key == key) { sProfTab[i].cycles += cycles; return; }
+        if (sProfTab[i].key == 0)
+        {
+            if (sProfUsed >= SE_PROF_FILL) break;
+            sProfTab[i].key = key; sProfTab[i].cycles = cycles; ++sProfUsed;
+            return;
+        }
+    }
+    sProfOther += cycles;
+    sProfNotAdmitted[(key & SE_PERF_FN_SLAVE) ? 1 : 0] += cycles;
+    sProfSat |= SE_PERF_SAT_TABLE_FULL;
+}
+
+/* The per-frame Other accounting starts from zero (the table itself is cleared by the caller). */
+static void SeMdfnProfOtherReset(void)
+{
+    sProfOther = 0;
+    memset(sProfNotAdmitted, 0, sizeof sProfNotAdmitted);
+    memset(sProfEvicted, 0, sizeof sProfEvicted);
+    sProfSat = 0;
+}
+
+/* The time a CPU spent asleep or held off the bus is not the function's: the counters the
+ * injected code keeps say how much of the interval that was. */
+static unsigned long long SeMdfnProfIdle(int cpu)
+{
+    return SeSsPerfC[SE_PERF_SH2_SLEEP + cpu] + SeSsPerfC[SE_PERF_SH2_STALL + cpu];
+}
+
+/* Charge what 'cpu' did since its previous instruction to the key that instruction was in: the cycles
+ * between the two timestamps, minus the sleep / stall the counters booked in between. 'ts' is the CPU's
+ * own timestamp NOW, which is the end of the previous instruction. Nothing is charged without a
+ * baseline (sProfSynced), and an interval outside (0, 2^24) is not an instruction's cost -- the
+ * per-frame rebase, a state load -- so it is dropped, never attributed. */
+static void SeMdfnProfCharge(int c, int ts)
+{
+    if (sProfSynced[c])
+    {
+        const unsigned long long idle = SeMdfnProfIdle(c);
+        const long long delta = (long long)ts - (long long)sProfLastTs[c];
+        const unsigned long long didle = idle - sProfLastIdle[c];
+        if (delta > 0 && delta < (1 << 24) && didle < (unsigned long long)delta)
+            SeMdfnProfAdd(sProfKey[c], (unsigned int)((unsigned long long)delta - didle));
+    }
+}
+
+/* One instruction of 'cpu' at 'pc' is about to run, 'ts' being the CPU's timestamp. */
+static void SeMdfnProfSampleAt(int cpu, unsigned int pc, int ts)
+{
+    const int c = cpu ? 1 : 0;
+    unsigned int fn;
+    SeMdfnProfCharge(c, ts);
+    sProfLastTs[c] = ts;
+    sProfLastIdle[c] = SeMdfnProfIdle(c);
+    sProfSynced[c] = 1;
+    SeExportNoteExecuted(c, pc);   /* the owner ran this instruction: its extent (evidence for jumps) grows */
+    /* The function the shadow stack says is running, which it says only while it knows (F9); otherwise
+     * a 16-byte bucket of the raw PC. Key 0 marks an empty slot; a raw-PC key always has its top bit
+     * set, and a recorded function at address 0 cannot be told from "none", so it falls to the raw-PC
+     * form as well. */
+    fn = SeExportCurrentFunction(c);
+    sProfKey[c] = ((fn & SE_PERF_FN_ADDR_MASK) != 0u
+                       ? (fn & SE_PERF_FN_ADDR_MASK)
+                       : (SE_PERF_FN_RAW_PC | (pc & SE_PERF_FN_ADDR_MASK & ~(SE_PERF_FN_PC_BUCKET - 1u)))) |
+                  (c ? SE_PERF_FN_SLAVE : 0u);
+}
+
+/* ---- frame lifecycle (F2 + F6) -------------------------------------------------------------------
+ * The emulator calls these where the CPU's power state, its reset state or the whole machine changes.
+ * None of them touches an emulator symbol, so the test links this file unwired and drives them with a
+ * controlled clock. Timestamps are the scheduler's: frame-relative SH-2 clocks, rebased every frame.
+ *
+ * SLAVE ON-TIME (counter 5) is the sum of the intervals [on edge, off edge) inside [0, end_ts) during
+ * which the slave SH-2 was powered, where an edge is a real SetActive transition at the slave's own
+ * timestamp (an on edge: the timestamp it was given; an off edge: how far it had run). A redundant
+ * SetActive is no edge. The frame's open interval is closed at end_ts before the rebase and reopens at
+ * 0 next frame if the slave is still on. A state load reseeds from the loaded CPU, which is on or off
+ * whatever SetActive last said. An interval whose edge was never seen (the on state before the first
+ * edge, a mismatch between our record and the CPU at the frame end) is counted as 0 rather than
+ * guessed: on-time is never over-claimed.
+ *
+ * Function accounting follows the same edges: when a CPU is switched off or reset, the cycles up to
+ * that moment are charged to the function that ran them, then the baseline, the recorded stack and
+ * the pending flow are dropped, so the off interval -- and what runs after power-on -- is never
+ * attributed to the function that happened to run before shutdown. */
+static int sSlaveOn = -1;          /* -1 unknown, 0 off, 1 on: our record of the slave's power */
+static int sSlaveSince;            /* start (frame-relative, >= 0) of the open on-interval */
+static unsigned int sFrameMode;    /* SE_LIVE_PROF_* the frame in progress runs in (F6) */
+/* ---- the native debugger holds the callback (Alt+D stepping, trace logging) --------------------------
+ * Mednafen's native debugger replaces our per-instruction callback while it needs one and removes its own
+ * when it is done (apply.py, SeSsNativeSetCPUCallback). SeSyncCpuHook tells us whenever we WANT a callback
+ * whether it is ours that is installed. While it is not, no instruction reaches SeMednafenTraceHook: the
+ * shadow call stack misses calls and returns, and the profiler's last sampled function stays "on top"
+ * of a stack that no longer describes the code. Two consequences, both handled here:
+ *   - the frame is not an attributed frame (sFrameGap, see SeMdfnPerfEndFrame): any frame during any part of
+ *     which our callback was absent publishes no function rows, and the mode it reports is the non-attributed
+ *     one -- the existing, honest "this frame was not attributed" form of the v27 record;
+ *   - when ours returns, the baseline and the shadow stack start again from nothing, so the gap is never
+ *     charged to the function that happened to be on top when the callback was taken. */
+static int sForeignHook;   /* we want a callback and another one is installed */
+static int sFrameGap;      /* part of the frame in progress ran without our callback */
+
+
+static void SeMdfnSlaveAccumulate(int until)
+{
+    if (sSlaveOn == 1)
+    {
+        const int from = sSlaveSince < 0 ? 0 : sSlaveSince;
+        if (until > from) SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] += (unsigned long long)(until - from);
+    }
+}
+
+/* SH7095::SetActive changed the slave's power. 'ts' is the slave's timestamp at the edge. */
+void SeMednafenSlaveActive(int on, int ts)
+{
+    on = on ? 1 : 0;
+    if (on == sSlaveOn) return;
+    if (!on)
+    {
+        SeMdfnSlaveAccumulate(ts);
+        if (sProfOn) SeMdfnProfCharge(1, ts);   /* the last valid interval, then nothing until power-on */
+    }
+    sSlaveOn = on;
+    sSlaveSince = ts < 0 ? 0 : ts;
+    sProfSynced[1] = 0;
+}
+
+/* SH7095::Reset ran on a powered CPU ('ts' its timestamp): by the watchdog, or inside SetActive. The
+ * code it was running is gone whether or not the power changed. */
+void SeMednafenCpuReset(int cpu, int ts)
+{
+    const int c = cpu ? 1 : 0;
+    if (sProfOn) SeMdfnProfCharge(c, ts);
+    sProfSynced[c] = 0;
+    SeExportResetCallStack(c);   /* THIS cpu's frames, ownership and (its epoch) pending flow; the other CPU is untouched */
+}
+
+/* An exception was entered on 'cpu' (interrupt, NMI, address error, illegal instruction). The hardware
+ * pushed SR and PC and vectored without presenting an instruction, so which function is running is no
+ * longer known. A trapa is the exception we DO observe -- its flow is held and its handler recorded --
+ * so it does not withdraw ownership. */
+void SeMednafenExceptionEntry(int cpu)
+{
+    const SeMdfnFlowPending* p = &sFlowPending[cpu ? 1 : 0];
+    if (p->stage == 2 && p->kind == SeFlowTrap && p->epoch == SeExportCallStackEpoch(cpu)) return;
+    SeExportOwnershipInvalidate(cpu, 0);
+}
+
+void SeMednafenForeignHook(int foreign)
+{
+    int c;
+    foreign = foreign ? 1 : 0;
+    if (foreign == sForeignHook) return;
+    sForeignHook = foreign;
+    sFrameGap |= foreign;
+    for (c = 0; c < 2; ++c)
+    {
+        sProfSynced[c] = 0;                   /* the interval across the gap is nobody's */
+        sFlowPending[c].stage = 0;            /* a held call/return was never completed by what followed it */
+        if (foreign)
+            SeExportOwnershipInvalidate(c, 1);
+        else
+            SeExportResetCallStack(c);        /* calls and returns were missed: restart from nothing */
+    }
+}
+
+/* Component-test accessor (component/perf_sh2_harness.cpp, which cannot reach the static flag and does not
+ * run the frame end that clears it): whether the frame in progress is a gap frame, and clear it. */
+int SeMednafenTakeFrameGap(void)
+{
+    const int gap = sFrameGap;
+    sFrameGap = sForeignHook;
+    return gap;
+}
+
+/* A state was loaded (rewind, slot, native): the machine is whatever the file said. Partial accounting
+ * belongs to the abandoned timeline and is discarded; the slave's on-state is read from the loaded
+ * CPU (a load never calls SetActive), starting at the frame's origin since a load lands between
+ * frames. */
+void SeMednafenStateLoaded(int slaveOn)
+{
+    sSlaveOn = slaveOn ? 1 : 0;
+    sSlaveSince = 0;
+    SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] = 0;
+    sProfSynced[0] = sProfSynced[1] = 0;
+    if (sProfUsed) { memset(sProfTab, 0, sizeof sProfTab); sProfUsed = 0; }
+    SeMdfnProfOtherReset();
+    SeExportResetCallStack(0);
+    SeExportResetCallStack(1);
+}
+
+/* The frame's emulation is over, BEFORE the timestamps are rebased: 'end_ts' is its length and
+ * 'ts0' / 'ts1' the CPUs' timestamps (ts1 meaningless while the slave is off). */
+void SeMednafenFrameClose(int end_ts, int ts0, int ts1, int slaveOn)
+{
+    slaveOn = slaveOn ? 1 : 0;
+    /* Slave on-time: close the open interval at end_ts. Only trusted when our record agrees with the
+     * CPU; then reopen at 0 from what the CPU actually is. */
+    if (sSlaveOn == 1 && slaveOn) SeMdfnSlaveAccumulate(end_ts);
+    sSlaveOn = slaveOn;
+    sSlaveSince = 0;
+    /* Function attribution: the final instruction's interval is charged now, where the baseline can
+     * still be compared with the clock; the baseline then moves to the rebased clock so the next
+     * frame's first sample measures from the frame's start instead of discarding that interval. */
+    if (sProfOn)
+    {
+        SeMdfnProfCharge(0, ts0);
+        sProfLastTs[0] = ts0 - end_ts;
+        if (slaveOn)
+        {
+            SeMdfnProfCharge(1, ts1);
+            sProfLastTs[1] = ts1 - end_ts;
+        }
+    }
+}
+
+/* The attribution mode for the NEXT frame, taken on the emulate thread when the server applies a
+ * request -- which it does only between frames, so the mode is latched: every frame runs entirely in
+ * the mode it is published under (sFrameMode), and a request that arrived mid-frame or during a halt
+ * waited. Continuous observation starts or ends here, so no baseline and no recorded frame carries
+ * over (F9). */
+static void SeMdfnApplyMode(unsigned int flags)
+{
+    sProfOn = (flags & SE_LIVE_PROF_FUNCTIONS) ? 1 : 0;
+    sFrameMode = flags & SE_LIVE_PROF_FUNCTIONS;
+    sFrameGap = sForeignHook;   /* the frame starts without our callback if that is how it is now */
+    sProfSynced[0] = sProfSynced[1] = 0;
+    SeExportOwnershipInvalidate(0, 1);
+    SeExportOwnershipInvalidate(1, 1);
+}
+
+#if defined(SE_MEDNAFEN_WIRED)
+/* Registered with the server (SeExportSetProfilerHook). */
+static void SeMdfnSetProfiler(unsigned int flags)
+{
+    SeMdfnApplyMode(flags);
+    SsDbgSetProfileActive(sProfOn);   /* the continuous per-instruction callback follows the mode */
+}
+#endif
+
+/* The frame is over: hand its counters and its hottest functions to the server, and start the
+ * next frame from zero. Nothing is serialized when nobody is attached. */
+static void SeMdfnPerfEndFrame(void)
+{
+    unsigned int keys[SE_LIVE_PERF_FN_MAX], cycles[SE_LIVE_PERF_FN_MAX];
+    unsigned int n = 0, other = sProfOther, i;
+    /* A frame during any part of which our callback was not the installed one (the native debugger held it)
+     * cannot be attributed: its table holds only the instructions seen before and after the gap, and its
+     * shadow stack was frozen in between. It is published as a frame that was NOT attributed -- no function
+     * rows, no remainder, mode without SE_LIVE_PROF_FUNCTIONS (valid), no Other split -- which is what the
+     * v27 record already says for a frame that ran with attribution off. The counters are untouched. */
+    const int gap = (sFrameMode & SE_LIVE_PROF_FUNCTIONS) && sFrameGap;
+    if (gap) other = 0;
+    if (SeExportHasClient())
+    {
+        if (sProfUsed && !gap)
+        {
+            /* The SE_LIVE_PERF_FN_MAX largest, hottest first, by insertion into a short sorted
+             * list: one pass over the table, once a frame. */
+            for (i = 0; i < SE_PROF_SLOTS; ++i)
+            {
+                const unsigned int k = sProfTab[i].key, cyc = sProfTab[i].cycles;
+                unsigned int j;
+                if (!k) continue;
+                if (n == SE_LIVE_PERF_FN_MAX)
+                {
+                    /* Whichever of the 65 loses is evicted: its cycles go to Other under ITS CPU. */
+                    if (cyc <= cycles[n - 1])
+                    {
+                        other += cyc; sProfEvicted[(k & SE_PERF_FN_SLAVE) ? 1 : 0] += cyc;
+                        sProfSat |= SE_PERF_SAT_TRUNCATED;
+                        continue;
+                    }
+                    other += cycles[n - 1];
+                    sProfEvicted[(keys[n - 1] & SE_PERF_FN_SLAVE) ? 1 : 0] += cycles[n - 1];
+                    sProfSat |= SE_PERF_SAT_TRUNCATED;
+                    --n;
+                }
+                for (j = n; j > 0 && cycles[j - 1] < cyc; --j) { keys[j] = keys[j - 1]; cycles[j] = cycles[j - 1]; }
+                keys[j] = k; cycles[j] = cyc;
+                ++n;
+            }
+        }
+        {
+            /* v27 Step 0: the record carries these fields but nothing produces them yet, so
+             * 'valid' stays 0 and a client shows them as "not available" rather than as zero. */
+            SeExportPerfInfo info;
+            memset(&info, 0, sizeof info);
+            /* The frame's own identity, reserved at the gate and committed after this hook (F3). */
+            SeExportFrameIdentity(&info.timelineId, &info.frameNo);
+            info.valid |= SE_PERF_VALID_IDENTITY;
+            /* F6: the mode this frame ran in. It only changes between frames (SeMdfnSetProfiler is applied
+             * at a boundary), so the frame is published under exactly the mode it ran in. */
+            info.mode = gap ? (sFrameMode & ~SE_LIVE_PROF_FUNCTIONS) : sFrameMode;
+            info.valid |= SE_PERF_VALID_MODE;
+            /* F7: Other per CPU and cause. Only a frame that ran with attribution on measured it; with it
+             * off nothing was attributed, and "0 in Other" would claim a measurement that never happened. */
+            if ((sFrameMode & SE_LIVE_PROF_FUNCTIONS) && !gap)
+            {
+                unsigned long long sum = 0;
+                for (i = 0; i < 2; ++i)
+                {
+                    info.otherNotAdmitted[i] = sProfNotAdmitted[i];
+                    info.otherEvicted[i] = sProfEvicted[i];
+                    sum += sProfNotAdmitted[i] + sProfEvicted[i];
+                }
+                info.satFlags = sProfSat;
+                info.valid |= SE_PERF_VALID_OTHER;
+                /* SeLiveProtocol.h: fnOtherCycles is the sum of the four words, saturated at 32 bits. */
+                other = sum > 0xFFFFFFFFull ? 0xFFFFFFFFu : (unsigned int)sum;
+            }
+            /* F8: the instruction-cache emulation mode, once a game has set it. */
+            if (SeSsCacheMode != SE_PERF_CACHE_UNKNOWN)
+            {
+                info.cacheMode = SeSsCacheMode;
+                info.valid |= SE_PERF_VALID_CACHE;
+            }
+            /* F4 (counters 55, 56), F5 (57) and F8 (58..61) are produced by the injected hooks in
+             * every patched build (apply.py fails on a missing anchor), so their bits go up with
+             * them. F2: counter 5 is the integrated figure (index 54 is reserved, never produced). */
+            info.valid |= SE_PERF_VALID_VDP1_WORK | SE_PERF_VALID_M68K_IDLE | SE_PERF_VALID_BUS_X |
+                          SE_PERF_VALID_SSH2_INT;
+            SeExportPublishPerf(SeSsPerfC, SE_PERF_COUNT, keys, cycles, n, other, &info);
+        }
+    }
+    /* The idle totals restart from zero with the counters, so the samplers' copies must too. */
+    sProfLastIdle[0] = sProfLastIdle[1] = 0;
+    memset(SeSsPerfC, 0, sizeof SeSsPerfC);
+    if (sProfUsed) { memset(sProfTab, 0, sizeof sProfTab); sProfUsed = 0; }
+    SeMdfnProfOtherReset();
+    /* The next frame is a gap frame from its first instruction if the callback is still not ours. */
+    sFrameGap = sForeignHook;
+    /* The CPUs' cycle counters were rebased just before this hook. The final interval of the frame was
+     * charged, and the baselines moved to the rebased clock, by SeMednafenFrameClose (before the
+     * rebase), so sampling carries on across the boundary with nothing lost and nothing doubled. */
 }
 
 /* ============================ lifecycle wiring ============================ */
@@ -759,6 +1219,10 @@ void SeMednafenTraceHook(int cpu, unsigned int pc)
  * rebased, and the machine is in exactly the state the next frame will start from. */
 void SeMednafenEndFrameHook(void)
 {
+    SeMdfnPerfEndFrame();
+    /* F6: between frames, with this frame already published in the mode it ran in: a profiler request
+     * that arrived during it (or during a halt) takes effect for the next frame, on this thread. */
+    SeExportApplyInstalls();
     SeExportEndFrame();
 }
 
@@ -768,7 +1232,10 @@ void SeMednafenFrameHook(void)
     if (!inited)
     {
         inited = 1;
-        SeExportInit();
+        /* Hooks first, listeners last (F14): nothing can ask for capabilities, or read a hook
+         * pointer, while it is being registered. Prepare (not "register, then init") because the
+         * save hook starts the rewind worker, which needs the server running. */
+        const int prepared = (SeExportPrepare() == 0);
         SeExportSetMemWriteHook(SeMdfnWriteByte);
         SeExportSetSoundWriteHook(SeMdfnWriteSoundByte);   /* Sound RAM pokes (v13) */
         SeExportSetVdpWriteHook(SeMdfnWriteVdpByte);       /* CRAM / VDP1 FB pokes (v23) */
@@ -784,10 +1251,17 @@ void SeMednafenFrameHook(void)
         SeExportSetTracepointHook(SeMdfnSetTracepoints);  /* tracepoints (v8+) */
         /* What the CPU hooks can really do (v24): all of it under --enable-debugger, none of it
          * otherwise -- the accessors are then no-op stubs, and a client must not offer them. */
+        /* Function profiling rides the same per-instruction hook; without it only the counters. */
+        if (SsDbgHasDebugger()) SeExportSetProfilerHook(SeMdfnSetProfiler);
         SeExportSetDebugCaps(SsDbgHasDebugger()
                                  ? (SE_LIVE_CAP_EXEC_BP | SE_LIVE_CAP_MEM_WATCH |
                                     SE_LIVE_CAP_INSN_STEP | SE_LIVE_CAP_TRACEPOINTS)
                                  : 0u);
+        /* Counters exist in every build this glue is part of: say so before the first sample, so
+         * the very first reply advertises SE_LIVE_CAP_PROFILER (a build without a debugger then
+         * advertises only that, never SE_LIVE_CAP_PROF_FUNCTIONS). */
+        SeExportSetPerfCapable(1);
+        if (prepared) SeExportStart();
     }
     SeMednafenSnapshot();
 }
@@ -804,6 +1278,8 @@ void SeMednafenSuppressUnusedWarnings(void)
     (void)SeMdfnGetKeyMap; (void)SeMdfnPortDeviceName;
     (void)SeMdfnSetTracepoints; (void)SeRd32LE;
     (void)SeMdfnSaveState; (void)SeMdfnLoadState;
-    (void)SeMdfnApplyFlow;   /* reached only through the wired SeMdfnTrackFlow */
+    (void)SeMdfnApplyFlow; (void)SeMdfnProfSampleAt;   /* reached only through the wired SeMdfnTrackFlow */
+    (void)SeMdfnProfAdd; (void)SeMdfnProfIdle; (void)SeMdfnApplyMode; (void)SeMdfnPerfEndFrame; (void)sProfOn;
+    (void)sFrameGap; (void)sForeignHook; (void)sProfSynced; (void)sProfLastTs; (void)sProfLastIdle; (void)sProfKey;
 }
 #endif

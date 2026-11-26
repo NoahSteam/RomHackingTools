@@ -453,12 +453,13 @@ void TestQueuedWorkDoesNotReachTheReplacement()
         std::lock_guard<std::mutex> lk(logMtx);
         CHECK(!verbsOnSecond.empty());
         // The first request is a plain GET, and what follows is only what this connection itself
-        // needs (REW restates the rewind setting to a server that starts with capture on). Nothing
+        // needs (REW restates the rewind setting to a server that starts with capture on; PRF
+        // restates the profiler request, "off" included, since it is per connection: F1). Nothing
         // from the previous session: no stale WRM/WRS/STP/PAU/LST/ELS.
         CHECK(verbsOnSecond.front() == SE_LIVE_VERB_GET);
         for (const std::string& v : verbsOnSecond)
         {
-            CHECK(v == SE_LIVE_VERB_GET || v == SE_LIVE_VERB_REWIND);
+            CHECK(v == SE_LIVE_VERB_GET || v == SE_LIVE_VERB_REWIND || v == SE_LIVE_VERB_PROFILE);
         }
     }
     // And a fresh edit, made now, is accepted and goes to this emulator.

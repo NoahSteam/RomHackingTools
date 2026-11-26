@@ -55,7 +55,17 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      25u   /* +v25 ESV: have the emulator save one of its own numbered slots
+#define SE_LIVE_VERSION      27u   /* +v27 profiler record frozen for the fix plan (Docs/ProfilerFixPlan.md): the perf
+                                  * section header gains newestSeq and a lost range, and the record gets
+                                  * a 64-bit sampleSeq, timelineId, 64-bit frameNo, the latched mode,
+                                  * the cache mode, a 'valid' word, the per-CPU Other split and the
+                                  * appended counters 55..61 (index 6 retired, 54 reserved). Not readable by a v26
+                                  * parser, hence the bump. Layout at "Perf section" below.
+                                  * +v26 profiler: a trailing perf block of per-frame hardware
+                                  * counters (SePerfCounters.h) and the PRF verb, which switches
+                                  * per-function SH-2 time attribution on and off
+                                  * (SE_LIVE_CAP_PROFILER / SE_LIVE_CAP_PROF_FUNCTIONS).
+                                  * +v25 ESV: have the emulator save one of its own numbered slots
                                   * (SE_LIVE_CAP_EMU_SAVE says the build can).
                                   * +v24 the capability word reports what this build really has:
                                   * the frame gate, rewind save/load, and the debugger hooks
@@ -105,10 +115,15 @@
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 /* Snapshot request. arg = the client's last-seen frame number: the server keeps an N-deep
- * ring of completed frames and replies with the OLDEST frame newer than 'arg' (gap-free, so
- * a client that keeps up never skips a frame), or the latest when arg is 0 or the client has
- * caught up. The reply's control block reports the frame number actually served. arg 0 (an
- * older client that doesn't track frames) always gets the latest — the original behavior. */
+ * ring of snapshots and replies with the OLDEST one newer than the last this connection was served
+ * (gap-free, so a client that keeps up never skips a snapshot), or the latest when arg is 0 or the
+ * client has caught up. "Newer" is decided on a server-side delivery sequence that every snapshot
+ * takes, halts included; a halt can show the same frame number as the frame it is inside, so the
+ * frame number alone cannot order them. The reply's control block reports the emulated frame number
+ * of the snapshot served (unchanged: it is the frame identity the client displays and rewinds to,
+ * not the delivery sequence). A connection that names a frame other than the one it was last served
+ * is ordered by frame number alone. arg 0 (an older client that doesn't track frames) always gets
+ * the latest — the original behavior. */
 #define SE_LIVE_VERB_GET     "GET\n"
 #define SE_LIVE_VERB_PAUSE   "PAU\n"
 #define SE_LIVE_VERB_RESUME  "RUN\n"
@@ -165,6 +180,15 @@
                                         * connection with capture ON, so a pre-v18 client that
                                         * never sends this keeps the old behavior; a v18 client
                                         * states its setting on connect and on every change. */
+#define SE_LIVE_VERB_PROFILE "PRF\n" /* profiler options (v26+): arg = SE_LIVE_PROF_* flags. No payload.
+                                        * The hardware counters of the perf block cost next to nothing
+                                        * and are always produced; this verb only controls the
+                                        * expensive half. SE_LIVE_PROF_FUNCTIONS makes the emulator
+                                        * run its per-instruction loop (the one breakpoints use, several
+                                        * times slower) so it can attribute SH-2 cycles to functions.
+                                        * Like REW it is per connection: a server drops it when the
+                                        * client leaves, so a game nobody is profiling runs at speed. */
+#define SE_LIVE_PROF_FUNCTIONS 0x1u
 #define SE_LIVE_VERB_LEN     4
 #define SE_LIVE_REQUEST_LEN  8    /* verb(4) + arg(4, little-endian) */
 
@@ -343,6 +367,8 @@
 #define SE_LIVE_MINVER_LOADSTATE 16u    /* LST */
 #define SE_LIVE_MINVER_REWIND    18u    /* REW */
 #define SE_LIVE_MINVER_EMUSAVE   25u    /* ESV (no payload, but an older server would read it as a GET) */
+#define SE_LIVE_MINVER_PROFILE   26u    /* PRF, and the v26 perf block */
+#define SE_LIVE_MINVER_PERF27    27u    /* the v27 perf section and record layout */
 
 #define SE_LIVE_MAX_BKPT_DESCS   1024u              /* BKP: descriptors in one install */
 #define SE_LIVE_MAX_TRACE_DESCS  256u               /* TRACE: descriptors in one install */
@@ -356,6 +382,80 @@
  *   then 'count' records: u8 present + u8 pad[3] + u64 mtime (unix seconds, LE; 0 unknown) */
 #define SE_LIVE_EMU_SLOTS     10u
 #define SE_LIVE_EMU_SLOT_LEN  12u
+
+/* Perf section (v26+): a trailing section after the v17 slot inventory, version-gated the same
+ * way. It carries the profiler counters of COMPLETED emulated frames -- one record per frame,
+ * produced when the emulator's frame function returns. Like the savestate stream it is a queue,
+ * not a field of the snapshot: the server keeps the most recent frames and each reply carries the
+ * ones this connection has not been sent yet (oldest first), so a client that skips a snapshot
+ * still receives every frame's record, and a paused emulator sends none. A connection's first
+ * reply carries at most the newest frame. All integers little-endian, no padding.
+ *
+ * ---- v27 form (server version >= 27) -- FROZEN; later work fills fields, it does not move them
+ *
+ *   section header
+ *     u32 count        records that follow (<= SE_LIVE_PERF_MAX_PER_REPLY); 0 = nothing new, or
+ *                      this build produces no counters
+ *     u64 newestSeq    the newest sampleSeq the server has published (0 = none yet). Lets a client
+ *                      drain to a known sequence instead of sleeping.
+ *     u64 lostFirst    }  the inclusive range of sampleSeq values the server dropped for THIS
+ *     u64 lostLast     }  connection immediately before the first record of this reply (its ring
+ *                      overwrote them before they were sent). Both 0 = nothing lost. When count > 0
+ *                      and the range is non-empty, lostLast + 1 == the first record's sampleSeq.
+ *                      Records merely deferred by SE_LIVE_PERF_MAX_PER_REPLY are not lost.
+ *   then per record
+ *     u32 length       bytes of this record that follow (<= SE_LIVE_PERF_MAX_LEN)
+ *     u64 sampleSeq    orders perf publications within one exporter run; never 0; 64-bit, so a
+ *                      32-bit wrap is not a restart
+ *     u32 timelineId   changes on every successful replacement of machine state (rewind, slot load,
+ *                      native load); valid only with SE_PERF_VALID_IDENTITY
+ *     u64 frameNo      the emulated frame within that timeline; valid only with
+ *                      SE_PERF_VALID_IDENTITY
+ *     u32 mode         the SE_LIVE_PROF_* flags LATCHED for this frame (the frame ran in exactly
+ *                      this mode); with SE_PERF_VALID_MODE clear it is only the flags in force when
+ *                      the record was published
+ *     u32 cacheMode    SE_PERF_CACHE_*; valid only with SE_PERF_VALID_CACHE
+ *     u32 valid        SE_PERF_VALID_* (SePerfCounters.h): which v27-only fields are real. A clear
+ *                      bit means "not available", never a measured zero
+ *     u32 satFlags     SE_PERF_SAT_*; valid only with SE_PERF_VALID_OTHER
+ *     u64 otherNotAdmitted[2]   master, slave: cycles of functions the per-frame table refused to
+ *                      admit (table full)
+ *     u64 otherEvicted[2]       master, slave: cycles of functions evicted from the top
+ *                      SE_LIVE_PERF_FN_MAX when the table was truncated. Both Other arrays valid
+ *                      only with SE_PERF_VALID_OTHER; 0 is a measurement only then
+ *     u32 counterCount (<= SE_LIVE_PERF_MAX_COUNTERS) then counterCount u64 counters, in
+ *                      SePerfCounters.h order (62 from a v27 server). A newer server may send more;
+ *                      the client skips the surplus and treats missing ones as not available.
+ *     u32 fnCount      (<= SE_LIVE_PERF_FN_MAX) then fnCount { u32 key, u32 cycles }: the functions
+ *                      the SH-2s spent the most cycles in, hottest first. Empty unless
+ *                      SE_LIVE_PROF_FUNCTIONS was in force. Key: SePerfCounters.h.
+ *     u32 fnOtherCycles  attributed cycles that did not fit in the fnCount records. With
+ *                      SE_PERF_VALID_OTHER it equals the sum of the four Other words, saturated at
+ *                      0xFFFFFFFF; otherwise it is the producer's single remainder, as in v26
+ *   Fixed part: 80 bytes (8+4+8+4+4+4+4+32 = 68, +4 counterCount +4 fnCount +4 fnOtherCycles).
+ *
+ * ---- v26 form (server version == 26) -- still parsed by a v27 client
+ *   section header: u32 count only (<= SE_LIVE_PERF_MAX_PER_REPLY)
+ *   per record: u32 length, u32 seq (completed frames, monotonic per emulator run, never 0),
+ *               u32 flags (SE_LIVE_PROF_* in force), u32 counterCount + u64 counters (54 from a
+ *               v26 server; index 6 is the ELAPSED VDP1 figure), u32 fnCount + fn records,
+ *               u32 fnOtherCycles.
+ *   A v27 client presents such a record as: sampleSeq = seq, no identity, no latched mode, no cache
+ *   mode, no Other split, every v27-only counter "not available", and index 6 as the old
+ *   "VDP1 drawing" figure under its old label.
+ *
+ * Compatibility: a v27 client reads both forms by the negotiated server version. A v26 client
+ * rejects a v27 server at its version check (and a v25 client already rejects v26): emulator and
+ * app are updated together. A client reads 'length' bytes per record whatever it understands of
+ * them, so fields appended to a record by a newer server are skipped rather than desynchronizing
+ * the stream. The section HEADER is not length-delimited, which is why its change needed v27. */
+#define SE_LIVE_PERF_MAX_PER_REPLY 8u
+#define SE_LIVE_PERF_FN_MAX      64u
+#define SE_LIVE_PERF_FN_LEN      8u
+#define SE_LIVE_PERF_MAX_COUNTERS 256u   /* sanity bound a client applies to counterCount */
+#define SE_LIVE_PERF_FIXED_LEN   80u     /* v27 record bytes outside the counter and function arrays */
+#define SE_LIVE_PERF_FIXED_LEN_V26 20u
+#define SE_LIVE_PERF_MAX_LEN     (SE_LIVE_PERF_FIXED_LEN + SE_LIVE_PERF_MAX_COUNTERS * 8u + SE_LIVE_PERF_FN_MAX * SE_LIVE_PERF_FN_LEN)
 
 /* Memory-edit blob (v16), carried inside an LST payload and applied by the emulator right
  * after the savestate restore. Layout:
@@ -404,7 +504,7 @@
 #define SE_LIVE_WRAM_LOW_LEN    0x100000u
 #define SE_LIVE_WRAM_HIGH_LEN   0x100000u
 #define SE_LIVE_VDP1_FB_LEN     0x40000u   /* VDP1 frame buffer (drawn output) */
-#define SE_LIVE_CONTROL_LEN     56u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each)
+#define SE_LIVE_CONTROL_LEN     60u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each)
                                            * + (v19) restore_done(u32) + restore_failed(u32). Every
                                            * accepted LST/ELS ends in exactly one: done counts once
                                            * the first frame of the restored timeline is in the
@@ -417,6 +517,13 @@
                                            * not been published yet. A client that has caught up
                                            * (served frame == latest_frame) with step_pending == 0
                                            * is looking at the end of the step.
+                                           * Both are emulated-FRAME labels. Since the server
+                                           * orders the ring by its own delivery sequence (a halt
+                                           * and the frame it is inside can carry the same label),
+                                           * served frame == latest_frame means "the same frame
+                                           * label", NOT "every snapshot has been consumed": a
+                                           * caller must keep issuing GETs to receive a snapshot
+                                           * that is queued behind one with an equal label.
                                            * (v21) stop_seq(u32 @+40): the sequence number of the
                                            * stop in {reason,cpu,pc}; it advances with every halt
                                            * the emulator publishes and is not reset by a resume
@@ -427,7 +534,25 @@
                                            * not apply (mailbox full, no writer wired, or a window
                                            * the emulator cannot write); caps(u32 @+52): the
                                            * SE_LIVE_CAP_* bits below. Both counters are monotonic
-                                           * per emulator run and wrap at 2^32. */
+                                           * per emulator run and wrap at 2^32.
+                                           * (v27, no version bump) snapshot_timeline(u32 @+56): the
+                                           * machine-state timeline (the perf record's timelineId, bumped
+                                           * on every replacement of machine state) of THE SNAPSHOT THIS
+                                           * REPLY CARRIES -- stamped when the slot was written, not when
+                                           * the reply was built. 0 = unknown. It is the one number that
+                                           * says which timeline the memory bytes in this very reply
+                                           * belong to: the perf records beside them are drained from a
+                                           * separate queue and can be of a newer timeline than a slot a
+                                           * lagging GET is still serving, and a native load leaves the
+                                           * pre-load slots in the ring. Compatibility: the control block's
+                                           * length is in the header and a parser reads only the fields it
+                                           * knows (a v27 parser accepts up to 64 bytes and reads 56), so a
+                                           * server that sends 60 bytes still works with a client that
+                                           * does not know the field, and a client reading a 56-byte block
+                                           * from an older server reports the timeline as unknown. No
+                                           * version bump on purpose: one would make every v27 client
+                                           * refuse the server at its version check. */
+#define SE_LIVE_CONTROL_TIMELINE_OFFSET 56
 /* Server capability bits (control block +52, v23+). */
 #define SE_LIVE_CAP_VDP_POKE    1u   /* a poke to the CRAM (0x05F00000..) or VDP1 frame buffer
                                       * (0x05C80000..) window is applied; without it the emulator's bus
@@ -442,6 +567,20 @@
 #define SE_LIVE_CAP_INSN_STEP   32u  /* IST single-steps the halted CPU */
 #define SE_LIVE_CAP_TRACEPOINTS 64u  /* TRC tracepoints fire */
 #define SE_LIVE_CAP_EMU_SAVE   128u  /* ESV saves the emulator's own slots (v25+) */
+#define SE_LIVE_CAP_PROFILER    256u  /* the perf block carries real counters (v26+). Semantics (v27, F14):
+                                       * set from the FIRST reply of any counter-capable build, before
+                                       * its first sample exists -- a build that will produce counters
+                                       * says so up front. Independent of SE_LIVE_CAP_PROF_FUNCTIONS. */
+#define SE_LIVE_CAP_PROF_FUNCTIONS 512u /* PRF's SE_LIVE_PROF_FUNCTIONS works: the emulator has the
+                                      * per-instruction hook (a debugger build) to attribute with.
+                                      * Set from the first reply of a debugger-enabled build; a
+                                      * counter-capable build WITHOUT debugger support advertises
+                                      * only SE_LIVE_CAP_PROFILER (before its first sample) and
+                                      * leaves this clear. A debugger-enabled build advertises both.
+                                      * Both bits are right in the very first reply: the emulator
+                                      * registers its hooks and declares counters (SeExportPrepare /
+                                      * SeExportSetPerfCapable) before listeners are admitted
+                                      * (SeExportStart). */
 #define SE_LIVE_MINVER_CAPS     24u  /* servers older than this report only SE_LIVE_CAP_VDP_POKE */
 #define SE_LIVE_MINVER_POKEINFO 23u  /* servers older than this send no poke counters or caps */
 #define SE_LIVE_SH2_REGS_LEN    92u        /* one CPU: 23 u32 (R[16],SR,GBR,VBR,MACH,MACL,PR,PC) */

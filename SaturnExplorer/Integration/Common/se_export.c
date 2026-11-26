@@ -16,6 +16,7 @@
 
 #include "se_export.h"
 #include "SeLiveProtocol.h"
+#include "SePerfCounters.h"
 #include "SeStateCodec.h"   /* XOR + RLE savestate delta codec (v16 rewind) */
 
 #include <stdint.h>
@@ -32,6 +33,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -69,6 +71,7 @@ typedef struct
     int has_cd;                /* 1 if this frame captured CD status */
     int valid;
     unsigned long long stop;   /* sStopWord when this slot was published; see the reply */
+    unsigned int timeline;     /* sTimelineId when the slot was written: the timeline its BYTES belong to */
 } SeFrame;
 
 /* Build the hardware-offset, big-endian VDP1 register image from Yabause's Vdp1
@@ -104,6 +107,15 @@ static void SeBuildVdp1Image(const unsigned char* dst_img, const void* vdp1struc
 #define SE_RING 4
 static SeFrame* sRing[SE_RING];
 static uint64_t sRingFrame[SE_RING];   /* frame number stored in each slot (0 = empty) */
+/* DELIVERY sequence. Every snapshot written to the ring -- a halt's or a normal frame's -- takes the next
+ * number of one strictly monotonic counter (sRingSeq[slot] = ++sDeliverySeq, under the lock; never reset
+ * by a restore, only by SeExportInit). It orders the ring and is what a GET's "newer than what this
+ * connection was last served" is decided on. It is NOT the frame identity: sRingFrame is the number the
+ * reply header shows and the client displays / rewinds to, and two snapshots (a halt and the frame it is
+ * inside) can show the same one. The mapping slot -> (delivery number, frame) is this pair of arrays. */
+static uint64_t sRingSeq[SE_RING];
+static uint64_t sDeliverySeq;
+static unsigned int sRingEpoch;        /* bumped whenever the ring is emptied by a restore */
 static int      sRingWrite;            /* next slot the producer will write */
 static volatile int sRunning;
 
@@ -211,6 +223,59 @@ static void SeStepFramePublished(void)
     }
 }
 static volatile unsigned long long sFrameNo;
+
+/* ---- Three different numbers, not to be confused:
+ *   1. The RESERVED perf identity (sIdFrame / SeIdReserve, read by SeExportFrameIdentity and committed
+ *      once in SeExportEndFrame): the emulated frame under execution. Halts never touch it.
+ *   2. The COMMITTED frame number sFrameNo (0 before the first frame completes): what the ring shows
+ *      for a normal snapshot, and what the event queue (sEvQ[].frame), call-stack frames
+ *      (SeCallFrame.frameNo) and tracepoint records are stamped with at the moment they are produced.
+ *      Those stamps therefore read 0 -- or the previous frame's number -- for anything that happens
+ *      before the frame in progress commits, including everything before the first normal snapshot or
+ *      end of frame. They are display hints, never keys.
+ *   3. The snapshot DELIVERY sequence (sRingSeq): one number per ring write, halts included, strictly
+ *      monotonic and never reused; it is what a GET's "newer than what this connection saw" is
+ *      decided on. It is server-side only (the reply header keeps showing the emulated frame number).
+ *
+ * ---- Frame identity for the profiler (F3). A record is stamped (timeline, frame) by the producer.
+ * The frame under execution has its number reserved at the top-of-frame gate -- after a pending
+ * load was applied, before the guest runs -- and committed once when Emulate() completes
+ * (SeExportEndFrame). Snapshots (ordinary and mid-frame halts) and the end-of-frame perf record all
+ * read the same reservation, so a frame that took no snapshot (NeedSoundReverse) or took several
+ * halts still reports its own number. The timeline changes on every successful replacement of
+ * machine state: an SE rewind or slot load (SeStateAfterRestore) or a native load that reaches
+ * SeExportNotifyStateLoaded. Emulate thread only, except sTimelineId which is atomic. ---- */
+static volatile int sTimelineId = 1;
+static unsigned long long sIdFrame;     /* number of the frame now executing */
+static int sIdOpen;                      /* sIdFrame is reserved and not yet committed */
+static int sIdSnapped;                   /* a normal snapshot already took sIdFrame (no EndFrame yet) */
+static int sInSeLoad;                    /* an SE-initiated load is running: its PostStateLoad is not a second change */
+
+/* Reserve the number of the frame about to run. */
+static void SeIdReserve(void)
+{
+    sIdFrame = sFrameNo + 1;
+    sIdOpen = 1;
+    sIdSnapped = 0;
+}
+
+int SeExportFrameIdentity(unsigned int* timelineId, unsigned long long* frameNo)
+{
+    if (timelineId) *timelineId = (unsigned int)SeAtLoad(&sTimelineId);
+    if (frameNo) *frameNo = sIdOpen ? sIdFrame : sFrameNo + 1;
+    return 1;
+}
+
+static void SeBumpTimeline(void)
+{
+    if (SeAtAddFetch(&sTimelineId, 1) == 0) SeAtStore(&sTimelineId, 1);   /* 0 is never a timeline */
+}
+
+void SeExportNotifyStateLoaded(void)
+{
+    if (sInSeLoad) return;   /* SeStateAfterRestore owns this change */
+    SeBumpTimeline();
+}
 
 /* ---- Stop-event state (v5+). When the emulator halts on an execution
  * breakpoint, Yabause's breakpoint callback calls SeExportNotifyStop(); the next
@@ -348,12 +413,97 @@ typedef struct {
     unsigned long long cycle;
     unsigned int frameNo;
     unsigned int kind;           /* SE_FRAME_* — internal, not on the wire */
+    unsigned int trust;          /* sOwnTrust[cpu] when pushed; a frame from an older trust epoch proves nothing (F9) */
+    unsigned char parentKnown;   /* ownership was known when this frame was pushed (F9) */
 } SeCallFrame;
 static SeCallFrame sCallStack[2][SE_CALLSTACK_CAP];
 static unsigned int sCallDepth[2];   /* frames stored (saturates at CAP) */
 /* Frames deeper than we store. Counted rather than dropped so their returns unwind the
  * counter instead of deleting a stored frame that is still live. */
 static unsigned int sCallOverflow[2];
+/* Function ownership (F9). The innermost frame NAMES the function that is running only while we
+ * know that it does. Per CPU:
+ *   sOwnKnown  1 = the innermost frame's function is the code now executing. It becomes 1 when a
+ *              call is observed (the callee's entry is then known) and when a return lands back in
+ *              a parent that was itself known; it becomes 0 on an actual exception entry, on loss
+ *              of continuous observation, on reset / load, on a computed transfer (jmp / braf) that
+ *              may be a tail call, and on a return into a parent that was not known.
+ *   sOwnTrust  bumped when observation was lost: frames pushed before that cannot restore
+ *              ownership, because what they describe may have returned unseen.
+ * While unknown, SeExportCurrentFunction says 0 and the profiler charges the raw PC bucket. */
+static unsigned char sOwnKnown[2];
+static unsigned int sOwnTrust[2];
+
+/* Function extents for unconditional jumps (F9 follow-up). Per CPU, from OBSERVED evidence only:
+ *   entries   every address a call (bsr / bsrf / jsr) was seen to enter, sorted; an entry is never
+ *             evicted, and when the table is full a new one is simply not recorded (a jump to it is
+ *             then raw, never named);
+ *   hi        per entry, the furthest PC executed while that function was the owner, kept across
+ *             invocations. It starts at the entry and only grows, one instruction presentation at a time
+ *             (a larger step is not a function's straight-line code and extends nothing).
+ * Both are dropped with the stack (reset / load / disable), because they describe the code that ran there.
+ * The current owner's hi is cached (sHiFn / sHi) and written back when the owner changes. */
+#define SE_OWN_ENTRY_CAP   1024u
+#define SE_OWN_HI_STEP     0x400u    /* the largest forward step in the PC that still extends the extent */
+#define SE_OWN_FWD_WINDOW  0x1000u   /* how far past hi a jump out of a still-live function is believed (bra's own reach) */
+static unsigned int sEntryAddr[2][SE_OWN_ENTRY_CAP];
+static unsigned int sEntryHi[2][SE_OWN_ENTRY_CAP];
+static unsigned int sEntryCount[2];
+static unsigned int sHiFn[2], sHi[2];
+
+/* Index of the first entry >= addr (binary search). */
+static unsigned int SeEntryLower(int c, unsigned int addr)
+{
+    unsigned int lo = 0, hi = sEntryCount[c];
+    while (lo < hi)
+    {
+        const unsigned int mid = lo + (hi - lo) / 2u;
+        if (sEntryAddr[c][mid] < addr) lo = mid + 1u; else hi = mid;
+    }
+    return lo;
+}
+static int SeEntryIsKnown(int c, unsigned int addr)
+{
+    const unsigned int i = SeEntryLower(c, addr);
+    return i < sEntryCount[c] && sEntryAddr[c][i] == addr;
+}
+static void SeEntryAdd(int c, unsigned int addr)
+{
+    unsigned int i;
+    if (!addr || sEntryCount[c] >= SE_OWN_ENTRY_CAP) return;
+    i = SeEntryLower(c, addr);
+    if (i < sEntryCount[c] && sEntryAddr[c][i] == addr) return;
+    memmove(&sEntryAddr[c][i + 1], &sEntryAddr[c][i], (sEntryCount[c] - i) * sizeof sEntryAddr[c][0]);
+    memmove(&sEntryHi[c][i + 1], &sEntryHi[c][i], (sEntryCount[c] - i) * sizeof sEntryHi[c][0]);
+    sEntryAddr[c][i] = addr;
+    sEntryHi[c][i] = addr;
+    ++sEntryCount[c];
+}
+static void SeHiFlush(int c)
+{
+    if (sHiFn[c])
+    {
+        const unsigned int i = SeEntryLower(c, sHiFn[c]);
+        if (i < sEntryCount[c] && sEntryAddr[c][i] == sHiFn[c] && sHi[c] > sEntryHi[c][i]) sEntryHi[c][i] = sHi[c];
+    }
+}
+static void SeHiSelect(int c, unsigned int fn)
+{
+    unsigned int i;
+    SeHiFlush(c);
+    sHiFn[c] = fn;
+    sHi[c] = fn;
+    i = SeEntryLower(c, fn);
+    if (i < sEntryCount[c] && sEntryAddr[c][i] == fn) sHi[c] = sEntryHi[c][i];
+}
+/* The furthest PC executed under 'fn' as owner (fn itself when nothing more is known). */
+static unsigned int SeHiOf(int c, unsigned int fn)
+{
+    unsigned int i;
+    if (sHiFn[c] == fn) return sHi[c];
+    i = SeEntryLower(c, fn);
+    return (i < sEntryCount[c] && sEntryAddr[c][i] == fn) ? sEntryHi[c][i] : fn;
+}
 
 /* ---- Breakpoint hooks (v5+). se_export stays free of Yabause headers: apply.py
  * wires these to Yabause's SH2 breakpoint API. SeAddExecBp(cpu, addr) installs one
@@ -464,6 +614,10 @@ static pthread_t sThread;
 static pthread_t sTcpThread;
 static int sTcpThreadStarted = 0;
 static pthread_mutex_t sLock = PTHREAD_MUTEX_INITIALIZER;
+/* The published listening sockets (-1 = none). Written by a listener thread when it is up and by
+ * SeExportDeinit, so both go through SeAtXchg; whoever swaps the fd out owns closing it. Deinit
+ * closing a descriptor the thread then closed again (or the thread closing one the emulator had
+ * meanwhile been handed the same number for) was a double close; see SeCloseListener. */
 static int sListenFd = -1;
 static int sTcpListenFd = -1;
 /* The accepted client of each listener (-1 = none), so shutdown can interrupt a server thread
@@ -637,6 +791,10 @@ static unsigned           sPendingStateEpoch;
 static void SeServiceEmuSave(void);
 void SeExportEndFrame(void)
 {
+    /* Commit the frame's identity, once, whether or not it took a snapshot. */
+    sFrameNo = sIdOpen ? sIdFrame : sFrameNo + 1;
+    sIdOpen = 0;
+    sIdSnapped = 0;
     SeServiceEmuSave();   /* a frame just ended: the state is whole */
     if (!sPendingState) return;
     sPendingState = 0;
@@ -687,9 +845,10 @@ static void SeRestoreFailed(void)
 static void SeStateAfterRestore(void)
 {
     SE_LOCK();
-    { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
+    { int i; for (i = 0; i < SE_RING; ++i) { sRingFrame[i] = 0; sRingSeq[i] = 0; } sRingWrite = 0; ++sRingEpoch; }
     ++sRestoreAckPending;   /* each restore is counted done when the next frame lands in the emptied ring */
     SE_UNLOCK();
+    SeBumpTimeline();   /* the machine was replaced: the next frame belongs to a new timeline */
     /* The restored machine has its own, different SH-2 stacks; every frame we recorded
      * belongs to the timeline we just abandoned, and the returns that would have unwound
      * them will never execute. Drop them rather than let them sit under whatever the
@@ -714,13 +873,18 @@ static void SeStateApplyLoad(const unsigned char* buf, size_t len)
     if ((size_t)8 + edits_len > len) { SeRestoreFailed(); return; }   /* malformed */
     state = buf + 8 + edits_len;
     state_len = len - 8 - (size_t)edits_len;
-    if (sLoadState(state, state_len) == 0)
+    sInSeLoad = 1;   /* the emulator's own PostStateLoad notification is this load, not a second one */
     {
-        SeStateApplyEdits(buf + 8, edits_len);   /* patch RAM on top of the restore */
-        sFrameNo = frame;
-        SeStateAfterRestore();
+        const int loaded = sLoadState(state, state_len);
+        sInSeLoad = 0;
+        if (loaded == 0)
+        {
+            SeStateApplyEdits(buf + 8, edits_len);   /* patch RAM on top of the restore */
+            sFrameNo = frame;                        /* the first frame after a rewind to N is N + 1 */
+            SeStateAfterRestore();
+        }
+        else { SeExportLog("rewind: load state failed"); SeRestoreFailed(); }
     }
-    else { SeExportLog("rewind: load state failed"); SeRestoreFailed(); }
 }
 
 static void SeStateConsumeLoad(void)
@@ -900,6 +1064,106 @@ static void SeLogPortDevices(void)
  * flag: on POSIX the local socket and the web-bridge TCP port are served by two threads. */
 static volatile int sClients;
 
+/* ---- Profiler (v26, record v27). Two halves with different costs.
+ *
+ * The hardware counters are kept by the emulator all the time (a handful of adds on paths that
+ * already do far more work) and handed over once per frame by SeExportPublishPerf, already
+ * serialized into a wire record here so the server thread only copies bytes. The last
+ * SE_PERF_RING frames are kept, each numbered, and a reply carries the ones its connection has
+ * not been sent yet: a client that skips a snapshot (the snapshot ring is 4 deep and a GET may be
+ * served the latest) still gets every frame's counters, which a per-frame history needs.
+ *
+ * Function attribution needs the emulator's per-instruction hook, which is several times slower
+ * than its fast loop, so it is strictly opt-in: the PRF verb publishes the flags the client
+ * wants, and the emulate thread applies them at its next frame boundary or gate (the hook may
+ * only be changed there, like a breakpoint install). ---- */
+typedef void (*SeSetProfilerFn)(unsigned int flags);
+static SeSetProfilerFn sSetProfiler;
+/* F1: the request belongs to a connection. Each live connection owns a slot for as long as
+ * SeServeClient runs; sProfWanted is the OR of the slots, recomputed under SE_LOCK whenever one
+ * joins, changes or leaves, so a client's request can neither outlive its connection nor leak into
+ * another's. The emulate thread applies sProfWanted and publishes the result in sProfApplied: the
+ * single value everything downstream (the attribution mode a frame is latched with) reads. */
+#define SE_PROF_SLOTS 8
+static int sProfSlotUsed[SE_PROF_SLOTS];      /* guarded by SE_LOCK */
+static int sProfSlotFlags[SE_PROF_SLOTS];     /* guarded by SE_LOCK */
+static volatile int sProfWanted;      /* OR of every connection's request (written under SE_LOCK) */
+static volatile int sProfPending;     /* sProfWanted changed and has not been applied */
+static volatile int sProfApplied;     /* what the emulator is running with (emulate thread writes) */
+static int sProfAtBoundary;           /* F6: emulate thread is at a frame boundary: a profiler change may be applied now */
+static volatile int sPerfWired;       /* the emulator has handed over counters at least once */
+static volatile int sPerfCapable;     /* the build produces counters (declared up front, F14) */
+#define SE_PERF_RING 16u
+static unsigned char sPerfBlk[SE_PERF_RING][SE_LIVE_PERF_MAX_LEN];   /* guarded by SE_LOCK */
+static unsigned int  sPerfLen[SE_PERF_RING];
+static unsigned long long sPerfSeqOf[SE_PERF_RING];   /* 0 = empty slot */
+static unsigned long long sPerfSeq;                   /* publications so far; 64-bit, never wraps in practice */
+
+void SeExportSetProfilerHook(void (*set)(unsigned int flags))
+{
+    sSetProfiler = set;
+}
+
+/* The build produces counters. Declared at startup, before listeners are admitted, so the first
+ * reply already advertises SE_LIVE_CAP_PROFILER instead of waiting for the first publication. */
+void SeExportSetPerfCapable(int capable)
+{
+    SeAtStore(&sPerfCapable, capable ? 1 : 0);
+}
+
+unsigned int SeExportProfilerFlags(void)
+{
+    return (unsigned int)SeAtLoad(&sProfApplied);
+}
+
+/* Caller holds SE_LOCK. Recompute the union and tell the emulate thread, only on a change. */
+static void SeProfRecomputeLocked(void)
+{
+    int i, want = 0;
+    for (i = 0; i < SE_PROF_SLOTS; ++i)
+        if (sProfSlotUsed[i]) want |= sProfSlotFlags[i];
+    if (want != SeAtLoad(&sProfWanted))
+    {
+        SeAtStore(&sProfWanted, want);
+        SeAtStore(&sProfPending, 1);
+    }
+}
+
+/* A connection starts with no request. -1 when every slot is taken (that connection cannot ask). */
+static int SeProfAcquire(void)
+{
+    int i, got = -1;
+    SE_LOCK();
+    for (i = 0; i < SE_PROF_SLOTS; ++i)
+        if (!sProfSlotUsed[i]) { sProfSlotUsed[i] = 1; sProfSlotFlags[i] = 0; got = i; break; }
+    SE_UNLOCK();
+    return got;
+}
+
+static void SeProfSetRequest(int slot, unsigned int flags)
+{
+    if (slot < 0 || slot >= SE_PROF_SLOTS) return;
+    SE_LOCK();
+    if (sProfSlotUsed[slot])
+    {
+        sProfSlotFlags[slot] = (int)(flags & SE_LIVE_PROF_FUNCTIONS);
+        SeProfRecomputeLocked();
+    }
+    SE_UNLOCK();
+}
+
+/* Every way a connection ends passes through here (SeServeClient wraps all three accept sites,
+ * POSIX local and TCP, and the Windows pipe). */
+static void SeProfRelease(int slot)
+{
+    if (slot < 0 || slot >= SE_PROF_SLOTS) return;
+    SE_LOCK();
+    sProfSlotUsed[slot] = 0;
+    sProfSlotFlags[slot] = 0;
+    SeProfRecomputeLocked();
+    SE_UNLOCK();
+}
+
 void SeExportSetDebugCaps(unsigned int caps)
 {
     SeAtStore(&sDebugCaps, caps & (SE_LIVE_CAP_EXEC_BP | SE_LIVE_CAP_MEM_WATCH |
@@ -934,6 +1198,9 @@ static void SeOnClientDisconnect(void)
      * fork) and its events would stream to whichever client attaches next. */
     SePublishTracepoints(NULL, 0);
     SeAtStore(&sRewindWanted, 1);   /* the next client states its own setting; don't inherit this one's */
+    /* Function attribution: nothing to do here. Each connection released its own request when it
+     * ended (SeProfRelease), so the union is already what the remaining clients (none, here) want;
+     * zeroing it again here could overwrite a client that connected since (F1). */
     SE_LOCK();
     sEvHead = sEvCount = 0;   /* events fired for the client that left are its own */
     SeCancelSteps();
@@ -1139,6 +1406,22 @@ static void SeApplyPendingInstalls(void)
         SE_SUNLOCK();
         if (sSetTracepoints) sSetTracepoints(n, sTpApply);
     }
+    /* F6: only between frames. The mode is latched for a whole frame, so a request that arrives
+     * during a mid-frame halt or snapshot waits (sProfPending stays set) for the next boundary. */
+    if (sProfAtBoundary && SeAtLoad(&sProfPending))
+    {
+        /* Cleared before the read: a PRF that lands in between sets it again and is applied next
+         * time, so the last request always wins. */
+        SeAtStore(&sProfPending, 0);
+        {
+            const int want = sSetProfiler ? SeAtLoad(&sProfWanted) : 0;
+            if (want != SeAtLoad(&sProfApplied))
+            {
+                SeAtStore(&sProfApplied, want);
+                if (sSetProfiler) sSetProfiler((unsigned int)want);
+            }
+        }
+    }
 }
 
 /* Common to every halt: the step that was in progress is over (a breakpoint on the OTHER CPU can
@@ -1234,7 +1517,17 @@ int SeExportInsnStepTick(int cpu, unsigned int pc, int selfBranchTaken)
     return 0;
 }
 
+/* F6: a call made BETWEEN frames (the glue's end-of-frame hook, after the record was published; a
+ * test standing in for it): everything pending, the profiler request included, takes effect for the
+ * next frame. SeExportApplyInstallsMidFrame is the same without the profiler request. */
 void SeExportApplyInstalls(void)
+{
+    sProfAtBoundary = 1;
+    SeApplyPendingInstalls();
+    sProfAtBoundary = 0;
+}
+
+void SeExportApplyInstallsMidFrame(void)
 {
     SeApplyPendingInstalls();
 }
@@ -1274,7 +1567,9 @@ static int SeGateDecide(int frameBoundary)
     /* Install what the server thread has published (breakpoints, tracepoints) -- here, on the
      * emulate thread, because it is the only one that reads them. This is also reached from the halt
      * gate, so an edit made while a breakpoint holds the CPU still lands. */
+    sProfAtBoundary = frameBoundary;
     SeApplyPendingInstalls();
+    sProfAtBoundary = 0;
     /* A load (LST or ELS) is applied only at a frame boundary. The halt gate spins inside the CPU
      * hook, part-way through an instruction dispatch and a frame: a state loaded there is resumed by a
      * run loop holding the abandoned timeline's locals, and the machine that comes out differs from
@@ -1310,7 +1605,14 @@ static int SeGateDecide(int frameBoundary)
         const int slot = pendingSlot - 1;
         if (pendingSlot != 0)
         {
-            if (sEmuSlotLoad && sEmuSlotLoad((unsigned int)slot) == 0)
+            int loaded = -1;
+            if (sEmuSlotLoad)
+            {
+                sInSeLoad = 1;
+                loaded = sEmuSlotLoad((unsigned int)slot);
+                sInSeLoad = 0;
+            }
+            if (loaded == 0)
             {
                 SeStateAfterRestore();
             }
@@ -1356,7 +1658,9 @@ static int SeGateRelease(int frameBoundary)
      * top of the gate ran before the pause check, and a resume landing between the two released the
      * CPU with its temporary breakpoint (Step Over, Run to Cursor) still unapplied, which a short
      * subroutine can run straight past. */
-    if (run) SeApplyPendingInstalls();
+    if (run) { sProfAtBoundary = frameBoundary; SeApplyPendingInstalls(); sProfAtBoundary = 0; }
+    /* The frame about to run: any pending load has been applied, the guest has not started. */
+    if (run && frameBoundary) SeIdReserve();
     return run;
 }
 
@@ -1510,6 +1814,7 @@ static void SePushCallFrame(int cpu, unsigned int kind, unsigned int callSite,
 {
     int c = cpu ? 1 : 0;
     SE_LOCK();
+    if (kind == SE_FRAME_CALL) SeEntryAdd(c, func);   /* an observed call: func is where a function starts */
     if (sCallDepth[c] < SE_CALLSTACK_CAP)
     {
         SeCallFrame* f = &sCallStack[c][sCallDepth[c]];
@@ -1517,7 +1822,10 @@ static void SePushCallFrame(int cpu, unsigned int kind, unsigned int callSite,
         f->cycle = cycle;
         f->frameNo = (unsigned int)(sFrameNo & 0xFFFFFFFFu);
         f->kind = kind;
+        f->trust = sOwnTrust[c];
+        f->parentKnown = sOwnKnown[c];
         ++sCallDepth[c];
+        sOwnKnown[c] = 1;      /* a call we watched: its target is the function now running */
     }
     else ++sCallOverflow[c];
     SE_UNLOCK();
@@ -1535,38 +1843,314 @@ void SeExportPushExceptionFrame(int cpu, unsigned int site, unsigned int handler
     SePushCallFrame(cpu, SE_FRAME_EXCEPTION, site, handler, ret, sp, cycle);
 }
 
+/* After a return that removed 'f' and landed on 'landing': the parent is known again only if it
+ * was known when the call was made, nothing since made the frame untrustworthy, and the return
+ * really did land where the call said it would. Anything else leaves ownership unknown. */
+static void SeOwnAfterReturn(int c, const SeCallFrame* f, unsigned int landing, int haveLanding)
+{
+    sOwnKnown[c] = (unsigned char)(f && haveLanding && f->parentKnown && f->trust == sOwnTrust[c] &&
+                                   landing == f->ret);
+}
+
 /* rts. Unwinds the overflow first (those frames are the innermost), then a stored frame —
  * but only a call frame: an rts cannot return across an exception boundary, so meeting an
- * exception frame means this rts belongs to a call made before recording started. */
-void SeExportPopFrame(int cpu)
+ * exception frame means this rts belongs to a call made before recording started.
+ * 'landing' is the PC the return arrived at (haveLanding 0: not known, ownership stays unknown). */
+static void SePopCallFrame(int cpu, unsigned int landing, int haveLanding)
 {
     int c = cpu ? 1 : 0;
     SE_LOCK();
-    if (sCallOverflow[c]) --sCallOverflow[c];
+    if (sCallOverflow[c]) --sCallOverflow[c];   /* ownership is already "unknown" while frames overflowed */
     else if (sCallDepth[c] && sCallStack[c][sCallDepth[c] - 1].kind == SE_FRAME_CALL)
+    {
+        SeOwnAfterReturn(c, &sCallStack[c][sCallDepth[c] - 1], landing, haveLanding);
         --sCallDepth[c];
+    }
+    else sOwnKnown[c] = 0;                      /* a return from code that was running before recording */
     SE_UNLOCK();
 }
+
+void SeExportPopFrame(int cpu) { SePopCallFrame(cpu, 0, 0); }
+void SeExportPopFrameAt(int cpu, unsigned int landing) { SePopCallFrame(cpu, landing, 1); }
 
 /* rte, with R15 as the instruction sees it. Unwinds the exception frame this rte returns
  * from — identified by that R15, which SH-2 rte pops PC and SR from and which therefore
  * equals the sp recorded at the entry. No match means the exception was one we never
  * observed (asynchronous interrupts execute no instruction we can hook), and the call
  * stack must be left exactly as it is. Unlike rts this never touches the overflow count:
- * a frame we could not store kept no sp to match against. */
-void SeExportPopExceptionFrame(int cpu, unsigned int sp)
+ * a frame we could not store kept no sp to match against.
+ *
+ * Two cases, kept apart (F9). An UNOBSERVED ASYNCHRONOUS interrupt (IRQ / NMI / fault) pushed no
+ * exception frame here, so its rte matches nothing and leaves ownership unknown: the interrupted
+ * function stays raw until an observed call establishes a new known callee, or its own matching
+ * rts proves the known caller again (returning from a handler's nested call into the unknown handler
+ * also stays unknown). An OBSERVED trapa recorded an exception frame with parent, return address and
+ * sp, so a matching rte may restore the parent when parentKnown is true, the trust epoch is current
+ * and the landing matches: observed evidence, not a reconstructed exception stack. */
+static void SePopExceptionFrame(int cpu, unsigned int sp, unsigned int landing, int haveLanding)
 {
     int c = cpu ? 1 : 0;
     SE_LOCK();
     if (sCallDepth[c])
     {
         const SeCallFrame* top = &sCallStack[c][sCallDepth[c] - 1];
-        if (top->kind == SE_FRAME_EXCEPTION && top->sp == sp) --sCallDepth[c];
+        if (top->kind == SE_FRAME_EXCEPTION && top->sp == sp)
+        {
+            SeOwnAfterReturn(c, top, landing, haveLanding);
+            --sCallDepth[c];
+            SE_UNLOCK();
+            return;
+        }
     }
+    sOwnKnown[c] = 0;   /* an rte we cannot match ends a handler we never saw begin: we land in unknown code */
     SE_UNLOCK();
 }
 
-static volatile unsigned int sCallStackEpoch;
+void SeExportPopExceptionFrame(int cpu, unsigned int sp) { SePopExceptionFrame(cpu, sp, 0, 0); }
+void SeExportPopExceptionFrameAt(int cpu, unsigned int sp, unsigned int landing)
+{
+    SePopExceptionFrame(cpu, sp, landing, 1);
+}
+
+/* F9: the code running on 'cpu' is no longer provably the innermost recorded frame's function: an
+ * exception was taken (asynchronous entry is not an instruction presentation), or a computed
+ * transfer that may be a tail call completed. The stack is kept -- a balanced handler or tail
+ * callee still returns through it -- but nothing is named until a call or a matching return
+ * proves ownership again. 'lostObservation' also distrusts every recorded frame: the CPU ran
+ * while nobody watched, so any of them may have returned unseen. */
+void SeExportOwnershipInvalidate(int cpu, int lostObservation)
+{
+    int c = cpu ? 1 : 0;
+    SE_LOCK();
+    sOwnKnown[c] = 0;
+    if (lostObservation) ++sOwnTrust[c];
+    SE_UNLOCK();
+}
+
+/* One instruction of 'cpu' at 'pc' is about to run (emulate thread only, like SeExportCurrentFunction, and
+ * only while attribution is on): while ownership is known it was executed by the owner, so the owner's
+ * extent grows to include it. */
+void SeExportNoteExecuted(int cpu, unsigned int pc)
+{
+    const int c = cpu ? 1 : 0;
+    const unsigned int depth = sCallDepth[c];
+    unsigned int fn;
+    if (!depth || sCallOverflow[c] || !sOwnKnown[c]) return;
+    fn = sCallStack[c][depth - 1].func;
+    if (!fn) return;
+    if (fn != sHiFn[c]) SeHiSelect(c, fn);
+    if (pc > sHi[c] && pc - sHi[c] <= SE_OWN_HI_STEP) sHi[c] = pc;
+}
+
+/* An unconditional jump (bra, jmp @Rn, braf Rn) has COMPLETED: 'landing' is the first PC presented after
+ * its delay slot, which was charged to the jumper like any delay slot. What it says about ownership, only
+ * while ownership is known and the innermost frame is a call frame whose function is E:
+ *   1. landing == E, or E < landing <= hi(E) (the furthest PC already executed while E was the owner):
+ *      the function's own code. Ownership kept.
+ *   2. landing is a KNOWN ENTRY (an address an observed call entered on this CPU): a tail call. The frame
+ *      is not pushed and not popped; its function becomes the landing. Its return address, SP and the
+ *      frames below stay, so the callee's rts is matched against the same frame and lands on the original
+ *      caller exactly as the callee of a call from that caller would. Nothing is guessed: the landing is
+ *      where a function was observed to begin.
+ *   3. otherwise the jump leaves ground that has never been shown to be E's. It is believed to stay inside
+ *      E only when the registers at the landing show E still in its body (SP is not the SP the call saw, or
+ *      PR is not the call's return address: a tail call is made after the epilogue has restored both), the
+ *      landing is a forward move of at most SE_OWN_FWD_WINDOW past hi(E), and no known entry lies in
+ *      (E, landing] (another function begins there). That is the one rule here that is not proof: its
+ *      failure is a control transfer out of a live frame (a longjmp-like jump, shared tail code) to an
+ *      address no call ever entered, which keeps the old name until a return; a frameless function looks
+ *      exactly like a tail call and gets no benefit of the doubt.
+ *   4. anything else: unknown. The stack is kept; a call or a matching return proves ownership again.
+ * Returns SE_JUMP_NEED_REGS, having changed nothing, when only the registers can decide (the caller reads
+ * SP / PR at the landing and asks again with haveRegs). */
+int SeExportUncondJumpLanded(int cpu, unsigned int landing, int haveRegs, unsigned int sp, unsigned int pr)
+{
+    const int c = cpu ? 1 : 0;
+    int result = SE_JUMP_DONE;
+    SE_LOCK();
+    if (sOwnKnown[c])
+    {
+        const unsigned int depth = sCallDepth[c];
+        SeCallFrame* f = (depth && !sCallOverflow[c]) ? &sCallStack[c][depth - 1] : 0;
+        if (!f || f->kind != SE_FRAME_CALL || !f->func) sOwnKnown[c] = 0;
+        else
+        {
+            const unsigned int E = f->func;
+            const unsigned int hi = SeHiOf(c, E);
+            /* Order matters. An extent is an interval, not proof of every address in it: a forward
+             * jump can have grown it past code E skipped, and a later call can show that code to be
+             * another function. So a known entry outranks the extent, and E's own code -- already
+             * run or not -- is only ever an address with no known entry in (E, landing]. */
+            if (landing == E) { /* its own entry: kept */ }
+            else if (SeEntryIsKnown(c, landing)) f->func = landing;
+            else if (landing < E || !SeEntryIsKnown(c, E) ||
+                     sEntryAddr[c][SeEntryLower(c, landing) - 1u] != E) sOwnKnown[c] = 0;
+            else if (landing <= hi) { /* code E already ran, nothing known in between: kept */ }
+            else if (landing - hi <= SE_OWN_FWD_WINDOW)
+            {
+                if (!haveRegs) result = SE_JUMP_NEED_REGS;
+                else if (sp == f->sp && pr == f->ret) sOwnKnown[c] = 0;   /* in the state a tail call is made in */
+                /* else: still in its body, kept */
+            }
+            else sOwnKnown[c] = 0;
+        }
+    }
+    SE_UNLOCK();
+    return result;
+}
+
+/* The function the CPU is in, by the recorded stack: the innermost frame's entry address, or 0
+ * when nothing is recorded (code that was running before recording began). EMULATE THREAD ONLY --
+ * it is the sole writer of the stack, so it may read its own last write without the lock, and the
+ * profiler calls this once per instruction. */
+unsigned int SeExportCurrentFunction(int cpu)
+{
+    const int c = cpu ? 1 : 0;
+    const unsigned int depth = sCallDepth[c];
+    /* Frames deeper than the cap are counted, not stored: the stored top is then an ancestor of
+     * the running function, not the function itself. */
+    if (!depth || sCallOverflow[c] || !sOwnKnown[c]) return 0;   /* F9: only while ownership is known */
+    return sCallStack[c][depth - 1].func;
+}
+
+/* Hand over one completed frame's profile (emulate thread, once per frame). 'counters' are in
+ * SePerfCounters.h order; the function arrays are parallel, hottest first. Serialized here into
+ * the body of the v27 perf record so a reply only copies it. */
+static void SeWr64(unsigned char* p, unsigned long long v)
+{
+    SeWr32(p, (unsigned int)(v & 0xFFFFFFFFu));
+    SeWr32(p + 4, (unsigned int)((v >> 32) & 0xFFFFFFFFu));
+}
+
+void SeExportPublishPerf(const unsigned long long* counters, unsigned int count,
+                         const unsigned int* fnKeys, const unsigned int* fnCycles,
+                         unsigned int fnCount, unsigned int fnOtherCycles,
+                         const SeExportPerfInfo* info)
+{
+    unsigned char* p;
+    unsigned int i, slot;
+    SeExportPerfInfo none;
+    memset(&none, 0, sizeof none);
+    if (!info) info = &none;
+    if (count > SE_LIVE_PERF_MAX_COUNTERS) count = SE_LIVE_PERF_MAX_COUNTERS;
+    if (fnCount > SE_LIVE_PERF_FN_MAX) fnCount = SE_LIVE_PERF_FN_MAX;
+    if (!counters) count = 0;
+    if (!fnKeys || !fnCycles) fnCount = 0;
+    SE_LOCK();
+    ++sPerfSeq;   /* 64-bit: starts at 1, 0 means "no frame yet" on the wire, and it does not wrap */
+    slot = (unsigned int)(sPerfSeq % SE_PERF_RING);
+    p = sPerfBlk[slot];
+    /* v27 record, field order frozen in SeLiveProtocol.h. */
+    SeWr64(p, sPerfSeq);                                  p += 8;
+    SeWr32(p, info->timelineId);                          p += 4;
+    SeWr64(p, info->frameNo);                             p += 8;
+    SeWr32(p, (info->valid & SE_PERF_VALID_MODE) ? info->mode
+                                                 : (unsigned int)SeAtLoad(&sProfApplied)); p += 4;
+    SeWr32(p, info->cacheMode);                           p += 4;
+    SeWr32(p, info->valid & SE_PERF_VALID_ALL);           p += 4;
+    SeWr32(p, info->satFlags);                            p += 4;
+    for (i = 0; i < 2; ++i) { SeWr64(p, info->otherNotAdmitted[i]); p += 8; }
+    for (i = 0; i < 2; ++i) { SeWr64(p, info->otherEvicted[i]);     p += 8; }
+    SeWr32(p, count);                                     p += 4;
+    for (i = 0; i < count; ++i) { SeWr64(p, counters[i]); p += 8; }
+    SeWr32(p, fnCount);                                   p += 4;
+    for (i = 0; i < fnCount; ++i)
+    {
+        SeWr32(p, fnKeys[i]);
+        SeWr32(p + 4, fnCycles[i]);
+        p += SE_LIVE_PERF_FN_LEN;
+    }
+    SeWr32(p, fnOtherCycles);                             p += 4;
+    sPerfLen[slot] = (unsigned int)(p - sPerfBlk[slot]);
+    sPerfSeqOf[slot] = sPerfSeq;
+    SE_UNLOCK();
+    SeAtStore(&sPerfWired, 1);
+}
+
+/* Build one reply's perf section for the connection whose position is 'c' (header: u32 count, u64
+ * newestSeq, u64 lostFirst, u64 lostLast; then the records) and advance the cursor. 'out' holds at
+ * least SE_EXPORT_PERF_SECTION_MAX bytes. Returns the length. */
+size_t SeExportBuildPerfSection(SeExportPerfCursor* c, unsigned char* out)
+{
+    unsigned char* rec = out + SE_EXPORT_PERF_HEADER_LEN;
+    unsigned int cnt = 0;
+    unsigned long long k, newest, lostFirst = 0, lostLast = 0;
+    SE_LOCK();
+    /* A connection made mid-run starts with the newest publication only, not a stale backlog.
+     * That is not a loss: nothing was ever owed to it. The decision is taken on the FIRST reply,
+     * empty or not -- "nothing sent yet" cannot stand for it, or a first reply built before the
+     * first publication would later skip the early records. */
+    if (!c->started)
+    {
+        c->started = 1;
+        if (sPerfSeq > 1) c->sent = sPerfSeq - 1;
+    }
+    /* Whatever the ring no longer holds between the cursor and the newest publication is lost to
+     * this connection: say so, as the exact range. */
+    if (sPerfSeq - c->sent > SE_PERF_RING)
+    {
+        lostFirst = c->sent + 1;
+        c->sent = sPerfSeq - SE_PERF_RING;
+        lostLast = c->sent;
+    }
+    for (k = c->sent + 1; cnt < SE_LIVE_PERF_MAX_PER_REPLY && k <= sPerfSeq; ++k)
+    {
+        const unsigned int slot = (unsigned int)(k % SE_PERF_RING);
+        if (sPerfSeqOf[slot] != k || sPerfLen[slot] == 0 || sPerfLen[slot] > SE_LIVE_PERF_MAX_LEN)
+        {
+            /* Not deliverable (cannot happen inside the ring window; kept so a broken slot is
+             * reported as lost rather than as a silent hole). Only a leading run can be expressed
+             * as the one lost range of a reply. */
+            if (cnt == 0)
+            {
+                if (!lostFirst) lostFirst = k;
+                lostLast = k;
+                c->sent = k;
+            }
+            continue;
+        }
+        SeWr32(rec, sPerfLen[slot]);
+        memcpy(rec + 4, sPerfBlk[slot], sPerfLen[slot]);
+        rec += 4 + sPerfLen[slot];
+        ++cnt;
+        c->sent = k;
+    }
+    newest = sPerfSeq;
+    SE_UNLOCK();
+    /* The lost range ends just before this reply's first record, or at the newest publication
+     * when the reply carries none. */
+    SeWr32(out, cnt);
+    SeWr64(out + 4, newest);
+    SeWr64(out + 12, lostFirst);
+    SeWr64(out + 20, lostLast);
+    return (size_t)(rec - out);
+}
+
+#if defined(SE_EXPORT_TEST_HOOKS)
+/* Test builds only: start the publication sequence part-way (a 64-bit sequence cannot be walked
+ * across 2^32 one record at a time). The ring must be empty. */
+void SeExportTestSetPerfSeq(unsigned long long seq)
+{
+    SE_LOCK();
+    sPerfSeq = seq;
+    SE_UNLOCK();
+}
+#endif
+
+unsigned long long SeExportPerfNewestSeq(void)
+{
+    unsigned long long n;
+    SE_LOCK();
+    n = sPerfSeq;
+    SE_UNLOCK();
+    return n;
+}
+
+/* One epoch PER CPU: it moves when that CPU's stack is reset, and a flow instruction the glue is holding
+ * for that CPU is dropped when its epoch no longer matches. A single shared epoch let a reset of one SH-2
+ * silently discard the other's pending call or return while its recorded frames survived (wrong owner).
+ * A whole-machine discontinuity (state load, hook mode off) resets both CPUs, which moves both epochs. */
+static volatile unsigned int sCallStackEpoch[2];
 
 void SeExportResetCallStack(int cpu)
 {
@@ -1574,13 +2158,17 @@ void SeExportResetCallStack(int cpu)
     SE_LOCK();
     sCallDepth[c] = 0;
     sCallOverflow[c] = 0;
-    SeAtAdd((volatile int*)&sCallStackEpoch, 1);
+    sOwnKnown[c] = 0;     /* F9: a reset / load / disable replaced the code the frames described */
+    ++sOwnTrust[c];
+    sEntryCount[c] = 0;   /* ... and the entries / extents observed in it */
+    sHiFn[c] = sHi[c] = 0;
+    SeAtAdd((volatile int*)&sCallStackEpoch[c], 1);
     SE_UNLOCK();
 }
 
-unsigned int SeExportCallStackEpoch(void)
+unsigned int SeExportCallStackEpoch(int cpu)
 {
-    return (unsigned int)SeAtLoad((volatile int*)&sCallStackEpoch);
+    return (unsigned int)SeAtLoad((volatile int*)&sCallStackEpoch[cpu ? 1 : 0]);
 }
 
 unsigned int SeExportSerializeCallStack(int cpu, unsigned char* out)
@@ -1618,7 +2206,9 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     /* Nobody attached: capture nothing. The ring copy and the staged savestate below would
      * both be thrown away unread, and the savestate is the single most expensive thing the
      * emulate thread does per frame. Capture resumes on the first frame after a client
-     * attaches; the frame counter simply stands still across the gap. */
+     * attaches. The frame counter does not stand still across the gap any more: the frame number
+     * is committed once per emulated frame (SeExportEndFrame), snapshot or not, so a profiler
+     * record's identity is the emulator's own count. */
     if (!SeExportHasClient())
     {
         return;
@@ -1653,16 +2243,35 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     if (cdStatus) { memcpy(dst->cd, cdStatus, SE_LIVE_CD_BLOCK_LEN); dst->has_cd = 1; }
     else          { memset(dst->cd, 0, SE_LIVE_CD_BLOCK_LEN);        dst->has_cd = 0; }
     dst->valid = 1;
+    dst->timeline = (unsigned int)SeAtLoad(&sTimelineId);   /* the memory above is of THIS timeline; the reply says so */
     dst->stop = SeAtLoad64(&sStopWord);
     /* A publish from inside a debugger halt (a breakpoint, a step, a DMA watchpoint: a stop latched
      * and the CPU held) shows a moment part-way through the frame now running; it is not a new
      * frame. Tag it with the current number so the counter keeps counting emulated frames -- 300
      * halts used to advance it by 300 while the machine moved a few hundred instructions -- and a
      * GET with nothing newer serves the latest slot, which is this one. */
-    sRingFrame[sRingWrite] = (SeAtLoad(&sPaused) && SE_STOP_REASON(dst->stop) != SE_LIVE_STOP_NONE &&
-                              sFrameNo != 0)
-                                 ? sFrameNo      /* a halt: a moment inside the current frame */
-                                 : ++sFrameNo;   /* a frame (free-running, or granted by a step) */
+    if (SeAtLoad(&sPaused) && SE_STOP_REASON(dst->stop) != SE_LIVE_STOP_NONE)
+    {
+        /* A halt snapshot never reserves, renames or commits the emulated frame (sIdFrame /
+         * sFrameNo), so the frame the halt happened in reports the same identity before the halt,
+         * after it and in its record. The frame number it SHOWS in the reply header is the last
+         * committed frame, or 1 before any frame has committed (slot value 0 means "empty"), which can
+         * equal the number of a normal snapshot. That is harmless: the order in which snapshots are
+         * delivered is the separate delivery sequence (sRingSeq, assigned below), which every
+         * snapshot takes, so a halt and a frame showing the same number are still two deliveries. */
+        sRingFrame[sRingWrite] = sFrameNo != 0 ? sFrameNo : 1;
+    }
+    else
+    {
+        /* A frame (free-running, or granted by a step): it takes the number the gate reserved. A
+         * second snapshot without a gate or an end-of-frame in between (a glue that has neither)
+         * is a new frame. */
+        if (!sIdOpen || sIdSnapped) SeIdReserve();
+        sIdSnapped = 1;
+        sFrameNo = sIdFrame;
+        sRingFrame[sRingWrite] = sFrameNo;
+    }
+    sRingSeq[sRingWrite] = ++sDeliverySeq;             /* the delivery number: unique, whatever frame it shows */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
     if (sRestoreAckPending) { sRestoreDone += sRestoreAckPending; sRestoreAckPending = 0; }   /* first post-restore frame */
     /* How many loads have been settled, one way or the other: the stamp each savestate block of
@@ -1859,7 +2468,8 @@ static int SeRecvPokeStream(SeConn cl, int sound, unsigned int count, unsigned i
     return SeDrainWith(cl, count, block, (unsigned int)sizeof(block));
 }
 
-static void SeServeClientLoop(SeConn cl, SeFrame* snap);
+static void SeServeClientLoop(SeConn cl, SeFrame* snap, int profSlot);
+static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut, int profSlot);
 
 /* Count this client in for as long as it is attached. A wrapper around the serve loop, rather
  * than a bump at each of the three accept sites: the loop returns from a dozen places on any I/O
@@ -1867,13 +2477,15 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap);
  * them impossible to leave unpaired. */
 static void SeServeClient(SeConn cl, SeFrame* snap)
 {
+    const int profSlot = SeProfAcquire();   /* F1: this connection's profiler request, if it makes one */
     SeAtAdd(&sClients, 1);
     /* A client that joins part-way through a run has never seen the keyframe the deltas now being
      * produced are measured against, so none of them could be rebuilt until the next one came
      * round -- up to SE_STATE_KF_MAX frames of the history it records would be unusable. Make the
      * next state a keyframe so the first thing it receives is a base it can start from. */
     SeStateFlushAndRekey();
-    SeServeClientLoop(cl, snap);
+    SeServeClientLoop(cl, snap, profSlot);
+    SeProfRelease(profSlot);   /* before the count drops: the request ends with the connection */
     /* Release what the debugger holds only when the LAST client leaves. Two can be attached (the
      * local socket and the TCP port), and the one that remains still owns its breakpoints and its
      * halt: a stray connection to the TCP port -- a second Saturn Explorer, the web build, a port
@@ -1883,8 +2495,28 @@ static void SeServeClient(SeConn cl, SeFrame* snap)
 
 /* Serve one connected client until it disconnects or the server stops. 'snap' is
  * scratch the size of one frame. */
-static void SeServeClientLoop(SeConn cl, SeFrame* snap)
+static void SeServeClientLoop(SeConn cl, SeFrame* snap, int profSlot)
 {
+    /* v26: the newest profiler frame this connection has been sent (0 = none yet), and the
+     * buffer its unsent records are copied into. Heap, not stack: 20 KiB, and two server
+     * threads. */
+    SeExportPerfCursor perfSent;
+    unsigned char* perfOut = (unsigned char*)malloc((size_t)SE_EXPORT_PERF_SECTION_MAX);
+    if (!perfOut) return;
+    perfSent.sent = 0;
+    perfSent.started = 0;   /* "first reply" is its own state: 0 sent can also mean an empty ring */
+    SeServeClientRequests(cl, snap, &perfSent, perfOut, profSlot);
+    free(perfOut);
+}
+
+static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut, int profSlot)
+{
+#define perfSent (*perfSentP)
+    /* This connection's snapshot cursor: the delivery number of the slot its last reply carried, the
+     * (32-bit) frame number that reply showed, and the ring epoch it was served in. */
+    uint64_t connServedSeq = 0;
+    uint32_t connServedFrame = 0;
+    unsigned int connRingEpoch = 0;
     SeLogPortDevices();   /* report the emulator's controller config on connect */
     while (SeAtLoad(&sRunning))
     {
@@ -1933,6 +2565,10 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
                 SeAtStore(&sRewindWanted, want);
                 SeStateFlushAndRekey();
             }
+        }
+        else if (memcmp(req, SE_LIVE_VERB_PROFILE, SE_LIVE_VERB_LEN) == 0)
+        {
+            SeProfSetRequest(profSlot, arg);   /* applied by the emulate thread */
         }
         else if (memcmp(req, SE_LIVE_VERB_ISTEP, SE_LIVE_VERB_LEN) == 0)
         {
@@ -2094,20 +2730,36 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             int slot = (sRingWrite + SE_RING - 1) % SE_RING;   /* latest by default */
             if (lastSeen != 0)
             {
+                /* "Unseen" is decided on the DELIVERY sequence when the client's cursor is the snapshot
+                 * this connection was last served (its arg is that snapshot's frame), or when a restore
+                 * emptied the ring since (the arg is then a resync to the load's frame, and everything
+                 * now in the ring is newer than anything served before). The frame number cannot decide
+                 * it: a halt and the frame it is inside show the same one. Otherwise -- a client that
+                 * names some other frame, or a fresh connection -- the old rule applies: a slot is
+                 * unseen when its (32-bit) frame number is newer than the arg. Either way the OLDEST
+                 * unseen slot by delivery order is served. */
+                const int byDelivery = connServedSeq != 0 &&
+                                       (connServedFrame == lastSeen || connRingEpoch != sRingEpoch);
                 int i, found = -1;
-                uint32_t best = 0;
+                uint64_t best = 0;
                 for (i = 0; i < SE_RING; ++i)
                 {
-                    /* Compare in 32-bit to match the client's frame counter, but test
-                     * emptiness on the full 64-bit value (0 only means never-written). */
-                    uint32_t f = (uint32_t)sRingFrame[i];
-                    if (sRingFrame[i] != 0 && f > lastSeen && (found < 0 || f < best))
-                    { best = f; found = i; }
+                    /* Emptiness is tested on the full 64-bit frame (0 only means never-written). */
+                    const int unseen = byDelivery ? sRingSeq[i] > connServedSeq
+                                                  : (uint32_t)sRingFrame[i] > lastSeen;
+                    if (sRingFrame[i] != 0 && unseen && (found < 0 || sRingSeq[i] < best))
+                    { best = sRingSeq[i]; found = i; }
                 }
                 if (found >= 0) slot = found;   /* oldest unseen; else stay on latest */
             }
             memcpy(snap, sRing[slot], sizeof(SeFrame));
             served = sRingFrame[slot];
+            if (served != 0)   /* the cursor follows whatever this reply carried, for any verb */
+            {
+                connServedSeq = sRingSeq[slot];
+                connServedFrame = (uint32_t)(served & 0xFFFFFFFFu);
+                connRingEpoch = sRingEpoch;
+            }
         }
         SeWr32(ctl + 4, (unsigned int)(served & 0xFFFFFFFFu));
         SeWr32(ctl + 8, (unsigned int)((served >> 32) & 0xFFFFFFFFu));
@@ -2134,6 +2786,7 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         SeWr32(ctl + 32, (unsigned int)(sRingFrame[(sRingWrite + SE_RING - 1) % SE_RING] & 0xFFFFFFFFu));
         SeWr32(ctl + 36, (unsigned int)SeAtLoad(&sStepOutstanding));
         SeWr32(ctl + 40, SE_STOP_SEQ(stop));   /* the same read as the reason above */
+        SeWr32(ctl + SE_LIVE_CONTROL_TIMELINE_OFFSET, snap->timeline);   /* the served slot's own timeline, not the current one */
         SE_UNLOCK();
         SE_SLOCK();
         SeWr32(ctl + 44, sPokesApplied);
@@ -2144,6 +2797,10 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             if (sWriteVdpByte)       caps |= SE_LIVE_CAP_VDP_POKE;
             if (SeAtLoad(&sGateSeen)) caps |= SE_LIVE_CAP_FRAME_GATE;
             if (sEmuSlotSave)        caps |= SE_LIVE_CAP_EMU_SAVE;
+            /* From the first reply: a counter-capable build declares itself at startup (F14), so this
+             * does not wait for the first publication. */
+            if (SeAtLoad(&sPerfCapable) || SeAtLoad(&sPerfWired)) caps |= SE_LIVE_CAP_PROFILER;
+            if (sSetProfiler)        caps |= SE_LIVE_CAP_PROF_FUNCTIONS;
             SE_SLOCK();
             if (sStateCap && sLoadState) caps |= SE_LIVE_CAP_STATE_REWIND;   /* the worker sized a real state */
             SE_SUNLOCK();
@@ -2343,8 +3000,16 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
                 if (SeSend(cl, rec, SE_LIVE_EMU_SLOT_LEN) != 0) return;
             }
         }
+
+        /* v26/v27 trailing section: the profiler records this connection has not been sent yet,
+         * oldest first, built under the lock into one buffer and sent outside it. */
+        {
+            const size_t n = SeExportBuildPerfSection(&perfSent, perfOut);
+            if (SeSend(cl, perfOut, n) != 0) return;
+        }
     }
 }
+#undef perfSent
 
 #if defined(_WIN32)
 /* --- Shutdown, the Windows half (review finding HOOK-01) ---------------------------------
@@ -2461,6 +3126,17 @@ static void SeInterruptClients(void)
     pthread_mutex_unlock(&sConnLock);
 }
 
+/* Close a published listening socket exactly once, whichever of the listener thread and
+ * SeExportDeinit gets there first: the fd is swapped out atomically and only the swapper closes it
+ * (shutdown first, which is what wakes a thread parked in accept()). A listener publishes its fd
+ * BEFORE it re-tests sRunning and Deinit clears sRunning BEFORE it swaps, so with seq_cst ops one
+ * of the two always sees the other: either the thread notices the stop, or Deinit finds the fd. */
+static void SeCloseListener(int* slot)
+{
+    int fd = SeAtXchg(slot, -1);
+    if (fd >= 0) { shutdown(fd, SHUT_RDWR); close(fd); }
+}
+
 static void* SeServerThread(void* arg)
 {
     SeFrame* snap = (SeFrame*)malloc(sizeof(SeFrame));
@@ -2476,7 +3152,7 @@ static void* SeServerThread(void* arg)
     {
         close(srv); free(snap); return NULL;
     }
-    sListenFd = srv;
+    SeAtStore(&sListenFd, srv);
     while (SeAtLoad(&sRunning))
     {
         int cl = accept(srv, NULL, NULL);
@@ -2487,7 +3163,7 @@ static void* SeServerThread(void* arg)
         SeUnregisterClient(0);
         close(cl);
     }
-    close(srv);
+    SeCloseListener(&sListenFd);   /* a no-op when Deinit already took (and closed) it */
     unlink(SE_LIVE_DEFAULT_SOCK_PATH);
     free(snap);
     return NULL;
@@ -2513,18 +3189,25 @@ static void* SeTcpServerThread(void* arg)
     {
         close(srv); free(snap); return NULL;
     }
-    sTcpListenFd = srv;
+    SeAtStore(&sTcpListenFd, srv);
     while (SeAtLoad(&sRunning))
     {
         int cl = accept(srv, NULL, NULL);
         if (cl < 0) break;   /* closed on deinit */
         SeQuietSocket(cl);
+        {
+            /* A reply goes out as many small sends; with Nagle's algorithm on, each waits for the
+             * peer's delayed ACK and the poll period more than doubles (measured 30 ms against
+             * 12 ms on the unix socket), which overruns the perf ring at high frame rates. */
+            int on = 1;
+            setsockopt(cl, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+        }
         SeRegisterClient(1, cl);
         SeServeClient(cl, snap);   /* releases the debugger state when it was the last */
         SeUnregisterClient(1);
         close(cl);
     }
-    close(srv);
+    SeCloseListener(&sTcpListenFd);
     free(snap);
     return NULL;
 }
@@ -2538,7 +3221,16 @@ const char* SeExportTitleSuffix(const char* emu_name, const char* emu_rev)
     return buf;
 }
 
-int SeExportInit(void)
+/* Initialization is two steps so hooks can be installed BEFORE a listener exists (F14). The listener
+ * threads read the hook pointers (the capability word of the very first reply, the profiler setter)
+ * with no lock, so a hook registered after SeExportInit could be seen half-published, or not at all
+ * by a client that asks at the first instant. Prepare brings up locks and state with sRunning set --
+ * the savestate worker needs it, which is why registration cannot simply move BEFORE init -- and
+ * Start admits listeners. SeExportInit is both, for callers with nothing to register in between. */
+static int sPrepared;     /* SeExportPrepare ran and SeExportDeinit has not */
+static int sStarted;      /* the listener threads exist */
+
+int SeExportPrepare(void)
 {
     if (sShutdownIncomplete)
     {
@@ -2548,17 +3240,35 @@ int SeExportInit(void)
                         "session never exited\n");
         return -1;
     }
+    if (sPrepared)
+    {
+        fprintf(stderr, "[SaturnExplorer] live tap: already initialized\n");
+        return -1;
+    }
     {
         int i;
         for (i = 0; i < SE_RING; ++i)
         {
             sRing[i] = (SeFrame*)calloc(1, sizeof(SeFrame));
-            sRingFrame[i] = 0;
+            sRingFrame[i] = 0; sRingSeq[i] = 0;
             if (!sRing[i]) { SeExportDeinit(); return -1; }
         }
     }
-    sRingWrite = 0;
+    sRingWrite = 0; sDeliverySeq = 0; sRingEpoch = 0;
     SeAtStore(&sPaused, 0); SeCancelSteps(); sFrameNo = 0; SeAtStore(&sClients, 0); SeAtStore(&sRewindWanted, 1);
+    SeAtStore(&sProfWanted, 0); SeAtStore(&sProfPending, 0); SeAtStore(&sProfApplied, 0);
+    { int i; for (i = 0; i < SE_PROF_SLOTS; ++i) { sProfSlotUsed[i] = 0; sProfSlotFlags[i] = 0; } }
+    /* Nothing of a previous run survives into this one: not its profiler records, its sequence, its
+     * identity reservation, nor the capabilities it declared. */
+    sSetProfiler = 0;
+    SeAtStore(&sPerfWired, 0); SeAtStore(&sPerfCapable, 0);
+    {
+        unsigned int i;
+        for (i = 0; i < SE_PERF_RING; ++i) { sPerfLen[i] = 0; sPerfSeqOf[i] = 0; }
+        sPerfSeq = 0;
+    }
+    sIdFrame = 0; sIdOpen = 0; sIdSnapped = 0; sInSeLoad = 0;
+    SeAtStore(&sTimelineId, 1);
     SeAtStore64(&sStopWord, 0);
     /* Savestate rewind (v16): the worker + buffer pool are created lazily when a save hook is
      * wired (SeExportSetSaveStateHook); here we only reset the bookkeeping for a fresh session. */
@@ -2572,6 +3282,15 @@ int SeExportInit(void)
     InitializeCriticalSection(&sLock);
     InitializeCriticalSection(&sStateLock);
     sLocksReady = 1;   /* both CSes are now real -- enable locking BEFORE any locking thread starts */
+#endif
+    sPrepared = 1;
+    return 0;
+}
+
+int SeExportStart(void)
+{
+    if (!sPrepared || sStarted) return -1;
+#if defined(_WIN32)
     sThread = CreateThread(NULL, 0, SeServerThread, NULL, 0, NULL);
     if (!sThread) { SeAtStore(&sRunning, 0); return -1; }
 #else
@@ -2580,11 +3299,18 @@ int SeExportInit(void)
      * local socket, which is the primary path for native clients. */
     sTcpThreadStarted = (pthread_create(&sTcpThread, NULL, SeTcpServerThread, NULL) == 0);
 #endif
+    sStarted = 1;
     /* Surface the protocol version so a client/emulator mismatch is diagnosable
      * (Saturn Explorer must be built for the same SE_LIVE_VERSION to capture). */
     fprintf(stderr, "[SaturnExplorer] live tap ready: protocol v%u\n",
             (unsigned)SE_LIVE_VERSION);
     return 0;
+}
+
+int SeExportInit(void)
+{
+    if (SeExportPrepare() != 0) return -1;
+    return SeExportStart();
 }
 
 void SeExportDeinit(void)
@@ -2598,7 +3324,7 @@ void SeExportDeinit(void)
         /* The state worker only ever sleeps between queue polls, so clearing its flag is enough
          * and it needs no nudge. The server does (see SeWinWakeServer). */
         int joined = SeWinJoinThread(&sStateWorker, 0);
-        if (!SeWinJoinThread(&sThread, 1))
+        if (sStarted && !SeWinJoinThread(&sThread, 1))
         {
             joined = 0;
         }
@@ -2624,16 +3350,16 @@ void SeExportDeinit(void)
     DeleteCriticalSection(&sLock);
 #else
     if (sStateWorkerStarted) { pthread_join(sStateWorker, NULL); }
-    if (sListenFd >= 0) { shutdown(sListenFd, SHUT_RDWR); close(sListenFd); sListenFd = -1; }
-    if (sTcpListenFd >= 0) { shutdown(sTcpListenFd, SHUT_RDWR); close(sTcpListenFd); sTcpListenFd = -1; }
+    SeCloseListener(&sListenFd);
+    SeCloseListener(&sTcpListenFd);
     SeInterruptClients();   /* a client that stopped answering would otherwise pin the joins below */
-    pthread_join(sThread, NULL);
+    if (sStarted) pthread_join(sThread, NULL);   /* Prepare without Start has no thread to join */
     if (sTcpThreadStarted) { pthread_join(sTcpThread, NULL); sTcpThreadStarted = 0; }
     SeStateShutdown();
 #endif
     {
         int i;
-        for (i = 0; i < SE_RING; ++i) { free(sRing[i]); sRing[i] = NULL; sRingFrame[i] = 0; }
+        for (i = 0; i < SE_RING; ++i) { free(sRing[i]); sRing[i] = NULL; sRingFrame[i] = 0; sRingSeq[i] = 0; }
     }
     sRingWrite = 0;
     {
@@ -2644,4 +3370,6 @@ void SeExportDeinit(void)
         sPokeBoxBytes = 0;
         SeAtStore(&sPokePending, 0);
     }
+    sStarted = 0;
+    sPrepared = 0;
 }

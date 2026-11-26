@@ -464,6 +464,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"breakpoints",     "Breakpoints",        &Panels::breakpoints,     "Debugger"},
         {"ramSearch",       "RAM Search",         &Panels::ramSearch,       "Debugger"},
         {"accessLog",       "Access Log",         &Panels::accessLog,       "Debugger"},
+        {"profiler",        "Profiler",           &Panels::profiler,        "Debugger"},
         {"soundCpu",        "Sound CPU (68K)",    &Panels::soundCpu,        "Audio"},
         {"sound",           "Sound (SCSP)",       &Panels::sound,           "Audio"},
         {"discExplorer",    "Disc Explorer",      &Panels::discExplorer,    "Files & Input"},
@@ -661,6 +662,8 @@ void App::ResetSessionDebugState()
 void App::CloseData(bool cancelAutoConnect)
 {
     ++mSourceSerial;
+    mProfiler.Clear();       // another source's frames and pools are not this one's
+    mPoolTracker.Reset();
     ResetCompareSession();   // whatever is loaded next is a different run: nothing marked carries over
     if (mbLiveSource && mContext)
     {
@@ -2052,6 +2055,9 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.callStack)       DrawCallStack(platform);
     if (mPanels.ramSearch)       DrawRamSearch();
     if (mPanels.accessLog)       DrawAccessLog();
+    UpdateProfiler();             // before the draw, and even when hidden: it also disarms the emulator
+    if (mPanels.profiler)        DrawProfiler();
+    else                         mProfilerPanel.NotDrawn();
     if (mPanels.soundCpu)        DrawSoundCpu();
     if (mPanels.sound)           DrawSound(platform);
     if (mPanels.discExplorer)    DrawDiscExplorer(platform);
@@ -2193,6 +2199,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Breakpoints", bBreak);   // its own column (see the split above)
     ImGui::DockBuilderDockWindow("RAM Search", bWatch);    // debugger tools tab here too
     ImGui::DockBuilderDockWindow("Access Log", bWatch);
+    ImGui::DockBuilderDockWindow("Profiler", bWatch);
     ImGui::DockBuilderDockWindow("Current Input", bWatch);
     ImGui::DockBuilderDockWindow("Input Queue", bWatch);
     ImGui::DockBuilderDockWindow("Input Recording", bWatch);
@@ -4367,6 +4374,154 @@ void App::DrawAccessLog()
 // 68K sees from offset 0), so this decodes the captured Sound RAM with the 68000 disassembler
 // starting at a chosen 68K address, following branches. Read-only: 68K register state would
 // need dedicated emulator glue and isn't exposed yet.
+// ---- Profiler -------------------------------------------------------------------------------
+// The emulator counts where each emulated frame's time went and what crossed its buses (see
+// Integration/Common/SePerfCounters.h); the live driver queues one record per frame. This drains
+// them into the model every UI frame whether or not the panel is open -- the queue is bounded,
+// but history that is already there when the panel opens is the useful kind -- and tells the
+// emulator whether to attribute time to functions, which it must only do while someone is
+// looking: that mode runs its per-instruction loop.
+void App::UpdateProfiler()
+{
+#ifdef SE_ENABLE_LIVE
+    if (mbLiveSource && mContext)
+    {
+        se_live_perf_frame batch[32];
+        uint32_t n;
+        while ((n = se_live_drain_perf(&mDataSource, batch, 32)) != 0)
+        {
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                const se_live_perf_frame& in = batch[i];
+                PerfFrame f;
+                f.seq = in.seq;
+                f.frame = in.frame;
+                f.wireVersion = in.wire_version;
+                f.valid = in.valid;
+                f.sampleSeq = in.sample_seq;
+                f.timelineId = in.timeline_id;
+                f.frameNo = in.frame_no;
+                f.mode = in.mode;
+                f.cacheMode = in.cache_mode;
+                f.satFlags = in.sat_flags;
+                for (int k = 0; k < 2; ++k) { f.otherNotAdmitted[k] = in.other_not_admitted[k]; f.otherEvicted[k] = in.other_evicted[k]; }
+                f.gapFirst = in.gap_first;
+                f.gapLast = in.gap_last;
+                f.evictFirst = in.evict_first;
+                f.evictLast = in.evict_last;
+                f.gapCount = in.gap_count;
+                f.evictCount = in.evict_count;
+                f.gapOnly = in.gap_only != 0;
+                f.newestSeq = in.newest_seq;
+                f.functions = (in.flags & SE_LIVE_PROF_FUNCTIONS) != 0;
+                const uint32_t counters = std::min<uint32_t>(in.counter_count, SE_PERF_COUNT);
+                for (uint32_t k = 0; k < counters; ++k) f.c[k] = in.counters[k];
+                const uint32_t fns = std::min<uint32_t>(in.fn_count, SE_LIVE_PERF_FUNCTIONS);
+                f.fns.reserve(fns);
+                for (uint32_t k = 0; k < fns; ++k) f.fns.push_back({ in.fn_key[k], in.fn_cycles[k] });
+                f.fnOther = in.fn_other_cycles;
+                mProfiler.Push(std::move(f));
+            }
+            if (n < 32) break;
+        }
+        // Restated every frame, like the rewind setting: the driver sends only a change, and a
+        // reconnect cannot leave the emulator in the slow mode with the panel closed.
+        const bool wantFunctions = mPanels.profiler && mProfilerPanel.WantsFunctions() &&
+                                   LiveHas(SE_LIVE_CAP_PROF_FUNCTIONS);
+        se_live_set_profiler(&mDataSource, wantFunctions ? SE_LIVE_PROF_FUNCTIONS : 0u);
+    }
+#endif
+
+    // Memory pools: only while the Memory tab is showing, and a few times a second -- each sample
+    // reads and hashes every captured RAM. They come from the displayed context, so a scrubbed
+    // frame or a savestate shows its own occupancy.
+    if (!mbHasData || !mPanels.profiler || !mProfilerPanel.WantsPools()) return;
+    // "Changed since sample" compares a sample with the previous one, which means something only when
+    // both are of the same capture. The tracker therefore re-primes (the first sample after reports
+    // nothing changed) when the displayed source moves -- another file, a savestate, a scrubbed frame
+    // (SourceId moves on every scrub step), or a new emulator process -- when the machine-state
+    // timeline changes (rewind, slot or native load), and when a scrubbed frame goes BACKWARDS.
+    // The timeline must be the CAPTURE's own: the bytes sampled below come from the snapshot this
+    // thread last captured, while the profiler frames (mProfiler) are a separate stream that can
+    // already be on a newer timeline than a lagging capture. A server that stamps its snapshots says
+    // which timeline they are (se_live_captured_identity); one that does not leaves the tracker to
+    // wait out the server's snapshot ring after a change seen on the stream rather than guess.
+    {
+        const bool scrubbed = mScrubContext && mContext == mScrubContext;
+        uint32_t streamTimeline = 0;
+        uint64_t streamFrame = 0;
+        mProfiler.LatestIdentity(&streamTimeline, &streamFrame);
+        PoolCaptureSource src;
+#ifdef SE_ENABLE_LIVE
+        if (mbLiveSource && !scrubbed)
+            src = LivePoolSource(&mDataSource, mMemBackend.SourceId(), mLiveConnGeneration, streamTimeline);
+        else
+#endif
+        {
+            src.sourceId = mMemBackend.SourceId();
+            src.instance = mLiveConnGeneration;
+            src.streamTimeline = streamTimeline;
+        }
+        // A live view has no displayed frame number of its own, only a scrub supplies one.
+        src.frame = scrubbed ? mScrubShownFrame : 0;
+        const bool mayAccept = mPoolTracker.BeginSample(src);
+        if (mPoolTracker.Count() == 0) mPoolSampleCountdown = 0;   // re-primed: sample now, don't show an empty tab
+        if (!mayAccept) return;   // waiting out a timeline change this capture cannot confirm
+    }
+    if (mPoolSampledSource != mMemBackend.SourceId())
+    {
+        mPoolSampledSource = mMemBackend.SourceId();
+        mPoolSampleCountdown = 0;
+    }
+    if (mPoolSampleCountdown-- > 0) return;
+    mPoolSampleCountdown = 9;
+    static const struct { const char* name; uint32_t base; uint32_t size; } kPools[] = {
+        { "High work RAM", 0x06000000u, kWramSize },
+        { "Low work RAM",  0x00200000u, kWramSize },
+        { "VDP1 VRAM",     kVdp1VramBase, kVdp1VramSize },
+        { "VDP2 VRAM",     0x05E00000u, kVdp2VramSize },
+        { "Colour RAM",    kCramBase, kCramSize },
+        { "Sound RAM",     0x05A00000u, kSoundRamSize },
+    };
+    std::vector<uint8_t> bytes;
+    for (size_t i = 0; i < sizeof(kPools) / sizeof(kPools[0]); ++i)
+    {
+        if (ReadRegionBytes(mMemBackend, kPools[i].base, kPools[i].size, bytes))
+            mPoolTracker.Sample(i, kPools[i].name, kPools[i].base, bytes.data(), kPools[i].size);
+        else
+            mPoolTracker.MarkMissing(i, kPools[i].name, kPools[i].base, kPools[i].size);
+    }
+}
+
+void App::DrawProfiler()
+{
+    ProfilerPanel::Host host;
+    host.live = mbLiveSource && mContext;
+#ifdef SE_ENABLE_LIVE
+    host.hasCounters = host.live && LiveHas(SE_LIVE_CAP_PROFILER);
+    host.canFunctions = host.live && LiveHas(SE_LIVE_CAP_PROF_FUNCTIONS);
+#endif
+    // The profiler's addresses are the 27 bus bits; work-RAM code is named and shown at its
+    // cached mirror, which for 0x06...... and 0x002..... is the same number.
+    host.functionName = [this](uint32_t address) { return mFunctionNames.NameOf(address); };
+    host.goToCode = [this](int cpu, uint32_t address)
+    {
+        mAssemblyPanel.GoTo(cpu, address);
+        mPanels.assembly = true;
+    };
+    host.goToMemory = [this](uint32_t address)
+    {
+        mHexEditor.GoTo(address);
+        mPanels.hexEditor = true;
+    };
+    if (mProfilerPanel.Draw(mProfiler, mPoolTracker, host))
+    {
+        mProfiler.Clear();
+        mPoolTracker.Reset();
+        mPoolSampleCountdown = 0;
+    }
+}
+
 void App::DrawSoundCpu()
 {
     if (!ImGui::Begin("Sound CPU (68K)")) { ImGui::End(); return; }
@@ -8300,6 +8455,9 @@ void App::AdoptNewEmulatorInstance()
 
     ResetCompareSession();   // the old run's snapshots are not comparable with this one's
     DropRecordedHistory();   // the ring, the slot tracker and any scrubbed-frame edits
+    mProfiler.Clear();       // a different emulator process: its frame counts start over
+    mPoolTracker.Reset();    // and its RAM is not the previous run's: nothing compares across the switch
+    mPoolSampleCountdown = 0;
     mRestoreOutstanding = 0; // its counters start over; a wait on the old run can never resolve
     mBlockEpochFloor = 0;
     mRestoreTimedOut = mRestoreUnconfirmable = false;   // a new process: the load is moot

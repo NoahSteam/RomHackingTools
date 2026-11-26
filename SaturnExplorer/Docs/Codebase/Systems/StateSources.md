@@ -46,11 +46,11 @@ flowchart TD
     C --> U["App display and debugger consumers"]
 ```
 
-`se_live_open` probes the endpoint, allocates `LiveState`, starts `PollLoop`, and returns a callback table. Defaults are a Windows named pipe or POSIX Unix socket; `tcp:host:port` is also supported. `PollLoop` establishes each connection with a plain GET before allowing version-gated mutations. `ReadSnapshot` checks magic, rejects versions below 3 or above the client's `SE_LIVE_VERSION` (25 at this revision), validates section lengths, and normalizes incoming regions.
+`se_live_open` probes the endpoint, allocates `LiveState`, starts `PollLoop`, and returns a callback table. Defaults are a Windows named pipe or POSIX Unix socket; `tcp:host:port` is also supported. `PollLoop` establishes each connection with a plain GET before allowing version-gated mutations. `ReadSnapshot` checks magic, rejects versions below 3 or above the client's `SE_LIVE_VERSION` (26 since the profiler's perf block and `PRF` verb, see [Profiler](Profiler.md); 25 at this page's revision), validates section lengths, and normalizes incoming regions.
 
 The worker publishes an immutable `shared_ptr` snapshot under `LiveState::mtx`. `CbBeginCapture` pins it on the calling thread; all callbacks in that capture use one state even if another reply arrives. `CbEndCapture` retains the displayed snapshot in `gLastCaptured`. Stop and shadow-stack queries use `DisplayedSnapshot`, so debugger context agrees with memory on screen. Do not independently poll newest registers while evaluating displayed memory.
 
-`PollLoop` also collects trace events, diagnostic logs, emulator slot inventory, keyboard mappings, and rewind blocks into separately synchronized queues/state. The frontend consumes them with `se_live_poll_events`, `se_live_poll_log`, `se_live_emu_slots`, `se_live_poll_keymap`, and `se_live_drain_state_blocks`. SH-2 registers and other memory are ordinary capture callbacks.
+`PollLoop` also collects trace events, diagnostic logs, emulator slot inventory, keyboard mappings, profiler frames (`se_live_drain_perf`, see [Profiler](Profiler.md)), and rewind blocks into separately synchronized queues/state. The frontend consumes them with `se_live_poll_events`, `se_live_poll_log`, `se_live_emu_slots`, `se_live_poll_keymap`, and `se_live_drain_state_blocks`. SH-2 registers and other memory are ordinary capture callbacks.
 
 ### Control, memory writes, and restore
 
