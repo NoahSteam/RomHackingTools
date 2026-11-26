@@ -382,6 +382,7 @@ def main():
     # the patched ss.cpp) with the sink replaced by the harness's capture.
     hw_o = os.path.join(scratch, "se_mednafen_glue.hwev.o")
     r = subprocess.run(["gcc", "-std=gnu99", "-O1", "-g", "-w", "-DSE_MEDNAFEN_WIRED=1", "-DSE_MDFN_HWEV_SINK=SeHarnessHwSink",
+                        "-DSeMednafenHwEvent=SeHarnessGlueEvent", "-DSeMednafenDmacRecalc=SeHarnessGlueDmac",
                         "-I" + os.path.join(HERE, "..", "Common"), "-I" + HERE, "-c", os.path.join(HERE, "se_mednafen_glue.c"), "-o", hw_o],
                        capture_output=True, text=True)
     if r.returncode:

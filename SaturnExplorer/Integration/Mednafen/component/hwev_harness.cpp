@@ -200,6 +200,24 @@ static std::vector<Snap> gSnap;
 uint32 StackTop(unsigned cpu);
 extern "C"
 {
+// The glue is built with its two entry points renamed, so these wrappers see every call the injected hooks make
+// BEFORE the glue's own mask test: a hook that ignores the mask is then visible even though the glue would drop
+// the record. gCalls counts them.
+static unsigned gCalls;
+void SeHarnessGlueEvent(unsigned kind, int cpu, unsigned pc, unsigned a0, unsigned a1, unsigned a2, unsigned a3);
+void SeHarnessGlueDmac(int cpu, unsigned runMask, unsigned ch0chcr, unsigned sar0, unsigned dar0, unsigned tcr0,
+                       unsigned ch1chcr, unsigned sar1, unsigned dar1, unsigned tcr1);
+void SeMednafenHwEvent(unsigned kind, int cpu, unsigned pc, unsigned a0, unsigned a1, unsigned a2, unsigned a3)
+{
+    ++gCalls;
+    SeHarnessGlueEvent(kind, cpu, pc, a0, a1, a2, a3);
+}
+void SeMednafenDmacRecalc(int cpu, unsigned runMask, unsigned ch0chcr, unsigned sar0, unsigned dar0, unsigned tcr0,
+                          unsigned ch1chcr, unsigned sar1, unsigned dar1, unsigned tcr1)
+{
+    ++gCalls;
+    SeHarnessGlueDmac(cpu, runMask, ch0chcr, sar0, dar0, tcr0, ch1chcr, sar1, dar1, tcr1);
+}
 void SeHarnessHwSink(const SeHwEvent* ev)
 {
     Snap s = { 0 };
@@ -420,10 +438,21 @@ void ExceptionTests()
     std::printf("mask clear: an exception reports nothing\n");
     SeMednafenSetHwEvents(0);
     Fresh(0);
+    gCalls = 0;
     Handler(4, WRAMH_A + 0x2000);
     Prime(0, WRAMH_A + 0x100, 0xFFFF);
     Run(0, 1);
     Expect("exception with the mask clear: events", gSeen.size(), 0);
+    Expect("exception with the mask clear: the hook did not even call the glue", gCalls, 0);
+    SeMednafenSetHwEvents(SE_HWEV_EN_SCU_INT | SE_HWEV_EN_SCU_DMA | SE_HWEV_EN_VDP2 | SE_HWEV_EN_VDP1 | SE_HWEV_EN_CD |
+                          SE_HWEV_EN_SMPC | SE_HWEV_EN_SH2_DMAC);
+    Fresh(0);
+    gCalls = 0;
+    Handler(4, WRAMH_A + 0x2000);
+    Prime(0, WRAMH_A + 0x100, 0xFFFF);
+    Run(0, 1);
+    Expect("exception with only other sources on: the hook did not call the glue", gCalls, 0);
+    SeMednafenSetHwEvents(0);
     Expect("... but the core still took it", CPU[0].PC - 4, WRAMH_A + 0x2000);
 }
 
@@ -441,6 +470,16 @@ void ChSetup(unsigned ch, const Dma& d)
 void DmacTests()
 {
     std::printf("on-chip DMAC: start on the enabling write, end when the transfer finishes\n");
+    SeMednafenSetHwEvents(0);
+    Fresh(0);
+    gCalls = 0;
+    {
+        Dma off = { WRAMH_A, WRAML_A, 8, 2 };
+        ChSetup(0, off);
+    }
+    CPU[0].MWFP32[7](0xFFFFFFB0, 1);
+    CPU[0].DMA_Update(0x3FFFFFFF);
+    Expect("mask clear: the DMAC hook does not call the glue", gCalls, 0);
     SeMednafenSetHwEvents(SE_HWEV_EN_SH2_DMAC);
     Fresh(0);
     for (unsigned i = 0; i < 0x40000; i++) ne16_wbo_be<uint16>(WorkRAMH, i * 2, 0x1111);
@@ -591,9 +630,20 @@ void ScuTests()
     }
     SeMednafenSetHwEvents(0);
     gSeen.clear();
+    gCalls = 0;
     SCU_SetHBVB(0, false, true);
     SCU_SetHBVB(0, false, false);
     Expect("mask clear: v-blank edges report nothing", gSeen.size(), 0);
+    Expect("mask clear: the v-blank hook does not call the glue", gCalls, 0);
+    gCalls = 0;
+    StartDMATransfer(&DMALevel[1], WRAMH_A + 0x4000, SCSP_A, 0x40);
+    SCU_DoDMAEnd(2);
+    StartDMATransfer(&DMALevel[0], 0x00000000, WRAMH_A, 4);
+    StartDMATransfer(&DMALevel[0], WRAMH_A, 0x00000000, 4);
+    SCU_RegRW_DB<uint32, true>(0x25FE00A0, &db);
+    SCU_SetInt(SCU_INT_HBIN, true);
+    SCU_SetInt(SCU_INT_HBIN, false);
+    Expect("mask clear: the SCU DMA, interrupt and mask hooks do not call the glue", gCalls, 0);
 }
 }
 
