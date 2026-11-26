@@ -1592,6 +1592,17 @@ if(BUILD_TESTING)
     target_link_libraries(SaturnExplorerProfilerLifecycleTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerProfilerLifecycleTests COMMAND SaturnExplorerProfilerLifecycleTests)
 
+    # The hardware event log's glue: the enable mask, the kind -> source mapping, the per-source frame cap and
+    # its SUPPRESSED record, the DMAC edge shadow and the resets, with the sink replaced by a capture.
+    add_executable(SaturnExplorerHwEventGlueTests
+        Integration/tests/HwEventGlueTests.c
+        Integration/Common/se_export.c
+    )
+    target_include_directories(SaturnExplorerHwEventGlueTests
+        PRIVATE Integration/Common Integration/Mednafen)
+    target_link_libraries(SaturnExplorerHwEventGlueTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerHwEventGlueTests COMMAND SaturnExplorerHwEventGlueTests)
+
     # The hardware event record is one 32-byte layout in C and C++ (SeHwEvents.h).
     add_executable(SaturnExplorerHwEventsHeaderTests
         Integration/tests/HwEventsHeaderTests.c

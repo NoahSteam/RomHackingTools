@@ -16,7 +16,7 @@ from the checkout's repository HEAD, patches a scratch copy with the CURRENT app
 Usage: check_component.py <mednafen root> <scratch dir> [c++ compiler] [--drop KEY ...] [--mutate NAME ...]
                           [--only HARNESS ...] [--skip-if-missing]
 Exit status 0 = all checks passed.
---only f4_vdp1|f5_m68k|f2_sh2|f8_bus runs just those harnesses (and no text checks).
+--only f4_vdp1|f5_m68k|f2_sh2|f8_bus|hwev_vdp1|hwev_sh2 runs just those harnesses (and no text checks).
 --skip-if-missing exits 77 (CTest's SKIP_RETURN_CODE) when there is no Mednafen checkout at <root>, so the
 caller can be a ctest that is skipped on machines without one.
 
@@ -45,7 +45,13 @@ the debugger holds it), "native-both-cpus" (the both-CPU handler stays on under 
 A takeover released inside the handler call it was made in (the deferred sync finds the debugger's callback already
 gone) must still be a gap, and these must make it fail: "native-transient-lost" (the takeover is not recorded),
 "native-transient-undelivered" (the sync does not tell the glue), "native-transient-unconditional" (it is told even
-when we want no callback), "native-transient-kept" (the record is never cleared: every later sync repeats it)."""
+when we want no callback), "native-transient-kept" (the record is never cleared: every later sync repeats it).
+
+Hardware event log (component/hwev_harness.cpp: hwev_vdp1 on the patched vdp1.cpp, hwev_sh2 on the patched ss.cpp with
+the real glue). --drop takes every key apply.py writes for it (apply.HWEV_KEYS: SE_HWEV_FWD, SE_HWEV_HOOK_*); dropping any of them must make the run fail -- by the harnesses where they reach the site, and by
+hwev_text_checks (present exactly once, behind a SeSsHwEvMask test, in the right file) where they cannot (CD block,
+SMPC, VDP2 display). Mutations: "hwev-mask-ignored" (the sites fire with the mask clear: VDP1, an exception, the DMAC,
+the SCU) and "hwev-wrong-kind" (a site reports another kind); every harness they touch must fail."""
 import os
 import subprocess
 import sys
@@ -198,6 +204,63 @@ SYNC_MUTATIONS = {
 }
 
 
+
+# The hardware event log hooks: (file, key) for the text checks, from apply.py's own table.
+def hwev_file_of(key):
+    return None if key == "SE_HWEV_FWD" else cm.load_new().HWEV_KEY_FILE[key]
+
+
+def hwev_text_checks(work, apply_mod):
+    """Every hardware-event fence is in the patched tree exactly once, in the file it belongs in, and (a hook) tests
+    SeSsHwEvMask. This is the only check the sites no harness reaches (CD block, SMPC, VDP2 display) get at run time;
+    for the others it backs the harness up when the harness cannot tell a dropped hook (a source with no events
+    expected in the scenario)."""
+    import re
+    bad = 0
+    texts = {}
+    for key in apply_mod.HWEV_KEYS:
+        if key == "SE_HWEV_FWD":
+            continue
+        f = hwev_file_of(key)
+        if f not in texts:
+            texts[f] = open(os.path.join(work, "src/ss", f), errors="replace").read()
+        fences = [m.group(0) for m in re.finditer(re.escape(apply_mod.BEGIN) + r".*?" + re.escape(apply_mod.END), texts[f], re.S)
+                  if key in m.group(0)]
+        if len(fences) != 1:
+            print("FAIL: %d fence(s) with %s in %s, expected 1" % (len(fences), key, f))
+            bad += 1
+        elif key.startswith("SE_HWEV_HOOK_") and "SeSsHwEvMask &" not in fences[0]:
+            print("FAIL: the %s hook does not test SeSsHwEvMask" % key)
+            bad += 1
+    for f in apply_mod.HWEV_FWD_FILES:
+        t = open(os.path.join(work, "src/ss", f), errors="replace").read()
+        n = t.count("/* SE_HWEV_FWD */")
+        if n != 1:
+            print("FAIL: %s has %d hardware-event declaration fence(s), expected 1" % (f, n))
+            bad += 1
+    return bad
+
+
+# (harness, file, patched text, mutated text) lists. Each mutation must make EVERY harness it touches fail.
+HWEV_MUTATIONS = {
+    "hwev-mask-ignored": [
+        ("hwev_vdp1", "src/ss/vdp1.cpp", "if(MDFN_UNLIKELY(SeSsHwEvMask & SE_HWEV_EN_VDP1)) SeMednafenHwEvent(SE_HWEV_K_VDP1_DRAW_START",
+         "if(1) SeMednafenHwEvent(SE_HWEV_K_VDP1_DRAW_START"),
+        ("hwev_sh2", "src/ss/sh7095_ops.inc", "if(MDFN_UNLIKELY(SeSsHwEvMask & SE_HWEV_EN_CPU_EXC)) SeMednafenHwEvent(SE_HWEV_K_SH2_EXCEPTION, (int)(this - CPU), PC, (unsigned)(VECNUM_ILLINSTR)",
+         "if(1) SeMednafenHwEvent(SE_HWEV_K_SH2_EXCEPTION, (int)(this - CPU), PC, (unsigned)(VECNUM_ILLINSTR)"),
+        ("hwev_sh2", "src/ss/sh7095.inc", "if(MDFN_UNLIKELY(SeSsHwEvMask & SE_HWEV_EN_SH2_DMAC)) SeMednafenDmacRecalc",
+         "if(1) SeMednafenDmacRecalc"),
+        ("hwev_sh2", "src/ss/scu.inc", "if(MDFN_UNLIKELY(SeSsHwEvMask & SE_HWEV_EN_SCU_DMA)) SeMednafenHwEvent(SE_HWEV_K_SCU_DMA_START",
+         "if(1) SeMednafenHwEvent(SE_HWEV_K_SCU_DMA_START"),
+    ],
+    "hwev-wrong-kind": [
+        ("hwev_vdp1", "src/ss/vdp1.cpp", "SeMednafenHwEvent(SE_HWEV_K_VDP1_FB_SWAP", "SeMednafenHwEvent(SE_HWEV_K_VDP1_FB_ERASE"),
+        ("hwev_sh2", "src/ss/sh7095_ops.inc", "SeMednafenHwEvent(SE_HWEV_K_SH2_EXCEPTION, (int)(this - CPU), PC, (unsigned)(VECNUM_ILLINSTR), SE_HWEV_EXC_ILLINSTR",
+         "SeMednafenHwEvent(SE_HWEV_K_SH2_EXCEPTION, (int)(this - CPU), PC, (unsigned)(VECNUM_ILLINSTR), SE_HWEV_EXC_NMI"),
+        ("hwev_sh2", "src/ss/scu.inc", "SeMednafenHwEvent(SE_HWEV_K_SCU_DMA_END", "SeMednafenHwEvent(SE_HWEV_K_SCU_DMA_START"),
+    ],
+}
+
 def unsupported_linker(cxx):
     """The harnesses link real emulator translation units whose references into the rest of Mednafen are left
     unresolved on purpose (-Wl,--unresolved-symbols=ignore-in-object-files, below). That GNU ld option exists for
@@ -249,9 +312,25 @@ def main():
         if f8_decoder_checks(work) or f11_checks(work) or f2_hook_checks(work):
             return 1
         print("decoder and hook-placement checks: ok")
+        if hwev_text_checks(work, cm.load_new()):
+            return 1
+        print("hardware event hook checks: ok")
     apply_mod = cm.load_new()
     mutated_harnesses = set()
+    hwev_expected = {}
     for key in mutates:
+        if key in HWEV_MUTATIONS:
+            for harness, rel, old, new in HWEV_MUTATIONS[key]:
+                path = os.path.join(work, rel)
+                text = open(path, newline="").read()
+                if old not in text:
+                    print("mutation %s: the hook text is not in the patched %s" % (key, rel))
+                    return 1
+                open(path, "w", newline="").write(text.replace(old, new, 1))
+                hwev_expected.setdefault(harness, set()).add(key)
+                mutated_harnesses.add(harness)
+            print("mutation: %s" % key)
+            continue
         if key in SYNC_MUTATIONS:
             harness, rel, old, new = SYNC_MUTATIONS[key]
         else:
@@ -266,7 +345,8 @@ def main():
         open(path, "w", newline="").write(text.replace(old, new))
         print("mutation: %s" % key)
     for key in drops:
-        for rel in ("src/ss/vdp1.cpp", "src/ss/sound.cpp", "src/hw_cpu/m68k/m68k.cpp", "src/ss/sh7095.inc"):
+        for rel in ("src/ss/vdp1.cpp", "src/ss/sound.cpp", "src/hw_cpu/m68k/m68k.cpp", "src/ss/sh7095.inc", "src/ss/sh7095_ops.inc",
+                    "src/ss/scu.inc", "src/ss/ss.cpp", "src/ss/cdb.cpp", "src/ss/smpc.cpp", "src/ss/vdp2.cpp"):
             path = os.path.join(work, rel)
             text = open(path, newline="").read()
             new, n = apply_mod.retire_fences_text(text, key)
@@ -286,6 +366,7 @@ def main():
         print("m68k.cpp does not compile:\n" + r.stderr[-1500:])
         return 1
     bad = 0
+    failed = set()
     # The real glue (unwired: no emulator symbols) and the real shadow call stack, for the SH-2 harness.
     glue_objs = []
     for c_src in (os.path.join(HERE, "se_mednafen_glue.c"), os.path.join(HERE, "..", "Common", "se_export.c")):
@@ -296,11 +377,34 @@ def main():
             print("%s does not compile:\n%s" % (c_src, r.stderr[-1500:]))
             return 1
         glue_objs.append(o)
+    # The hardware event harness links the glue WIRED (its clock and PC then come from the emulator's own accessors in
+    # the patched ss.cpp) with the sink replaced by the harness's capture.
+    hw_o = os.path.join(scratch, "se_mednafen_glue.hwev.o")
+    r = subprocess.run(["gcc", "-std=gnu99", "-O1", "-g", "-w", "-DSE_MEDNAFEN_WIRED=1", "-DSE_MDFN_HWEV_SINK=SeHarnessHwSink",
+                        "-DSeMednafenHwEvent=SeHarnessGlueEvent", "-DSeMednafenDmacRecalc=SeHarnessGlueDmac",
+                        "-I" + os.path.join(HERE, "..", "Common"), "-I" + HERE, "-c", os.path.join(HERE, "se_mednafen_glue.c"), "-o", hw_o],
+                       capture_output=True, text=True)
+    if r.returncode:
+        print("the wired glue does not compile:\n" + r.stderr[-1500:])
+        return 1
+    # The patched vdp1.cpp now carries the event hooks, which reference the glue's mask and entry point; the F4 harness
+    # does not link the glue, so it gets the mask (clear: no hook fires) and an empty entry point.
+    stub_c = os.path.join(scratch, "hwev_stub.c")
+    with open(stub_c, "w") as f:
+        f.write("unsigned int SeSsHwEvMask;\nvoid SeMednafenHwEvent(unsigned k, int c, unsigned pc, unsigned a, unsigned b, unsigned d, unsigned e) {}\n")
+    stub_o = os.path.join(scratch, "hwev_stub.o")
+    r = subprocess.run(["gcc", "-c", "-w", stub_c, "-o", stub_o], capture_output=True, text=True)
+    if r.returncode:
+        print("the stub does not compile:\n" + r.stderr[-800:])
+        return 1
+    hw_objs = [hw_o, glue_objs[1]]
     for name, define, src, extra in (
-            ("f4_vdp1", "SE_VDP1_CPP", "perf_vdp1_harness.cpp", []),
+            ("f4_vdp1", "SE_VDP1_CPP", "perf_vdp1_harness.cpp", [stub_o]),
             ("f5_m68k", "SE_SOUND_CPP", "perf_m68k_harness.cpp", [m68k_o]),
             ("f2_sh2", "SE_SS_CPP", "perf_sh2_harness.cpp", glue_objs + ["-lpthread"]),
-            ("f8_bus", "SE_SS_CPP", "perf_bus_harness.cpp", glue_objs + ["-lpthread"])):
+            ("f8_bus", "SE_SS_CPP", "perf_bus_harness.cpp", glue_objs + ["-lpthread"]),
+            ("hwev_vdp1", "SE_VDP1_CPP", "hwev_harness.cpp", []),
+            ("hwev_sh2", "SE_SS_CPP", "hwev_harness.cpp", hw_objs + ["-lpthread"])):
         if only and name not in only:
             continue
         if mutates and name not in mutated_harnesses:
@@ -315,6 +419,7 @@ def main():
         if r.returncode:
             print("== %s: harness does not build:\n%s" % (name, r.stderr[-3000:]))
             bad += 1
+            failed.add(name)
             continue
         print("== " + name)
         r = subprocess.run([exe], capture_output=True, text=True)
@@ -322,7 +427,15 @@ def main():
         if r.returncode:
             print(r.stderr[-500:])
             bad += 1
+            failed.add(name)
+    if drops and not mutates:
+        bad += hwev_text_checks(work, apply_mod)
     if drops or mutates:
+        if hwev_expected:
+            missed = [h for h in hwev_expected if h not in failed]
+            if missed:
+                print("mutation NOT DETECTED by: %s" % ", ".join(missed))
+                return 1
         print("mutation %s" % ("detected" if bad else "NOT DETECTED"))
         return 0 if bad else 1
     return 1 if bad else 0
