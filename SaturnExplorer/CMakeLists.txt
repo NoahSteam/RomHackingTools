@@ -1191,6 +1191,7 @@ if(BUILD_TESTING)
         FrontEnd/src/FileWrite.cpp   # AssemblyPanel::SaveComments stages through WriteFileAtomically
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp   # in-place assembly editing
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp

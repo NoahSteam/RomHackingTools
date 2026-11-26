@@ -13,6 +13,7 @@
 #include "imgui.h"
 
 #include "AddressNameLine.h"
+#include "Debug/WriteDestText.h"
 #include "FileRead.h"
 #include "FileWrite.h"
 #include "StoreMerge.h"
@@ -71,7 +72,366 @@ Sh2MemReader MemReaderFor(IMemoryBackend& backend)
     };
 }
 
+std::string Hex8(uint32_t v)
+{
+    char b[16];
+    std::snprintf(b, sizeof b, "%08X", v);
+    return b;
+}
+
+uint16_t BE16(const std::vector<uint8_t>& b) { return (uint16_t)((b[0] << 8) | b[1]); }
+
+// The literal a PC-relative load reads: its address and width. False for everything else (mova names
+// an address, it does not read one) and for a row reached after a delayed branch, whose PC -- and so
+// whose literal -- depends on whether it runs in the slot (the same ambiguity the row's operand shows
+// as "@(disp,pc)"). Computed from the decoded displacement, the way the hardware does.
+bool LiteralOf(const DisassembledInstruction& ins, uint32_t& ea, uint32_t& size)
+{
+    if (ins.PcRelAmbiguous || (ins.PcRel != Sh2PcRel::Word && ins.PcRel != Sh2PcRel::Long)) return false;
+    const uint32_t pc = ins.Address + 4;
+    ea = (ins.PcRel == Sh2PcRel::Word ? pc : (pc & ~3u)) + ins.PcRelDisp;
+    size = ins.PcRel == Sh2PcRel::Word ? 2 : 4;
+    return true;
+}
+
+// A number the way the assembler spells them (0x1F, H'1F, $1F, decimal, optional sign) that fits
+// 'size' bytes, signed or unsigned. A literal pool word is just bits, so both readings are allowed.
+bool ParseLiteral(const std::string& text, uint32_t size, uint32_t& out, std::string& err, size_t& col)
+{
+    size_t i = 0;
+    while (i < text.size() && (text[i] == ' ' || text[i] == '\t')) ++i;
+    size_t end = text.size();
+    while (end > i && (text[end - 1] == ' ' || text[end - 1] == '\t')) --end;
+    col = i;
+    bool neg = false;
+    if (i < end && (text[i] == '-' || text[i] == '+')) { neg = text[i] == '-'; ++i; }
+    int base = 10;
+    if (i + 1 < end && text[i] == '0' && (text[i + 1] == 'x' || text[i + 1] == 'X')) { base = 16; i += 2; }
+    else if (i + 1 < end && (text[i] == 'H' || text[i] == 'h') && text[i + 1] == '\'') { base = 16; i += 2; }
+    else if (i < end && text[i] == '$') { base = 16; ++i; }
+    if (i >= end) { err = "expected a number"; col = i < text.size() ? i : text.size(); return false; }
+    uint64_t v = 0;
+    for (; i < end; ++i)
+    {
+        const char c = text[i];
+        int d = c >= '0' && c <= '9' ? c - '0' : (c | 0x20) >= 'a' && (c | 0x20) <= 'f' ? (c | 0x20) - 'a' + 10 : 99;
+        if (d >= base) { err = std::string("'") + c + "' is not a digit here"; col = i; return false; }
+        v = v * (uint64_t)base + (uint64_t)d;
+        if (v > 0xFFFFFFFFull + 1) { err = "number is too large"; col = i; return false; }
+    }
+    const uint64_t maxU = size == 2 ? 0xFFFFu : 0xFFFFFFFFu;
+    if (neg ? v > (maxU >> 1) + 1 : v > maxU)
+    {
+        char b[96];
+        std::snprintf(b, sizeof b, "does not fit %u bytes (%lld..%llu)", size,
+                      -(long long)((maxU >> 1) + 1), (unsigned long long)maxU);
+        err = b;
+        col = 0;
+        return false;
+    }
+    out = (uint32_t)(neg ? (0 - v) : v) & (uint32_t)maxU;
+    return true;
+}
+
+// Instructions below 'ea' that load from the same literal (or overlap it). A pool word is shared, so
+// patching it changes every one of them. Only the bytes just below the literal can hold a load that
+// reaches it: a word load reaches 510 bytes forward, a long load 1020, so one read covers all of them.
+// Decoded as if reached directly (what the panel's rows show), so data that looks like a load counts.
+void CountSharers(IMemoryBackend& backend, uint32_t rowAddr, uint32_t ea, uint32_t size,
+                  size_t& count, uint32_t& first)
+{
+    count = 0;
+    first = 0;
+    const uint32_t span = 1032;
+    const uint32_t lo = (ea >= span ? ea - span : 0) & ~1u;
+    if (ea <= lo) return;
+    const MemoryReadResult r = backend.ReadMemoryBatch({ { lo, ea - lo } })[0];
+    if (!r.success || r.bytes.size() < ea - lo) return;
+    for (uint32_t off = 0; off + 1 < ea - lo; off += 2)
+    {
+        const uint32_t a = lo + off;
+        if (a == rowAddr) continue;
+        uint32_t ea2 = 0, sz2 = 0;
+        if (!LiteralOf(Sh2Decode(a, (uint16_t)((r.bytes[off] << 8) | r.bytes[off + 1])), ea2, sz2)) continue;
+        if (ea2 < ea + size && ea < ea2 + sz2)
+        {
+            if (!count) first = a;
+            ++count;
+        }
+    }
+}
+
+std::string SharersText(size_t n, uint32_t first)
+{
+    return "also loaded by " + std::to_string(n) + " other instruction" + (n == 1 ? "" : "s") +
+           " (first at " + Hex8(first) + ")";
+}
+
+std::string JoinWarnings(const std::vector<std::string>& w)
+{
+    std::string s;
+    for (const std::string& x : w) s += (s.empty() ? "" : "; ") + x;
+    return s;
+}
+
 }  // namespace
+
+// The assembler's context for the instruction at 'addr', from memory as it is NOW: the previous word
+// says whether this row can sit in a delay slot (and where that branch goes), the next word lets the
+// assembler warn about an illegal slot instruction. Re-run at commit, because with Auto Refresh on the
+// neighbours can change under an open editor.
+bool AssemblyPanel::BuildAsmContext(IMemoryBackend& backend, uint32_t addr, Sh2AsmContext& ctx, uint16_t& curOp)
+{
+    const auto r = backend.ReadMemoryBatch({ { addr, 2 }, { addr - 2, 2 }, { addr + 2, 2 } });
+    if (r.size() < 3 || !r[0].success || r[0].bytes.size() < 2) return false;
+    curOp = BE16(r[0].bytes);
+    ctx = Sh2AsmContext();
+    ctx.address = addr;
+    ctx.resolveSymbol = mResolveSymbol;
+    if (addr >= 2 && r[1].success && r[1].bytes.size() >= 2)
+    {
+        const DisassembledInstruction prev = Sh2Decode(addr - 2, BE16(r[1].bytes));
+        if (prev.HasDelaySlot)
+        {
+            ctx.afterDelayedBranch = true;
+            ctx.slotTargetKnown = prev.HasBranchTarget;
+            ctx.slotBranchTarget = prev.BranchTarget;
+        }
+    }
+    if (r[2].success && r[2].bytes.size() >= 2)
+    {
+        ctx.haveNext = true;
+        ctx.nextOpcode = BE16(r[2].bytes);
+    }
+    return true;
+}
+
+void AssemblyPanel::BeginInstructionEdit(IMemoryBackend& backend, const Line& ln)
+{
+    if (!ln.readable) return;
+    if (!backend.CanWrite(ln.addr))
+    {
+        const std::string why = backend.WriteRefusal(ln.addr);
+        SetNotice(why.empty() ? "Writing is not available at " + Hex8(ln.addr) + "." : why, 2);
+        return;
+    }
+    AsmEdit e;
+    uint16_t cur = 0;
+    if (!BuildAsmContext(backend, ln.addr, e.ctx, cur))
+    {
+        SetNotice("Cannot read memory at " + Hex8(ln.addr) + ".", 2);
+        return;
+    }
+    e.kind = EditKind::Instruction;
+    e.rowAddr = e.target = ln.addr;
+    e.size = 2;
+    e.cpu = mCpu;
+    e.sourceId = backend.SourceId();
+    e.focusPending = true;
+    e.beganFrame = (unsigned)ImGui::GetFrameCount();
+    e.oldValue = ln.op;
+    // Exactly what the Instr and Operands cells show, so the text pastes back unchanged. A slot row's
+    // operand is already the "@(disp,pc)" form, which the assembler takes.
+    const std::string seed = ln.ins.Operands.empty() ? ln.ins.Mnemonic : ln.ins.Mnemonic + " " + ln.ins.Operands;
+    std::snprintf(e.buf, sizeof e.buf, "%s", seed.c_str());
+    mEdit = e;
+}
+
+void AssemblyPanel::BeginLiteralEdit(IMemoryBackend& backend, const Line& ln)
+{
+    uint32_t ea = 0, size = 0;
+    if (!ln.readable || !LiteralOf(ln.ins, ea, size)) return;
+    if (!backend.CanWrite(ea))
+    {
+        const std::string why = backend.WriteRefusal(ea);
+        SetNotice(why.empty() ? "Writing is not available at " + Hex8(ea) + "." : why, 2);
+        return;
+    }
+    const MemoryReadResult r = backend.ReadMemoryBatch({ { ea, size } })[0];
+    if (!r.success || r.bytes.size() < size)
+    {
+        SetNotice("Cannot read the literal at " + Hex8(ea) + ".", 2);
+        return;
+    }
+    AsmEdit e;
+    e.kind = EditKind::Literal;
+    e.rowAddr = ln.addr;
+    e.target = ea;
+    e.size = size;
+    e.cpu = mCpu;
+    e.sourceId = backend.SourceId();
+    e.focusPending = true;
+    e.beganFrame = (unsigned)ImGui::GetFrameCount();
+    for (uint32_t i = 0; i < size; ++i) e.oldValue = (e.oldValue << 8) | r.bytes[i];
+    std::snprintf(e.buf, sizeof e.buf, size == 2 ? "0x%04X" : "0x%08X", e.oldValue);
+    CountSharers(backend, ln.addr, ea, size, e.sharers, e.firstSharer);
+    mEdit = e;
+}
+
+// Re-assemble only when the text changed: Sh2Assemble is cheap, but a decode-back per frame is waste.
+void AssemblyPanel::UpdatePreview()
+{
+    AsmEdit& e = mEdit;
+    if (e.previewReady && e.previewFor == e.buf) return;
+    e.previewReady = true;
+    e.previewFor = e.buf;
+    e.previewOk = false;
+    e.previewWarn = false;
+    e.previewMsg.clear();
+    if (e.kind == EditKind::Instruction)
+    {
+        const Sh2AsmResult r = Sh2Assemble(e.buf, e.ctx);
+        if (!r.ok)
+            e.previewMsg = r.error + " (column " + std::to_string(r.errorColumn + 1) + ")";
+        else
+        {
+            e.previewOk = true;
+            e.previewValue = r.opcode;
+            e.previewMsg = JoinWarnings(r.warnings);
+            e.previewWarn = !r.warnings.empty();
+        }
+    }
+    else
+    {
+        std::string err;
+        size_t col = 0;
+        if (!ParseLiteral(e.buf, e.size, e.previewValue, err, col))
+            e.previewMsg = err + " (column " + std::to_string(col + 1) + ")";
+        else
+        {
+            e.previewOk = true;
+            if (e.sharers) { e.previewMsg = SharersText(e.sharers, e.firstSharer); e.previewWarn = true; }
+        }
+    }
+}
+
+// Enter on the edit box. Everything that can be checked is checked before the one WriteMemory call:
+// the source is still the one the edit was opened on, the text assembles against memory as it is now,
+// the backend accepts the address. A bad text keeps the editor open; a refusal ends it, leaving the bytes.
+void AssemblyPanel::CommitEdit(IMemoryBackend& backend, Request& req)
+{
+    const bool literal = mEdit.kind == EditKind::Literal;
+    const uint32_t addr = mEdit.target;
+    const uint32_t size = mEdit.size;
+
+    if (backend.SourceId() != mEdit.sourceId)
+    {
+        CancelEdit();
+        SetNotice("Edit dropped: the memory source changed.", 2);
+        return;
+    }
+
+    uint32_t oldValue = 0, newValue = 0;
+    std::vector<std::string> warnings;
+    std::string what;   // the text for the notice: the assembled line, or the literal
+    size_t sharers = 0;
+    uint32_t firstSharer = 0;
+    if (!literal)
+    {
+        Sh2AsmContext ctx;
+        uint16_t cur = 0;
+        if (!BuildAsmContext(backend, addr, ctx, cur))
+        {
+            SetNotice("Cannot read memory at " + Hex8(addr) + ".", 2);
+            mEdit.focusPending = true;
+            return;
+        }
+        const Sh2AsmResult r = Sh2Assemble(mEdit.buf, ctx);
+        if (!r.ok)
+        {
+            // Stay open so the text can be fixed; nothing was written.
+            SetNotice("Cannot assemble: " + r.error + " (column " + std::to_string(r.errorColumn + 1) + ")", 2);
+            mEdit.focusPending = true;
+            return;
+        }
+        oldValue = cur;
+        newValue = r.opcode;
+        warnings = r.warnings;
+        what = r.decoded.Operands.empty() ? r.decoded.Mnemonic : r.decoded.Mnemonic + " " + r.decoded.Operands;
+        // The slot after a delayed branch stops being a slot when the branch is replaced. Only the panel
+        // knows the old instruction, so it is the panel that says so (the assembler sees the new one).
+        if (Sh2Decode(addr, cur).HasDelaySlot && !r.decoded.HasDelaySlot)
+            warnings.push_back("replaced a delayed branch: the instruction at " + Hex8(addr + 2) +
+                               " is no longer its delay slot");
+        if (newValue == oldValue)
+        {
+            CancelEdit();
+            SetNotice("No change at " + Hex8(addr) + ": the instruction already encodes as that.", 0);
+            return;
+        }
+    }
+    else
+    {
+        std::string err;
+        size_t col = 0;
+        if (!ParseLiteral(mEdit.buf, size, newValue, err, col))
+        {
+            SetNotice("Cannot write the literal: " + err + " (column " + std::to_string(col + 1) + ")", 2);
+            mEdit.focusPending = true;
+            return;
+        }
+        const MemoryReadResult cur = backend.ReadMemoryBatch({ { addr, size } })[0];
+        if (!cur.success || cur.bytes.size() < size)
+        {
+            SetNotice("Cannot read the literal at " + Hex8(addr) + ".", 2);
+            mEdit.focusPending = true;
+            return;
+        }
+        for (uint32_t i = 0; i < size; ++i) oldValue = (oldValue << 8) | cur.bytes[i];
+        // Counted again now: before the write it is what the user is about to change under other code.
+        CountSharers(backend, mEdit.rowAddr, addr, size, sharers, firstSharer);
+        char b[16];
+        std::snprintf(b, sizeof b, size == 2 ? "0x%04X" : "0x%08X", newValue);
+        what = b;
+    }
+
+    std::string result;
+    int level = 0;
+    if (!backend.CanWrite(addr))
+    {
+        const std::string why = backend.WriteRefusal(addr);
+        result = why.empty() ? "Write refused at " + Hex8(addr) + "." : why;
+        level = 2;
+    }
+    else
+    {
+        // One call for the whole opcode or literal: one poke, one staged record. Two byte writes could
+        // leave half an instruction behind if the second were refused.
+        uint8_t bytes[4];
+        for (uint32_t i = 0; i < size; ++i) bytes[i] = (uint8_t)(newValue >> (8 * (size - 1 - i)));
+        const size_t n = backend.WriteMemory(addr, bytes, size);
+        if (n == size)
+        {
+            result = "Wrote " + std::to_string(size) + " bytes at " + Hex8(addr) + " (" + what + "): " +
+                     WriteDestText(backend.WriteDestination(addr));
+            if (literal && sharers)
+            {
+                result += "; the literal is " + SharersText(sharers, firstSharer);
+                level = 1;
+            }
+            if (!warnings.empty()) { result += ". Warning: " + JoinWarnings(warnings); level = 1; }
+            req.assembled = true;
+            req.asmAddr = addr;
+            req.asmSize = size;
+            req.asmOld = oldValue;
+            req.asmNew = newValue;
+            req.asmNote = result;
+        }
+        else
+        {
+            const std::string why = backend.WriteRefusal(addr);
+            result = n == 0 ? (why.empty() ? "Write refused at " + Hex8(addr) + "." : why)
+                            : "Partially written " + std::to_string(n) + "/" + std::to_string(size) + " at " +
+                              Hex8(addr) + (why.empty() ? "" : ": " + why);
+            level = 2;
+        }
+        // Even a short write may have changed memory, and a backend write does not move SourceId, so
+        // with Auto Refresh off the cached rows would keep showing the old bytes.
+        if (n > 0) mDropPages = true;
+    }
+    CancelEdit();
+    SetNotice(result, level);
+}
 
 void AssemblyPanel::GoTo(int cpu, uint32_t addr)
 {
@@ -162,6 +522,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     if (mFocusRequested) { ImGui::SetNextWindowFocus(); mFocusRequested = false; }
     if (!ImGui::Begin("SH-2 Assembly"))
     {
+        CancelEdit();   // a hidden panel draws no edit box, so nothing would ever finish it
         ImGui::End();
         return;
     }
@@ -227,6 +588,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
 
     if (!haveRegs)
     {
+        CancelEdit();
         ImGui::Separator();
         ImGui::TextWrapped("No SH-2 state in this source. Load a savestate (or connect a "
                            "live Yabause) that provides CPU registers.");
@@ -261,8 +623,25 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         }
     }
 
+    // The last edit's outcome (a refusal, an assembler error, "Wrote ..."), until it times out.
+    if (!mNotice.empty())
+    {
+        mNoticeAge -= ImGui::GetIO().DeltaTime;
+        if (mNoticeAge <= 0.0f) mNotice.clear();
+        else
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, mNoticeLevel == 2 ? ui::Color(IM_COL32(235, 100, 100, 255), IM_COL32(176, 32, 32, 255))
+                                               : mNoticeLevel == 1 ? ui::Color(IM_COL32(230, 180, 80, 255), IM_COL32(140, 90, 0, 255))
+                                                                   : ui::Color(IM_COL32(150, 210, 150, 255), IM_COL32(30, 110, 50, 255)));
+            ImGui::TextWrapped("%s", mNotice.c_str());
+            ImGui::PopStyleColor();
+        }
+    }
+
     // --- Frame the view: follow PC unless browsing ---
-    if (mFollowPc)
+    // While an edit box is open the view stays put: a PC that moves would re-scroll the list (and, when
+    // it leaves the region, swap the rows) out from under the box. Following resumes when it closes.
+    if (mFollowPc && mEdit.kind == EditKind::None)
     {
         // Scroll when the view was re-framed (so a forced recentre at a *steady* PC still moves
         // it -- the "Go to PC" case) and on any PC change. The list is the whole region, so a
@@ -273,13 +652,14 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         mWindowAnchor = pc & ~1u;
         mWindowValid = true;
     }
-    else if (!mWindowValid)
+    else if (!mFollowPc && !mWindowValid)
     {
         mWindowAnchor = pc & ~1u;
         RequestScroll(mWindowAnchor, 0.35f);
         mWindowValid = true;
     }
-    mLastPc = pc;   // track the followed PC (also the Back-history anchor in Navigate)
+    // Left alone while editing so that, once the box closes, a PC that moved meanwhile is scrolled to.
+    if (mEdit.kind == EditKind::None) mLastPc = pc;   // the followed PC (also the Back-history anchor in Navigate)
 
     // The list spans the anchor's whole region; row r is the instruction at span.base + 2r. Held
     // in locals: a Navigate() raised by a click mid-table re-aims mWindowAnchor at what may be
@@ -294,12 +674,23 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     const uint64_t sourceId = backend.SourceId();
     if (mAutoRefresh || mPagesSource != sourceId || mPages.size() > 1024) mPages.clear();
     mPagesSource = sourceId;
+    // The edit's target is gone when the bytes behind the address are different data, or the other CPU
+    // is shown (its rows are not this row).
+    if (mEdit.kind != EditKind::None && (sourceId != mEdit.sourceId || mCpu != mEdit.cpu))
+    {
+        CancelEdit();
+        SetNotice("Edit cancelled: the memory source or CPU changed.", 1);
+    }
+    const bool startEditKey = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+                              !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F2, false);
+    bool editDrawn = false;
 
     // --- Table ---
     const ImGuiTableFlags flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg |
                                   ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable;
     if (!ImGui::BeginTable("asm", 6, flags))
     {
+        CancelEdit();
         ImGui::End();
         return;
     }
@@ -421,17 +812,56 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                 ImGui::PopStyleColor();
             }
             openRowContext();
+            // Editing this row: the edit box replaces the mnemonic and operands (it holds both), and the
+            // Bytes cell previews the encoding the text assembles to.
+            const bool editingRow = mEdit.kind != EditKind::None && mEdit.rowAddr == ln.addr;
+            // Double-click on Bytes or Instr (or F2 on the selected row) opens the instruction editor.
+            // Operands keep their click-to-follow-branch meaning and the address its Memory jump.
+            bool openAsm = startEditKey && mEdit.kind == EditKind::None && mHasSel &&
+                           mSelLoAddr == mSelHiAddr && ln.addr == mSelLoAddr;
             ImGui::TableSetColumnIndex(2);
-            if (ln.readable) { ImGui::PushStyleColor(ImGuiCol_Text, kColBytes()); ImGui::Text("%04X", ln.op); ImGui::PopStyleColor(); }
+            if (editingRow && mEdit.kind == EditKind::Instruction)
+            {
+                UpdatePreview();
+                if (mEdit.previewOk)
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Text, kColMnem());
+                    ImGui::Text("%04X", mEdit.previewValue);
+                    ImGui::PopStyleColor();
+                }
+                else ImGui::TextDisabled("----");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%04X -> %s", mEdit.oldValue, mEdit.previewOk ? "new encoding" : "no valid encoding yet");
+            }
+            else if (ln.readable) { ImGui::PushStyleColor(ImGuiCol_Text, kColBytes()); ImGui::Text("%04X", ln.op); ImGui::PopStyleColor(); }
             else ImGui::TextDisabled("----");
+            if (!editingRow && ln.readable && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) openAsm = true;
             openRowContext();
             ImGui::TableSetColumnIndex(3);
-            if (ln.readable) { ImGui::PushStyleColor(ImGuiCol_Text, kColMnem()); ImGui::TextUnformatted(ln.ins.Mnemonic.c_str()); ImGui::PopStyleColor(); }
+            if (editingRow) ImGui::TextUnformatted(" ");
+            else if (ln.readable) { ImGui::PushStyleColor(ImGuiCol_Text, kColMnem()); ImGui::TextUnformatted(ln.ins.Mnemonic.c_str()); ImGui::PopStyleColor(); }
             else ImGui::TextDisabled("????");
+            if (!editingRow && ln.readable && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) openAsm = true;
             openRowContext();
             ImGui::TableSetColumnIndex(4);
             Sh2OperandsDrawn ops;
-            if (ln.readable) ops = DrawSh2Operands(ln.ins);
+            if (editingRow)
+            {
+                editDrawn = true;
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (mEdit.focusPending) { ImGui::SetKeyboardFocusHere(); mEdit.focusPending = false; }
+                // Zero vertical frame padding for the same reason as the comment editor below: the list
+                // is clipped on the assumption that every row is one text line tall.
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
+                const bool enter = ImGui::InputText("##asm", mEdit.buf, sizeof(mEdit.buf),
+                                                    ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+                ImGui::PopStyleVar();
+                // Enter commits (and leaves the box open when the text is bad). Anything else that
+                // ends the activation -- Escape, a click elsewhere, focus moving away -- cancels.
+                if (enter) CommitEdit(backend, req);
+                else if (ImGui::IsItemDeactivated()) CancelEdit();
+            }
+            else if (ln.readable) ops = DrawSh2Operands(ln.ins);
+            if (openAsm && !editingRow) BeginInstructionEdit(backend, ln);
             // Right-clicking an operand aims the menu's memory actions at that operand, so
             // "Add Operand to Watch" on the @r5+ half of "mac.l @r4+,@r5+" watches r5's
             // address and not r4's.
@@ -458,7 +888,23 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             {
                 auto it = mComments.find(ln.addr);
                 const bool hasUser = it != mComments.end() && !it->second.empty();
-                if (mEditingComment && mEditCommentAddr == ln.addr)
+                if (mEdit.kind != EditKind::None && mEdit.rowAddr == ln.addr)
+                {
+                    // Live result of the text in the box: the error in red with its column, else the
+                    // warnings in amber, else a hint. Single line; the tooltip holds the whole text.
+                    UpdatePreview();
+                    const bool bad = !mEdit.previewOk;
+                    const std::string msg = bad || mEdit.previewWarn ? mEdit.previewMsg
+                                          : mEdit.kind == EditKind::Literal ? "Enter writes the literal, Esc cancels"
+                                                                            : "Enter assembles, Esc cancels";
+                    ImGui::PushStyleColor(ImGuiCol_Text, bad ? ui::Color(IM_COL32(235, 100, 100, 255), IM_COL32(176, 32, 32, 255))
+                                          : mEdit.previewWarn ? ui::Color(IM_COL32(230, 180, 80, 255), IM_COL32(140, 90, 0, 255))
+                                                              : kColCmt());
+                    ImGui::TextUnformatted(msg.c_str());
+                    ImGui::PopStyleColor();
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", msg.c_str());
+                }
+                else if (mEditingComment && mEditCommentAddr == ln.addr)
                 {
                     ImGui::SetNextItemWidth(-FLT_MIN);
                     if (mCommentFocus) { ImGui::SetKeyboardFocusHere(); mCommentFocus = false; }
@@ -535,6 +981,34 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                     ImGui::SetClipboardText(b);
                 }
                 ImGui::Separator();
+                // In-place edits write through the backend, so they follow its CanWrite; when it says no,
+                // the tooltip carries the backend's own reason, as the hex editor and Structs panel do.
+                {
+                    const bool canAsm = ln.readable && backend.CanWrite(ln.addr);
+                    if (ImGui::MenuItem("Assemble...", "F2", false, canAsm)) BeginInstructionEdit(backend, ln);
+                    if (ln.readable && !canAsm && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    {
+                        const std::string why = backend.WriteRefusal(ln.addr);
+                        ImGui::SetTooltip("%s", why.empty() ? "Writing is not available here." : why.c_str());
+                    }
+                    uint32_t litEa = 0, litSize = 0;
+                    const bool isLit = ln.readable && LiteralOf(ln.ins, litEa, litSize);
+                    const bool canLit = isLit && backend.CanWrite(litEa);
+                    if (ImGui::MenuItem("Edit Literal Value...", nullptr, false, canLit)) BeginLiteralEdit(backend, ln);
+                    if (ln.readable && !canLit && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    {
+                        if (isLit)
+                        {
+                            const std::string why = backend.WriteRefusal(litEa);
+                            ImGui::SetTooltip("%s", why.empty() ? "Writing is not available here." : why.c_str());
+                        }
+                        else if (ln.ins.PcRelAmbiguous)
+                            ImGui::SetTooltip("This row follows a delayed branch: which literal it loads depends on whether it runs in the delay slot.");
+                        else
+                            ImGui::SetTooltip("Only a PC-relative mov.w / mov.l load has a literal to edit.");
+                    }
+                }
+                ImGui::Separator();
                 if (ImGui::MenuItem("Edit Comment"))
                 {
                     mEditingComment = true; mEditCommentAddr = ln.addr; mCommentFocus = true;
@@ -605,6 +1079,12 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     // A request raised during the loop is left alone for the same reason the consume above skips
     // it -- it belongs to the span the next frame will list.
     if (mScrollPending && mScrollSeq == scrollSeqAtRowStart) mScrollPending = false;
+
+    // The edit's row left the clipped range (scrolled away, or the view moved): there is no box to finish
+    // it in. The frame it opened on is exempt, its box is only submitted from the next one.
+    if (mEdit.kind != EditKind::None && !editDrawn && (unsigned)ImGui::GetFrameCount() > mEdit.beganFrame)
+        CancelEdit();
+    if (mDropPages) { mPages.clear(); mDropPages = false; }
 
     ImGui::EndTable();
 

@@ -18,6 +18,7 @@
 #include "Debug/MemoryBackend.h"
 #include "Debug/BreakpointManager.h"
 #include "Debug/ExecutionActions.h"
+#include "Debug/Sh2Asm.h"
 #include "Debug/Sh2Disasm.h"
 
 namespace sfe
@@ -54,12 +55,37 @@ public:
         uint32_t decompileAddr = 0;
         bool     showPseudocode = false;  // show the line of the instruction at pseudoAddr in SH-2 Pseudocode (A7-5)
         uint32_t pseudoAddr = 0;
+        // An in-place edit was written this frame (instruction or literal). 'asmAddr' is where the
+        // bytes went, 'asmSize' how many (2 for an instruction, 2 or 4 for a literal), asmOld/asmNew
+        // the big-endian values. 'asmNote' is the one-line outcome the panel also shows, ready for
+        // the App's Log.
+        bool        assembled = false;
+        uint32_t    asmAddr = 0;
+        uint32_t    asmSize = 0;
+        uint32_t    asmOld = 0;
+        uint32_t    asmNew = 0;
+        std::string asmNote;
     };
     void Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
               ExecutionActions& actions, WatchPanel& watch, bool live, Request& req);
 
     // Offer "Decompile Here" and "Show in Pseudocode" in the row menu: only builds with the decompiler have the panel they open.
     void SetOfferDecompile(bool offer) { mOfferDecompile = offer; }
+
+    // Resolves a symbol typed into the assembler (branch targets, PC-relative operands). Unset: symbols
+    // are rejected with the assembler's own message. Same setter style as SetOfferDecompile.
+    void SetSymbolResolver(std::function<bool(const std::string&, uint32_t&, std::string&)> r)
+    { mResolveSymbol = std::move(r); }
+
+    // Auto Refresh is otherwise a checkbox only; exposed so a host (and the tests) can start with it off.
+    void SetAutoRefresh(bool on) { mAutoRefresh = on; }
+
+    // In-place editing state, read-only: whether an edit box is open, its current text, and the last
+    // outcome line (a refusal, an error or "Wrote ..."), which the panel also draws under the header.
+    bool               Editing() const { return mEdit.kind != EditKind::None; }
+    std::string        EditText() const { return mEdit.buf; }
+    const std::string& Notice() const { return mNotice; }
+    bool               NoticeIsError() const { return mNoticeLevel == 2; }
 
     // The CPU the panel is currently viewing (0 master, 1 slave) — used by the App
     // to target run-control (Run to Here) at the right core.
@@ -189,6 +215,49 @@ private:
     // every frame the menu stays open would be a request per frame.
     std::vector<uint8_t> mCtxFindBytes;
     uint32_t             mCtxFindStart = 0;
+
+    // ---- In-place editing (instruction text, or a PC-relative load's literal) ----
+    enum class EditKind { None, Instruction, Literal };
+    struct AsmEdit
+    {
+        EditKind kind = EditKind::None;
+        uint32_t rowAddr = 0;        // the instruction row the box sits in
+        uint32_t target = 0;         // where the bytes go: the row itself, or the literal's address
+        uint32_t size = 2;           // 2, or 2/4 for a literal
+        int      cpu = 0;
+        uint64_t sourceId = 0;       // the source the edit was opened on; another one cancels it
+        bool     focusPending = false;
+        unsigned beganFrame = 0;     // ImGui frame count at open, so the not-drawn check skips that frame
+        char     buf[128] = {};
+        uint32_t oldValue = 0;       // what the target held when opened (preview only; re-read at commit)
+        Sh2AsmContext ctx;           // context built when opened (preview only; rebuilt at commit)
+        // Live preview of 'previewFor'.
+        std::string previewFor;
+        bool        previewReady = false;
+        bool        previewOk = false;
+        uint32_t    previewValue = 0;
+        std::string previewMsg;      // the error with its column, or the warnings
+        bool        previewWarn = false;
+        // Literal edits: other instructions loading the same slot, found when opened.
+        size_t   sharers = 0;
+        uint32_t firstSharer = 0;
+    };
+    AsmEdit     mEdit;
+    std::function<bool(const std::string&, uint32_t&, std::string&)> mResolveSymbol;
+    std::string mNotice;             // last edit outcome, shown under the header
+    int         mNoticeLevel = 0;    // 0 ok, 1 warning, 2 error
+    float       mNoticeAge = 0.0f;
+    // A write changed bytes the cached pages hold. Applied after the row loop, not at the write: the
+    // loop holds references into the pages, so clearing them mid-frame would leave dangling rows.
+    bool        mDropPages = false;
+    void SetNotice(const std::string& text, int level)
+    { mNotice = text; mNoticeLevel = level; mNoticeAge = 12.0f; }
+    void CancelEdit() { mEdit = AsmEdit(); }
+    void BeginInstructionEdit(IMemoryBackend& backend, const Line& ln);
+    void BeginLiteralEdit(IMemoryBackend& backend, const Line& ln);
+    void UpdatePreview();
+    void CommitEdit(IMemoryBackend& backend, Request& req);
+    bool BuildAsmContext(IMemoryBackend& backend, uint32_t addr, Sh2AsmContext& ctx, uint16_t& curOp);
 
     uint32_t mEditCommentAddr = 0;     // address whose comment cell is being edited
     bool     mEditingComment = false;
