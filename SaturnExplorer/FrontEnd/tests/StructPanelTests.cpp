@@ -625,10 +625,79 @@ void RequestViewAtAddsAView()
     CHECK(f.panel.Library().Views().size() == 1);
     CHECK(f.panel.Library().Views()[0].expression == "0x06001234");
 }
+// ---------------------------------------------------------------- root-row editing
+
+// Click a root-row box, replace its text and press Enter.
+void TypeIntoBox(Fixture& f, ImVec2 at, const char* text)
+{
+    f.h.Hover(at);
+    f.h.Click(at);
+    f.Frames(2);
+    f.SelectAll();
+    f.Type(text);
+    f.Key(ImGuiKey_Enter);
+    f.Frames(2);
+}
+
+// Saving clears the dirty flag, so a later edit can be seen to set it.
+void MakeClean(Fixture& f, const char* name)
+{
+    SetWorkFolder(TempDir(name));
+    std::string err;
+    CHECK(f.panel.SaveSession(&err));
+    CHECK(!f.panel.NeedsSave());
+}
+
+void TypedCountTakesEffect()
+{
+    Fixture f(ItemView(1));
+    f.Frames(4);
+    MakeClean(f, "count");
+    const auto* root = f.Row("v1");
+    CHECK(root != nullptr);
+    if (!root) return;
+    TypeIntoBox(f, root->countPos, "5");
+    CHECK(f.panel.Library().Views()[0].count == 5);
+    CHECK(f.panel.NeedsSave());
+    CHECK(f.Row("v1") && f.Row("v1")->value == "5");
+
+    // Zero and negatives clamp to 1, and the box shows the stored value afterwards.
+    TypeIntoBox(f, f.Row("v1")->countPos, "0");
+    CHECK(f.panel.Library().Views()[0].count == 1);
+    CHECK(f.Row("v1") && f.Row("v1")->value == "1");
+    TypeIntoBox(f, f.Row("v1")->countPos, "-3");
+    CHECK(f.panel.Library().Views()[0].count == 1);
+    SetWorkFolder("");
+}
+
+void TypedLabelAndAddressTakeEffect()
+{
+    Fixture f(ItemView(1));
+    f.Frames(4);
+    MakeClean(f, "labeladdr");
+    const auto* root = f.Row("v1");
+    CHECK(root != nullptr);
+    if (!root) return;
+    TypeIntoBox(f, root->labelPos, "renamed");
+    CHECK(f.panel.Library().Views()[0].label == "renamed");
+    CHECK(f.panel.NeedsSave());
+
+    std::string err;
+    CHECK(f.panel.SaveSession(&err));
+    CHECK(!f.panel.NeedsSave());
+    TypeIntoBox(f, f.Row("v1")->exprPos, "0x06000200");
+    CHECK(f.panel.Library().Views()[0].expression == "0x06000200");
+    CHECK(f.panel.NeedsSave());
+    f.Frames(3);
+    CHECK(f.Row("v1.id") && f.Row("v1.id")->address == "0x06000200");
+    SetWorkFolder("");
+}
 }  // namespace
 
 int main()
 {
+    TypedCountTakesEffect();
+    TypedLabelAndAddressTakeEffect();
     TreeEditWritesExactBytes();
     TableEditWritesExactBytes();
     RefusedWriteKeepsOldValueAndSaysWhy();

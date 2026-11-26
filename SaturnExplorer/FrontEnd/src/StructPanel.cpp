@@ -78,6 +78,8 @@ WatchType WatchTypeFor(FieldKind k)
     }
 }
 
+ImVec2 Mid(ImVec2 a, ImVec2 b) { return ImVec2((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f); }
+
 void CopyStr(char* dst, size_t cap, const std::string& s)
 {
     const size_t n = (std::min)(s.size(), cap - 1);
@@ -362,9 +364,9 @@ void StructPanel::RequestViewAt(uint32_t addr, const std::string& label)
 StructPanel::ViewUi& StructPanel::UiFor(const StructView& v)
 {
     ViewUi& ui = mViewUi[v.id];
-    if (!ui.labelActive && v.label != ui.label) CopyStr(ui.label, sizeof ui.label, v.label);
+    if (!ui.countActive && ui.count != (int)v.count) ui.count = (int)v.count;
     if (!ui.exprActive && v.expression != ui.expr) CopyStr(ui.expr, sizeof ui.expr, v.expression);
-    if (ui.count != (int)v.count && ui.count != 0) ui.count = (int)v.count;
+    if (!ui.countActive && ui.count != (int)v.count) ui.count = (int)v.count;
     return ui;
 }
 
@@ -1232,6 +1234,7 @@ void StructPanel::DrawViewRoot(const StructView& v)
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::InputText("##label", ui.label, sizeof ui.label, ImGuiInputTextFlags_CharsNoBlank);
     ui.labelActive = ImGui::IsItemActive();
+    rec.labelPos = Mid(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemDeactivatedAfterEdit())
     {
         std::string err;
@@ -1244,6 +1247,7 @@ void StructPanel::DrawViewRoot(const StructView& v)
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::InputText("##expr", ui.expr, sizeof ui.expr, ImGuiInputTextFlags_CharsNoBlank);
     ui.exprActive = ImGui::IsItemActive();
+    rec.exprPos = Mid(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemDeactivatedAfterEdit())
     {
         std::string err;
@@ -1278,11 +1282,19 @@ void StructPanel::DrawViewRoot(const StructView& v)
     ImGui::TableSetColumnIndex(3);
     ImGui::SetNextItemWidth(70.0f);
     ImGui::InputInt("##count", &ui.count, 0, 0);
+    rec.countPos = Mid(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    // Not synced from the model while the box is active: InputInt only writes on the frame the
+    // text changes, so a per-frame sync would put the old count back before the commit reads it.
+    ui.countActive = ImGui::IsItemActive();
     if (ImGui::IsItemDeactivatedAfterEdit())
     {
         std::string err;
-        const int n = (std::max)(1, ui.count);
-        if (mLib.UpdateView(v.id, v.label, v.structName, (uint32_t)n, v.expression, &err)) mDirty = true;
+        const int n = (std::max)(1, ui.count);       // 0 or negative clamps to 1
+        if (mLib.UpdateView(v.id, v.label, v.structName, (uint32_t)n, v.expression, &err))
+        {
+            mDirty = true;
+            ui.count = n;
+        }
         else { SetNotice("Count: " + err, true); ui.count = (int)v.count; }
     }
     if (v.count > 1)

@@ -94,6 +94,7 @@ public:
         float       rowY = 0.0f;                 // screen Y of the row's first cell
         ImVec2      valueMin, valueMax;          // the Value cell
         ImVec2      menuMin, menuMax;            // the "..." button (zero in table cells)
+        ImVec2      labelPos, exprPos, countPos;  // centres of a view root's label, address and count boxes
     };
     struct MenuItemRecord
     {
@@ -134,6 +135,7 @@ private:
         char     expr[256] = {};
         int      count = 1;
         bool     labelActive = false;
+        bool     countActive = false;
         bool     exprActive = false;
         std::string resolvedExpr;
         uint64_t resolvedEpoch = 0;
