@@ -31,6 +31,7 @@
 #include "se_export.h"
 #include "SeLiveProtocol.h"
 #include "SePerfCounters.h"
+#include "SeHwEvents.h"
 
 #include <string.h>
 #include <stdint.h>
@@ -44,6 +45,12 @@ unsigned long long SeSsPerfC[SE_PERF_COUNT];
 /* SE_PERF_CACHE_* the emulator was configured with; set by the code apply.py injects where Mednafen
  * picks its cache emulation mode (F8), UNKNOWN until a game has loaded. */
 unsigned int SeSsCacheMode = SE_PERF_CACHE_UNKNOWN;
+
+/* The hardware event log's enable mask (SE_HWEV_EN_*): the single flag every injected site tests, so a
+ * site costs one load and one branch while the log is off. Written only on the emulate thread, by
+ * SeMednafenSetHwEvents at a frame boundary, and read only there too, so it needs no atomics.
+ * Defined outside SE_MEDNAFEN_WIRED for the same reason as SeSsPerfC. */
+unsigned int SeSsHwEvMask;
 
 /* ---- Accessors the patcher injects into Mednafen ss (C linkage). Each reaches a
  *      file-scope static the glue can't see directly. Pointer accessors return the
@@ -79,6 +86,7 @@ extern void            SsDbgSetTraceActive(int active);           /* arm per-ins
 extern int             SsDbgHasDebugger(void);                    /* 1 in a --enable-debugger build: the CPU hooks are real */
 extern void            SsDbgSetProfileActive(int active);         /* v26: keep the per-insn hook on for function profiling */
 extern int             SsDbgCpuTimestamp(int cpu);                /* v26: an SH-2's cycle counter (rebased every frame) */
+extern unsigned int    SsDbgCpuPc(int cpu);                       /* hardware events: where an SH-2 is (approximate; see apply.py) */
 /* Controller injection (v7+). apply.py implements this accessor through the SMPC
  * gamepad path, translating SE_PAD_* to Mednafen's bit order and atomically overlaying
  * it after each host-input refresh. `port` is 0-based (0 = controller 1). */
@@ -995,6 +1003,158 @@ void SeMednafenSlaveActive(int on, int ts)
     sProfSynced[1] = 0;
 }
 
+/* ---- Hardware event log (DebuggerFeaturesPlan.md, Part 1). The hooks apply.py injects into the
+ *      emulator test SeSsHwEvMask themselves and call SeMednafenHwEvent only when their source is on; the
+ *      work below (stamping, the per-frame cap, the DMAC edge shadow) therefore costs nothing while the
+ *      log is off. Everything here runs on the emulate thread. ---- */
+
+/* Where a record goes. The unit test substitutes its own before including this file. */
+#ifndef SE_MDFN_HWEV_SINK
+#define SE_MDFN_HWEV_SINK SeExportQueueHwEvent
+#endif
+
+/* The enable bits this build has hooks for (apply.py's HWEV_* sites). */
+#define SE_MDFN_HWEV_SUPPORTED 0xFFu
+
+/* The record's clock and PC. Wired, they come from the emulator; in a test they are whatever it sets. */
+#if defined(SE_MEDNAFEN_WIRED)
+#define SE_MDFN_HWEV_TS()     ((unsigned int)SsDbgCpuTimestamp(0))
+#define SE_MDFN_HWEV_PC(cpu)  SsDbgCpuPc(cpu)
+#else
+static unsigned int sHwEvTestTs, sHwEvTestPc;
+#define SE_MDFN_HWEV_TS()     sHwEvTestTs
+#define SE_MDFN_HWEV_PC(cpu)  (sHwEvTestPc)
+#endif
+
+/* Records produced per source this frame, counting those the cap dropped. */
+static unsigned int sHwEvCount[8];
+/* Each SH-2's on-chip DMAC run conditions (bit n = channel n runs) as of its last recalc, or -1 when
+ * unknown (a state load or a reset replaced the machine; the log was off while the DMAC changed). */
+static int sDmacRun[2] = { -1, -1 };
+
+/* kind -> enable bit index; 0xFF = not a kind this glue knows. */
+static unsigned int SeMdfnHwEvSource(unsigned int kind)
+{
+    switch (kind)
+    {
+        case SE_HWEV_K_SH2_EXCEPTION:                                       return 0;
+        case SE_HWEV_K_SCU_INT_ACCEPT: case SE_HWEV_K_SCU_INT_MASK:         return 1;
+        case SE_HWEV_K_SCU_DMA_START: case SE_HWEV_K_SCU_DMA_END:
+        case SE_HWEV_K_SCU_DMA_ILLEGAL:                                     return 2;
+        case SE_HWEV_K_DMAC_START: case SE_HWEV_K_DMAC_END:                 return 3;
+        case SE_HWEV_K_VDP1_DRAW_START: case SE_HWEV_K_VDP1_DRAW_END:
+        case SE_HWEV_K_VDP1_FB_SWAP: case SE_HWEV_K_VDP1_FB_ERASE:          return 4;
+        case SE_HWEV_K_VDP2_VBLANK: case SE_HWEV_K_VDP2_DISPLAY:            return 5;
+        case SE_HWEV_K_CD_COMMAND: case SE_HWEV_K_CD_RESPONSE:              return 6;
+        case SE_HWEV_K_SMPC_COMMAND:                                        return 7;
+        default:                                                            return 0xFFu;
+    }
+}
+
+static unsigned int SeMdfnHwEvFlags(unsigned int kind)
+{
+    /* An exception's saved PC is exact; a DMAC start is noticed where the CPU happens to be when it
+     * writes the register that starts it, so its PC is approximate. Device events carry none. */
+    if (kind == SE_HWEV_K_SH2_EXCEPTION) return SE_HWEV_F_HAS_PC;
+    if (kind == SE_HWEV_K_DMAC_START)    return SE_HWEV_F_HAS_PC | SE_HWEV_F_PC_APPROX;
+    return 0;
+}
+
+/* Build one record and hand it to the sink; the cap has been applied by the caller. */
+static void SeMdfnHwEvEmit(unsigned int kind, unsigned int source, int cpu, unsigned int flags, unsigned int pc,
+                           unsigned int a0, unsigned int a1, unsigned int a2, unsigned int a3)
+{
+    SeHwEvent ev;
+    memset(&ev, 0, sizeof ev);
+    ev.kind = (unsigned char)kind;
+    ev.source = (unsigned char)source;
+    ev.cpu = (unsigned char)((cpu == 0 || cpu == 1) ? cpu : SE_HWEV_CPU_NONE);
+    ev.flags = (unsigned char)flags;
+    ev.ts = SE_MDFN_HWEV_TS();
+    ev.pc = (flags & SE_HWEV_F_HAS_PC) ? pc : 0;
+    ev.arg[0] = a0; ev.arg[1] = a1; ev.arg[2] = a2; ev.arg[3] = a3;
+    SE_MDFN_HWEV_SINK(&ev);   /* 'frame' is stamped by the exporter */
+}
+
+/* Called by an injected site whose source bit is set. 'cpu' other than 0 / 1 (SE_HWEV_CPU_NONE, or -1) is "no CPU"; 'pc' is read only for kinds
+ * that carry one. Re-tests the mask so a call that raced the frame-boundary change (or a test) is inert. */
+void SeMednafenHwEvent(unsigned int kind, int cpu, unsigned int pc,
+                       unsigned int a0, unsigned int a1, unsigned int a2, unsigned int a3)
+{
+    const unsigned int src = SeMdfnHwEvSource(kind);
+    if (src > 7u || !(SeSsHwEvMask & (1u << src))) return;
+    /* The per-source frame cap: an interrupt-heavy game would otherwise fill the ring with one line of
+     * the log. The excess is counted and reported once, at the frame's end. */
+    if (sHwEvCount[src]++ >= SE_HWEV_FRAME_CAP) return;
+    SeMdfnHwEvEmit(kind, src, cpu, SeMdfnHwEvFlags(kind), pc, a0, a1, a2, a3);
+}
+
+/* SH7095::DMA_RecalcRunning, after every CHCR / DMAOR write and when a transfer finishes: 'runMask' says
+ * which channels run now. The edges against the last recalc are the events. The first recalc after the
+ * shadow became unknown only seeds it: a transfer already running then has no start to report. */
+void SeMednafenDmacRecalc(int cpu, unsigned int runMask,
+                          unsigned int chcr0, unsigned int sar0, unsigned int dar0, unsigned int tcr0,
+                          unsigned int chcr1, unsigned int sar1, unsigned int dar1, unsigned int tcr1)
+{
+    const int c = cpu ? 1 : 0;
+    const int was = sDmacRun[c];
+    unsigned int ch;
+    runMask &= 3u;
+    if (!(SeSsHwEvMask & SE_HWEV_EN_SH2_DMAC)) return;   /* the shadow is re-seeded when the source is enabled */
+    sDmacRun[c] = (int)runMask;
+    if (was < 0) return;
+    for (ch = 0; ch < 2u; ++ch)
+    {
+        const unsigned int bit = 1u << ch;
+        const unsigned int chcr = ch ? chcr1 : chcr0, sar = ch ? sar1 : sar0, dar = ch ? dar1 : dar0, tcr = ch ? tcr1 : tcr0;
+        if ((runMask & bit) && !((unsigned int)was & bit))
+        {
+            if (sHwEvCount[3]++ < SE_HWEV_FRAME_CAP)
+                SeMdfnHwEvEmit(SE_HWEV_K_DMAC_START, 3, c, SeMdfnHwEvFlags(SE_HWEV_K_DMAC_START), SE_MDFN_HWEV_PC(c),
+                               ch | (chcr << 8), sar, dar, tcr);
+        }
+        else if (!(runMask & bit) && ((unsigned int)was & bit))
+        {
+            if (sHwEvCount[3]++ < SE_HWEV_FRAME_CAP)
+                SeMdfnHwEvEmit(SE_HWEV_K_DMAC_END, 3, c, SeMdfnHwEvFlags(SE_HWEV_K_DMAC_END), 0, ch, 0, 0, 0);
+        }
+    }
+}
+
+/* The enable mask changed (registered with the exporter; it runs at a frame boundary, on this thread).
+ * A source that was off did not see the machine change, so what its hooks would have tracked is unknown. */
+void SeMednafenSetHwEvents(unsigned int mask)
+{
+    const unsigned int turnedOn = mask & ~SeSsHwEvMask;
+    unsigned int i;
+    mask &= SE_MDFN_HWEV_SUPPORTED;
+    SeSsHwEvMask = mask;
+    if (turnedOn & SE_HWEV_EN_SH2_DMAC) sDmacRun[0] = sDmacRun[1] = -1;
+    for (i = 0; i < 8u; ++i) sHwEvCount[i] = 0;
+}
+
+/* The frame is over (before its installs are applied, so the SUPPRESSED rows are queued under the mask the
+ * frame ran with and carry the frame's own number): one record per source that hit its cap, saying how
+ * many it dropped, then the counters restart. */
+void SeMdfnHwEvEndFrame(void)
+{
+    unsigned int src;
+    for (src = 0; src < 8u; ++src)
+    {
+        if (sHwEvCount[src] > SE_HWEV_FRAME_CAP && (SeSsHwEvMask & (1u << src)))
+            SeMdfnHwEvEmit(SE_HWEV_K_SUPPRESSED, src, SE_HWEV_CPU_NONE, 0, 0, sHwEvCount[src] - SE_HWEV_FRAME_CAP, SE_HWEV_FRAME_CAP, 0, 0);
+        sHwEvCount[src] = 0;
+    }
+}
+
+/* A state load replaced what the hooks were tracking. */
+static void SeMdfnHwEvForget(void)
+{
+    unsigned int i;
+    sDmacRun[0] = sDmacRun[1] = -1;
+    for (i = 0; i < 8u; ++i) sHwEvCount[i] = 0;
+}
+
 /* SH7095::Reset ran on a powered CPU ('ts' its timestamp): by the watchdog, or inside SetActive. The
  * code it was running is gone whether or not the power changed. */
 void SeMednafenCpuReset(int cpu, int ts)
@@ -1003,6 +1163,7 @@ void SeMednafenCpuReset(int cpu, int ts)
     if (sProfOn) SeMdfnProfCharge(c, ts);
     sProfSynced[c] = 0;
     SeExportResetCallStack(c);   /* THIS cpu's frames, ownership and (its epoch) pending flow; the other CPU is untouched */
+    sDmacRun[c] = -1;            /* a reset stops its DMAC without a recalc: what was running is unknown */
 }
 
 /* An exception was entered on 'cpu' (interrupt, NMI, address error, illegal instruction). The hardware
@@ -1057,6 +1218,7 @@ void SeMednafenStateLoaded(int slaveOn)
     SeMdfnProfOtherReset();
     SeExportResetCallStack(0);
     SeExportResetCallStack(1);
+    SeMdfnHwEvForget();
 }
 
 /* The frame's emulation is over, BEFORE the timestamps are rebased: 'end_ts' is its length and
@@ -1220,6 +1382,7 @@ static void SeMdfnPerfEndFrame(void)
 void SeMednafenEndFrameHook(void)
 {
     SeMdfnPerfEndFrame();
+    SeMdfnHwEvEndFrame();   /* before the installs below: the frame's own mask and number */
     /* F6: between frames, with this frame already published in the mode it ran in: a profiler request
      * that arrived during it (or during a halt) takes effect for the next frame, on this thread. */
     SeExportApplyInstalls();
@@ -1261,6 +1424,9 @@ void SeMednafenFrameHook(void)
          * the very first reply advertises SE_LIVE_CAP_PROFILER (a build without a debugger then
          * advertises only that, never SE_LIVE_CAP_PROF_FUNCTIONS). */
         SeExportSetPerfCapable(1);
+        /* The hardware event log needs no debugger loop: its hooks sit on exception, DMA, device-command
+         * and frame-level paths, so every build advertises it. */
+        SeExportSetHwEventHook(SeMednafenSetHwEvents, SE_MDFN_HWEV_SUPPORTED);
         if (prepared) SeExportStart();
     }
     SeMednafenSnapshot();
