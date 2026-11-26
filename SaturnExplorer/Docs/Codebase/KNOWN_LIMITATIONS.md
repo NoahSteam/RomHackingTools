@@ -24,6 +24,7 @@ Detailed source evidence and test navigation are in the linked subsystem pages.
 | Patch application | Script launch is not completion; generated patch script has no rollback after a write-time failure | Distinguish successful launch, validation and completed publication; `PatchLibrary::EmitPython` |
 | AI investigation | M0 deterministic contracts only, no App collectors/UI/package I/O/action application | Later milestone plans are not callable implementation; [AI contracts](Systems/AIInvestigation.md) |
 | Browser | Default build is viewer-only, decompiler off; optional web live requires special host/proxy | Check CMake options and actual platform support, not just shared source presence; [Dependencies](DEPENDENCIES.md) |
+| Linux desktop | ImGui toolbar rather than a native menu bar; file dialogs need zenity/kdialog; the window icon shows on X11 only; Wayland decorations depend on the host's libdecor plugin; the release tarball is x86_64, glibc 2.35+, tested only on the Ubuntu that built it | The archive carries every library except the system set in `package_release.py` (`is_linux_system`); [Docs/LINUX_RELEASE_PLAN.md](../LINUX_RELEASE_PLAN.md) |
 
 ## Existing text that conflicts with current implementation
 

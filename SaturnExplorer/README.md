@@ -20,7 +20,7 @@ Built for **fan translators, ROM hackers, and curious developers**, it helps ans
 - **Patches & disc rebuilding:** Find where edited bytes belong in game files, save your mappings in a patch project, and rebuild a supported disc image to test your changes.
 - **Audio:** Inspect Saturn sound voices, audition samples, and export them as WAV files.
 
-**[Explore all features](https://noahsteam.github.io/RomHackingTools/SaturnExplorer/web/guides/features.html)**
+**[Explore all features](https://noahsteam.github.io/RomHackingTools/features.html)**
 
 ## From a game screen to an explanation
 
@@ -44,9 +44,9 @@ Live debugging requires an emulator with the Saturn Explorer integration patch. 
 
 You don’t need to know the Saturn’s hardware terminology to begin. These guides explain the chips and the panels used to inspect them:
 
-- **[Sprites and textures (VDP1)](https://noahsteam.github.io/RomHackingTools/SaturnExplorer/web/guides/vdp1.html)** — how the Saturn draws objects and how to inspect them.
-- **[Backgrounds and layers (VDP2)](https://noahsteam.github.io/RomHackingTools/SaturnExplorer/web/guides/vdp2.html)** — how scrolling layers and colors combine into a scene.
-- **[Sound and music](https://noahsteam.github.io/RomHackingTools/SaturnExplorer/web/guides/audio.html)** — the audio hardware and tracing sounds to game data.
+- **[Sprites and textures (VDP1)](https://noahsteam.github.io/RomHackingTools/vdp1.html)** — how the Saturn draws objects and how to inspect them.
+- **[Backgrounds and layers (VDP2)](https://noahsteam.github.io/RomHackingTools/vdp2.html)** — how scrolling layers and colors combine into a scene.
+- **[Sound and music](https://noahsteam.github.io/RomHackingTools/audio.html)** — the audio hardware and tracing sounds to game data.
 - **[Reading SH-2 pseudocode](Docs/DECOMPILER_GUIDE.md)** — using the desktop decompiler.
 
 For detailed setup and feature reference, see [ReadMe.txt](ReadMe.txt). For the implementation, start with the [codebase guide](Docs/Codebase/README.md).

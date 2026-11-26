@@ -76,7 +76,9 @@ live endpoint (see "What you are shipping, security-wise") since users did not c
 **Windows:** [`install.bat`](../install.bat) (→ [`install.py`](install.py)) does all of the
 below automatically — builds Saturn Explorer, downloads a pinned emulator, patches it, and
 builds it, installing any missing toolchain (git, CMake, MSVC, MSYS2) via `winget` with your
-consent. `install.bat --dry-run` previews the plan. See [`INSTALL.md`](INSTALL.md).
+consent. `install.bat --dry-run` previews the plan. On macOS and Linux, [`install.sh`](../install.sh)
+does the same with Homebrew or the distribution's package manager (apt-get, dnf, pacman, zypper).
+See [`INSTALL.md`](INSTALL.md).
 
 The manual steps it wraps:
 
@@ -104,7 +106,7 @@ Each licence asks that its notice travel with the binary, so the build puts ever
 
 | Build | Where the texts land |
 |---|---|
-| CMake, Windows / Linux | `licenses/<component>/` beside the executable |
+| CMake, Windows / Linux | `licenses/<component>/` beside the executable (the Linux release adds `licenses/bundled-libraries/<package>/copyright` for each shared library it carries) |
 | `build-release-msbuild.bat` | `x64\Release\licenses\<component>\` |
 | macOS `.app` / DMG | `SaturnExplorer.app/Contents/Resources/licenses/<component>/` (sealed by the signature) |
 
@@ -139,8 +141,8 @@ Saturn core only) beside it, the licences, and the GPL source offer.
 |---|---|
 | `Integration/Mednafen/UPSTREAM.json` | The Mednafen base: upstream version and tarball hash, and the fork commit `install.py` pins. Edit it with any fork bump. |
 | `Integration/make_source_offer.py` | Writes `SOURCE.txt` and `mednafen-se-source.tar.xz` (the fork base with `apply.py` already run on it), from `UPSTREAM.json` and the same patch arguments and defines `install.py` builds with. |
-| `Integration/package_release.py` | Lays out the archive from the two existing builds, relinks Mednafen's dylibs into `mednafen-se/lib` (macOS), merges the licences, smoke-tests the result, then makes the `.dmg` / `.zip`. |
-| `.github/workflows/saturn-explorer-release.yml` | Runs the above on both platforms for a `v*` tag and leaves a DRAFT GitHub release. |
+| `Integration/package_release.py` | Lays out the archive from the two existing builds, relinks Mednafen's dylibs into `mednafen-se/lib` (macOS) or both programs' shared libraries into `lib/` folders (Linux), merges the licences, smoke-tests the result, then makes the `.dmg` / `.zip` / `.tar.gz`. |
+| `.github/workflows/saturn-explorer-release.yml` | Runs the above on macOS, Windows and Linux for a `v*` tag and leaves a DRAFT GitHub release. |
 | `make-release.bat` | Windows, on your own machine: `install.py --yes --mednafen-saturn-only`, then `package_release.py`, giving `dist\SaturnExplorer-<label>-windows.zip` (label = the argument, else the short commit hash). For trying a build; a release for others should come from the workflow, whose clean runner cannot carry over a stale DLL or setting from a developer's machine. |
 
 `mednafen-se/` sits beside the app (beside the `.app` on macOS) because a signed bundle cannot be
@@ -157,6 +159,34 @@ that page (for example Japanese on a Western-European Windows) hides the bundled
 fixed); an accented Latin-1 name is found but its path is drawn garbled. Windows packaging was checked on a real machine and on a
 `windows-latest` runner (workflow_dispatch, label only, no tag). The macOS job was not re-run after its
 Mednafen bootstrap was changed (`Docs/MacReleaseSteps.md`).
+
+On Linux the archive is `SaturnExplorer-<ref>-linux.tar.gz` (a tarball keeps the executable bits), built in an
+`ubuntu:22.04` container for x86_64. It holds `SaturnExplorerFrontEnd` with `lib/` beside it,
+`mednafen-se/mednafen` with its own `lib/`, `licenses/`, and `SYSTEM-REQUIREMENTS.txt`. That file lists the system
+libraries the programs load and the newest glibc/libstdc++ symbol versions they need, generated from the binaries.
+Each program's runpath points at its `lib/` (`patchelf`). The libraries every desktop has are not copied, because
+they must match the user's system: glibc, the C++ runtime, OpenGL, X11/Wayland, ALSA/PulseAudio
+(`LINUX_SYSTEM_STEMS` in `package_release.py`, named one by one).
+
+Licences: `LINUX_BUNDLED_SOURCES` in `package_release.py` records, for each Debian source package whose library
+is shipped, a reviewed licence, the SONAMEs reviewed, the upstream version range the decision covers, and whether
+its source must ship. Another source package, another SONAME from a known one, or a version outside the range
+stops the packaging until someone reviews it. Debian's copyright file (and any `common-licenses` text it
+points to) goes into `licenses/bundled-libraries/<package>/` as evidence, but is not parsed for the licence: its
+`Files: *` stanza describes the whole source package (FLAC's says GPL/LGPL, for the tools; libFLAC is BSD).
+`apt-get source --print-uris` must name the exact source version, every file line must parse, and a copyleft
+source is downloaded into `third-party-source/` only when it matches its `.dsc` member for member.
+
+The smoke test runs on the finished tarball, unpacked elsewhere; the tarball gets its release name only after it
+passes, so a failed run leaves no untested archive behind. Every library must resolve inside the package or
+be a system one. `--selftest` must exit 0. With `--require-window` (the release job runs under `xvfb-run`),
+`--selftest-window` must open the real window with its OpenGL context on X11 or Wayland. libcurl is not shipped:
+the update check loads the user's own copy (`SE_REQUIRE_CURL=ON` makes the release build fail without the headers).
+File dialogs use zenity or kdialog, which the user must have.
+
+Not yet verified: the archive on Fedora, Arch, openSUSE, Debian 12 or stock Jammy, and on a native Wayland session.
+libdecor's decoration plugin is not bundled (it sits outside the `DT_NEEDED` walk), so Wayland title bars come from
+the host's plugin, or are missing where its path differs from Debian's. The archive is not signed.
 
 The in-app **Check for Updates** compares the build's release tag with GitHub's latest published release
 (`releases/latest`) and offers the release page. The tag is baked in at build time

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-install.py — one-command Windows setup for Saturn Explorer + a patched emulator.
+install.py — one-command Windows/macOS/Linux setup for Saturn Explorer + a patched emulator.
 
 What it does, in order:
   1. Build Saturn Explorer itself (this repo) with CMake + MSVC (Release).
@@ -13,7 +13,8 @@ What it does, in order:
 
 It is an *orchestrator with assisted install*: it detects the tools it needs
 (git, CMake, an MSVC C++ toolchain, MSYS2) and — only with your consent — installs
-missing ones via winget / MSYS2 pacman. Nothing is installed or built until you
+missing ones via winget / MSYS2 pacman (Windows), Homebrew (macOS) or the distribution's
+package manager (Linux: apt-get, dnf, pacman, zypper). Nothing is installed or built until you
 approve; --dry-run prints the whole plan and touches nothing.
 
 Why download-and-build instead of shipping a patched binary:
@@ -51,6 +52,7 @@ SE_ROOT = os.path.dirname(HERE)                            # .../SaturnExplorer
 # clone_and_patch, settings.ini recording, summary) is platform-agnostic.
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
+IS_LINUX = sys.platform.startswith("linux")
 
 # ---------------------------------------------------------------------------
 # Emulator registry.
@@ -366,6 +368,83 @@ def check_prereqs_macos(rn, do_mednafen, args):
         ok = False
 
     return ok
+
+
+# ---------------------------------------------------------------------------
+# Linux — the distribution's own package manager plays winget's / Homebrew's role.
+# What is checked: the build tools by name, the libraries through pkg-config (sdl2 and gl
+# for SE, flac and alsa for Mednafen, libcurl for SE's update check, which the Linux build
+# loads at run time and so only needs the headers to compile).
+# ---------------------------------------------------------------------------
+LINUX_TOOLS_SE = ("cc", "c++", "make", "git", "cmake", "pkg-config")
+LINUX_TOOLS_MEDNAFEN = ("cc", "c++", "make", "git", "pkg-config", "autoreconf", "libtoolize")
+LINUX_PC_SE = ("sdl2", "gl", "libcurl")
+LINUX_PC_MEDNAFEN = ("sdl2", "flac", "alsa", "zlib")
+# Mednafen's configure.ac calls AM_GNU_GETTEXT, so autoreconf needs gettext's m4 macros.
+LINUX_M4_MEDNAFEN = ("gettext.m4",)
+# The install command of each manager (the first one found is used), covering every tool and library above
+# plus gettext, whose m4 macros Mednafen's autoreconf needs. The release workflow relies on the apt-get one.
+LINUX_PACKAGE_MANAGERS = {
+    "apt-get": "apt-get install -y build-essential git cmake pkg-config autoconf automake libtool gettext "
+               "libsdl2-dev libgl-dev libcurl4-openssl-dev libflac-dev libasound2-dev zlib1g-dev",
+    "dnf": "dnf install -y gcc gcc-c++ make git cmake pkgconf-pkg-config autoconf automake libtool gettext-devel "
+           "SDL2-devel mesa-libGL-devel libcurl-devel flac-devel alsa-lib-devel zlib-devel",
+    "pacman": "pacman -S --needed --noconfirm base-devel git cmake pkgconf gettext sdl2 mesa curl flac alsa-lib zlib",
+    "zypper": "zypper --non-interactive install gcc gcc-c++ make git cmake pkg-config autoconf automake libtool "
+              "gettext-tools libSDL2-devel Mesa-libGL-devel libcurl-devel flac-devel alsa-devel zlib-devel",
+}
+
+
+def linux_needed(do_se, do_mednafen):
+    """(kind, name) of everything the selected builds need: a tool, a pkg-config module or an aclocal macro file."""
+    tools = (LINUX_TOOLS_SE if do_se else ()) + (LINUX_TOOLS_MEDNAFEN if do_mednafen else ())
+    modules = (LINUX_PC_SE if do_se else ()) + (LINUX_PC_MEDNAFEN if do_mednafen else ())
+    m4 = LINUX_M4_MEDNAFEN if do_mednafen else ()
+    return list(dict.fromkeys([("tool", t) for t in tools] + [("pc", m) for m in modules] + [("m4", m) for m in m4]))
+
+
+def aclocal_dirs():
+    dirs = ["/usr/share/aclocal", "/usr/local/share/aclocal"]
+    if which("aclocal"):
+        r = subprocess.run(["aclocal", "--print-ac-dir"], capture_output=True, text=True)
+        dirs.insert(0, r.stdout.strip())
+    return dirs
+
+
+def linux_has(kind, name):
+    if kind == "tool":
+        return bool(which(name))
+    if kind == "pc":
+        return bool(which("pkg-config")) and subprocess.call(["pkg-config", "--exists", name]) == 0
+    return any(os.path.isfile(os.path.join(d, name)) for d in aclocal_dirs())
+
+
+def linux_missing(do_se, do_mednafen):
+    return [name for kind, name in linux_needed(do_se, do_mednafen) if not linux_has(kind, name)]
+
+
+def check_prereqs_linux(rn, do_se, do_mednafen, args):
+    """Linux prerequisite check + assisted install through apt/dnf/pacman/zypper (parity with the
+    winget/MSYS2 and Homebrew blocks). Resolves CMake into the CMAKE global. Returns ok."""
+    global CMAKE
+    print("Prerequisites:" + (" (incremental — skipping package installs)" if args.incremental else ""))
+    missing = linux_missing(do_se, do_mednafen)
+    if missing and not args.incremental:
+        manager = next((m for m in LINUX_PACKAGE_MANAGERS if which(m)), None)
+        if manager is None:
+            print("  No supported package manager (apt-get, dnf, pacman, zypper) was found; install the")
+            print("  tools and development packages listed below, then re-run.")
+        elif rn.confirm(f"  Missing: {', '.join(missing)}. Install the build packages with {manager} (uses sudo)?"):
+            cmd = LINUX_PACKAGE_MANAGERS[manager].split()
+            if rn.run(cmd if os.geteuid() == 0 else ["sudo"] + cmd, description=f"Install build packages ({manager})") != 0:
+                print(f"  {manager} failed; see its output above.")
+                return False
+            missing = linux_missing(do_se, do_mednafen)
+    for _kind, n in linux_needed(do_se, do_mednafen):
+        print(f"  [{'missing' if n in missing else 'ok'}]{' ' * (3 if n in missing else 6)}{n}")
+    CMAKE = cmake_path() or CMAKE
+    # A dry run reports what is missing but goes on to show the plan.
+    return not missing or args.dry_run
 
 
 # Absolute path to the cmake we build with. Resolved in main(); the build steps use
@@ -740,7 +819,7 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     env = {**os.environ, "MSYSTEM": "MINGW64", "CHERE_INVOKING": "1"}
     rc = rn.run([bash, "-lc", f"export PATH=/mingw64/bin:$PATH && {script}"], env=env,
                 description="Compile and package Mednafen")
-    if rc == 0:
+    if rc == 0 and not rn.dry_run:   # a dry run built nothing, so it must not record a build
         mednafen_stamp_write(dest, signature)
     exe = os.path.join(dest, "mednafen.exe")
     return rc == 0, exe
@@ -792,10 +871,10 @@ def build_mednafen_unix(rn, dest, configure_flags="", reconfigure=True):
         # Incremental: configure only when the tree isn't configured yet; else straight to
         # make, so only the objects whose sources apply.py touched get recompiled.
         cfg = f"([ -f config.status ] || {{ {bootstrap} && {configure}; }}) && "
-    script = f"cd '{dest}' && {cfg}make -j{ncpu}"
-    rc = rn.run(["/bin/sh", "-c", script], env=env,
+    # cwd, not a `cd` in the script: the prefix is the user's path and must not become shell text.
+    rc = rn.run(["/bin/sh", "-c", f"{cfg}make -j{ncpu}"], cwd=dest, env=env,
                 description="Configure and build Mednafen")
-    if rc == 0:
+    if rc == 0 and not rn.dry_run:   # a dry run built nothing, so it must not record a build
         mednafen_stamp_write(dest, signature)
     exe = os.path.join(dest, "src", "mednafen")
     return rc == 0, exe
@@ -864,7 +943,7 @@ def record_emulator_path(rn, name, exe):
 
 def main():
     global FORK_OWNER
-    ap = argparse.ArgumentParser(description="Saturn Explorer + patched-emulator setup (Windows/macOS).")
+    ap = argparse.ArgumentParser(description="Saturn Explorer + patched-emulator setup (Windows/macOS/Linux).")
     ap.add_argument("--prefix", default=os.path.join(SE_ROOT, "_emu"),
                     help="where to clone+build emulators (default: <repo>/_emu)")
     ap.add_argument("--no-mednafen", action="store_true", help="skip Mednafen")
@@ -904,15 +983,15 @@ def main():
     args = ap.parse_args()
     FORK_OWNER = args.fork_owner
 
-    if not IS_WIN and not IS_MAC and not args.dry_run:
-        print("This installer supports Windows and macOS. Use --dry-run to preview the plan elsewhere.")
+    if not (IS_WIN or IS_MAC or IS_LINUX) and not args.dry_run:
+        print("This installer supports Windows, macOS and Linux. Use --dry-run to preview the plan elsewhere.")
         return 2
 
     rn = Runner(args.dry_run, args.yes, args.verbose)
     do_mednafen = not args.no_mednafen and not args.se_only
     do_yabause = args.with_yabause and not args.se_only
 
-    host = "Windows" if IS_WIN else ("macOS" if IS_MAC else "this platform")
+    host = "Windows" if IS_WIN else "macOS" if IS_MAC else "Linux" if IS_LINUX else "this platform"
     print(f"Saturn Explorer installer ({host})\n" + "=" * 36)
     if args.dry_run:
         print("(dry-run: nothing will be installed, cloned, or built)\n")
@@ -949,9 +1028,14 @@ def main():
             # After a fresh winget install (or in --dry-run) detection can't see it yet;
             # fall back to the default root so the build step still has a path to use.
             msys2 = msys2 or args.msys2 or r"C:\msys64"
-    else:
-        # macOS (and, best-effort, other Unix): Homebrew + clang + native autotools.
+    elif IS_MAC:
+        # Homebrew + clang + native autotools.
         ok = check_prereqs_macos(rn, do_mednafen, args)
+    elif IS_LINUX:
+        # The distribution's package manager + gcc/clang + native autotools.
+        ok = check_prereqs_linux(rn, not args.no_se, do_mednafen, args)
+    else:
+        ok = True   # only reachable as a dry run: there is no prerequisite step for this platform
 
     if not ok and not args.dry_run:
         print("\nSome prerequisites are missing. Install them (above) and re-run.")

@@ -24,7 +24,7 @@ reuse the relevant existing map rather than inventing new mirror or region rules
 | nlohmann JSON | [VENDOR.md](../../FrontEnd/third_party/nlohmann-json/VENDOR.md), single header v3.11.3 | Copied verbatim; replacement must update the recorded hash. Only `JsonReader.cpp` includes it; SE SAX handling enforces duplicate-key, integer and input-limit rules. |
 | Fonts | [FrontEnd/third_party/fonts](../../FrontEnd/third_party/fonts) | Ship the font license notices with the binary. |
 | Windows platform libraries | [WindowsPlatform.cpp](../../FrontEnd/Platforms/Windows/WindowsPlatform.cpp), Win32/D3D11/WinHTTP | OS/GPU/network code stays behind Seam C; process/argument and save-error contracts are shared with other backends. |
-| SDL2 / OpenGL / optional curl | [WebPlatform.cpp](../../FrontEnd/Platforms/Web/WebPlatform.cpp), native macOS/Linux frontend | CMake requires SDL2/OpenGL for the native frontend; HTTPS is optional through `SE_HAVE_CURL`. Native macOS menu bridge is [MacMenuBar.mm](../../FrontEnd/Platforms/macOS/MacMenuBar.mm). |
+| SDL2 / OpenGL / optional curl | [WebPlatform.cpp](../../FrontEnd/Platforms/Web/WebPlatform.cpp), native macOS/Linux frontend | CMake requires SDL2/OpenGL for the native frontend; HTTPS is optional through `SE_HAVE_CURL`. macOS links libcurl; Linux compiles against its headers and `dlopen`s `libcurl.so.4` (`SE_CURL_DLOPEN`) so a release never ships the build machine's copy. Native macOS menu bridge is [MacMenuBar.mm](../../FrontEnd/Platforms/macOS/MacMenuBar.mm). |
 | Emscripten | [WebMain.cpp](../../FrontEnd/Platforms/Web/WebMain.cpp), WebGL2/SDL2 ports | Browser lifecycle/filesystem limits apply; decompiler forced off. Optional `SE_WEB_LIVE` needs pthreads and WebSocket-to-TCP proxy with cross-origin isolation. Default Pages build is viewer-only. |
 | Mednafen / Yabause | [Integration/Mednafen](../../Integration/Mednafen/README.md), [Integration/Yabause](../../Integration/Yabause/README.md) | Separate emulator source/build; SE's patch scripts/glue are the integration. Only Mednafen is supported; the Yabause patch is unmaintained. `_emu/` is generated/untracked; editing only that checkout does not persist the integration. |
 
@@ -43,6 +43,8 @@ ordinary executable-file decompilation. [Decompiler](Systems/Decompiler.md) expl
 | AI schema/action list | [ActionRegistry.cpp](../../FrontEnd/src/AIInvestigation/ActionRegistry.cpp); `SaturnExplorerActionRegistryTests` freshness/write mode, see [AI investigation](Systems/AIInvestigation.md) |
 | Patched emulator working copy | `Integration/Mednafen/apply.py` and integration scripts, not manual edits under `_emu/` |
 | Bundled macOS dylibs/signatures | CMake install/packaging steps in [BUILD.md](../BUILD.md); rewriting library paths requires re-signing |
+| Bundled Linux shared libraries | `package_release.py` (`bundle_elf_libs`, `dpkg_manifest`); copied at packaging time with `patchelf` runpaths, never in the source tree |
+| Linux window icon `FrontEnd/Platforms/Linux/SaturnExplorerIcon.h` | `make_icon_header.py` beside it, from the Windows `.ico` |
 
 ## Integration contracts
 
@@ -73,5 +75,6 @@ encoder validation is part of `App::VerifyEncoder`; see [DiscAndPatching](System
 
 CI entry points (repository-root paths):
 [verification](../../../.github/workflows/saturn-explorer-verify.yml),
-[decompiler](../../../.github/workflows/saturn-explorer-decompiler.yml). Exact matrix/commands should be read from
+[decompiler](../../../.github/workflows/saturn-explorer-decompiler.yml),
+[release](../../../.github/workflows/saturn-explorer-release.yml) (macOS, Windows and Linux archives). Exact matrix/commands should be read from
 those files when changing build or release behavior; they were surveyed here, not rerun.

@@ -11,6 +11,10 @@
 #  command-line tools (clang, git) must already be present:
 #      xcode-select --install
 #
+#  On Linux it checks the same tools and the SDL2/OpenGL/libcurl/FLAC/ALSA
+#  development packages, and (with your consent, via sudo) installs what is
+#  missing with apt-get, dnf, pacman or zypper.
+#
 #  Examples:
 #    ./install.sh                          SE + Mednafen
 #    ./install.sh --mednafen-saturn-only   SE + Mednafen (Saturn core only; faster build)

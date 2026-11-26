@@ -27,6 +27,11 @@ Resources). They are not duplicated here.
 | Microsoft Visual C++ runtime | `vcruntime140*.dll`, `msvcp140*.dll` beside the exe (Windows, app-local) | Microsoft redistributable terms (Visual Studio licence) | not open source; `package_release.py` copies it, no text to ship |
 | libgcc / libstdc++ | statically linked into `mednafen.exe` (Windows) | GPL-3.0 + GCC Runtime Library Exception 3.1 | `gcc-runtime/*.txt` (GPL text: `saturn-explorer/GPL-3.0.txt`) |
 
+On Linux the bundled shared libraries' own licence texts come from their Debian packages instead
+(`licenses/bundled-libraries/<package>/`, with the reviewed licence of each in `SOURCE.txt`), and the
+winpthreads and GCC-runtime folders are left out of the archive (`LICENSES_NOT_ON_LINUX` in
+`package_release.py`): Linux Mednafen uses the system's C++ runtime.
+
 Which rows apply depends on the platform. The SDL, FLAC, gettext, libiconv, libogg, zlib and
 winpthreads rows describe the libraries `Integration/install.py` copies next to
 `mednafen.exe` on Windows and the Homebrew dylibs a macOS bundle would carry. Re-check the

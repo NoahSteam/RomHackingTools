@@ -2339,8 +2339,14 @@ else()
     # Non-Windows desktop: build the web backend natively against system SDL2 +
     # OpenGL when available (a browser-free way to run/validate the frontend).
     find_package(SDL2 QUIET)
+    # Link libGL.so.1, not GLVND's libOpenGL.so.0: newer CMake prefers the latter, which lives in its own
+    # package (libopengl0 on Debian/Ubuntu) that many desktops do not install, so a release built that way does
+    # not start there. Every Linux GL stack provides libGL.so.1.
+    if(NOT APPLE AND NOT DEFINED OpenGL_GL_PREFERENCE)
+        set(OpenGL_GL_PREFERENCE LEGACY)
+    endif()
     find_package(OpenGL QUIET)
-    if(SDL2_FOUND AND OpenGL_OpenGL_FOUND)
+    if(SDL2_FOUND AND OPENGL_FOUND)
         add_executable(SaturnExplorerFrontEnd
             FrontEnd/src/App.cpp
             FrontEnd/src/Theme.cpp
@@ -2407,6 +2413,7 @@ else()
         target_include_directories(SaturnExplorerFrontEnd PRIVATE
             FrontEnd/src
             FrontEnd/Platforms/Web
+            FrontEnd/Platforms/Linux   # SaturnExplorerIcon.h (the include is skipped on macOS)
             ${SE_IMGUI_DIR}
             ${SE_IMGUI_DIR}/backends
             ${SDL2_INCLUDE_DIRS}
@@ -2425,8 +2432,21 @@ else()
         )
         # Native desktop (Linux/macOS) HttpsGet uses libcurl when available (macOS ships
         # it). Without it the update check degrades to "unsupported" — no hard dependency.
-        find_package(CURL QUIET)
-        if(CURL_FOUND)
+        # A release sets SE_REQUIRE_CURL so a missing libcurl fails the build instead of shipping a
+        # program whose update check always reports "not available".
+        option(SE_REQUIRE_CURL "Fail configuration when libcurl (headers) is not found" OFF)
+        if(SE_REQUIRE_CURL)
+            find_package(CURL REQUIRED)
+        else()
+            find_package(CURL QUIET)
+        endif()
+        if(CURL_FOUND AND NOT APPLE)
+            # Linux: compile against the headers, load the user's libcurl.so.4 at run time (see
+            # LoadCurl in WebPlatform.cpp), so a release never ships the build machine's libcurl.
+            target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_HAVE_CURL SE_CURL_DLOPEN)
+            target_include_directories(SaturnExplorerFrontEnd PRIVATE ${CURL_INCLUDE_DIRS})
+            target_link_libraries(SaturnExplorerFrontEnd PRIVATE ${CMAKE_DL_LIBS})
+        elseif(CURL_FOUND)
             target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_HAVE_CURL)
             target_link_libraries(SaturnExplorerFrontEnd PRIVATE CURL::libcurl)
         else()

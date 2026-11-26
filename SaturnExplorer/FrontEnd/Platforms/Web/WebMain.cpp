@@ -89,6 +89,25 @@ int main(int argc, char** argv)
         SDL_Quit();
         return 0;
     }
+    // `--selftest-window`: the platform's real startup -- window, OpenGL context, ImGui backends --
+    // then one rendered frame and exit 0. --selftest proves the libraries load; this proves the
+    // program can open its window on this display (X11 or Wayland), which a release check runs
+    // under Xvfb or a headless compositor.
+    if (argc > 1 && std::strcmp(argv[1], "--selftest-window") == 0)
+    {
+        sfe::PlatformConfig config;
+        if (!gPlatform.Initialize(config))
+        {
+            std::fprintf(stderr, "selftest-window: platform start failed: %s\n", SDL_GetError());
+            return 1;
+        }
+        gPlatform.PumpEvents();
+        gPlatform.BeginFrame();
+        gPlatform.EndFrame();
+        std::printf("selftest-window ok: %s\n", SDL_GetCurrentVideoDriver());
+        gPlatform.Shutdown();
+        return 0;
+    }
 #endif
     sfe::PlatformConfig config;
     if (!gPlatform.Initialize(config))

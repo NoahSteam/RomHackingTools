@@ -9,7 +9,7 @@ name: Saturn Explorer Release
 # manual run with sign=true) re-signs it with a Developer ID, has Apple notarise it and staples the ticket,
 # using secrets from the repository's "release" environment (see SaturnExplorer/Integration/DISTRIBUTION.md,
 # "Signing in CI"). Without those secrets it does nothing and the ad hoc archive is what gets attached.
-# Windows code signing is not done.
+# Windows code signing is not done. Linux archives are not signed either; SHA256SUMS-linux.txt is the check.
 on:
   push:
     tags: ['v*']
@@ -179,6 +179,116 @@ jobs:
             SaturnExplorer/dist/SHA256SUMS-windows.txt
           if-no-files-found: error
 
+  linux:
+    name: Linux archive
+    # Ubuntu 22.04 sets the archive's baseline (glibc 2.35) and supplies its bundled libraries. A container rather
+    # than the ubuntu-22.04 runner image, which GitHub retires in 2027, so the baseline does not move with the runner.
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+    timeout-minutes: 90
+    env:
+      # The tag being built, baked into the app (cmake/GenerateBuildInfo.cmake) so "Check for Updates"
+      # can compare it with the latest GitHub release. Empty for a manual run, which is not a release.
+      SE_RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      # The bare image has no git, so checkout would fall back to a tarball without history; the build reads tags.
+      - name: Install git and Python
+        working-directory: .
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y git python3 ca-certificates
+          # The workspace is mounted from the runner, owned by another user than the container's root.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The build packages are install.py's apt-get list (the one users get), read from install.py itself. deb-src:
+      # package_release.py names (and, for copyleft ones, downloads) the Debian source of every bundled library.
+      - name: Install build and packaging packages
+        run: |
+          sed -i 's/^# *deb-src /deb-src /' /etc/apt/sources.list
+          grep -q '^deb-src ' /etc/apt/sources.list || { echo "no deb-src entry was enabled"; exit 1; }
+          apt-get update
+          PACKAGES="$(python3 -I -c 'import sys; sys.path.insert(0, "Integration"); import install; print(install.LINUX_PACKAGE_MANAGERS["apt-get"])')"
+          DEBIAN_FRONTEND=noninteractive $PACKAGES ninja-build patchelf xvfb xauth
+          # Fail now, not after both builds, if apt cannot name the exact source of what will be bundled.
+          SDL_SRC="$(dpkg-query -W -f='${source:Package}=${source:Version}' libsdl2-2.0-0)"
+          apt-get source --print-uris "$SDL_SRC" > sdl-source.txt || { echo "apt has no source for $SDL_SRC"; exit 1; }
+          grep -q "\.dsc' " sdl-source.txt || { echo "apt names no .dsc for $SDL_SRC"; cat sdl-source.txt; exit 1; }
+
+      # The label comes from a typed input or a tag name, so it reaches the shell only through the
+      # environment and only after it matches a filename-safe pattern.
+      - name: Label
+        id: label
+        shell: bash
+        env:
+          INPUT_LABEL: ${{ github.event.inputs.label }}
+        run: |
+          LABEL="$INPUT_LABEL"
+          [ -z "$LABEL" ] && [ "$GITHUB_REF_TYPE" = "tag" ] && LABEL="$GITHUB_REF_NAME"
+          [ -z "$LABEL" ] && LABEL="$(git rev-parse --short=10 HEAD)"
+          if ! printf '%s' "$LABEL" | grep -Eq '^[A-Za-z0-9._-]+$'; then
+            echo "release label must contain only letters, digits, '.', '_' and '-'" >&2
+            exit 1
+          fi
+          echo "label=$LABEL" >> "$GITHUB_OUTPUT"
+
+      # Pinned to the commit in Integration/Mednafen/UPSTREAM.json; Saturn core only.
+      - name: Build the patched Mednafen
+        run: python3 Integration/install.py --yes --no-se --mednafen-saturn-only
+
+      - name: Build Saturn Explorer
+        run: |
+          cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DSE_DEMO_MENU=OFF -DSE_REQUIRE_CURL=ON -DBUILD_TESTING=OFF
+          cmake --build build-release --parallel 4 --target SaturnExplorerFrontEnd
+
+      - name: Check the Demo menu is off
+        run: grep -q "^SE_DEMO_MENU:BOOL=OFF" build-release/CMakeCache.txt
+
+      # A tag build must have its tag baked into the app, or "Check for Updates" in the shipped build would call
+      # itself "not a tagged release". Fail here rather than ship that.
+      - name: Check the release version is baked in
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          grep -F "kBuildVersion = \"$GITHUB_REF_NAME\"" build-release/generated/BuildInfo.h || {
+            echo "build-release/generated/BuildInfo.h does not carry $GITHUB_REF_NAME:"; grep kBuildVersion build-release/generated/BuildInfo.h; exit 1
+          }
+
+      # libcurl is loaded at run time, never shipped (see LoadCurl in WebPlatform.cpp). GL comes from libGL.so.1,
+      # which every Linux GL stack has, not GLVND's libOpenGL.so.0, which many desktops do not install.
+      - name: Check the program's direct libraries
+        shell: bash
+        run: |
+          readelf -d build-release/bin/SaturnExplorerFrontEnd > dynamic.txt
+          if grep -q 'NEEDED.*libcurl' dynamic.txt; then echo "libcurl is linked; it must be loaded at run time"; exit 1; fi
+          if grep -q 'NEEDED.*libOpenGL\.so' dynamic.txt; then echo "linked to libOpenGL.so.0; it must use libGL.so.1"; exit 1; fi
+          grep -q 'NEEDED.*\[libGL\.so\.1\]' dynamic.txt || { echo "not linked to libGL.so.1"; cat dynamic.txt; exit 1; }
+
+      - name: Package
+        env:
+          LABEL: ${{ steps.label.outputs.label }}
+        run: |
+          xvfb-run -a python3 Integration/package_release.py --se-app build-release/bin \
+            --mednafen _emu/mednafen/src --ref "$LABEL" --out dist --require-window
+
+      # Published beside the archive so a download can be checked against what this run built.
+      - name: Checksum
+        run: cd dist && sha256sum *.tar.gz > SHA256SUMS-linux.txt && cat SHA256SUMS-linux.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            SaturnExplorer/dist/*.tar.gz
+            SaturnExplorer/dist/SHA256SUMS-linux.txt
+          if-no-files-found: error
+
   macos-sign:
     name: macOS Developer ID signing and notarization
     if: github.ref_type == 'tag' || github.event.inputs.sign == 'true'
@@ -276,7 +386,7 @@ jobs:
   draft-release:
     name: Draft GitHub release
     if: github.ref_type == 'tag'
-    needs: [macos, windows, macos-sign]
+    needs: [macos, windows, linux, macos-sign]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -290,8 +400,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          files=(archives/windows/*)
-          notes="Includes mednafen-se, a modified Mednafen build (not an official release); its source is in each archive (SOURCE.txt and mednafen-se-source.tar.xz). You supply the Saturn BIOS. The Windows zip is not code-signed, so SmartScreen may warn the first time you run it (More info, then Run anyway). Check a download against the SHA256SUMS-windows.txt / SHA256SUMS-macos.txt attached here."
+          files=(archives/windows/* archives/linux/*)
+          notes="Includes mednafen-se, a modified Mednafen build (not an official release); its source is in each archive (SOURCE.txt and mednafen-se-source.tar.xz). You supply the Saturn BIOS. The Windows zip is not code-signed, so SmartScreen may warn the first time you run it (More info, then Run anyway). The Linux tarball is for x86_64 with glibc 2.35 or newer (Ubuntu 22.04 and later). Check a download against the SHA256SUMS-windows.txt / SHA256SUMS-macos.txt / SHA256SUMS-linux.txt attached here."
           if ls archives/macos-notarized/*.dmg > /dev/null 2>&1; then
             files+=(archives/macos-notarized/*)
           else
