@@ -272,6 +272,41 @@ void TestGraftedTailChainsFromRecordedFrame()
     if (f.size() == 2) { CHECK(f[1].returnAddress == r1); CHECK(f[1].currentAddress == 0x06005550); }
 }
 
+// (a) Non-leaf frame #0 that has pushed PR, no inner call yet: PR == the first stack word, so
+// row #1 is frame #0's own function and is at the PC, not at PR (an address in the caller).
+void TestSavedPrRowIsAtThePc()
+{
+    se_sh2_regs regs = Regs();
+    regs.pr = kRet;
+    FakeMemory mem;
+    mem.PutU32(kSp, kRet);
+    mem.PutU16(kRet - 4, 0xB010u);
+    sfe::CallStack cs;
+    cs.Reconstruct(0, regs, mem);
+    const std::vector<sfe::CallStackFrame>& f = cs.Frames(0);
+    CHECK(f.size() == 2);
+    if (f.size() < 2) return;
+    CHECK(f[1].returnAddress == kRet);
+    CHECK(f[1].currentAddress == regs.pc);
+    CHECK(f[1].functionAddress == kRet + 0x20);
+}
+
+// (b) Documented limit: PR pushed, an inner call returned, PR now stale inside frame #0's own
+// function. Indistinguishable from a leaf without the prologue, so row #1 is at PR.
+void TestStalePrKnownLimit()
+{
+    se_sh2_regs regs = Regs();
+    regs.pr = 0x06002040;   // inside frame #0's function, != the saved return
+    FakeMemory mem;
+    mem.PutU32(kSp, kRet);
+    mem.PutU16(kRet - 4, 0xB010u);
+    sfe::CallStack cs;
+    cs.Reconstruct(0, regs, mem);
+    const std::vector<sfe::CallStackFrame>& f = cs.Frames(0);
+    CHECK(f.size() == 2);
+    if (f.size() == 2) CHECK(f[1].currentAddress == regs.pr);
+}
+
 }  // namespace
 
 // ---- Step Out ----------------------------------------------------------------------------------
@@ -390,6 +425,8 @@ int main()
     TestDroppedCandidateIsSkippedInTheChain();
     TestUnreadableOpcodeFramesAreChained();
     TestUnknownPrFallsBack();
+    TestSavedPrRowIsAtThePc();
+    TestStalePrKnownLimit();
     TestGraftedTailChainsFromRecordedFrame();
     TestStopBannerNamesTheCause();
     if (gFailures)

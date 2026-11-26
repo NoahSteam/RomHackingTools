@@ -39,7 +39,11 @@ resumes: the `ReturnAddress` of the frame below it (frame #0's PR for the first 
 non-call candidates are skipped). It is a return address, not the call site, matching
 `ReturnAddress`. It is *not* the frame's own `ReturnAddress`, which lies in that frame's caller.
 Where the callee's return is not a code address the walk falls back to the frame's own return
-address so the frame stays navigable. Shadow-stack frames use the recorded entry (or return
+address so the frame stays navigable. If the first stack word equals PR (the halted function
+already pushed PR, no inner call yet), that row is frame #0's own function and is "at" the PC;
+it stays a separate row. Known limit: if PR was pushed and an inner call has since returned, PR
+is stale and row #1's At is in the right function at a stale position; telling that apart from
+a leaf needs the prologue, so it is not guessed. Shadow-stack frames use the recorded entry (or return
 address when none) and are unchanged.
 
 `FunctionAddress` is an entry point, and it is only filled in when something recovered one.
