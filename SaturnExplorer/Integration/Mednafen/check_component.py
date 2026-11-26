@@ -388,9 +388,19 @@ def main():
     if r.returncode:
         print("the wired glue does not compile:\n" + r.stderr[-1500:])
         return 1
+    # The patched vdp1.cpp now carries the event hooks, which reference the glue's mask and entry point; the F4 harness
+    # does not link the glue, so it gets the mask (clear: no hook fires) and an empty entry point.
+    stub_c = os.path.join(scratch, "hwev_stub.c")
+    with open(stub_c, "w") as f:
+        f.write("unsigned int SeSsHwEvMask;\nvoid SeMednafenHwEvent(unsigned k, int c, unsigned pc, unsigned a, unsigned b, unsigned d, unsigned e) {}\n")
+    stub_o = os.path.join(scratch, "hwev_stub.o")
+    r = subprocess.run(["gcc", "-c", "-w", stub_c, "-o", stub_o], capture_output=True, text=True)
+    if r.returncode:
+        print("the stub does not compile:\n" + r.stderr[-800:])
+        return 1
     hw_objs = [hw_o, glue_objs[1]]
     for name, define, src, extra in (
-            ("f4_vdp1", "SE_VDP1_CPP", "perf_vdp1_harness.cpp", []),
+            ("f4_vdp1", "SE_VDP1_CPP", "perf_vdp1_harness.cpp", [stub_o]),
             ("f5_m68k", "SE_SOUND_CPP", "perf_m68k_harness.cpp", [m68k_o]),
             ("f2_sh2", "SE_SS_CPP", "perf_sh2_harness.cpp", glue_objs + ["-lpthread"]),
             ("f8_bus", "SE_SS_CPP", "perf_bus_harness.cpp", glue_objs + ["-lpthread"]),
