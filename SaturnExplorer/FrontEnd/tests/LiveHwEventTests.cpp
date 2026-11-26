@@ -25,6 +25,7 @@
 
 extern "C" {
 #include "se_export.h"
+void SeExportTestFillProfSlots(int fill);   // se_export.c, SE_EXPORT_TEST_HOOKS builds only
 }
 #include "FakeLiveServer.h"
 #include "LiveDriver.h"
@@ -974,10 +975,77 @@ void TestScriptedBroken()
         s.server.Stop();
     }
 }
+// Every connection slot taken: the request of the connection that got none is never recorded, so the section
+// has to say so (supportedMask 0) instead of leaving the client waiting for an applied mask.
+void TestSlotExhaustion()
+{
+    Harness h(true);
+    se_data_source a = {}, b = {};
+    CHECK(OpenRetry(kLocal, &a));                 // takes a slot
+    CHECK(Until([&] { return se_live_server_version(&a) != 0; }));   // served, so the slot is really taken
+    SeExportTestFillProfSlots(1);                 // ...and nothing is left for the next one
+    CHECK(OpenRetry(kTcp, &b));
+    se_live_set_hw_events(&a, 0x01u);
+    se_live_set_hw_events(&b, 0x02u);
+    CHECK(Until([&] { return HasSection(a) && HasSection(b); }));
+    Settled({ &a, &b });
+    CHECK(ApplyUntil(0x01u));                     // only the connection with a slot counts
+    CHECK(Until([&] { se_live_hw_status st = {}; return se_live_hw_status_get(&b, &st) == 1 && st.supported_mask == 0u; }));
+    { se_live_hw_status st = {}; CHECK(se_live_hw_status_get(&a, &st) == 1 && st.supported_mask == 0xFFu); }
+    // The cursor field is the whole mechanism: the builder reports supported 0 for it and nothing else changes.
+    SeExportHwCursor cur;
+    std::memset(&cur, 0, sizeof cur);
+    cur.noSlot = 1;
+    CHECK(Build(cur).supported == 0u);
+    std::memset(&cur, 0, sizeof cur);
+    CHECK(Build(cur).supported == 0xFFu);
+    Close(b);
+    SeExportTestFillProfSlots(0);
+    Close(a);
+}
+
+// Preparing the exporter again must leave the glue and the exporter agreeing: the old hook is told "nothing
+// wanted" (the emulator's own copy of the mask follows), and a hook registered after the second prepare
+// receives requests again.
+void TestRePrepare()
+{
+    {
+        Harness h(true);
+        se_data_source a = {};
+        CHECK(OpenRetry(kLocal, &a));
+        se_live_set_hw_events(&a, 0x13u);
+        CHECK(Until([&] { return HasSection(a); }));
+        Settled({ &a });
+        CHECK(ApplyUntil(0x13u));
+        Close(a);
+        CHECK(ApplyUntil(0u));
+        // Leave the glue "on" the way an applied mask would have: the next prepare must switch it off.
+        SeExportApplyInstalls();
+    }
+    gCalls.clear();
+    {
+        CHECK(SeExportPrepare() == 0);
+        CHECK(!gCalls.empty() && gCalls.back() == 0u);   // the previous run's hook heard "0" from Prepare
+        SeExportSetHwEventHook(FakeSetHw, 0xFFu);         // the glue registers again
+        CHECK(SeExportStart() == 0);
+        gCalls.clear();
+        se_data_source a = {};
+        CHECK(OpenRetry(kLocal, &a));
+        se_live_set_hw_events(&a, 0x13u);
+        CHECK(Until([&] { return HasSection(a); }));
+        Settled({ &a });
+        CHECK(ApplyUntil(0x13u));
+        CHECK(!gCalls.empty() && gCalls.back() == 0x13u);
+        Close(a);
+        SeExportDeinit();
+    }
+}
 }  // namespace
 
 int main()
 {
+    TestSlotExhaustion();
+    TestRePrepare();
     TestNotOptedIn();
     TestCapability();
     TestMaskAndStream();

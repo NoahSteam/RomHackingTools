@@ -99,6 +99,15 @@ SeHwEvent HwEv(unsigned kind, unsigned a0 = 0, unsigned a1 = 0, unsigned flags =
     return e;
 }
 
+// Arms every hardware source on `p` (as a saved choice would): PushBatch drops sources this panel did not ask for.
+void ArmAll(LogPanel& p)
+{
+    Settings s;
+    for (const char* k : { "cpuexceptions", "scuinterrupts", "scudma", "dmac", "vdp1", "vdp2", "cd", "smpc" })
+        s.SetBool("Log", k, true);
+    p.Load(s);
+}
+
 struct HwRig
 {
     LogPanel panel;
@@ -231,6 +240,29 @@ void PendingLabel()
     CHECK(std::fabs(rig.ChipWidth(LogCategory::DMA) - idle) < 1.0f);
 }
 
+// A connection the server had no request slot for is told supported 0: the chip says "unavailable", not
+// "pending" (which would wait for an applied mask that never comes).
+void UnavailableLabel()
+{
+    HwRig rig;
+    rig.panel.SetHwStatus(Capable());
+    ImGuiHarness h([&] { rig.Draw(); });
+    h.Settle();
+    const float idle = rig.ChipWidth(LogCategory::DMA);
+    const ImVec2 p = rig.ChipCentre(LogCategory::DMA);
+    h.Hover(p); h.Click(p); h.Frame(p, false);
+    HwChipStatus st = Capable();
+    st.applied = 0;
+    rig.panel.SetHwStatus(st);
+    h.Settle();
+    const float pending = rig.ChipWidth(LogCategory::DMA);
+    CHECK(pending > idle + 20.0f);
+    st.supported = 0;
+    rig.panel.SetHwStatus(st);
+    h.Settle();
+    CHECK(rig.ChipWidth(LogCategory::DMA) > pending + 10.0f);   // "(unavailable)" is longer than "(pending)"
+}
+
 ImGuiWindow* PopupWindow()
 {
     ImGuiContext& g = *ImGui::GetCurrentContext();
@@ -263,6 +295,7 @@ void RightClickMenuChangesMask()
 void LostAndSuppressedRowsRender()
 {
     HwRig rig;
+    ArmAll(rig.panel);
     rig.panel.CategoryVisible(LogCategory::VDP) = true;
     std::vector<LogEvent> batch;
     batch.push_back(FormatHwEvent(HwEv(12, 1, 0)));
@@ -287,6 +320,7 @@ void LostAndSuppressedRowsRender()
 void PcRowOffersJump()
 {
     HwRig rig;
+    ArmAll(rig.panel);
     rig.panel.CategoryVisible(LogCategory::CPU) = true;
     std::vector<LogEvent> batch;
     SeHwEvent e = HwEv(1, 0x40, SE_HWEV_EXC_INT, SE_HWEV_F_HAS_PC, 0x06004A20);
@@ -326,6 +360,7 @@ void PcRowOffersJump()
 void ManyRowsAreClipped()
 {
     HwRig rig;
+    ArmAll(rig.panel);
     rig.panel.CategoryVisible(LogCategory::VDP) = true;
     for (int i = 0; i < 10000; ++i) rig.panel.Info("info row " + std::to_string(i), 1);
     std::vector<LogEvent> batch;
@@ -380,6 +415,7 @@ void ManyRowsAreClipped()
 void AutoScrollFollowsAndRowHeightIsStable()
 {
     HwRig rig;
+    ArmAll(rig.panel);
     rig.panel.CategoryVisible(LogCategory::VDP) = true;
     auto push = [&](int n)
     {
@@ -414,6 +450,31 @@ void AutoScrollFollowsAndRowHeightIsStable()
 }
 }  // namespace
 
+// The server streams the UNION of every connection's mask, so a panel can be handed sources it did not ask for.
+// They must be dropped before they count against the hardware budget.
+void UnrequestedSourcesAreDropped()
+{
+    HwRig rig;
+    Settings s;
+    s.SetBool("Log", "vdp1", true);          // this panel asked for VDP1 (source bit index 4) only
+    rig.panel.Load(s);
+    CHECK(rig.panel.HwRequestMask() == SE_HWEV_EN_VDP1);
+    std::vector<LogEvent> batch;
+    batch.push_back(FormatHwEvent(HwEv(12, 1, 0, 0, 0, 4)));     // VDP1: kept
+    batch.push_back(FormatHwEvent(HwEv(16, 1, 0, 0, 0, 5)));     // VDP2: another connection's source
+    batch.push_back(FormatHwEvent(HwEv(11, 0, 0, 0, 0, 7)));     // SMPC: same
+    batch.push_back(FormatHwLost(5, 10));                        // a gap marker has no source and stays
+    rig.panel.PushBatch(batch);
+    CHECK(rig.panel.Size() == 2);
+    // And they do not consume the budget: far more than kHwCap foreign rows leave the wanted ones in place.
+    for (int i = 0; i < 3; ++i)
+    {
+        for (size_t n = 0; n < LogPanel::kHwCap + 100; ++n) batch.push_back(FormatHwEvent(HwEv(16, 1, 0, 0, 0, 5)));
+        rig.panel.PushBatch(batch);
+    }
+    CHECK(rig.panel.Size() == 2);
+}
+
 int main()
 {
     ClickRowAndLook(600.0f, "tall window");
@@ -423,10 +484,12 @@ int main()
     AllDoesNotArm();
     DisabledWithoutCapability();
     PendingLabel();
+    UnavailableLabel();
     RightClickMenuChangesMask();
     LostAndSuppressedRowsRender();
     PcRowOffersJump();
     ManyRowsAreClipped();
+    UnrequestedSourcesAreDropped();
     AutoScrollFollowsAndRowHeightIsStable();
     if (gFailures == 0) std::printf("LogPanel: all checks passed\n");
     return gFailures == 0 ? 0 : 1;

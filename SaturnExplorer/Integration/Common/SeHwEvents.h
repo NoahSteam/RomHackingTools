@@ -37,7 +37,9 @@ extern "C" {
  *   4  SCU_DMA_START     none              level | indirect<<8 | startFactor<<16 | readBus<<24 | writeBus<<28
  *                                                            src             dst           bytes
  *   5  SCU_DMA_END       none              level
- *   6  SCU_DMA_ILLEGAL   none              level             src
+ *   6  SCU_DMA_ILLEGAL   none              level | side<<8   src             dst
+ *                                          (side 0: the SOURCE was refused, 1: the DESTINATION; arg1 and arg2
+ *                                          are both always the transfer's addresses)
  *   7  DMAC_START        cpu, PC approx    ch | CHCR<<8      SAR             DAR           TCR
  *   8  DMAC_END          cpu               ch
  *   9  CD_COMMAND       none              CR1 (cmd = hi)    CR2             CR3           CR4

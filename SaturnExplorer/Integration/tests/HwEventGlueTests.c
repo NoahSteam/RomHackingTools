@@ -305,8 +305,30 @@ static void TestResets(void)
     CHECK_EQ(gN, SE_HWEV_FRAME_CAP);
 }
 
+/* The exporter's Prepare resets its own mask bookkeeping; the glue's copy (SeSsHwEvMask, read by every hook)
+ * must follow, or the emulator keeps reporting for a mask nobody holds any more. */
+static void TestRePrepare(void)
+{
+    CHECK_EQ(SeExportPrepare(), 0);
+    SeMednafenRegisterHwEvents();
+    SeMednafenSetHwEvents(0x0Fu);          /* what a boundary applied for a client's request */
+    CHECK_EQ(SeSsHwEvMask, 0x0Fu);
+    SeExportDeinit();
+    CHECK_EQ(SeExportPrepare(), 0);        /* a second prepare in the same process */
+    CHECK_EQ(SeSsHwEvMask, 0);
+    /* The hook was forgotten with the old run: registering again brings the glue back in reach. */
+    SeMednafenRegisterHwEvents();
+    SeMednafenSetHwEvents(0x03u);
+    CHECK_EQ(SeSsHwEvMask, 0x03u);
+    SeExportDeinit();
+    CHECK_EQ(SeExportPrepare(), 0);
+    CHECK_EQ(SeSsHwEvMask, 0);
+    SeExportDeinit();
+}
+
 int main(void)
 {
+    TestRePrepare();
     TestMaskZero();
     TestMapping();
     TestCap();

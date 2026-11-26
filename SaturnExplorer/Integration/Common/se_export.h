@@ -96,7 +96,9 @@ int SeExportFrameIdentity(unsigned int* timelineId, unsigned long long* frameNo)
 void SeExportSetHwEventHook(void (*set)(unsigned int mask), unsigned int supportedMask);
 void SeExportQueueHwEvent(const SeHwEvent* ev);
 unsigned int SeExportHwEventMask(void);
-typedef struct SeExportHwCursor { unsigned long long sent; int started; } SeExportHwCursor;
+/* noSlot: the connection's request cannot be recorded (all connection slots taken); its section then reports
+ * supportedMask 0, which a client reads as "unavailable". */
+typedef struct SeExportHwCursor { unsigned long long sent; int started; int noSlot; } SeExportHwCursor;
 #define SE_EXPORT_HW_SECTION_MAX (SE_LIVE_HWEV_HDR_LEN + SE_LIVE_HWEV_MAX_PER_REPLY * SE_LIVE_HWEV_REC_LEN)
 size_t SeExportBuildHwSection(SeExportHwCursor* cursor, unsigned char* out);
 

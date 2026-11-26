@@ -118,7 +118,14 @@ void LogPanel::PushBatch(std::vector<LogEvent>& events)
 {
     if (events.empty()) return;
     const std::string t = NowString();
-    for (LogEvent& e : events) PushEvent(std::move(e), t);
+    for (LogEvent& e : events)
+    {
+        // The server streams every opted-in connection the union of ALL connections' masks, so this panel can be
+        // handed sources it did not ask for. They must not eat the 40000-row hardware budget (and push out the
+        // rows the user did ask for). Lost-event markers carry no record and always stay.
+        if (e.fromHw && e.hasRecord && e.hw.source < 32 && (mHwArmed & (1u << e.hw.source)) == 0) continue;
+        PushEvent(std::move(e), t);
+    }
     events.clear();
 }
 
@@ -254,7 +261,11 @@ void LogPanel::DrawChips()
 
         const bool enabled = mHw.live && mHw.capable;
         const bool armed = (mHwArmed & hw->bits) != 0;
-        const bool pending = enabled && (mHwArmed & hw->bits & ~mHw.applied) != 0;
+        // The server reports supported 0 to a connection it had no request slot for (every slot taken): its HWE
+        // can never be applied, so "pending" would wait forever. A build that lacks every source of the chip
+        // reads the same way, and is just as unavailable.
+        const bool unavailable = enabled && mHw.statusValid && (mHw.supported & hw->bits) == 0;
+        const bool pending = enabled && !unavailable && (mHwArmed & hw->bits & ~mHw.applied) != 0;
         // Armed = full colour, shown but not capturing = dimmed, hidden = disabled text.
         ImU32 col = ImGui::GetColorU32(ImGuiCol_TextDisabled);
         if (on)
@@ -264,7 +275,7 @@ void LogPanel::DrawChips()
             col = ImGui::ColorConvertFloat4ToU32(c);
         }
         char label[48];
-        std::snprintf(label, sizeof(label), "%s%s###chip%d", st.name, pending ? " (pending)" : "", i);
+        std::snprintf(label, sizeof(label), "%s%s###chip%d", st.name, unavailable ? " (unavailable)" : pending ? " (pending)" : "", i);
         if (!on) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
         ImGui::PushStyleColor(ImGuiCol_Text, col);
         if (!enabled) ImGui::BeginDisabled();
@@ -294,6 +305,7 @@ void LogPanel::DrawChips()
                 ImGui::Text("%s: click to capture and show, click again to stop. Right-click to pick sources.", st.name);
                 ImGui::Text("Capturing costs a little emulator time, and events are capped at %u per source per frame; the rest is summarised as \"+N more\".",
                             static_cast<unsigned>(SE_HWEV_FRAME_CAP));
+                if (unavailable) ImGui::TextUnformatted("Unavailable: the emulator cannot capture this here (no free connection slot, or not in this build).");
                 if (pending) ImGui::TextUnformatted("Pending: the emulator applies the change at the next frame boundary.");
             }
             ImGui::PopTextWrapPos();

@@ -1602,12 +1602,18 @@ def process_anchored(src_dir, fname, title, edits, do_write, prepend=None):
 #   sound.cpp se_perf_t0                the v26 per-slice 68000 hooks (baseline taken after the setjmp,
 #                                       so a longjmp skipped the increments); v27 uses se_perf_ts0
 #   ss.cpp    SSH2_ON_CYCLES += end_ts  the all-or-nothing slave on-time in the end-of-frame fence
+#   scu.inc   SE_HWEV_HOOK_SCU_DMA_BADSRC / _BADDST  the SCU DMA refusal hooks before arg0 carried the side
 RETIRED_FENCES = [
     ("vdp1.cpp", "SE_PERF_VDP1_DRAW_CYCLES"),
     ("sound.cpp", "se_perf_t0"),
     # The end-of-frame fence of 3269140 and earlier counted the slave all-or-nothing after the rebase
     # (F2 replaces it with SeMednafenFrameClose before the rebase); same key, different text.
     ("ss.cpp", "SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] += end_ts"),
+    # The two SCU DMA refusal hooks passed arg0 = level for both sides, so a refused destination was shown as
+    # the source. Same anchor, new arg0 (side in bit 8) and new keys, so upsert's "key present = done" cannot
+    # keep the old text.
+    ("scu.inc", "SE_HWEV_HOOK_SCU_DMA_BADSRC"),
+    ("scu.inc", "SE_HWEV_HOOK_SCU_DMA_BADDST"),
 ]
 
 
@@ -1784,11 +1790,11 @@ HWEV_SCU = (
      hwev_call("SCU_DMA", "SCU_DMA_END", NONE_, "0", ["level", "0", "0", "0"], "SE_HWEV_HOOK_SCU_DMA_END"),
      "SE_HWEV_HOOK_SCU_DMA_END"),
     (r'(SS_DBG\(SS_DBG_WARNING \| SS_DBG_SCU, "\[SCU\] Attempted DMA from illegal address 0x%08x\\n", ra\);[ \t]*\n)',
-     hwev_call("SCU_DMA", "SCU_DMA_ILLEGAL", NONE_, "0", ["(unsigned)(d - DMALevel)", "ra", "wa", "0"], "SE_HWEV_HOOK_SCU_DMA_BADSRC", indent="  "),
-     "SE_HWEV_HOOK_SCU_DMA_BADSRC"),
+     hwev_call("SCU_DMA", "SCU_DMA_ILLEGAL", NONE_, "0", ["(unsigned)(d - DMALevel)", "ra", "wa", "0"], "SE_HWEV_HOOK_SCU_DMA_SRC_REFUSED", indent="  "),
+     "SE_HWEV_HOOK_SCU_DMA_SRC_REFUSED"),
     (r'(SS_DBG\(SS_DBG_WARNING \| SS_DBG_SCU, "\[SCU\] Attempted DMA to illegal address 0x%08x\\n", wa\);[ \t]*\n)',
-     hwev_call("SCU_DMA", "SCU_DMA_ILLEGAL", NONE_, "0", ["(unsigned)(d - DMALevel)", "ra", "wa", "0"], "SE_HWEV_HOOK_SCU_DMA_BADDST", indent="  "),
-     "SE_HWEV_HOOK_SCU_DMA_BADDST"),
+     hwev_call("SCU_DMA", "SCU_DMA_ILLEGAL", NONE_, "0", ["(unsigned)(d - DMALevel) | (1u << 8)", "ra", "wa", "0"], "SE_HWEV_HOOK_SCU_DMA_DST_REFUSED", indent="  "),
+     "SE_HWEV_HOOK_SCU_DMA_DST_REFUSED"),
     (r'(IPending &= ~\(1U << bpos\);[ \t]*\n)',
      hwev_call("SCU_INT", "SCU_INT_ACCEPT", NONE_, "0", ["bpos", "ILevel", "IVec", "IPending"], "SE_HWEV_HOOK_SCU_INT_ACCEPT", indent="   "),
      "SE_HWEV_HOOK_SCU_INT_ACCEPT"),

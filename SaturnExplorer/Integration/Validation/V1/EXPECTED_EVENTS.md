@@ -100,7 +100,7 @@ the same to a copy for the component harness).
 | `SE_HWEV_HOOK_VBLANK` | every phase | no `VDP2_VBLANK` |
 | `SE_HWEV_HOOK_SCU_DMA_START` | phases 6, 7, 8 | no `SCU_DMA_START` |
 | `SE_HWEV_HOOK_SCU_DMA_END` | phases 6, 7, 8 | no `SCU_DMA_END` |
-| `SE_HWEV_HOOK_SCU_DMA_BADSRC`, `_BADDST` | none | V1 cannot detect them |
+| `SE_HWEV_HOOK_SCU_DMA_SRC_REFUSED`, `_DST_REFUSED` | none | V1 cannot detect them |
 | `SE_HWEV_HOOK_VDP1_DRAW_START` | phases 4, 5, 8 | no `VDP1_DRAW_START` |
 | `SE_HWEV_HOOK_VDP1_DRAW_END` | phases 4, 5 (and 8 when it completes) | no END-bit `VDP1_DRAW_END` |
 | `SE_HWEV_HOOK_VDP1_DRAW_ABORT` | phase 8, only if a run shows an abort | no aborted `VDP1_DRAW_END`; undetectable if no abort occurs |

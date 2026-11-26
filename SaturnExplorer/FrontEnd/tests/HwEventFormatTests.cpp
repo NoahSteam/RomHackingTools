@@ -86,7 +86,11 @@ void Messages()
               "SCU DMA L0 start: invalid bus 00001000 -> invalid bus 00002000, 0x4 bytes, factor Sprite draw end");
     // 5, 6
     CheckText("dma end", Msg(Ev(5, 1)), "SCU DMA L1 end");
-    CheckText("dma illegal", Msg(Ev(6, 0, 0x12345678)), "SCU DMA L0 illegal address 12345678");
+    CheckText("dma illegal source", Msg(Ev(6, 0, 0x12345678, 0x06000000)),
+              "SCU DMA L0 illegal source address 12345678 (destination 06000000)");
+    // Side 1 (arg0 bit 8): the destination was refused; the text must show arg2, not arg1.
+    CheckText("dma illegal destination", Msg(Ev(6, 0x102, 0x06000000, 0x0BADBAD0)),
+              "SCU DMA L2 illegal destination address 0BADBAD0 (source 06000000)");
     // 7 DMAC_START: ch | CHCR<<8. CHCR 0x5A01 = long, SAR+, DAR+, auto request, DE.
     CheckText("dmac", Msg(Ev(7, 0x5A0100, 0x06000000, 0x25C00000, 0x100, 0, SE_HWEV_F_HAS_PC | SE_HWEV_F_PC_APPROX, 0x6004000)),
               "MSH2 DMAC ch0 start: 06000000 -> 25C00000, 256 x long (1024 bytes)");
