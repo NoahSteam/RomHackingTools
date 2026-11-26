@@ -47,7 +47,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SHARED_DIR = os.path.normpath(os.path.join(HERE, "..", "Common"))
 # Copied verbatim from Common; the glue is copied from HERE with SE_MEDNAFEN_WIRED
 # prepended so no per-file build flag is needed.
-COMMON_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h", "SeStateCodec.h", "SePerfCounters.h"]
+COMMON_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h", "SeStateCodec.h", "SePerfCounters.h", "SeHwEvents.h"]
 GLUE_FILE = "se_mednafen_glue.c"
 
 BEGIN = "/* --- SE_EXPORT (Saturn Explorer live tap) --- */"
