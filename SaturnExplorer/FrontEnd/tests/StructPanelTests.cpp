@@ -200,9 +200,12 @@ struct Fixture
     }
     void SelectAll()
     {
-        ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+        // ImGui swaps Cmd and Ctrl when ConfigMacOSXBehaviors is set (the default on macOS): the shortcut key there
+        // is Cmd, and a Ctrl event selects nothing, so the typed text would be inserted instead of replacing.
+        const ImGuiKey mod = ImGui::GetIO().ConfigMacOSXBehaviors ? ImGuiMod_Super : ImGuiMod_Ctrl;
+        ImGui::GetIO().AddKeyEvent(mod, true);
         Key(ImGuiKey_A);
-        ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, false);
+        ImGui::GetIO().AddKeyEvent(mod, false);
         h.Frame(ImVec2(1275, 715), false);
     }
     void Key(ImGuiKey key)

@@ -537,11 +537,14 @@ void TestInvalidTextWritesNothing()
     CHECK(f.panel.Editing());
 
     // Select-all is not repeated, so replace the text the way a user would: select all, type.
-    ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+    // ImGui swaps Cmd and Ctrl when ConfigMacOSXBehaviors is set (the default on macOS): the shortcut key there
+        // is Cmd, and a Ctrl event selects nothing, so the typed text would be inserted instead of replacing.
+        const ImGuiKey mod = ImGui::GetIO().ConfigMacOSXBehaviors ? ImGuiMod_Super : ImGuiMod_Ctrl;
+        ImGui::GetIO().AddKeyEvent(mod, true);
     ImGui::GetIO().AddKeyEvent(ImGuiKey_A, true);
     f.h.Frame(Away(), false);
     ImGui::GetIO().AddKeyEvent(ImGuiKey_A, false);
-    ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, false);
+    ImGui::GetIO().AddKeyEvent(mod, false);
     f.h.Frame(Away(), false);
     Type(f, "nop");
     PressKey(f, ImGuiKey_Enter);
