@@ -162,11 +162,9 @@ struct Tok
 
 constexpr size_t kMaxTextBytes = 4u << 20;
 
-// Replace comments with spaces (newlines kept so line numbers stay true). "// size 0xNN" comments
-// are remembered per line: Emit writes the total there, and a larger hand-written value is
-// explicit tail padding.
-bool StripComments(const std::string& in, std::string& out, std::map<int, uint64_t>& sizeComments,
-                   int& errLine)
+// Replace comments with spaces (newlines kept so line numbers stay true). Comments never carry
+// meaning: pasted C headers say anything in them, so none may change the layout or raise an error.
+bool StripComments(const std::string& in, std::string& out, int& errLine)
 {
     out = in;
     int line = 1;
@@ -179,15 +177,6 @@ bool StripComments(const std::string& in, std::string& out, std::map<int, uint64
         {
             size_t j = i + 2;
             while (j < n && in[j] != '\n') ++j;
-            std::string body = Trim(in.substr(i + 2, j - i - 2));
-            if (body.size() > 4 && (body.compare(0, 4, "size") == 0 || body.compare(0, 4, "SIZE") == 0 ||
-                                    body.compare(0, 4, "Size") == 0) &&
-                (body[4] == ' ' || body[4] == '\t'))
-            {
-                uint64_t v;
-                if (ParseMagnitude(Trim(body.substr(4)), 10, true, v))
-                    sizeComments[line] = v;
-            }
             for (size_t k = i; k < j; ++k) out[k] = ' ';
             i = j;
             continue;
@@ -659,7 +648,7 @@ public:
             return false;
         }
         int errLine = 0;
-        if (!StripComments(mText, mClean, mSizeComments, errLine))
+        if (!StripComments(mText, mClean, errLine))
         {
             Err(errLine, "unterminated /* comment");
             return false;
@@ -801,7 +790,32 @@ private:
                     break;
                 }
 
-        if (Peek().type == TokType::Ident && Peek().text == "packed") { Next(); p.def.packed = true; }
+        // Modifiers, either order, each at most once: "packed" and "size(N)".
+        bool sawPacked = false;
+        while (Peek().type == TokType::Ident && (Peek().text == "packed" || Peek().text == "size"))
+        {
+            const Tok m = Next();
+            if (m.text == "packed")
+            {
+                if (sawPacked) Err(m.line, "'packed' given twice");
+                sawPacked = true;
+                p.def.packed = true;
+                continue;
+            }
+            if (p.hasDeclared) Err(m.line, "'size(...)' given twice");
+            uint32_t v = 0;
+            if (!IsPunct('(') || Peek(1).type != TokType::Number || !IsPunct(')', 2))
+            {
+                Err(m.line, "expected size(N), e.g. size(0x40)");
+                SkipStatement();
+                return;
+            }
+            Next();
+            if (!Number32(Next(), v, "struct size")) { SkipStatement(); return; }
+            Next();
+            p.hasDeclared = true;
+            p.declared = v;
+        }
         if (IsPunct(':'))
         {
             Err(Peek().line, "inheritance is not supported");
@@ -843,8 +857,6 @@ private:
         }
         if (IsPunct(';')) Next();
 
-        auto it = mSizeComments.find(kw.line);
-        if (it != mSizeComments.end()) { p.hasDeclared = true; p.declared = it->second; }
         if (p.def.fields.empty() && mErrs.size() == errsAtStart)
             Err(kw.line, "struct '" + nameTok.text + "' has no fields");
         structs.push_back(std::move(p));
@@ -1153,7 +1165,6 @@ private:
     std::vector<ParseError>&  mErrs;
     const std::string&        mText;
     std::string               mClean;
-    std::map<int, uint64_t>   mSizeComments;
     std::vector<Tok>          mToks;
     size_t                    mPos = 0;
 };
@@ -1308,10 +1319,14 @@ bool ExprOk(const std::string& e, std::string& why)
 bool StructLibrary::Parse(const std::string& text, std::vector<ParseError>& errors)
 {
     errors.clear();
+    // A UTF-8 byte-order mark (Windows editors) is not part of the text.
+    const bool bom = text.size() >= 3 && (unsigned char)text[0] == 0xEF && (unsigned char)text[1] == 0xBB &&
+                     (unsigned char)text[2] == 0xBF;
+    const std::string stripped = bom ? text.substr(3) : std::string();
     std::vector<Pending> pend;
     std::vector<StructView> views;
     std::vector<int> viewLines;
-    Parser parser(text, errors);
+    Parser parser(bom ? stripped : text, errors);
     parser.Run(pend, views, viewLines);
 
     // Semantic checks only on text that is syntactically sound, so a broken definition does not
@@ -1369,7 +1384,7 @@ std::string StructLibrary::Emit() const
         const StructDef& d = mStructs[i];
         const StructLayout& L = mLayouts[i];
         if (!out.empty()) out += "\n";
-        out += "struct " + d.name + (d.packed ? " packed" : "") + " { // size " + Hex(d.size) + "\n";
+        out += "struct " + d.name + (d.packed ? " packed" : "") + " size(" + Hex(d.size) + ") {\n";
         for (size_t k = 0; k < d.fields.size(); ++k)
         {
             const FieldDef& f = d.fields[k];

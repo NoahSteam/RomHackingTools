@@ -11,7 +11,9 @@
 //   count * struct size must fit the 32-bit address space.
 //
 // Text format, in one glance (the plan's "Text format (v1)"):
-//   struct Actor packed {          // size 0x40     <- optional; a declared size may only pad
+//   struct Actor packed size(0x40) {   // both modifiers optional, either order; size(N) smaller
+//                                      // than the layout is an error, larger pads the tail.
+//                                      // Comments never carry meaning.
 //       u8     state @0x00;
 //       fixed  pos[3];
 //       [[hex]] u16 flags @0x20;   // display attribute: hex | dec | fixed
@@ -68,7 +70,7 @@ struct StructDef
     std::string           name;
     bool                  packed = false;      // no padding, alignment 1 (hand-reversed layouts)
     std::vector<FieldDef> fields;
-    // A "// size 0xNN" comment larger than the natural layout: explicit tail padding. 0 = none.
+    // A size(N) modifier larger than the natural layout: explicit tail padding. 0 = none.
     // Only recorded when it exceeds the natural size, so Emit -> Parse is the identity.
     uint32_t              minSize = 0;
     uint32_t              size = 0;            // total bytes including tail padding (set by Parse)
@@ -155,8 +157,9 @@ public:
     // library. Views in the text replace the current ones (ids are assigned fresh, ascending).
     bool Parse(const std::string& text, std::vector<ParseError>& errors);
 
-    // Canonical text: definition order, "@offset" on every field, a "// size" comment, then the
-    // views. Emit(Parse(Emit(x))) == Emit(x).
+    // Canonical text: definition order, size(N) on every struct, "@offset" on every field, then the
+    // views. Emit(Parse(Emit(x))) == Emit(x). An empty library emits "" and Parse("") yields an
+    // empty library by design, so a caller that failed to load a file must not save over it.
     std::string Emit() const;
 
     void Clear();

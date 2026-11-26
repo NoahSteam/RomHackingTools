@@ -92,7 +92,7 @@ StructValue Dec(FieldKind k, FieldFormat fmt, std::initializer_list<uint8_t> byt
 }
 
 const char* kValid = R"(// sample
-struct Vec3 { // size 0xC
+struct Vec3 size(0xC) {
     fixed x @0x00;
     fixed y @0x04;
     fixed z @0x08;
@@ -161,11 +161,22 @@ void TestLayout()
     Check(Off(lib, "E", 1) == 0x10 && Off(lib, "E", 2) == 0x14 && lib.Layout("E")->size == 0x18, "explicit offsets");
 
     // Declared size: larger pads, equal is fine, smaller is rejected.
-    Check(Parses(lib, "struct D { // size 0x20\n u8 a; };"), "declared bigger parses");
+    Check(Parses(lib, "struct D size(0x20) { u8 a; };"), "declared bigger parses");
     Check(lib.Layout("D")->size == 0x20 && lib.Find("D")->minSize == 0x20, "declared size pads");
-    Check(Parses(lib, "struct D2 { // size 4\n u8 a; };"), "declared equal parses");
+    Check(Parses(lib, "struct D2 size(4) { u8 a; };"), "declared equal parses");
     Check(lib.Layout("D2")->size == 4, "declared == natural");
-    Fails("struct D3 { // size 4\n u32 a; u32 b; };", 1, "smaller than its layout", "declared size too small");
+    Fails("struct D3 size(4) {\n u32 a; u32 b; };", 1, "smaller than its layout", "declared size too small");
+    Fails("\n\nstruct D4 packed size(0x4) { u32 a; u32 b; };", 3, "smaller than its layout", "size error line, either order");
+    Fails("struct D5 size(4) size(8) { u32 a; };", 1, "given twice", "size twice");
+    Fails("struct D6 size() { u32 a; };", 1, "expected size(N)", "empty size");
+    Fails("struct D7 size(0x100001) { u32 a; };", 1, "exceeds the maximum", "size over max");
+    // Comments are inert, whatever they say.
+    Check(Parses(lib, "struct C1 { // size 1\n u32 a; u32 b; };\nstruct C2 { /* size(1) */ u32 a; // size of this is 12 words\n};"),
+          "size comments are ignored");
+    Check(lib.Layout("C1")->size == 8 && lib.Layout("C2")->size == 4 && lib.Find("C1")->minSize == 0, "comment does not change layout");
+    Check(Parses(lib, "struct P2 size(0x20) packed { u8 a; };") && lib.Layout("P2")->size == 0x20 && lib.Find("P2")->packed,
+          "modifiers in either order");
+    Check(Parses(lib, "struct P3 size(12) { u8 a; };") && lib.Layout("P3")->size == 12, "decimal size");
 
     // Aliases.
     Check(Parses(lib, "struct Al { Uint8 a; Sint16 b; uint32_t c; FIXED d; ANGLE e; int8_t f; };"), "aliases parse");
@@ -264,15 +275,15 @@ void TestTextRoundTrip()
     Check(Parses(lib2, e1), "emitted text parses");
     CheckStr(lib2.Emit(), e1, "Emit(Parse(Emit)) is stable");
     Check(lib.Equivalent(lib2), "Parse(Emit(lib)) equivalent");
-    Check(e1.find("@0x20;") != std::string::npos && e1.find("// size 0x40") != std::string::npos,
+    Check(e1.find("@0x20;") != std::string::npos && e1.find("size(0x40)") != std::string::npos,
           "emit writes offsets and total size");
     Check(e1.find("[[hex]] u16 flags") != std::string::npos, "emit writes attribute");
-    Check(e1.find("struct Packed packed {") != std::string::npos, "emit writes packed");
+    Check(e1.find("struct Packed packed size(") != std::string::npos, "emit writes packed");
     Check(e1.find("view player = Actor[2] @ 0x060A1000;") != std::string::npos, "emit writes views");
 
     // Padding comment, formats, struct order survive.
     StructLibrary lib3;
-    Check(Parses(lib3, "struct B { // size 0x40\n [[dec]] u32 a; [[fixed]] s32 b; fixed c[2]; };\nstruct A { B b; };"), "pad parses");
+    Check(Parses(lib3, "struct B size(0x40) {\n [[dec]] u32 a; [[fixed]] s32 b; fixed c[2]; };\nstruct A { B b; };"), "pad parses");
     const std::string e3 = lib3.Emit();
     StructLibrary lib4;
     Check(Parses(lib4, e3) && lib4.Equivalent(lib3) && lib4.Emit() == e3, "padded struct round-trips");
@@ -295,6 +306,26 @@ void TestTextRoundTrip()
     Check(lib.AddView("x", "Vec3", 0, "1", &err) == 0, "count 0 rejected");
     Check(lib.UpdateView(id, "renamed", "Vec3", 2, "0x1000", &err) && lib.FindView(id)->label == "renamed", "UpdateView");
     Check(lib.RemoveView(id) && lib.FindView(id) == nullptr && !lib.RemoveView(id), "RemoveView");
+}
+
+void TestLineEndingsAndEmpty()
+{
+    StructLibrary lib;
+    std::vector<ParseError> errs;
+    const std::string bom = "\xEF\xBB\xBF";
+    Check(lib.Parse(bom + "// hdr\r\nstruct A {\r\n  u8 a;\r\n  u32 b;\r\n};\r\n", errs) && lib.Layout("A")->size == 8,
+          "CRLF + BOM parses");
+    // Errors report the right line with CRLF, a BOM, and a multi-line block comment before them.
+    StructLibrary bad;
+    Check(!bad.Parse(bom + "/* a\r\n b */\r\nstruct A {\r\n  u8 a : 2;\r\n};\r\n", errs) && !errs.empty() && errs[0].line == 4,
+          "line number with CRLF/BOM/block comment");
+    // Old-Mac lone CR is whitespace, not a line break; it must at least not crash or hang.
+    StructLibrary cr;
+    cr.Parse("struct A {\r u8 a;\r};", errs);
+    // Empty library: emits nothing; Parse("") deliberately clears.
+    StructLibrary empty;
+    CheckStr(empty.Emit(), "", "empty library emits empty text");
+    Check(Parses(lib, "") && lib.Structs().empty() && lib.Views().empty() && lib.Emit().empty(), "Parse(\"\") clears the library");
 }
 
 void TestAtomicParse()
@@ -583,6 +614,7 @@ int main()
     TestLayout();
     TestRejections();
     TestTextRoundTrip();
+    TestLineEndingsAndEmpty();
     TestAtomicParse();
     TestFlatten();
     TestDecode();
