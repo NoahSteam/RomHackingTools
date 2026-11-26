@@ -1047,6 +1047,7 @@ if(BUILD_TESTING)
                 FrontEnd/src/Sh2Address.cpp
                 FrontEnd/src/Debug/CallStack.cpp
                 FrontEnd/src/Debug/MemoryBackend.cpp
+                FrontEnd/src/Debug/Sh2Asm.cpp
                 FrontEnd/src/Debug/Sh2Disasm.cpp
                 FrontEnd/src/Decompiler/MemorySnapshot.cpp
                 FrontEnd/src/Decompiler/BiosImageFile.cpp
@@ -1191,6 +1192,7 @@ if(BUILD_TESTING)
         FrontEnd/src/FileWrite.cpp   # AssemblyPanel::SaveComments stages through WriteFileAtomically
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp   # in-place assembly editing
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
@@ -2250,6 +2252,7 @@ if(WIN32)
         ${SE_DESKTOP_SHARED_SRC}
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/StepHaltMachine.cpp
@@ -2345,6 +2348,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/StepHaltMachine.cpp
@@ -2466,6 +2470,7 @@ else()
             ${SE_DESKTOP_SHARED_SRC}
             FrontEnd/src/Debug/WatchList.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp
+            FrontEnd/src/Debug/Sh2Asm.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp
             FrontEnd/src/Debug/BreakpointManager.cpp
             FrontEnd/src/Debug/StepHaltMachine.cpp
