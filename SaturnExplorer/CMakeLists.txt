@@ -927,6 +927,23 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerHexEditorPanelTests
              COMMAND SaturnExplorerHexEditorPanelTests)
 
+    # The Structs panel -- the real panel under the app's theme and font against a mock backend:
+    # clicks reaching edit boxes, the write path, pointer follow, clipped array reads, persistence.
+    add_executable(SaturnExplorerStructPanelTests
+        FrontEnd/tests/StructPanelTests.cpp
+        FrontEnd/src/StructPanel.cpp
+        FrontEnd/src/Debug/StructDefs.cpp
+        FrontEnd/src/Debug/WatchList.cpp
+        FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/FileWrite.cpp
+        FrontEnd/src/Theme.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerStructPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerStructPanelTests COMMAND SaturnExplorerStructPanelTests)
+    set_tests_properties(SaturnExplorerStructPanelTests PROPERTIES TIMEOUT 120)
+
     # The SH-2 Pseudocode panel (PLAN.md Step 3) -- the real panel, the real engine and runner, and
     # the real Memory panel typing into a mock backend: navigation, CPU retention, the install rule,
     # stale retention and the A1 refresh policy.
