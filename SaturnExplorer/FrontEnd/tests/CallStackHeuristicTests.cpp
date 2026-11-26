@@ -110,7 +110,7 @@ void TestBsrCallSiteYieldsRealEntryPoint()
     CHECK(fr.functionKnown);
     CHECK(fr.functionAddress == kRet + 0x20);
     CHECK(fr.returnAddress == kRet);
-    CHECK(fr.currentAddress == kRet);
+    CHECK(fr.currentAddress == Regs().pr);   // resumes where frame #0 returns, not at its own return
 }
 
 // A negative displacement -- the common shape, a call backwards to a helper.
@@ -148,7 +148,7 @@ void TestJsrLeavesEntryPointUnknown()
     CHECK(fr.confidence == sfe::FrameConfidence::Probable);
     CHECK(!fr.functionKnown);
     CHECK(fr.functionAddress == 0);
-    CHECK(fr.currentAddress == kRet);   // still navigable, just not as an entry point
+    CHECK(fr.currentAddress == Regs().pr);   // still navigable, just not as an entry point
 }
 
 // `bsrf Rn` adds a register to PC, so it is in the same position as jsr.
@@ -181,6 +181,95 @@ void TestFrameZeroDoesNotClaimAnEntryPoint()
     CHECK(!frames[0].functionKnown);
     CHECK(frames[0].currentAddress == regs.pc);
     CHECK(frames[0].returnAddress == regs.pr);
+}
+
+// A 3-deep walk: leaf (frame 0, PR = kPr) <- F (bsr, ret r1) <- G (bsr, ret r2). Each caller is at
+// the return address of the frame below it, not its own.
+void TestCallerFramesAreAtTheCalleesReturn()
+{
+    const uint32_t r1 = 0x06001100, r2 = 0x06001200;
+    FakeMemory mem;
+    mem.PutU32(kSp, r1);       mem.PutU16(r1 - 4, 0xB010u);
+    mem.PutU32(kSp + 4, r2);   mem.PutU16(r2 - 4, 0xB020u);
+    sfe::CallStack cs;
+    cs.Reconstruct(0, Regs(), mem);
+    const std::vector<sfe::CallStackFrame>& f = cs.Frames(0);
+    CHECK(f.size() == 3);
+    if (f.size() < 3) return;
+    CHECK(f[0].currentAddress == Regs().pc);
+    CHECK(f[1].returnAddress == r1);  CHECK(f[1].currentAddress == Regs().pr);
+    CHECK(f[1].functionKnown);        CHECK(f[1].functionAddress == r1 + 0x20);
+    CHECK(f[2].returnAddress == r2);  CHECK(f[2].currentAddress == r1);
+    CHECK(f[2].functionKnown);        CHECK(f[2].functionAddress == r2 + 0x40);
+}
+
+// A code-looking stack word not preceded by a call is dropped; the chain must skip it.
+void TestDroppedCandidateIsSkippedInTheChain()
+{
+    const uint32_t r1 = 0x06001100, junk = 0x06001180, r2 = 0x06001200;
+    FakeMemory mem;
+    mem.PutU32(kSp, r1);        mem.PutU16(r1 - 4, 0xB010u);
+    mem.PutU32(kSp + 4, junk);  mem.PutU16(junk - 4, 0x0009u);   // nop: not a call
+    mem.PutU32(kSp + 8, r2);    mem.PutU16(r2 - 4, 0x430Bu);     // jsr @R3
+    sfe::CallStack cs;
+    cs.Reconstruct(0, Regs(), mem);
+    const std::vector<sfe::CallStackFrame>& f = cs.Frames(0);
+    CHECK(f.size() == 3);
+    if (f.size() < 3) return;
+    CHECK(f[1].currentAddress == Regs().pr);
+    CHECK(f[2].returnAddress == r2);
+    CHECK(f[2].currentAddress == r1);   // not junk
+}
+
+// Opcode before the return address unreadable -> Heuristic frame, still chained.
+void TestUnreadableOpcodeFramesAreChained()
+{
+    const uint32_t r1 = 0x06001100, r2 = 0x06001200;
+    FakeMemory mem;
+    mem.PutU32(kSp, r1);        // no opcode written at r1 - 4
+    mem.PutU32(kSp + 4, r2);    // nor at r2 - 4
+    sfe::CallStack cs;
+    cs.Reconstruct(0, Regs(), mem);
+    const std::vector<sfe::CallStackFrame>& f = cs.Frames(0);
+    CHECK(f.size() == 3);
+    if (f.size() < 3) return;
+    CHECK(f[1].confidence == sfe::FrameConfidence::Heuristic);
+    CHECK(f[1].currentAddress == Regs().pr);
+    CHECK(f[2].currentAddress == r1);
+    CHECK(f[2].returnAddress == r2);
+}
+
+// PR unset: nothing better is known, so the first caller falls back to its own return address.
+void TestUnknownPrFallsBack()
+{
+    se_sh2_regs regs = Regs();
+    regs.pr = 0;
+    FakeMemory mem;
+    mem.PutU32(kSp, kRet);
+    mem.PutU16(kRet - 4, 0x430Bu);
+    sfe::CallStack cs;
+    cs.Reconstruct(0, regs, mem);
+    CHECK(cs.Frames(0).size() == 2);
+    if (cs.Frames(0).size() == 2) CHECK(cs.Frames(0)[1].currentAddress == kRet);
+}
+
+// The grafted tail starts from the deepest recorded frame's return, not from PR.
+void TestGraftedTailChainsFromRecordedFrame()
+{
+    const uint32_t r1 = 0x06001100;
+    FakeMemory mem;
+    mem.PutU32(kSp + 8, r1);  mem.PutU16(r1 - 4, 0xB010u);
+    sfe::CallStack cs;
+    sfe::CallStackFrame c;
+    c.confidence = sfe::FrameConfidence::Confirmed;
+    c.returnRecorded = true;
+    c.returnAddress = 0x06005550;
+    c.stackPointer = kSp + 4;
+    cs.SetConfirmed(0, {c});
+    cs.ReconcileHeuristicTail(0, Regs(), mem);
+    const std::vector<sfe::CallStackFrame>& f = cs.Frames(0);
+    CHECK(f.size() == 2);
+    if (f.size() == 2) { CHECK(f[1].returnAddress == r1); CHECK(f[1].currentAddress == 0x06005550); }
 }
 
 }  // namespace
@@ -297,6 +386,11 @@ int main()
     TestJsrLeavesEntryPointUnknown();
     TestBsrfLeavesEntryPointUnknown();
     TestFrameZeroDoesNotClaimAnEntryPoint();
+    TestCallerFramesAreAtTheCalleesReturn();
+    TestDroppedCandidateIsSkippedInTheChain();
+    TestUnreadableOpcodeFramesAreChained();
+    TestUnknownPrFallsBack();
+    TestGraftedTailChainsFromRecordedFrame();
     TestStopBannerNamesTheCause();
     if (gFailures)
     {

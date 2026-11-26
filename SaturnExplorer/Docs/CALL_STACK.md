@@ -23,7 +23,7 @@ struct CallStackFrame
     uint32_t  CallSite;            // the bsr/jsr instruction that made the call
     uint32_t  FunctionAddress;     // entry point of the frame's function, when it is known
     bool      FunctionKnown;       // false unless something actually decoded that entry
-    uint32_t  CurrentAddress;      // an address inside this frame: PC, or a caller's return
+    uint32_t  CurrentAddress;      // an address inside this frame: PC, or (caller) the callee's return
     uint32_t  ReturnAddress;       // where this frame returns to (PR / saved-PR)
     uint32_t  StackPointerAtCall;  // R15 at the call
     uint64_t  Cycle;               // when the call happened (shadow stack only)
@@ -34,7 +34,13 @@ struct CallStackFrame
 ```
 
 Frame #0 is the halted instruction itself (`CurrentAddress` = PC, `ReturnAddress` = PR).
-Frames above it are its callers, innermost first.
+Frames above it are its callers, innermost first. A caller's `CurrentAddress` is where it
+resumes: the `ReturnAddress` of the frame below it (frame #0's PR for the first caller; dropped
+non-call candidates are skipped). It is a return address, not the call site, matching
+`ReturnAddress`. It is *not* the frame's own `ReturnAddress`, which lies in that frame's caller.
+Where the callee's return is not a code address the walk falls back to the frame's own return
+address so the frame stays navigable. Shadow-stack frames use the recorded entry (or return
+address when none) and are unchanged.
 
 `FunctionAddress` is an entry point, and it is only filled in when something recovered one.
 The shadow stack records it. A `bsr disp` at the call site encodes it (site + 4 + disp*2). A

@@ -264,7 +264,15 @@ static std::vector<CallStackFrame> ReconstructHeuristic(int cpu, const se_sh2_re
         CallStackFrame fr;
         fr.cpu = cpu;
         fr.returnAddress   = c.ret;
-        fr.currentAddress  = c.ret;
+        // Where THIS frame is: execution resumes in it at the return address of the frame below
+        // (its callee) -- frame #0's PR for the first caller, else the previous KEPT frame's
+        // return address, so a candidate dropped as data below is skipped. c.ret is this frame's
+        // own return address, i.e. a spot in ITS caller, so using it put every "At" one frame too
+        // high. Same convention as returnAddress: a return address, not the call site. When the
+        // callee's return is not a code address (PR unset or clobbered) the walk knows nothing
+        // better; c.ret keeps the frame navigable, as before.
+        const uint32_t calleeRet = out.back().returnAddress;
+        fr.currentAddress  = IsPlausibleCodeAddress(calleeRet) ? calleeRet : c.ret;
         fr.stackPointer    = c.at;
 
         const MemoryReadResult& o = (i < opRes.size()) ? opRes[i] : MemoryReadResult{};
@@ -309,9 +317,17 @@ void CallStack::ReconcileHeuristicTail(int cpu, const se_sh2_regs& regs, IMemory
     // deepest confirmed frame — those predate when recording started.
     const uint32_t deepestSp = mFrames[idx].back().stackPointer;
     std::vector<CallStackFrame> heur = ReconstructHeuristic(cpu, regs, mem);
+    bool first = true;
     for (const CallStackFrame& h : heur)
         if (h.stackPointer > deepestSp && h.confidence != FrameConfidence::Confirmed)
+        {
             mFrames[idx].push_back(h);
+            // The heuristic chain started from PR, not from the recorded frames; the first grafted
+            // caller is really at the deepest recorded frame's return address.
+            if (first && IsPlausibleCodeAddress(mFrames[idx][mFrames[idx].size() - 2].returnAddress))
+                mFrames[idx].back().currentAddress = mFrames[idx][mFrames[idx].size() - 2].returnAddress;
+            first = false;
+        }
 }
 
 void CallStack::SetConfirmed(int cpu, std::vector<CallStackFrame> frames)
