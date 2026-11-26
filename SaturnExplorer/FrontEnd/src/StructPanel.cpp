@@ -364,7 +364,9 @@ void StructPanel::RequestViewAt(uint32_t addr, const std::string& label)
 StructPanel::ViewUi& StructPanel::UiFor(const StructView& v)
 {
     ViewUi& ui = mViewUi[v.id];
-    if (!ui.countActive && ui.count != (int)v.count) ui.count = (int)v.count;
+    // The boxes draw these buffers, not the model, so each follows the model whenever it is not being typed in:
+    // a view that was imported, reloaded or added from Watch must show its name without being renamed first.
+    if (!ui.labelActive && v.label != ui.label) CopyStr(ui.label, sizeof ui.label, v.label);
     if (!ui.exprActive && v.expression != ui.expr) CopyStr(ui.expr, sizeof ui.expr, v.expression);
     if (!ui.countActive && ui.count != (int)v.count) ui.count = (int)v.count;
     return ui;
@@ -1227,7 +1229,7 @@ void StructPanel::DrawViewRoot(const StructView& v)
     EnsureViewsTable();                           // begun outside the PushID scope it will be ended outside of
     ImGui::PushID((int)v.id);
     const bool open = BeginRow("##root", true, tableMode, true, &rec);
-    rec.label = v.label;
+    rec.label = ui.label;   // what the box shows, which is what a test must see (not the model's copy)
 
     // Field column: the label, editable in place.
     ImGui::SameLine();
@@ -1255,7 +1257,7 @@ void StructPanel::DrawViewRoot(const StructView& v)
         if (mLib.UpdateView(v.id, v.label, v.structName, v.count, norm, &err)) { mDirty = true; ui.resolvedExpr.clear(); }
         else { SetNotice("Address: " + err, true); CopyStr(ui.expr, sizeof ui.expr, v.expression); }
     }
-    rec.address = v.expression;
+    rec.address = ui.expr;  // likewise the box's own text
 
     // Type column: the struct, by combo.
     ImGui::TableSetColumnIndex(2);

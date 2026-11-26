@@ -745,12 +745,46 @@ void TypedLabelAndAddressTakeEffect()
     CHECK(f.Row("v1.id") && f.Row("v1.id")->address == "0x06000200");
     SetWorkFolder("");
 }
+
+// The root row's boxes draw the panel's own buffers: a view that came from text (import, reload) or from Watch
+// must show its label and address without the user having typed them.
+void RootBoxesShowTheModel()
+{
+    SetWorkFolder(TempDir("rootboxes"));
+    std::string err;
+    {
+        // Its own scope: one ImGui harness at a time (each owns the context and the clipboard handlers).
+        Fixture f(ItemView(1));
+        f.Frames(4);
+        CHECK(f.Row("v1") && f.Row("v1")->label == "a");
+        CHECK(f.Row("v1") && f.Row("v1")->address == "0x06000100");
+        CHECK(f.panel.SaveSession(&err));
+    }
+    Fixture g("");
+    CHECK(g.panel.LoadSession(&err));
+    g.Frames(4);
+    CHECK(g.panel.Library().Views().size() == 1);
+    const std::string key = g.panel.Library().Views().empty() ? std::string("v1") : "v" + std::to_string(g.panel.Library().Views()[0].id);
+    CHECK(g.Row(key.c_str()) && g.Row(key.c_str())->label == "a");
+
+    g.panel.RequestViewAt(0x06000400, "fromwatch");
+    g.Frames(4);
+    CHECK(g.panel.Library().Views().size() == 2);
+    if (g.panel.Library().Views().size() == 2)
+    {
+        const std::string k2 = "v" + std::to_string(g.panel.Library().Views()[1].id);
+        CHECK(g.Row(k2.c_str()) && g.Row(k2.c_str())->label == "fromwatch");
+        CHECK(g.Row(k2.c_str()) && g.Row(k2.c_str())->address == "0x06000400");
+    }
+    SetWorkFolder("");
+}
 }  // namespace
 
 int main()
 {
     TypedCountTakesEffect();
     TypedLabelAndAddressTakeEffect();
+    RootBoxesShowTheModel();
     TreeEditWritesExactBytes();
     TableEditWritesExactBytes();
     RefusedWriteKeepsOldValueAndSaysWhy();
