@@ -102,7 +102,7 @@ void WatchPanel::Refresh(IMemoryBackend& backend, IExpressionResolver& resolver)
 
 void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
                       IPlatform& platform, BreakpointManager& bps, float dt,
-                      uint32_t* outHexJump)
+                      uint32_t* outHexJump, ViewAsStructRequest* outViewAsStruct)
 {
     if (!ImGui::Begin("Watch"))
     {
@@ -310,6 +310,12 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
             ImGui::Separator();
             if (ImGui::MenuItem("View in Memory", nullptr, false, row.resolved))
                 if (outHexJump) *outHexJump = row.address;
+            if (ImGui::MenuItem("View as Struct...", nullptr, false, row.resolved && outViewAsStruct))
+            {
+                outViewAsStruct->pending = true;
+                outViewAsStruct->address = row.address;
+                outViewAsStruct->label   = e.name;
+            }
             ImGui::EndPopup();
         }
 

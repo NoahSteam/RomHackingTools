@@ -29,9 +29,19 @@ public:
     // memory breakpoints to 'bps' from the "Break on..." menu. When the user picks
     // "View in Hex Editor" and 'outHexJump' is non-null, the watch's address is
     // written there for the App to reveal in the Hex Editor.
+    // "View as Struct..." fills 'outViewAsStruct' (check .pending afterwards) with the
+    // watch's address and name; the App forwards it to the Structs panel, which Watch
+    // does not know about.
+    struct ViewAsStructRequest
+    {
+        bool        pending = false;
+        uint32_t    address = 0;
+        std::string label;
+    };
     void Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
               IPlatform& platform, BreakpointManager& bps, float dt,
-              uint32_t* outHexJump = nullptr);
+              uint32_t* outHexJump = nullptr,
+              ViewAsStructRequest* outViewAsStruct = nullptr);
 
     // Session persistence: load/save the watch list to a file in the working dir.
     void LoadSession();

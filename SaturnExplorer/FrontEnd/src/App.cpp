@@ -334,6 +334,11 @@ void App::Initialize()
 
     mWatchPanel.LoadSession();     // restore the session's watch list, if any
     {
+        // A file that is there and was not usable is said once here; the panel holds its text and refuses to overwrite it.
+        std::string err;
+        if (!mStructPanel.LoadSession(&err)) mLog.Error("Structs: " + err);
+    }
+    {
         std::string err;
         if (!mAssemblyPanel.LoadComments(&err)) mLog.Error("Assembly comments: " + err);   // restore the session's assembly comments
         else if (mAssemblyPanel.SkippedCommentLines())
@@ -431,6 +436,11 @@ void App::Shutdown()
         std::string err;
         if (!mWatchPanel.SaveSession(&err)) { mLog.Error(err); addLost(err); }   // A9-57
     }
+    {
+        // Only when there is something to lose: a file that failed to load stays as it is and is not a loss to announce at every exit.
+        std::string err;
+        if (mStructPanel.NeedsSave() && !mStructPanel.SaveSession(&err)) { mLog.Error(err); addLost(err); }
+    }
     if (!lost.empty())
         NoticeAtExit("These changes were not saved:" + lost + "\n\nThe files were left as they were, and the Log panel closes with the window, so the changes are lost. "
                      "At exit all the saves share 10 seconds of waiting for another instance.");
@@ -458,6 +468,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"references",      "References",         &Panels::references,      "Memory & Data"},
         {"selectedObject",  "Selected Object",    &Panels::selectedObject,  "Graphics"},
         {"watch",           "Watch",              &Panels::watch,           "Debugger"},
+        {"structs",         "Structs",            &Panels::structs,         "Debugger"},
         {"assembly",        "SH-2 Assembly",      &Panels::assembly,        "Debugger"},
 #if SE_ENABLE_DECOMPILER
         {"decompiler",      "SH-2 Pseudocode",    &Panels::decompiler,      "Debugger"},
@@ -2022,6 +2033,7 @@ void App::BuildUI(IPlatform& platform)
     // now.)
     if (mPanels.selectedObject)  DrawSelectedObject();
     if (mPanels.watch)           DrawWatch(platform);
+    if (mPanels.structs)         DrawStructs(platform);
     if (mPanels.assembly)        DrawAssembly();
 #if SE_ENABLE_DECOMPILER
     UpdateDecompiler(platform);   // every frame (results, budget); draws when the panel is shown
@@ -2202,6 +2214,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     // Bottom debugger strip. Watch / Controller / Log tab together on the left; the
     // SH-2 Assembly gets the right half.
     ImGui::DockBuilderDockWindow("Watch", bWatch);
+    ImGui::DockBuilderDockWindow("Structs", bWatch);       // beside Watch
     ImGui::DockBuilderDockWindow(kControllerPanel, bWatch);
     ImGui::DockBuilderDockWindow("Log", bWatch);
     ImGui::DockBuilderDockWindow("Tracepoints", bWatch);   // tabs with Watch/Log/Controller
@@ -3102,9 +3115,43 @@ void App::DrawLayersMenu()
 void App::DrawWatch(IPlatform& platform)
 {
     uint32_t hexJump = 0;
+    WatchPanel::ViewAsStructRequest viewAsStruct;
     mWatchPanel.Draw(mMemBackend, mExprResolver, platform, mBreakpoints,
-                     ImGui::GetIO().DeltaTime, &hexJump);
+                     ImGui::GetIO().DeltaTime, &hexJump, &viewAsStruct);
     if (hexJump != 0) mHexEditor.GoTo(hexJump);   // "View in Hex Editor"
+    if (viewAsStruct.pending)
+    {
+        mStructPanel.RequestViewAt(viewAsStruct.address, viewAsStruct.label);
+        mPanels.structs = true;   // it draws from the next frame and takes focus then
+    }
+}
+
+// Structs window — persisted struct views over memory. Same arguments as Watch: the memory backend, the
+// expression resolver, the platform's file dialogs and the breakpoint manager (for "Break on ...").
+void App::DrawStructs(IPlatform& platform)
+{
+    uint32_t hexJump = 0;
+    StructPanel::WatchRequest watchReq;
+    mStructPanel.Draw(mMemBackend, mExprResolver, platform, mBreakpoints,
+                      ImGui::GetIO().DeltaTime, &hexJump, &watchReq);
+    if (hexJump != 0) mHexEditor.GoTo(hexJump);   // "View in Memory", as Watch's
+    if (watchReq.pending) mWatchPanel.AddWatch(watchReq.name, watchReq.expression, watchReq.type);
+
+    // Autosave: the file is the user's only copy of their struct definitions, so a crash must not lose a session's
+    // work. At most every 5 s; a refusal (a file that failed to load, a lock, a full disk) is logged once per message
+    // and retried only at the same pace, and it clears when a save works again.
+    if (mStructPanel.NeedsSave() && std::chrono::steady_clock::now() >= mStructSaveAt)
+    {
+        std::string err;
+        if (mStructPanel.SaveSession(&err))
+            mStructSaveLogged.clear();
+        else if (err != mStructSaveLogged)
+        {
+            mStructSaveLogged = err;
+            mLog.Error(err);
+        }
+        mStructSaveAt = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    }
 }
 
 // SH-2 Assembly — live disassembly around the master/slave PC. Reads CPU state +

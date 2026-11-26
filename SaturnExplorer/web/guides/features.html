@@ -289,7 +289,7 @@
         <div class="col">
           <div class="zone" style="--c: var(--c-debug)">
             <p class="z-cat">Debugger</p>
-            <div class="z-list">SH-2 Assembly · Watch · Breakpoints · Call Stack</div>
+            <div class="z-list">SH-2 Assembly · Watch · Structs · Breakpoints · Call Stack</div>
           </div>
           <div class="zone" style="--c: var(--c-audio)">
             <p class="z-cat">Audio</p>
@@ -448,6 +448,11 @@
         <span class="tag">Track values</span>
         <h3>Watch</h3>
         <p>Track addresses and expressions, refreshed continuously with change tinting. Typed as U8…S32, RGB555 (with a swatch), or Pointer. Break on change straight from a row.</p>
+      </div>
+      <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">Read structures</span>
+        <h3>Structs</h3>
+        <p>Describe a game structure in C-like text (<span class="mono">struct Actor { s16 x; s16 y; u32 flags; }; view player = Actor[1] @ 0x060A1000;</span>) and see its fields live, with nested structs, arrays and pointers you can follow. Arrays of structs can be shown as a table. Double-click a value to edit it. <span class="lit">View as Struct…</span> on a Watch row starts a view at that address. Saved to <span class="mono">saturn_structs.txt</span>. No bitfields or unions.</p>
       </div>
       <div class="card" style="--c: var(--c-debug)">
         <span class="tag">Non-halting logging</span>

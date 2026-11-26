@@ -480,6 +480,46 @@ void WatchpointMenuUsesLeafAddressAndSize()
     }
 }
 
+// The two hand-offs the App turns into actions: "View in Memory" fills the hex-jump out-param with the
+// leaf's address, and "Add to Watch" fills the request with a name, an address expression and the
+// leaf's type (App forwards it to WatchPanel::AddWatch).
+bool ClickLeafMenuItem(Fixture& f, const char* rowKey, const char* label)
+{
+    const auto* r = f.Row(rowKey);
+    CHECK(r != nullptr);
+    if (!r) return false;
+    f.h.Hover(Fixture::Mid(r->menuMin, r->menuMax));
+    f.h.Click(Fixture::Mid(r->menuMin, r->menuMax));
+    f.Frames(3);
+    for (const auto& m : f.panel.MenuItems())
+        if (m.label == label)
+        {
+            const ImVec2 p = Fixture::Mid(m.min, m.max);
+            f.h.Hover(p);
+            f.h.Click(p);
+            f.Frames(2);
+            return true;
+        }
+    return false;
+}
+
+void ViewInMemoryAndAddToWatchHandOff()
+{
+    {   // one harness at a time: each owns the ImGui context and its clipboard handlers
+        Fixture f(ItemView(2));
+        f.Frames(6);
+        CHECK(ClickLeafMenuItem(f, "v1[1].flags", "View in Memory"));
+        CHECK(f.hexJump == 0x0600010C + 8);
+    }
+    Fixture g(ItemView(2));
+    g.Frames(6);
+    CHECK(ClickLeafMenuItem(g, "v1[1].flags", "Add to Watch"));
+    CHECK(g.watchReq.pending);
+    CHECK(g.watchReq.type == WatchType::U32);
+    CHECK(!g.watchReq.name.empty());
+    CHECK(!g.watchReq.expression.empty());
+}
+
 // ---------------------------------------------------------------- definitions and persistence
 
 void ApplyWithParseErrorLeavesLibraryUntouched()
@@ -710,6 +750,7 @@ int main()
     HugeArrayReadsOnlyVisibleRows();
     FallsBackToPerFieldReads();
     WatchpointMenuUsesLeafAddressAndSize();
+    ViewInMemoryAndAddToWatchHandOff();
     ApplyWithParseErrorLeavesLibraryUntouched();
     RemovedStructLeavesBrokenRow();
     FailedLoadIsNeverOverwritten();
