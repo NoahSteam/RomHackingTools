@@ -114,13 +114,23 @@ shares `se_export.c`, leaves the bit clear.
 4. `SeMednafenSetHwEvents` writes `SeSsHwEvMask` (masked with `SE_MDFN_HWEV_SUPPORTED`, 0xFF), re-seeds the
    DMAC shadow when that source is turned on, and zeroes every per-source frame counter.
 5. The section header's `appliedMask` tells the client what is actually running; the Log chip shows
-   "(pending)" while an armed bit is not in it.
+   "(pending)" while an armed bit is not in it, and "(unavailable)" when the chip's sources are all outside
+   `supportedMask`.
 
 Events are produced only while a bit is in the applied mask. While a request is pending nothing changes in
 the emulator: a newly armed source produces nothing until the boundary, and a source switched off keeps
 producing until it. Those late records are still queued unless the union is 0 (`SeExportQueueHwEvent`
 returns early when `sHwWanted == 0` or no client is attached), and they are not filtered per connection: the
-ring is one stream for the union of all masks, and every opted-in connection receives all of it.
+ring is one stream for the union of all masks, and every opted-in connection receives all of it (the server
+is deliberately not filtered per connection). `LogPanel::PushBatch` therefore drops records whose source bit is
+not in the panel's own request mask, so another connection's sources cannot use up the 40000-row hardware
+budget; gap markers carry no source and are kept.
+
+A connection that finds every slot taken (`SeProfAcquire` returns -1; two listeners serve one client each
+against eight slots, so this is a safeguard) cannot have its request recorded. The HWE verb still opts it in,
+and its section reports `supportedMask` 0 (`SeExportHwCursor.noSlot`, set where the connection starts), which
+`se_live_hw_status_get` hands on as `supported_mask == 0` and the chip shows as "(unavailable)" instead of
+waiting for an applied mask that cannot come. The profiler verb has no such report; it ignores the request.
 
 ## Per-frame cap and the SUPPRESSED record
 
@@ -166,7 +176,7 @@ None is in a per-instruction or per-bus-access path. The two that run often test
 | SCU_INT | `scu.inc`, the IMS write (`case 0xA0`), before `IMask` takes the value | `SCU_INT_MASK`: arg0 new IMask, arg1 old IMask |
 | SCU_DMA 0x04 | `scu.inc`, `StartDMATransfer` after `d->ReadFunc = rftab[rb]` (once per indirect table entry) | `SCU_DMA_START`: arg0 `level \| indirect<<8 \| startFactor<<16 \| readBus<<24 \| writeBus<<28` (bus 0 A, 1 B, 2 C), arg1 source, arg2 destination, arg3 byte count |
 | SCU_DMA | `scu.inc`, `DMALevel[level].Active = false;` in `SCU_DoDMAEnd` | `SCU_DMA_END`: arg0 level |
-| SCU_DMA | `scu.inc`, the two "Attempted DMA from/to illegal address" refusals | `SCU_DMA_ILLEGAL`: arg0 level, arg1 source, arg2 destination (both hooks pass both; `HwEventFormat.cpp` prints only arg1 as "illegal address", so a refused destination is shown as the source address) |
+| SCU_DMA | `scu.inc`, the two "Attempted DMA from/to illegal address" refusals | `SCU_DMA_ILLEGAL`: arg0 `level \| side<<8` (side 0 = the source was refused, 1 = the destination), arg1 source, arg2 destination (both hooks pass both; `HwEventFormat.cpp` prints the refused one by side and the other for context). The hook keys are `SE_HWEV_HOOK_SCU_DMA_SRC_REFUSED` / `_DST_REFUSED`; `apply.py` retires the earlier `_BADSRC` / `_BADDST` fences so a re-apply over an old tree migrates them |
 | SH2_DMAC 0x08 | `sh7095.inc`, top of `DMA_RecalcRunning`, through `SeMednafenDmacRecalc` | `DMAC_START` / `DMAC_END` are edges of a per-CPU shadow of the channel run conditions. START: cpu, `pc` approximate (`SE_HWEV_F_PC_APPROX`, read with `SsDbgSh2Regs`), arg0 `ch \| CHCR<<8`, arg1 SAR, arg2 DAR, arg3 TCR. END: arg0 channel, no PC. The shadow is unknown after a state load, a CPU reset and when the source is switched on, and the first recalc then only seeds it |
 | VDP1 0x10 | `vdp1.cpp`, top of `StartDrawing` | `VDP1_DRAW_START`: arg0 draw frame buffer, arg1 `DrawingActive` at entry. The frame-buffer-swap path clears `DrawingActive` first (and reports the abort as a DRAW_END), so arg1 is 1 only for a start by a `PTMR` write while drawing |
 | VDP1 | "Drawing finished" | `VDP1_DRAW_END`: arg0 byte address of the END command (`CurCommandAddr << 1`), arg1 0 |
@@ -193,6 +203,8 @@ declaration. Device events carry no CPU and no PC.
   asks the emulator for anything.
 - **Pending.** The label gains " (pending)" while an armed bit is not yet in the server's applied mask; the
   tooltip says the emulator applies the change at the next frame boundary (a halt delays it, see above).
+  **Unavailable** replaces it when the server reports no supported source for the chip (no free connection slot,
+  or not in this build).
 - **Disabled states.** With no live connection the chips are disabled and the tooltip says the setting is kept
   and applies on connect; with a live server lacking `SE_LIVE_CAP_HW_EVENTS` they are disabled with "no
   hardware event support". A sub-source the server's `supportedMask` does not contain is greyed in the menu
@@ -225,9 +237,14 @@ declaration. Device events carry no CPU and no PC.
   sequence and every cursor are untouched, and the frame number in later records follows the restored counter.
 - **Reconnect:** the new connection has not opted in; the driver re-sends the wanted mask when it is non-zero
   and its cursor starts at the newest record, so nothing from before it is delivered.
-- **Halt:** a mid-frame halt does not apply a pending mask change; producing continues with the old mask.
+- **Halt:** a mid-frame halt does not apply a pending mask change (the halt gate, `SeExportGateHalt`, passes
+  boundary 0); producing continues with the old mask until the next frame boundary, so a source armed while the
+  emulator sits at a breakpoint shows "(pending)" and produces nothing until the run resumes through one.
+  This is deliberate: the hook counters and the DMAC shadow are only consistent at a boundary.
 - **Server restart in-process** (`SeExportPrepare`) zeroes the ring sequence, the mask state and the registered
-  hook; the glue registers the hook once per process.
+  hook, but first calls the old hook with mask 0 so the glue's `SeSsHwEvMask` is 0 too. The emulator prepares once
+  per process; whoever prepares again must call `SeMednafenRegisterHwEvents` again for requests to reach the glue
+  (`HwEventGlueTests`, `TestRePrepare` in `LiveHwEventTests`).
 - The panel's rows are UI-thread state, cleared by `LogPanel::Clear` only.
 
 ## Extension points and constraints

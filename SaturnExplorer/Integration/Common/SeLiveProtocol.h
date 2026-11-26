@@ -480,7 +480,9 @@
  *   u64 lost           records the ring dropped for THIS connection immediately before firstSeq
  *   u32 appliedMask    the mask the emulate thread is running with (a UI shows "pending" until it
  *                      matches what was requested)
- *   u32 supportedMask  SE_HWEV_EN_* bits this build has hooks for
+ *   u32 supportedMask  SE_HWEV_EN_* bits this build has hooks for. 0 on a connection the server had no
+ *                      request slot for: its HWE is accepted but can never take effect (a UI shows the
+ *                      chips as unavailable rather than pending)
  *   then count records (header = SE_LIVE_HWEV_HDR_LEN bytes)
  * Record body per SeHwEvent field order, little-endian: kind, source, cpu, flags (u8 each), frame,
  * ts, pc, arg[0..3] (u32 each). The server stamps 'frame' itself. Records deferred by the per-reply

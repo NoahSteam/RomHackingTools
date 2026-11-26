@@ -1239,7 +1239,10 @@ size_t SeExportBuildHwSection(SeExportHwCursor* c, unsigned char* out)
     SeWr64(out + 16, newest);
     SeWr64(out + 24, lost);
     SeWr32(out + 32, (unsigned int)SeAtLoad(&sHwApplied));
-    SeWr32(out + 36, sHwSupported);
+    /* A connection without a slot can not have its request recorded (SeHwSetRequest ignores it), so nothing it
+     * asks for will ever be applied; saying "supported 0" is how the client learns that instead of waiting
+     * for an applied mask that cannot come. */
+    SeWr32(out + 36, c->noSlot ? 0u : sHwSupported);
     return (size_t)(rec - out);
 }
 
@@ -2264,6 +2267,23 @@ size_t SeExportBuildPerfSection(SeExportPerfCursor* c, unsigned char* out)
 }
 
 #if defined(SE_EXPORT_TEST_HOOKS)
+/* Test builds only: two listeners serve one client each, so the connection slots cannot be exhausted over
+ * sockets. fill=1 takes every free slot (a connection made now gets none); fill=0 gives back what was taken. */
+void SeExportTestFillProfSlots(int fill)
+{
+    static int taken[SE_PROF_SLOTS];
+    int i;
+    SE_LOCK();
+    for (i = 0; i < SE_PROF_SLOTS; ++i)
+    {
+        if (fill && !sProfSlotUsed[i]) { sProfSlotUsed[i] = 1; taken[i] = 1; }
+        else if (!fill && taken[i]) { sProfSlotUsed[i] = 0; sHwSlotMask[i] = 0; sProfSlotFlags[i] = 0; taken[i] = 0; }
+    }
+    SeProfRecomputeLocked();
+    SeHwRecomputeLocked();
+    SE_UNLOCK();
+}
+
 /* Test builds only: start the publication sequence part-way (a 64-bit sequence cannot be walked
  * across 2^32 one record at a time). The ring must be empty. */
 void SeExportTestSetPerfSeq(unsigned long long seq)
@@ -2653,6 +2673,7 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap, int profSlot)
     hw.optedIn = 0;
     hw.cursor.sent = 0;
     hw.cursor.started = 0;
+    hw.cursor.noSlot = (profSlot < 0);   /* every slot was taken when this connection arrived */
     hw.out = (unsigned char*)malloc((size_t)SE_EXPORT_HW_SECTION_MAX);   /* 16 KiB: heap, like perfOut */
     if (!hw.out) { free(perfOut); return; }
     perfSent.sent = 0;
@@ -3427,6 +3448,12 @@ int SeExportPrepare(void)
     SeAtStore(&sPaused, 0); SeCancelSteps(); sFrameNo = 0; SeAtStore(&sClients, 0); SeAtStore(&sRewindWanted, 1);
     SeAtStore(&sProfWanted, 0); SeAtStore(&sProfPending, 0); SeAtStore(&sProfApplied, 0);
     { int i; for (i = 0; i < SE_PROF_SLOTS; ++i) { sProfSlotUsed[i] = 0; sProfSlotFlags[i] = 0; sHwSlotMask[i] = 0; } }
+    /* The emulator side keeps its own copy of the mask and does not know this reset happened: tell the hook
+     * about to be dropped that nothing is wanted, so the hooks in the emulator stop reporting. Prepare runs
+     * on the emulate thread (or before any emulation), like the boundary that normally applies the mask.
+     * A hook registered once per process must register again afterwards; the pointer is not kept (a restart
+     * forgets the previous run's hooks, see TestCapability). */
+    if (sSetHwEvents) sSetHwEvents(0);
     sSetHwEvents = 0; sHwSupported = 0; sHwSeq = 0;
     SeAtStore(&sHwWanted, 0); SeAtStore(&sHwPending, 0); SeAtStore(&sHwApplied, 0);
     /* Nothing of a previous run survives into this one: not its profiler records, its sequence, its

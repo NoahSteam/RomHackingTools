@@ -1134,6 +1134,14 @@ void SeMednafenSetHwEvents(unsigned int mask)
     for (i = 0; i < 8u; ++i) sHwEvCount[i] = 0;
 }
 
+/* Registers the enable hook with the exporter. SeExportPrepare tells the hook the mask is 0 and forgets it, so
+ * whoever prepares the exporter again has to call this again (the frame hook's first-call block is the only
+ * caller in the emulator, which prepares once per process). */
+void SeMednafenRegisterHwEvents(void)
+{
+    SeExportSetHwEventHook(SeMednafenSetHwEvents, SE_MDFN_HWEV_SUPPORTED);
+}
+
 /* The frame is over (before its installs are applied, so the SUPPRESSED rows are queued under the mask the
  * frame ran with and carry the frame's own number): one record per source that hit its cap, saying how
  * many it dropped, then the counters restart. */
@@ -1427,7 +1435,7 @@ void SeMednafenFrameHook(void)
         SeExportSetPerfCapable(1);
         /* The hardware event log needs no debugger loop: its hooks sit on exception, DMA, device-command
          * and frame-level paths, so every build advertises it. */
-        SeExportSetHwEventHook(SeMednafenSetHwEvents, SE_MDFN_HWEV_SUPPORTED);
+        SeMednafenRegisterHwEvents();
         if (prepared) SeExportStart();
     }
     SeMednafenSnapshot();

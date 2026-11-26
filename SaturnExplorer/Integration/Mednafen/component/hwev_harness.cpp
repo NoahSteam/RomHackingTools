@@ -587,11 +587,18 @@ void ScuTests()
     {
         Expect("illegal: level", i->arg[0], 0);
         Expect("illegal: source", i->arg[1], 0);
+        Expect("illegal: side is the source", i->arg[0] >> 8, 0);
     }
     gSeen.clear();
     const bool bad2 = StartDMATransfer(&DMALevel[0], WRAMH_A, 0x00000000, 4);
     Expect("illegal destination refused", bad2, 0);
     Expect("illegal destination reported", Count(SE_HWEV_K_SCU_DMA_ILLEGAL), 1);
+    if (const SeHwEvent* d = Find(SE_HWEV_K_SCU_DMA_ILLEGAL))
+    {
+        Expect("illegal destination: side bit", d->arg[0] >> 8, 1);
+        Expect("illegal destination: level", d->arg[0] & 0xFF, 0);
+        Expect("illegal destination: dst arg", d->arg[2], 0);
+    }
 
     std::printf("SCU interrupt mask write: new and old IMS\n");
     SeMednafenSetHwEvents(SE_HWEV_EN_SCU_INT);

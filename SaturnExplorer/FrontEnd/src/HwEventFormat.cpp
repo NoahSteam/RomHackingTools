@@ -254,7 +254,14 @@ static std::string Message(const SeHwEvent& e)
             return s;
         }
         case SE_HWEV_K_SCU_DMA_END:     return Fmt("SCU DMA L%u end", a[0]);
-        case SE_HWEV_K_SCU_DMA_ILLEGAL: return Fmt("SCU DMA L%u illegal address %08X", a[0], a[1]);
+        case SE_HWEV_K_SCU_DMA_ILLEGAL:
+        {
+            // arg0 bit 8 says which side the SCU refused; both addresses are always carried, so the refused one
+            // is picked by side and the other is shown for context.
+            const bool dst = ((a[0] >> 8) & 1) != 0;
+            return Fmt("SCU DMA L%u illegal %s address %08X (%s %08X)", a[0] & 0xFF, dst ? "destination" : "source",
+                       dst ? a[2] : a[1], dst ? "source" : "destination", dst ? a[1] : a[2]);
+        }
         case SE_HWEV_K_DMAC_START:
         {
             const unsigned ch = a[0] & 0xFF;
@@ -399,9 +406,14 @@ std::vector<std::pair<std::string, std::string>> HwEventDetail(const SeHwEvent& 
         }
         case SE_HWEV_K_SCU_DMA_END: r.emplace_back("Level", Fmt("%u", a[0])); break;
         case SE_HWEV_K_SCU_DMA_ILLEGAL:
-            r.emplace_back("Level", Fmt("%u", a[0]));
-            r.emplace_back("Address", Fmt("%08X", a[1]));
+        {
+            const bool dst = ((a[0] >> 8) & 1) != 0;
+            r.emplace_back("Level", Fmt("%u", a[0] & 0xFF));
+            r.emplace_back("Refused side", dst ? "destination" : "source");
+            r.emplace_back("Illegal address", Fmt("%08X", dst ? a[2] : a[1]));
+            r.emplace_back(dst ? "Source" : "Destination", Fmt("%08X", dst ? a[1] : a[2]));
             break;
+        }
         case SE_HWEV_K_DMAC_START:
         {
             const uint32_t chcr = a[0] >> 8;
