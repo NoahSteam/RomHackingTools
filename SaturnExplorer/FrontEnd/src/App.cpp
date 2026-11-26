@@ -1,4 +1,5 @@
 #include "App.h"
+#include "HwEventFormat.h"
 #include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 #include "ArgSplit.h"
 
@@ -496,6 +497,7 @@ void App::LoadSettings()
         if (!mSettings.Load(&err)) mLog.Error("Settings: " + err);
     }
     mTheme.Load(mSettings);
+    mLog.Load(mSettings);   // which hardware event sources are armed
     mTheme.ApplyPending();
     for (const PanelInfo& p : PanelList())
         mPanels.*(p.flag) = mSettings.GetBool("panels", p.key, mPanels.*(p.flag));
@@ -542,6 +544,7 @@ bool App::SaveSettings(bool wait)
         mSettings.SetBool("panels", p.key, mPanels.*(p.flag));
     mSettings.Set("data", "dir", mDataDir);
     mTheme.Store(mSettings);
+    mLog.Store(mSettings);
     mSettings.SetBool("ui", "tooltips", mShowTooltips);
     mSettings.SetBool("debug", "rewind", mRewindEnabled);
     mSettings.Set("diff", "exe", mDiffExe);
@@ -1617,6 +1620,7 @@ void App::BuildUI(IPlatform& platform)
         SyncBreakpointsToLive();
         SyncTracepointsToLive();   // push tracepoint set (v8)
         DrainTraceEvents();        // pull fired tracepoints into the Log
+        DrainHwEvents();           // request and pull hardware events (live only)
 #ifdef SE_ENABLE_LIVE
         sfe::StopReport report;
         report.stopped = se_live_get_stop(&mDataSource, &report.reason, &report.cpu, &report.pc);
@@ -2107,6 +2111,7 @@ void App::BuildUI(IPlatform& platform)
     // Persist any preference the user changed this frame (panel visibility, data
     // dir). Dock-layout changes are saved separately by ImGui into imgui.ini.
     if (mController.ConsumeSettingsDirty()) mSettingsDirty = true;
+    if (mLog.ConsumeSettingsDirty()) mSettingsDirty = true;
     if (mSettingsDirty && std::chrono::steady_clock::now() >= mSettingsRetryAt) SaveSettings(false);   // no wait for the lock in a frame (A9-46)
 }
 
@@ -3558,6 +3563,54 @@ void App::DrainTraceEvents()
         if (n < 16) break;   // drained
     }
 #endif
+}
+
+// Hardware events (SeHwEvents.h). The wanted mask is restated every frame -- the driver sends only a
+// change and re-sends it after a reconnect -- and is 0 unless the source is live AND the server has the
+// capability, so a session that never arms a chip never makes the emulator do any extra work.
+// Events are live-only: nothing is stored in the recorded frames, so scrubbing history shows none.
+void App::DrainHwEvents()
+{
+    HwChipStatus cs;
+#ifdef SE_ENABLE_LIVE
+    if (mbLiveSource)
+    {
+        cs.live = true;
+        cs.capable = se_live_server_version(&mDataSource) >= SE_LIVE_MINVER_CAPS &&
+                     (mLiveCaps & SE_LIVE_CAP_HW_EVENTS) != 0;
+        se_live_set_hw_events(&mDataSource, cs.capable ? mLog.HwRequestMask() : 0u);
+        if (cs.capable)
+        {
+            se_live_hw_status st;
+            if (se_live_hw_status_get(&mDataSource, &st))
+            {
+                cs.statusValid = true;
+                cs.applied = st.applied_mask;
+                cs.supported = st.supported_mask;
+            }
+            se_live_hw_event evs[256];
+            std::vector<LogEvent> batch;
+            for (;;)
+            {
+                const uint32_t n = se_live_drain_hw_events(&mDataSource, evs, 256);
+                batch.reserve(n * 2);
+                for (uint32_t i = 0; i < n; ++i)
+                {
+                    const se_live_hw_event& e = evs[i];
+                    if (e.lost_before) batch.push_back(FormatHwLost(e.lost_before, e.frame));
+                    SeHwEvent rec;
+                    rec.kind = e.kind; rec.source = e.source; rec.cpu = e.cpu; rec.flags = e.flags;
+                    rec.frame = e.frame; rec.ts = e.ts; rec.pc = e.pc;
+                    for (int k = 0; k < 4; ++k) rec.arg[k] = e.arg[k];
+                    batch.push_back(FormatHwEvent(rec));
+                }
+                mLog.PushBatch(batch);   // one timestamp per drained batch
+                if (n < 256) break;
+            }
+        }
+    }
+#endif
+    mLog.SetHwStatus(cs);
 }
 
 void App::OpenTracepointEditor(int cpu, uint32_t addr)
@@ -8625,6 +8678,12 @@ void App::ResolveRestoreWait(uint32_t done, uint32_t failed)
     if (refused)
         mLog.Error("The emulator could not apply the state load; its state is unchanged.");
     mRestoreOutstanding = 0;
+    // Hardware events keep the frame they happened on, and a restore moves the frame counter, so the
+    // log would otherwise appear to run backwards. One row marks the discontinuity. Only a slot load
+    // is detectable here; a rewind seek does not pass through this wait, so it adds no row.
+    if (applied > 0 && mLog.HwRequestMask() != 0)
+        mLog.Info("State restored; hardware event frame numbers continue from " +
+                  std::to_string(static_cast<unsigned long long>(se_frame_number(mContext))));
     if (mRestoreTimedOut)
     {
         mRestoreTimedOut = false;
