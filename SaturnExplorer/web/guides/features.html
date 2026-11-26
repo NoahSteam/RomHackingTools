@@ -470,6 +470,11 @@
         <p>"Find what accesses this address": a non-halting watchpoint records every instruction that reads or writes it, with hit counts and each accessor's call stack.</p>
       </div>
       <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">What the hardware did</span>
+        <h3>Hardware events</h3>
+        <p>Click the <span class="mono">CPU</span>, <span class="mono">DMA</span>, <span class="mono">VDP</span>, <span class="mono">CD</span> or <span class="mono">SMPC</span> chip in the Log to capture interrupts and exceptions, SCU and on-chip DMA, VDP1 draws and VBlank, and CD and SMPC commands from the live emulator. Right-click a chip to pick sources. Capture is off until you ask, and a busy frame is summarised as "+N more".</p>
+      </div>
+      <div class="card" style="--c: var(--c-debug)">
         <span class="tag">Event feed</span>
         <h3>Log &amp; Symbols</h3>
         <p>A filterable, searchable event log — click an entry to jump to the instruction or address that produced it. An address→name store imports <span class="mono">.map</span> / <span class="mono">.sym</span> symbol files.</p>

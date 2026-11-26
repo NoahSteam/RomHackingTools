@@ -75,8 +75,8 @@ Not a scrolling text box — a filterable event table (see the mockup): columns
 **Frame · Category · Message**, filter chips (All / Info / Warnings / Errors / CPU / DMA /
 VDP / CD / Scripts / Tracepoints), "Pause Auto-Scroll", and a search box. Categories are
 an enum; sources today are system events (Connected, Loaded, protocol mismatch, frame
-advance) and tracepoints; DMA/VDP/CD categories light up as the emulator emits them
-(future), and Scripts ties into the Python proposal (SCRIPTING.md).
+advance) and tracepoints; the DMA/VDP/CD/CPU/SMPC categories are fed by the hardware event log
+(opt-in chips, see [Hardware events](Codebase/Systems/HardwareEvents.md)), and Scripts ties into the Python proposal (SCRIPTING.md).
 
 Every entry is **expandable** to a detail view: Time, PC, CPU, Frame, the captured
 register values, and **Jump to Assembly / Jump to Memory** actions. Double-clicking a
