@@ -7,13 +7,14 @@ guides (audio, VDP1, VDP2). Edit the content here.
 - `audio.html`, `vdp1.html`, `vdp2.html` — the hardware guides (inline CSS/JS, no external
   requests, theme-aware via `prefers-color-scheme`).
 - `features.html` — a tour of the Saturn Explorer app itself: every panel, tool, and workflow.
+- `profiler.html` — how the profiler works and how its numbers were verified.
 
 The `../../Docs/AUDIO_GUIDE.md`, `../../Docs/VDP1_GUIDE.md`, and `../../Docs/VDP2_GUIDE.md` are
 thin pointer stubs, not copies — so there is nothing to keep in sync.
 
 ## Publishing
 
-Nothing publishes this folder automatically (the GitHub Pages workflow that built the web version
-and copied the guides was removed). Each page is self-contained: open it in a browser.
+`.github/workflows/saturn-explorer-guides.yml` deploys this folder to GitHub Pages on every push to
+`master` that touches it; `index.html` is the site root. Each page is also self-contained: open it in a browser.
 
 No build step — just edit an HTML file and push.
