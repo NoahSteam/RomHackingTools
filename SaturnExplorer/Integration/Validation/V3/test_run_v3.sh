@@ -6,7 +6,10 @@
 set -u
 FAKE="$1"; BENCH="$2"; SOCK="$3"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-OUT="$(mktemp -d "${TMPDIR:-/tmp}/se_v3_run.XXXXXX")"
+# macOS sets TMPDIR with a trailing slash; a "//" in OUT would not match the paths run_v3.sh prints after it
+# resolves a folder (the emulator's own, for one), so the slash is dropped here.
+TMPBASE="${TMPDIR:-/tmp}"
+OUT="$(mktemp -d "${TMPBASE%/}/se_v3_run.XXXXXX")"
 trap 'rm -rf "$OUT"' EXIT
 # The stand-in's frame period. The live ring keeps 16 records and drops the oldest (that is what the loss rule
 # counts), so a client starved for 16 frame periods loses samples on ANY host; a 4 ms stand-in would turn a CPU
