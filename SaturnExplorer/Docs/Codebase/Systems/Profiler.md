@@ -783,7 +783,10 @@ the plan's V3: `se-bench-client` (headless client on the real LiveDriver, CSV pe
 procedure. Its tests run without a BIOS (`SaturnExplorerV3BenchClientTests`, `SaturnExplorerV3AnalyzeTests`,
 `SaturnExplorerV3RunScriptTests`). Any connected client already makes the exporter capture a snapshot per frame,
 so "no client" is measured with two short connections at the window edges; the procedure states what that
-cannot show. No overhead figure has been measured yet.
+cannot show. Measured once on a quiesced machine (2026-11-25, one game scene, unthrottled, 5 repetitions, all valid):
+a connected client with attribution off costs about +15 percent host time per frame (95 percent interval +8.5 to
++16.0), attribution on about +206 percent (117 -> 101 -> 38 fps). The no-client configuration missed the
+repeatability threshold because of its first repetition; details in the procedure's "Quiesced run" section.
 
 ## Related documentation
 

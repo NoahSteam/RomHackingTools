@@ -424,5 +424,29 @@ were not the ones this procedure now defaults to. Nothing here is evidence for o
 * G. With the per-instruction device sync skipped for attribution alone (see Profiler.md, "Cost of attribution"),
   configuration (c) on this scene ran at about 31.6 fps instead of about 8.7, so the default 1,500-frame window is
   reachable within the default time-out. Not quiesced, so still provisional.
-* Not done: the on-screen fps cross-check for (a) and a quiesced machine. A rerun with the defaults above on a
-  quiet machine is what would produce a result.
+* Not done on that run: the on-screen fps cross-check for (a) and a quiesced machine. The quiesced rerun is below.
+
+## Quiesced run, 2026-11-25 (at `94eb518`)
+
+Same machine, game and slot-0 state, left idle (load average at start 0.00; power governor not recorded).
+`run_v3.sh --slot 0 --reps 5 --throttle off` with the defaults (`--frames 1500 --warmup-frames 300`). The state was
+still the one made under the GUI's default cache mode, so the cache setting was unpinned. All 15 runs valid, none
+aborted, no warm-up flag.
+
+| Rep | (a) no client | (b) attribution off | (c) attribution on |
+|---|---|---|---|
+| 1 | 109.2 | 100.2 | 38.0 |
+| 2 | 116.0 | 101.0 | 37.9 |
+| 3 | 116.7 | 100.6 | 37.9 |
+| 4 | 116.1 | 100.7 | 38.1 |
+| 5 | 116.2 | 101.6 | 37.9 |
+| Median fps | 116.05 (cv 2.75 percent) | 100.67 (cv 0.53 percent) | 37.94 (cv 0.22 percent) |
+
+`analyze_v3.py`, extra host time per emulated frame against (a), median ratio and 95 percent bootstrap interval:
+(b) **+15.28 percent** [+8.50, +16.02], excluding 0; (c) **+205.86 percent** [+187.87, +207.66].
+
+The analyzer warned on (a): repetitions differ by 6.5 percent (threshold 3.0), and the last third is +6.4 percent
+from the first. Both come from repetition 1 (109.2 fps, the first emulator start after the machine went idle;
+repetitions 2 to 5 span 0.6 percent). Without it (a) is about 116.15 and (b) about +15.4 percent, so the result does
+not move, but (a) did not meet the repeatability threshold as run and the low end of the (b) interval reflects that.
+Not done: the on-screen fps cross-check for (a), a pinned cache mode, and F13 (the UI's cost; this harness has no UI).

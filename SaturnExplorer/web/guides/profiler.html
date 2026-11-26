@@ -189,6 +189,18 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     </div>
     <figcaption>Processor time the emulation thread needs per frame, on one scene of a commercial game. Function timing now costs about 2.6 times a normal frame, down from 9.5 times. Measured on a desktop that was not idle, so treat the figures as provisional.</figcaption>
   </figure>
+  <p>A separate benchmark on an idle machine measured overall speed with the frame limiter off, five runs of each setup, on the same scene:</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Setup</th><th class="num">Speed</th><th class="num">Extra time per frame</th></tr></thead>
+    <tbody>
+      <tr><td>Profiler not connected</td><td class="num">116 fps</td><td class="num">baseline</td></tr>
+      <tr><td>Connected, function timing off</td><td class="num">101 fps</td><td class="num">+15%</td></tr>
+      <tr><td>Connected, function timing on</td><td class="num">38 fps</td><td class="num">+206%</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">The Saturn runs at 60 fps, so a game that reaches these speeds stays at full speed with the counters on, and drops below it with function timing on. One of the five baseline runs was about 6% slower than the rest, so the +15% figure carries a range of roughly +8.5% to +16%.</p>
 
   <h3>Everything else</h3>
   <ul>
@@ -208,7 +220,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
       <li><strong>"Busy" includes slow bus waits.</strong> Only sleep and DMA stalls are separated out.</li>
       <li><strong>Function time is self time.</strong> Time in a function's callees is charged to the callees.</li>
       <li><strong>A breakpoint left set in Mednafen's own debugger pauses function timing</strong> until it is cleared. Those frames are marked as not attributed.</li>
-      <li><strong>Still to do:</strong> the speed benchmark repeated on an idle machine, and a hands-on pass over the panel in a real window. The panel has so far been tested without a display.</li>
+      <li><strong>Still to do:</strong> a hands-on pass over the panel in a real window. The panel has so far been tested without a display.</li>
     </ul>
   </div>
 </section>
