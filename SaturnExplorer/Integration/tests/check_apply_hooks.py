@@ -402,8 +402,8 @@ if hasattr(mod, "HWEV_KEYS"):
     sites = ([(h, k) for _a, h, k in mod.HWEV_SCU + mod.HWEV_CD + mod.HWEV_SMPC + mod.HWEV_VDP1 + mod.HWEV_VDP2]
              + [(mod.HWEV_DMAC_HOOK, mod.HWEV_DMAC_KEY)]
              + [(h, k) for _a, h, k in [mod.hwev_exception_edit(*e) for e in mod.HWEV_EXC]])
-    if len(sites) + 2 != len(keys):     # + the declarations and the SsDbgCpuPc accessor
-        fail("HWEV_KEYS (%d) does not list every hook (%d + 2)" % (len(keys), len(sites)))
+    if len(sites) + 1 != len(keys):     # + the declarations
+        fail("HWEV_KEYS (%d) does not list every hook (%d + 1)" % (len(keys), len(sites)))
     for hook, key in sites:
         if hook.count(key) != 1:
             fail("hook %s: its key appears %d times in its own text" % (key, hook.count(key)))
@@ -479,6 +479,42 @@ if hasattr(mod, "HWEV_KEYS"):
                     "void SeMednafenDmacRecalc(int cpu, unsigned int runMask,"):
             if sym not in glue:
                 fail("the glue does not define " + sym)
+
+# ---- the packing of the SMPC / CD hooks, by running the hook text itself (the front end decodes exactly this) ----
+if hasattr(mod, "HWEV_SMPC"):
+    with tempfile.TemporaryDirectory(dir=work) as d:
+        tu = os.path.join(d, "pack.cpp")
+        hooks = {k: h for tbl in (mod.HWEV_SMPC, mod.HWEV_CD) for _a, h, k in tbl}
+        prog = ('#include <cstdio>\n#include <cstring>\n#include "SeHwEvents.h"\n#define MDFN_UNLIKELY(x) (x)\ntypedef unsigned char uint8;\n'
+                'typedef unsigned short uint16;\ntypedef int int32;\nunsigned int SeSsHwEvMask = 0xFF;\nstatic unsigned got[6];\n'
+                'void SeMednafenHwEvent(unsigned k, int c, unsigned pc, unsigned a0, unsigned a1, unsigned a2, unsigned a3)'
+                ' { got[0]=k; got[1]=(unsigned char)c; got[2]=a0; got[3]=a1; got[4]=a2; got[5]=a3; }\n'
+                'static uint8 IREG[7]; static int32 ExecutingCommand; static uint16 Results[4];\n'
+                'static struct { uint16 CD[4]; } CTR;\n'
+                'static void smpc() {\n' + hooks["SE_HWEV_HOOK_SMPC_COMMAND"] + '}\n'
+                'static void cdc() {\n' + hooks["SE_HWEV_HOOK_CD_COMMAND"] + '}\n'
+                'static void cdr() {\n' + hooks["SE_HWEV_HOOK_CD_RESPONSE"] + '}\n'
+                'static int bad;\nstatic void eq(const char* w, unsigned g, unsigned e) { if (g != e) { std::printf("%s: %08x != %08x\\n", w, g, e); bad = 1; } }\n'
+                'int main() {\n'
+                ' for (int i = 0; i < 7; i++) IREG[i] = 0x11 * (i + 1);\n ExecutingCommand = 0x1A; smpc();\n'
+                ' eq("smpc kind", got[0], SE_HWEV_K_SMPC_COMMAND); eq("smpc cpu", got[1], SE_HWEV_CPU_NONE); eq("smpc a0", got[2], 0x1A);\n'
+                ' eq("smpc a1", got[3], 0x44332211u); eq("smpc a2", got[4], 0x00776655u); eq("smpc a3", got[5], 0);\n'
+                ' CTR.CD[0] = 0x1234; CTR.CD[1] = 0x5678; CTR.CD[2] = 0x9ABC; CTR.CD[3] = 0xDEF0; cdc();\n'
+                ' eq("cd cmd kind", got[0], SE_HWEV_K_CD_COMMAND); eq("cd cmd a0", got[2], 0x1234); eq("cd cmd a1", got[3], 0x5678);\n'
+                ' eq("cd cmd a2", got[4], 0x9ABC); eq("cd cmd a3", got[5], 0xDEF0);\n'
+                ' Results[0] = 0x0100; Results[1] = 2; Results[2] = 3; Results[3] = 0xFFFF; cdr();\n'
+                ' eq("cd resp kind", got[0], SE_HWEV_K_CD_RESPONSE); eq("cd resp a0", got[2], 0x0100); eq("cd resp a1", got[3], 2);\n'
+                ' eq("cd resp a2", got[4], 3); eq("cd resp a3", got[5], 0xFFFF);\n'
+                ' return bad; }\n')
+        open(tu, "w").write(prog)
+        exe = os.path.join(d, "pack")
+        r = subprocess.run([cxx, "-std=gnu++11", "-I" + COMMON, tu, "-o", exe], capture_output=True, text=True)
+        if r.returncode:
+            fail("the SMPC / CD hook packing program does not build:\n" + r.stderr[-800:])
+        else:
+            r = subprocess.run([exe], capture_output=True, text=True)
+            if r.returncode:
+                fail("the SMPC / CD hooks pack their arguments differently from the front end's decoding:\n" + r.stdout)
 
 print("OK" if not bad else "%d check(s) failed" % bad)
 sys.exit(1 if bad else 0)

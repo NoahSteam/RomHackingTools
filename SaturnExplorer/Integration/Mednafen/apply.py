@@ -1861,24 +1861,9 @@ HWEV_VDP2 = (
      "SE_HWEV_HOOK_VDP2_DISPLAY"),
 )
 
-# ss.cpp: where an SH-2 is, for the DMAC start event. The rule of SsDbgSh2Regs (RPC-4 unless the debug run
-# loop is live, whose PC_ID is exact) -- see the comment there for why PC_ID alone would read 0.
-HWEV_CPU_PC_KEY = "SE_HWEV_CPU_PC"
-HWEV_CPU_PC_ACCESSOR = """\
-/* SE_HWEV_CPU_PC: an SH-2's PC for a hardware event (the DMAC start). Same rule as SsDbgSh2Regs: PC_ID is
-   maintained only by the debug run loop, so unless that loop is live the PC is the fetch pointer less the
-   two instructions it runs ahead. Called from inside the CPU's own register write, so it is approximate. */
-namespace MDFN_IEN_SS {
-extern "C" unsigned int SsDbgCpuPc(int cpu) {
-   SH7095& c = CPU[cpu ? 1 : 0];
-   return DBG_NeedCPUHooks() ? (unsigned int)c.GetRegister(SH7095::GSREG_PC_ID, 0, 0)
-                             : (unsigned int)(c.GetRegister(SH7095::GSREG_RPC, 0, 0) - 4);
-}
-}"""
-
 # Every key this section writes, for the checks (check_apply_hooks / check_migration / check_component).
 HWEV_KEYS = (
-    [HWEV_FWD_KEY, HWEV_DMAC_KEY, HWEV_CPU_PC_KEY]
+    [HWEV_FWD_KEY, HWEV_DMAC_KEY]
     + ["SE_HWEV_HOOK_EXC_" + e[0] for e in HWEV_EXC]
     + [k for _a, _h, k in HWEV_SCU + HWEV_CD + HWEV_SMPC + HWEV_VDP1 + HWEV_VDP2]
 )
@@ -1886,7 +1871,7 @@ HWEV_KEYS = (
 
 # key -> the file (under src/ss) that carries it; SE_HWEV_FWD is one per translation unit and is not in it.
 HWEV_KEY_FILE = dict(
-    [(HWEV_DMAC_KEY, "sh7095.inc"), (HWEV_CPU_PC_KEY, "ss.cpp")]
+    [(HWEV_DMAC_KEY, "sh7095.inc")]
     + [("SE_HWEV_HOOK_EXC_" + e[0], "sh7095_ops.inc") for e in HWEV_EXC]
     + [(k, f) for tbl, f in ((HWEV_SCU, "scu.inc"), (HWEV_CD, "cdb.cpp"), (HWEV_SMPC, "smpc.cpp"),
                              (HWEV_VDP1, "vdp1.cpp"), (HWEV_VDP2, "vdp2.cpp")) for _a, _h, k in tbl]
@@ -1912,7 +1897,6 @@ def process_hwevents(src_dir, do_write):
                               prepend=(hwev_fwd(HWEV_DECL), HWEV_FWD_KEY))
     notes += process_anchored(src_dir, "vdp2.cpp", "hardware events: VDP2", list(HWEV_VDP2), do_write,
                               prepend=(hwev_fwd(HWEV_DECL), HWEV_FWD_KEY))
-    notes += process_append_file(src_dir, "ss.cpp", HWEV_CPU_PC_ACCESSOR, HWEV_CPU_PC_KEY, do_write)
     return notes
 
 

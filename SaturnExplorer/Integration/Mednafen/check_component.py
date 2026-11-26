@@ -48,8 +48,7 @@ gone) must still be a gap, and these must make it fail: "native-transient-lost" 
 when we want no callback), "native-transient-kept" (the record is never cleared: every later sync repeats it).
 
 Hardware event log (component/hwev_harness.cpp: hwev_vdp1 on the patched vdp1.cpp, hwev_sh2 on the patched ss.cpp with
-the real glue). --drop takes every key apply.py writes for it (apply.HWEV_KEYS: SE_HWEV_FWD, SE_HWEV_HOOK_*,
-SE_HWEV_CPU_PC); dropping any of them must make the run fail -- by the harnesses where they reach the site, and by
+the real glue). --drop takes every key apply.py writes for it (apply.HWEV_KEYS: SE_HWEV_FWD, SE_HWEV_HOOK_*); dropping any of them must make the run fail -- by the harnesses where they reach the site, and by
 hwev_text_checks (present exactly once, behind a SeSsHwEvMask test, in the right file) where they cannot (CD block,
 SMPC, VDP2 display). Mutations: "hwev-mask-ignored" (the sites fire with the mask clear: VDP1, an exception, the DMAC,
 the SCU) and "hwev-wrong-kind" (a site reports another kind); every harness they touch must fail."""

@@ -86,7 +86,6 @@ extern void            SsDbgSetTraceActive(int active);           /* arm per-ins
 extern int             SsDbgHasDebugger(void);                    /* 1 in a --enable-debugger build: the CPU hooks are real */
 extern void            SsDbgSetProfileActive(int active);         /* v26: keep the per-insn hook on for function profiling */
 extern int             SsDbgCpuTimestamp(int cpu);                /* v26: an SH-2's cycle counter (rebased every frame) */
-extern unsigned int    SsDbgCpuPc(int cpu);                       /* hardware events: where an SH-2 is (approximate; see apply.py) */
 /* Controller injection (v7+). apply.py implements this accessor through the SMPC
  * gamepad path, translating SE_PAD_* to Mednafen's bit order and atomically overlaying
  * it after each host-input refresh. `port` is 0-based (0 = controller 1). */
@@ -1019,7 +1018,9 @@ void SeMednafenSlaveActive(int on, int ts)
 /* The record's clock and PC. Wired, they come from the emulator; in a test they are whatever it sets. */
 #if defined(SE_MEDNAFEN_WIRED)
 #define SE_MDFN_HWEV_TS()     ((unsigned int)SsDbgCpuTimestamp(0))
-#define SE_MDFN_HWEV_PC(cpu)  SsDbgCpuPc(cpu)
+/* SsDbgSh2Regs applies the RPC-4 / PC_ID rule its comment documents (PC_ID is only live in the debug loop). */
+static unsigned int SeMdfnHwEvPc(int cpu) { uint32_t r[23]; SsDbgSh2Regs(cpu, r); return r[22]; }
+#define SE_MDFN_HWEV_PC(cpu)  SeMdfnHwEvPc(cpu)
 #else
 static unsigned int sHwEvTestTs, sHwEvTestPc;
 #define SE_MDFN_HWEV_TS()     sHwEvTestTs
@@ -1111,7 +1112,7 @@ void SeMednafenDmacRecalc(int cpu, unsigned int runMask,
         {
             if (sHwEvCount[3]++ < SE_HWEV_FRAME_CAP)
                 SeMdfnHwEvEmit(SE_HWEV_K_DMAC_START, 3, c, SeMdfnHwEvFlags(SE_HWEV_K_DMAC_START), SE_MDFN_HWEV_PC(c),
-                               ch | (chcr << 8), sar, dar, tcr);
+                               ch | ((chcr & 0xFFFFu) << 8), sar, dar, tcr);
         }
         else if (!(runMask & bit) && ((unsigned int)was & bit))
         {

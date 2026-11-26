@@ -189,6 +189,13 @@ static void TestDmac(void)
     CHECK_EQ(gRec[0].arg[1], 0x06000000u);
     CHECK_EQ(gRec[0].arg[2], 0x00200000u);
     CHECK_EQ(gRec[0].arg[3], 8);
+    /* only CHCR's 16 bits go into arg0, whatever sits above them */
+    SeMednafenDmacRecalc(1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    gN = 0;
+    SeMednafenDmacRecalc(1, 1, 0xFFFF1A05u, 0, 0, 0, 0, 0, 0, 0);
+    CHECK_EQ(gRec[0].arg[0], 0u | (0x1A05u << 8));
+    SeMednafenDmacRecalc(1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    gN = 1;
     /* a recalc that changes nothing is no edge */
     SeMednafenDmacRecalc(0, 1, 0x1A05u, 0x06000000u, 0x00200000u, 8, 0, 0, 0, 0);
     CHECK_EQ(gN, 1);
