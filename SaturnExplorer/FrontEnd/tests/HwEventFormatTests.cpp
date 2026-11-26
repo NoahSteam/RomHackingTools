@@ -65,9 +65,9 @@ void Messages()
     CheckText("slot illegal", Msg(Ev(1, 6, SE_HWEV_EXC_ILLSLOT, 0, 0x06000700, 0)),
               "MSH2 slot illegal instruction (vec 0x06) -> handler 06000700");
     CheckText("trapa", Msg(Ev(1, 35, SE_HWEV_EXC_TRAP, 0, 0x06001000, 0)),
-              "MSH2 TRAPA #3 (vec 0x23) -> handler 06001000");
+              "MSH2 TRAPA #35 (vec 0x23) -> handler 06001000");
     CheckText("trapa odd vector", Msg(Ev(1, 5, SE_HWEV_EXC_TRAP, 0, 0x06001000, 0)),
-              "MSH2 TRAPA (vec 0x05) -> handler 06001000");
+              "MSH2 TRAPA #5 (vec 0x05) -> handler 06001000");
     CheckText("unknown class", Msg(Ev(1, 1, 99, 0, 0x10, 0)), "MSH2 exception class 99 (vec 0x01) -> handler 00000010");
     // 2 SCU_INT_ACCEPT
     CheckText("accept", Msg(Ev(2, 0, 15, 0x40, 0)), "SCU interrupt VBlank-IN delivered (vec 0x40, level 15)");
@@ -80,8 +80,8 @@ void Messages()
               "SCU DMA L0 start: C-bus (work RAM-H) 06000000 -> B-bus 05C00000, 0x1000 bytes, factor VBlank-OUT");
     CheckText("dma start a-bus", Msg(Ev(4, 0x10000001u, 0x02000000, 0x05A00000, 0x20)),
               "SCU DMA L1 start: A-bus 02000000 -> B-bus 05A00000, 0x20 bytes, factor VBlank-IN");
-    CheckText("dma indirect", Msg(Ev(4, 0x00070102u, 0x06010000)),
-              "SCU DMA L2 start: indirect, table 06010000, factor enable bit (software)");
+    CheckText("dma indirect", Msg(Ev(4, 0x12070101u, 0x06004000, 0x05A00000, 0x40)),
+              "SCU DMA L1 start: indirect, C-bus (work RAM-H) 06004000 -> B-bus 05A00000, 0x40 bytes, factor enable bit (software)");
     CheckText("dma bad bus", Msg(Ev(4, 0xFF060000u, 0x00001000, 0x00002000, 4)),
               "SCU DMA L0 start: invalid bus 00001000 -> invalid bus 00002000, 0x4 bytes, factor Sprite draw end");
     // 5, 6
@@ -207,8 +207,8 @@ void Tables()
     CheckText("vec 10", HwSh2VectorName(10), "DMA address error");
     CheckText("vec 11", HwSh2VectorName(11), "NMI");
     CheckText("vec 12", HwSh2VectorName(12), "user break");
-    CheckText("vec 32", HwSh2VectorName(32), "TRAPA #0");
-    CheckText("vec 63", HwSh2VectorName(63), "TRAPA #31");
+    CheckText("vec 32", HwSh2VectorName(32), "TRAPA #32");
+    CheckText("vec 63", HwSh2VectorName(63), "TRAPA #63");
     CheckText("vec 0x41", HwSh2VectorName(0x41), "SCU VBlank-OUT");
     CheckText("vec 0x4B", HwSh2VectorName(0x4B), "SCU Level 0 DMA end");
     CheckText("vec 0x5F", HwSh2VectorName(0x5F), "SCU external 15");

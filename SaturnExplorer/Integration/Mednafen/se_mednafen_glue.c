@@ -1011,6 +1011,9 @@ void SeMednafenSlaveActive(int on, int ts)
 #ifndef SE_MDFN_HWEV_SINK
 #define SE_MDFN_HWEV_SINK SeExportQueueHwEvent
 #endif
+/* A substituted sink is defined by the harness, after this file: declare it, since C99 and later (an error
+ * from GCC 14 on) have no implicit function declarations. Redundant for the exporter's own. */
+void SE_MDFN_HWEV_SINK(const SeHwEvent* ev);
 
 /* The enable bits this build has hooks for (apply.py's HWEV_* sites). */
 #define SE_MDFN_HWEV_SUPPORTED 0xFFu

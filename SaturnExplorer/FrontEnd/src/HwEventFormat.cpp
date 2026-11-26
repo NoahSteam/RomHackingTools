@@ -147,7 +147,8 @@ const char* HwSourceName(unsigned s) { return s < 8 ? kSource[s] : nullptr; }
 std::string HwSh2VectorName(unsigned v)
 {
     if (const char* f = FixedVectorName(v)) return f;
-    if (v >= 32 && v < 64) return Fmt("TRAPA #%u", v - 32);
+    // TRAPA #imm takes vector imm itself (the immediate IS the vector number), so no offset.
+    if (v >= 32 && v < 64) return Fmt("TRAPA #%u", v);
     if (v >= 0x40 && v <= 0x4D) return std::string("SCU ") + kScuInt[v - 0x40];
     if (v >= 0x50 && v <= 0x5F) return Fmt("SCU external %u", v - 0x50);
     return std::string();
@@ -221,8 +222,8 @@ static std::string Message(const SeHwEvent& e)
                 case SE_HWEV_EXC_ILLINSTR: what = Fmt("illegal instruction (vec 0x%02X)", a[0]); break;
                 case SE_HWEV_EXC_ILLSLOT:  what = Fmt("slot illegal instruction (vec 0x%02X)", a[0]); break;
                 case SE_HWEV_EXC_TRAP:
-                    what = (a[0] >= 32 && a[0] < 64) ? Fmt("TRAPA #%u (vec 0x%02X)", a[0] - 32, a[0])
-                                                    : Fmt("TRAPA (vec 0x%02X)", a[0]);
+                    // arg0 is the instruction's immediate, which is also the vector it fetched.
+                    what = Fmt("TRAPA #%u (vec 0x%02X)", a[0], a[0]);
                     break;
                 default: what = Fmt("exception class %u (vec 0x%02X)", a[1], a[0]); break;
             }
@@ -246,9 +247,11 @@ static std::string Message(const SeHwEvent& e)
             const char* wn = HwScuBusName(wb);
             const char* fn = HwScuDmaFactorName(sf);
             std::string s = Fmt("SCU DMA L%u start: ", level);
-            s += indirect ? Fmt("indirect, table %08X", a[1])
-                          : Fmt("%s %08X -> %s %08X, 0x%X bytes", rn ? rn : "invalid bus", a[1],
-                                wn ? wn : "invalid bus", a[2], a[3]);
+            // An indirect transfer reports one event per table entry, with that entry's own source,
+            // destination and count; the table's address is not captured by the hook.
+            if (indirect) s += "indirect, ";
+            s += Fmt("%s %08X -> %s %08X, 0x%X bytes", rn ? rn : "invalid bus", a[1],
+                     wn ? wn : "invalid bus", a[2], a[3]);
             s += std::string(", factor ") + (fn ? fn : "?");
             if (!fn) s += Fmt(" %u", sf);
             return s;
@@ -395,11 +398,11 @@ std::vector<std::pair<std::string, std::string>> HwEventDetail(const SeHwEvent& 
             const char* rn = HwScuBusName((a[0] >> 24) & 0xF);
             const char* wn = HwScuBusName((a[0] >> 28) & 0xF);
             r.emplace_back("Level", Fmt("%u", a[0] & 0xFF));
-            r.emplace_back("Mode", ((a[0] >> 8) & 0xFF) ? "indirect" : "direct");
+            r.emplace_back("Mode", ((a[0] >> 8) & 0xFF) ? "indirect (one table entry; the table address is not captured)" : "direct");
             r.emplace_back("Start factor", Fmt("%u %s", sf, HwScuDmaFactorName(sf) ? HwScuDmaFactorName(sf) : "?"));
             r.emplace_back("Read bus", rn ? rn : "invalid");
             r.emplace_back("Write bus", wn ? wn : "invalid");
-            r.emplace_back(((a[0] >> 8) & 0xFF) ? "Table" : "Source", Fmt("%08X", a[1]));
+            r.emplace_back("Source", Fmt("%08X", a[1]));
             r.emplace_back("Destination", Fmt("%08X", a[2]));
             r.emplace_back("Bytes", Fmt("0x%X (%u)", a[3], a[3]));
             break;
