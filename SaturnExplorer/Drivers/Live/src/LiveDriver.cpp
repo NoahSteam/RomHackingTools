@@ -203,6 +203,72 @@ struct LivePerf
     bool empty() const { return frames.empty() && gapLast == 0; }
 };
 
+// The hardware event section one reply carried (SeLiveProtocol.h, "Hardware event section").
+// 'present' is false when the connection has not opted in (no section on the wire).
+struct LiveHw
+{
+    bool present = false;
+    uint64_t firstSeq = 0, newest = 0, lost = 0;
+    uint32_t appliedMask = 0, supportedMask = 0;
+    std::vector<se_live_hw_event> recs;   // seq filled in; lost_before not yet
+    void clear() { *this = LiveHw(); }
+};
+
+// The hardware event queue of one connection and what the status call reports (guarded by ctlMtx).
+const size_t kHwQueueBound = 16384;
+struct HwQueue
+{
+    std::deque<se_live_hw_event> q;
+    uint64_t seen = 0;          // newest sequence queued (0 = none yet)
+    uint64_t pendLost = 0;      // loss not yet attached to a queued record (rides on the next one)
+    uint64_t newest = 0, serverLost = 0, driverEvicted = 0;
+    uint32_t applied = 0, supported = 0;
+    bool haveSection = false;
+    void reset() { *this = HwQueue(); }
+};
+
+// Two things lose records between the emulator and the panel: the server's ring (the header's
+// 'lost', immediately before firstSeq) and this queue's bound. Both are counted exactly and ride
+// on the first record that follows as lost_before, so the panel puts its "N lost" row at the gap.
+void IngestHw(HwQueue& h, LiveHw& in, size_t bound)
+{
+    if (!in.present) return;
+    h.haveSection = true;
+    h.applied = in.appliedMask;
+    h.supported = in.supportedMask;
+    if (in.newest > h.newest) h.newest = in.newest;
+    h.serverLost += in.lost;
+    h.pendLost += in.lost;
+    // The loss the header reported covers records before firstSeq; anything beyond it between
+    // what was queued and the first record is a loss the server could not name (a record this
+    // client could not read), and is counted all the same. A fresh connection (seen == 0) was
+    // never owed a backlog, so its first record is not a gap.
+    uint64_t expect = h.seen != 0 ? h.seen + 1 + in.lost : 0;
+    for (se_live_hw_event& e : in.recs)
+    {
+        if (h.seen != 0 && e.seq <= h.seen) continue;   // a duplicate
+        if (expect != 0 && e.seq > expect)
+        {
+            h.serverLost += e.seq - expect;
+            h.pendLost += e.seq - expect;
+        }
+        e.lost_before = h.pendLost;
+        h.pendLost = 0;
+        h.seen = e.seq;
+        expect = e.seq + 1;
+        h.q.push_back(e);
+        while (h.q.size() > bound)
+        {
+            // The oldest goes; the record that becomes the oldest says so (and passes on what the
+            // evicted one reported), so the count stays exact however far the queue overflows.
+            const se_live_hw_event gone = h.q.front();
+            h.q.pop_front();
+            ++h.driverEvicted;
+            h.q.front().lost_before += gone.lost_before + 1;
+        }
+    }
+}
+
 // ---- Perf queue ingestion (F3) ----
 // Two things lose records between the emulator and the panel: the server's 16-deep ring (reported
 // in the section header) and this queue's own bound. Both leave an exact range on the first record
@@ -368,6 +434,7 @@ static uint32_t MinVerFor(const char* verb)
     if (is(SE_LIVE_VERB_REWIND))    return SE_LIVE_MINVER_REWIND;
     if (is(SE_LIVE_VERB_EMUSAVE))   return SE_LIVE_MINVER_EMUSAVE;
     if (is(SE_LIVE_VERB_PROFILE))   return SE_LIVE_MINVER_PROFILE;
+    if (is(SE_LIVE_VERB_HWEVENTS))  return SE_LIVE_MINVER_HWEVENTS;
     return 0u;
 }
 
@@ -547,6 +614,12 @@ struct LiveState
     // Totals and the newest sequence the server reported, for se_live_perf_status_get.
     uint64_t              perfNewest = 0, perfReplies = 0, perfServerLost = 0, perfDriverEvicted = 0;
     uint64_t              perfNewestReported = 0;   // newest_seq already reflected in the stream
+    // Hardware events. 'hwWanted' is what the UI last asked for; 'hwDirty' means the server has not
+    // been told it on this connection (set on a change, and on a new connection only when the wanted
+    // mask is non-zero, so a session that never uses the feature never opts in). Guarded by ctlMtx.
+    uint32_t              hwWanted = 0;
+    bool                  hwDirty = false;
+    HwQueue               hw;
 };
 
 // The snapshot a capture on this thread is pinned to (between begin_capture and end_capture),
@@ -1081,7 +1154,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                   LiveCallStacks& outCallStacks, LiveKeyMap& outKeyMap,
                   std::vector<std::string>& outLog,
                   std::vector<LiveStateBlock>& outStateBlocks, LiveEmuSlots& outEmuSlots,
-                  LivePerf& outPerf)
+                  LivePerf& outPerf, bool hwSection, LiveHw& outHw)
 {
     if (!SendCommand(c, verb, arg))
     {
@@ -1446,6 +1519,39 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         }
     }
 
+    // Hardware event section: present on this connection from the reply to its first HWE onward
+    // (the caller knows, the stream does not say). A count or record length this protocol could
+    // never produce is a broken stream; a longer record is read in full and its tail ignored.
+    outHw.clear();
+    if (hwSection)
+    {
+        uint8_t hb[SE_LIVE_HWEV_HDR_LEN];
+        if (!ConnReadFull(c, hb, sizeof(hb))) return false;
+        const uint32_t count = Rd32LE(hb);
+        const uint32_t recLen = Rd32LE(hb + 4);
+        if (count > SE_LIVE_HWEV_MAX_PER_REPLY) return false;
+        if (recLen < SE_LIVE_HWEV_REC_LEN || recLen > 256u) return false;
+        outHw.present = true;
+        outHw.firstSeq = Rd64LE(hb + 8);
+        outHw.newest = Rd64LE(hb + 16);
+        outHw.lost = Rd64LE(hb + 24);
+        outHw.appliedMask = Rd32LE(hb + 32);
+        outHw.supportedMask = Rd32LE(hb + 36);
+        std::vector<uint8_t> rb(recLen);
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            if (!ConnReadFull(c, rb.data(), recLen)) return false;
+            se_live_hw_event e = {};
+            e.seq = outHw.firstSeq + i;
+            e.kind = rb[0]; e.source = rb[1]; e.cpu = rb[2]; e.flags = rb[3];
+            e.frame = Rd32LE(rb.data() + 4);
+            e.ts = Rd32LE(rb.data() + 8);
+            e.pc = Rd32LE(rb.data() + 12);
+            for (int a = 0; a < 4; ++a) e.arg[a] = Rd32LE(rb.data() + 16 + 4 * a);
+            outHw.recs.push_back(e);
+        }
+    }
+
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     if (ct >= 32)
@@ -1578,6 +1684,7 @@ void PollLoop(LiveState* st)
     // version and queued work were meant for, and a GET is the one request every version
     // answers, so it is what establishes the version before anything that mutates is shipped.
     bool handshaken = false;
+    bool hwSection = false;   // this connection's replies end with the hardware event section
     while (st->running.load())
     {
         if (!conn.ok())
@@ -1595,6 +1702,7 @@ void PollLoop(LiveState* st)
             // connection, so a client that sees the new number never captures the old data.
             st->lastSeenFrame = 0;
             handshaken = false;
+            hwSection = false;   // a new connection has not opted in
         }
 
         // Drain any control command posted by the UI thread; otherwise poll. A
@@ -1660,6 +1768,14 @@ void PollLoop(LiveState* st)
                 verb = SE_LIVE_VERB_PROFILE;
                 arg = static_cast<int32_t>(st->profFlags);
                 st->profDirty = false;
+            }
+            else if (st->hwDirty)
+            {
+                // Per connection on the server, like PRF. Whether the server can take it is decided
+                // at the single send point below.
+                verb = SE_LIVE_VERB_HWEVENTS;
+                arg = static_cast<int32_t>(st->hwWanted);
+                st->hwDirty = false;
             }
             else if (st->bkptsDirty)
             {
@@ -1753,6 +1869,7 @@ void PollLoop(LiveState* st)
         std::vector<LiveStateBlock> stateBlocks;
         LiveEmuSlots emuSlots;
         LivePerf perf;
+        LiveHw hw;
 
         // One version gate, at the only point a request leaves. A server that does not know a
         // verb ignores it and never consumes the attached payload, so its next reply is read
@@ -1768,9 +1885,21 @@ void PollLoop(LiveState* st)
             arg = 0;
             payload.clear();
         }
+        // HWE also needs the capability bit, which is what says the server knows the verb: a v27
+        // server without it answers HWE as GET with no section, and the reply parser below would
+        // wait for one forever. No version bump distinguishes the two, so the bit is the gate.
+        if (std::memcmp(verb, SE_LIVE_VERB_HWEVENTS, SE_LIVE_VERB_LEN) == 0 &&
+            !(st->srvCaps.load() & SE_LIVE_CAP_HW_EVENTS))
+        {
+            verb = SE_LIVE_VERB_GET;
+            arg = 0;
+            payload.clear();
+        }
+        // From the reply to the first HWE shipped on this connection, every reply carries the section.
+        if (std::memcmp(verb, SE_LIVE_VERB_HWEVENTS, SE_LIVE_VERB_LEN) == 0) hwSection = true;
         if (!ReadSnapshot(conn, verb, arg, payload.data(), payload.size(),
                           snap, paused, frame, sver, stop, events, callStacks, keyMap,
-                          logLines, stateBlocks, emuSlots, perf))
+                          logLines, stateBlocks, emuSlots, perf, hwSection, hw))
         {
             // Whatever was queued belonged to this connection, and it is gone (ForgetConnection counts
             // those as lost: they were never sent). The poke that was on its way out is different: the
@@ -1875,6 +2004,9 @@ void PollLoop(LiveState* st)
             // no request whatever the last one said, so the setting is restated unconditionally,
             // "off" included, rather than inferred from the server's start-up default.
             st->profDirty = true;
+            // Hardware events are opt-in: a connection is told only when something is wanted, so
+            // a session that never uses them never gets the section.
+            st->hwDirty = st->hwWanted != 0;
             st->connected = true;
         }
         {
@@ -1890,6 +2022,7 @@ void PollLoop(LiveState* st)
                 st->perfPendFirst = st->perfPendLast = st->perfPendCount = 0;
                 st->perfNewest = st->perfNewestReported = 0;
                 st->perfReplies = st->perfServerLost = st->perfDriverEvicted = 0;
+                st->hw.reset();   // a new emulator run counts from 1 again
             }
             // Bounded: ten seconds nobody drained.
             const PerfIngest pi = { &st->perf, &st->perfSeqSeen, &st->perfPendFirst, &st->perfPendLast, &st->perfPendCount,
@@ -1897,6 +2030,7 @@ void PollLoop(LiveState* st)
             IngestPerf(pi, perf, static_cast<uint32_t>(frame), 600);
             if (perf.newest > st->perfNewest) st->perfNewest = perf.newest;
             ++st->perfReplies;   // after the queue holds everything this reply carried
+            IngestHw(st->hw, hw, kHwQueueBound);
         }
         if (!events.empty())
         {
@@ -1950,7 +2084,8 @@ void PollLoop(LiveState* st)
         std::vector<LiveStateBlock> sb;
         LiveEmuSlots es;
         LivePerf pf;
-        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km, lg, sb, es, pf);  // best-effort
+        LiveHw hwx;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km, lg, sb, es, pf, hwSection, hwx);  // best-effort
     }
     ConnClose(conn);
 }
@@ -2686,26 +2821,51 @@ extern "C" int se_live_perf_status_get(const se_data_source* ds, se_live_perf_st
     });
 }
 
-// Hardware event log: interface only for now (T0); the real bodies arrive with the driver task.
 extern "C" void se_live_set_hw_events(const se_data_source* ds, uint32_t mask)
 {
-    (void)ds;
-    (void)mask;
+    if (!ds || !ds->user || ds->close != CbClose) { return; }
+    se::GuardVoid([&]
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        // Only on a change, and never clearing the flag: see se_live_set_rewind_enabled.
+        if (mask != st->hwWanted) { st->hwWanted = mask; st->hwDirty = true; }
+    });
 }
 
 extern "C" uint32_t se_live_drain_hw_events(const se_data_source* ds, se_live_hw_event* out, uint32_t max)
 {
-    (void)ds;
-    (void)out;
-    (void)max;
-    return 0;
+    if (!ds || !ds->user || ds->close != CbClose || !out || max == 0) { return 0; }
+    return se::Guard(0u, [&]() -> uint32_t
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        uint32_t n = 0;
+        for (; n < max && !st->hw.q.empty(); ++n)
+        {
+            out[n] = st->hw.q.front();
+            st->hw.q.pop_front();
+        }
+        return n;
+    });
 }
 
 extern "C" int se_live_hw_status_get(const se_data_source* ds, se_live_hw_status* out)
 {
-    (void)ds;
     if (out) { *out = se_live_hw_status(); }
-    return 0;
+    if (!ds || !ds->user || ds->close != CbClose || !out) { return 0; }
+    return se::Guard(0, [&]() -> int
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        if (!st->hw.haveSection) { return 0; }
+        out->newest_seq = st->hw.newest;
+        out->server_lost = st->hw.serverLost;
+        out->driver_evicted = st->hw.driverEvicted;
+        out->applied_mask = st->hw.applied;
+        out->supported_mask = st->hw.supported;
+        return 1;
+    });
 }
 
 extern "C" void se_live_set_rewind_enabled(const se_data_source* ds, int enabled)

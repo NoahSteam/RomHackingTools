@@ -46,6 +46,15 @@ struct PerfRec
     uint32_t fnOther = 0;
 };
 
+// One hardware event record (SeHwEvents.h) in the section of a reply. 'tail' is appended after the
+// 32 known bytes when the reply declares a longer record length.
+struct HwRec
+{
+    uint8_t kind = 1, source = 0, cpu = 0, flags = 0;
+    uint32_t frame = 0, ts = 0, pc = 0;
+    uint32_t arg[4] = {};
+};
+
 // What one reply says. Everything not listed is zero-filled (the driver accepts empty regions).
 struct Reply
 {
@@ -72,6 +81,15 @@ struct Reply
     uint64_t perfNewest = 0;     // v27 section header: newestSeq
     uint64_t perfLostFirst = 0;  // v27 section header: lost range
     uint64_t perfLostLast = 0;
+    uint32_t caps = 0;           // control block +52 (SE_LIVE_CAP_*); nonzero makes the block 56 bytes
+    // Hardware event section (after the perf section). Emitted only when hwSection is set, the way a
+    // server does from the reply to a connection's first HWE.
+    bool     hwSection = false;
+    std::vector<HwRec> hw;
+    uint32_t hwCountField = 0xFFFFFFFFu;   // the count written; default = hw.size()
+    uint32_t hwRecLen = 32;                // the record length written (records are padded to it)
+    uint64_t hwFirstSeq = 1, hwNewest = 0, hwLost = 0;
+    uint32_t hwApplied = 0, hwSupported = 0;
 };
 
 inline void Put32(std::vector<uint8_t>& o, uint32_t v)
@@ -114,13 +132,28 @@ inline void BuildPerf(std::vector<uint8_t>& o, const Reply& r)
     }
 }
 
+inline void BuildHw(std::vector<uint8_t>& o, const Reply& r)
+{
+    Put32(o, r.hwCountField == 0xFFFFFFFFu ? static_cast<uint32_t>(r.hw.size()) : r.hwCountField);
+    Put32(o, r.hwRecLen);
+    Put64(o, r.hwFirstSeq); Put64(o, r.hwNewest); Put64(o, r.hwLost);
+    Put32(o, r.hwApplied); Put32(o, r.hwSupported);
+    for (const HwRec& h : r.hw)
+    {
+        o.push_back(h.kind); o.push_back(h.source); o.push_back(h.cpu); o.push_back(h.flags);
+        Put32(o, h.frame); Put32(o, h.ts); Put32(o, h.pc);
+        for (int i = 0; i < 4; ++i) Put32(o, h.arg[i]);
+        for (uint32_t i = 32; i < r.hwRecLen; ++i) o.push_back(0xEE);   // fields a newer server added
+    }
+}
+
 inline std::vector<uint8_t> Build(const Reply& r)
 {
     std::vector<uint8_t> o;
     o.push_back(SE_LIVE_MAGIC0); o.push_back(SE_LIVE_MAGIC1);
     o.push_back(SE_LIVE_MAGIC2); o.push_back(SE_LIVE_MAGIC3);
     Put32(o, r.version);
-    const uint32_t ct = r.ctlLen ? r.ctlLen : r.version >= 21 ? 44u : (r.version >= 20 ? 40u : (r.version >= 19 ? 32u : 24u));
+    const uint32_t ct = r.ctlLen ? r.ctlLen : (r.caps && r.version >= 21) ? 56u : r.version >= 21 ? 44u : (r.version >= 20 ? 40u : (r.version >= 19 ? 32u : 24u));
     const uint32_t vs = r.vdp2StructLen;
     const uint32_t vr = r.vdp1RegsLen;
     // Section lengths: v1 v2 cram vdp2struct vdp1regs wramLow wramHigh [fb] ctl [sh2]
@@ -148,7 +181,7 @@ inline std::vector<uint8_t> Build(const Reply& r)
     }
     if (ct >= 44) Put32(o, r.stopSeq);
     for (uint32_t at = 44; at < ct; at += 4)   // pokes applied/dropped, caps (zero), then the timeline at +56
-        Put32(o, at == SE_LIVE_CONTROL_TIMELINE_OFFSET ? r.snapshotTimeline : 0u);
+        Put32(o, at == SE_LIVE_CONTROL_TIMELINE_OFFSET ? r.snapshotTimeline : at == 52 ? r.caps : 0u);
     if (r.version >= 8)
     {
         Put32(o, r.events);
@@ -163,6 +196,7 @@ inline std::vector<uint8_t> Build(const Reply& r)
     if (r.version >= 16) Put32(o, 0);                            // savestate blocks
     if (r.version >= 17) Put32(o, 0);                            // emulator slots
     if (r.version >= 26) BuildPerf(o, r);                        // perf section
+    if (r.hwSection) BuildHw(o, r);                              // hardware event section
     return o;
 }
 

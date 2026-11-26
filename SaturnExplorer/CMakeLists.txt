@@ -1901,6 +1901,25 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerLiveProfilerRequestTests COMMAND SaturnExplorerLiveProfilerRequestTests)
 
+        # Hardware event log transport (HWE verb, trailing section, enable mask): real exporter and
+        # driver in lockstep on a socket and port of their own, plus the driver against a scripted server.
+        add_executable(SaturnExplorerLiveHwEventTests
+            FrontEnd/tests/LiveHwEventTests.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerLiveHwEventTests PRIVATE
+            SE_EXPORT_TEST_HOOKS=1
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_hw_event_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6957)
+        target_include_directories(SaturnExplorerLiveHwEventTests PRIVATE
+            Drivers/Live/src
+            FrontEnd/tests
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveHwEventTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveHwEventTests COMMAND SaturnExplorerLiveHwEventTests)
+        set_tests_properties(SaturnExplorerLiveHwEventTests PROPERTIES TIMEOUT 300 RESOURCE_LOCK live_tap_socket)
+
         # V3 harness: se-bench-client against the real exporter and driver (own socket and port 6953), in
         # process and through the executable. Measures nothing about the emulator; see PROCEDURE.md.
         add_executable(SaturnExplorerV3BenchClientTests
