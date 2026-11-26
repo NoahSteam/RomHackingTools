@@ -1,12 +1,15 @@
 // ContextBackend's write policy and source identity, against a real core context: a read-only
 // backend must refuse an edit that was already in flight, a refusal from the emulator must reach
 // the caller as "not written", and SourceId must move whenever the data behind an address does.
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <vector>
 
 #include "Debug/MemoryBackend.h"
 #include "Debug/PokeReport.h"
+#include "Debug/Sh2Asm.h"
 #include "FakeVdpSource.h"
 #include "Vdp1SpriteMove.h"
 
@@ -155,11 +158,89 @@ void TestSpriteMove()
     gesture.Update(true, false, true, 70, 80);
     Check(!gesture.active, "releasing the mouse button stops movement");
 }
+
+// An assembled instruction is a real write: the panel assembles one line and commits the opcode as
+// ONE two-byte WriteMemory (AssemblyPanel::CommitEdit). Against a real context with a work-RAM
+// poke sink, that one call must reach the sink once, change the snapshot and move
+// se_derive_serial (which the Pseudocode view and Call Stack key their rebuilds on).
+struct WramSink
+{
+    std::vector<uint8_t> ram = std::vector<uint8_t>(0x100000, 0);
+    int writes = 0;
+    size_t lastSize = 0;
+};
+size_t WramRead(void* u, uint32_t a, void* dst, size_t n)
+{
+    auto* w = static_cast<WramSink*>(u);
+    if (a < 0x06000000u || a - 0x06000000u >= w->ram.size()) return 0;   // only high work RAM here
+    const size_t off = a - 0x06000000u, c = (std::min)(n, w->ram.size() - off);
+    std::memcpy(dst, w->ram.data() + off, c);
+    return c;
+}
+size_t WramWrite(void* u, uint32_t a, const void* src, size_t n)
+{
+    auto* w = static_cast<WramSink*>(u);
+    ++w->writes; w->lastSize = n;
+    const size_t off = a - 0x06000000u;
+    std::memcpy(w->ram.data() + off, src, n);
+    return n;
+}
+
+void TestAssembledWrite()
+{
+    WramSink sink;
+    se_test::State st;
+    se_data_source ds = se_test::MakeSource(st);
+    ds.capabilities |= SE_CAP_MAIN_RAM | SE_CAP_MEM_WRITE;
+    ds.read_main_ram = [](void* u, uint32_t a, void* d, size_t n) { return WramRead(u, a, d, n); };
+    ds.write_main_ram = [](void* u, uint32_t a, const void* s, size_t n) { return WramWrite(u, a, s, n); };
+    // One 'user' pointer serves every hook, and the VDP readers would treat it as a State, so they
+    // are replaced with empty ones: this context is work RAM only.
+    ds.user = &sink;
+    ds.read_vdp1_vram = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    ds.read_vdp2_vram = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    ds.read_cram = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    ds.read_vdp1_fb = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    ds.read_vdp1_reg = [](void*, uint32_t) -> uint16_t { return 0; };
+    ds.read_vdp2_reg = [](void*, uint32_t) -> uint16_t { return 0; };
+    ds.capabilities &= ~(SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM | SE_CAP_VDP1_REGS |
+                         SE_CAP_VDP2_REGS | SE_CAP_VDP1_FB);
+    sink.ram[0x100] = 0xFF; sink.ram[0x101] = 0xFF;
+    se_context* ctx = se_test::CreateContext(ds);
+    Check(ctx != nullptr, "assembled-write context created");
+    if (!ctx) return;
+    se_begin_frame(ctx);
+    ContextBackend b(&ctx);
+    constexpr uint32_t kAt = 0x06000100u;
+    Check(b.CanWrite(kAt), "work RAM is writable through the backend");
+
+    Sh2AsmContext ac;
+    ac.address = kAt;
+    const Sh2AsmResult r = Sh2Assemble("nop", ac);
+    Check(r.ok && r.opcode == 0x0009, "nop assembles to 0009");
+    const uint8_t bytes[2] = { (uint8_t)(r.opcode >> 8), (uint8_t)r.opcode };
+
+    const auto serial = se_derive_serial(ctx);
+    Check(b.WriteMemory(kAt, bytes, 2) == 2, "the opcode is written in one two-byte call");
+    Check(sink.writes == 1 && sink.lastSize == 2, "the emulator-side poke saw exactly one two-byte write");
+    Check(sink.ram[0x100] == 0x00 && sink.ram[0x101] == 0x09, "and the poked bytes are 00 09");
+    Check(se_derive_serial(ctx) != serial, "the assembled write moves se_derive_serial");
+    const auto rd = b.ReadMemoryBatch({ { kAt, 2 } });
+    Check(rd[0].success && rd[0].bytes[0] == 0x00 && rd[0].bytes[1] == 0x09, "the backend reads the new instruction back");
+
+    // An invalid line never reaches memory: no write, no serial change.
+    const auto serial2 = se_derive_serial(ctx);
+    const Sh2AsmResult bad = Sh2Assemble("frobnicate r1", ac);
+    Check(!bad.ok && !bad.error.empty(), "an unknown mnemonic is an error");
+    Check(sink.writes == 1 && se_derive_serial(ctx) == serial2, "and nothing was written");
+    se_destroy(ctx);
+}
 }  // namespace
 
 int main()
 {
     TestSpriteMove();
+    TestAssembledWrite();
     const uint8_t ab[2] = { 0xAB, 0xCD };
 
     // Read-only is a write policy, not just a hint for the UI.

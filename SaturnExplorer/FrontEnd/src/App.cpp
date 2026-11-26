@@ -47,6 +47,7 @@
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
 #include "Debug/Sh2RegInfo.h"     // SH-2 register names / meanings + the SR decode
 #include "Debug/InspectionRouting.h"  // pseudocode inspection: restore gate and request routing
+#include "Debug/FunctionSymbol.h"   // the assembler's name lookup
 #include "Sh2Operands.h"          // Sh2MayAccessRange: could the halting instruction touch a watchpoint
 #include "ScspMix.h"              // mix the frame's sounding voices into one preview
 #include "Debug/M68kDisasm.h"     // SCSP 68000 sound-CPU disassembly
@@ -325,6 +326,10 @@ void App::Initialize()
 #endif
     }
     mAssemblyPanel.SetSaveErrorHandler([this](const std::string& why) { mLog.Error(why); });   // begins with its subject (A9-51)
+    // Branch targets and absolute PC-relative operands in the assembler may be function names. Read at call time, so a
+    // rename made after this line is seen.
+    mAssemblyPanel.SetSymbolResolver([this](const std::string& name, uint32_t& addr, std::string& err)
+                                     { return ResolveFunctionSymbol(mFunctionNames.All(), name, addr, err); });
     LoadSettings();                // panel visibility, data dir, emulator paths
 
     mWatchPanel.LoadSession();     // restore the session's watch list, if any
@@ -3112,6 +3117,13 @@ void App::DrawAssembly()
 #endif
     mAssemblyPanel.SetBreakpointStop(mStepHalt.HaltActive(), mStepHalt.HaltCpu(), mStepHalt.HaltPc());
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mActions, mWatchPanel, mbLiveSource, req);
+    // An in-place edit was written: the Log keeps the outcome (destination, old and new value, any warning) after the
+    // panel's own one-line notice has faded.
+    if (req.assembled)
+    {
+        if (req.asmNote.find("Warning:") != std::string::npos) mLog.Warn(req.asmNote);
+        else                                                   mLog.Info(req.asmNote);
+    }
 
     if (req.editTracepoint) OpenTracepointEditor(req.tpCpu, req.tpAddr);
 

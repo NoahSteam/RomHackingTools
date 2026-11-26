@@ -628,6 +628,11 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerSh2AsmTests COMMAND SaturnExplorerSh2AsmTests)
 
+    # The assembler's symbol lookup (function names + sub_XXXXXX): header only, pure.
+    add_executable(SaturnExplorerFunctionSymbolTests FrontEnd/tests/FunctionSymbolTests.cpp)
+    target_include_directories(SaturnExplorerFunctionSymbolTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerFunctionSymbolTests COMMAND SaturnExplorerFunctionSymbolTests)
+
     # Frame Memory Compare's snapshot + diff engine: pure logic over byte vectors, no ImGui.
     add_executable(SaturnExplorerMemoryCompareTests
         FrontEnd/tests/MemoryCompareTests.cpp
@@ -1210,6 +1215,8 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerMemoryBackendTests
         FrontEnd/tests/MemoryBackendTests.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp       # the assembled-write test assembles through the real assembler
+        FrontEnd/src/Debug/Sh2Disasm.cpp
     )
     target_include_directories(SaturnExplorerMemoryBackendTests PRIVATE
         FrontEnd/src Core/tests ${CMAKE_CURRENT_SOURCE_DIR}/include)

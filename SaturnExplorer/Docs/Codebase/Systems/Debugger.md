@@ -17,6 +17,7 @@ The frontend coordinates instruction-level debugging of the two SH-2 CPUs, while
 | User breakpoints | [Debug/BreakpointManager.h](../../../FrontEnd/src/Debug/BreakpointManager.h), [implementation](../../../FrontEnd/src/Debug/BreakpointManager.cpp): `Breakpoint`, `BpKind`, `BreakpointManager` |
 | Non-halting actions | [Debug/ExecutionActions.h](../../../FrontEnd/src/Debug/ExecutionActions.h), [implementation](../../../FrontEnd/src/Debug/ExecutionActions.cpp): `ExecutionAction`, `ActionEffects`, `ExecutionActions`, `EmulatorAppliesRepeat` |
 | Assembly view | [AssemblyPanel.cpp](../../../FrontEnd/src/AssemblyPanel.cpp): `AssemblyPanel::Draw`, `GoTo`, `LoadPages`; [AsmCodeWindow.h](../../../FrontEnd/src/AsmCodeWindow.h); [Debug/Sh2Disasm.cpp](../../../FrontEnd/src/Debug/Sh2Disasm.cpp): `Sh2DecodeAt`; [Sh2Operands.cpp](../../../FrontEnd/src/Sh2Operands.cpp) |
+| In-place assembler | [Debug/Sh2Asm.cpp](../../../FrontEnd/src/Debug/Sh2Asm.cpp): `Sh2Assemble`, `Sh2AsmContext`, `Sh2AsmResult`; editing UI in `AssemblyPanel` (`BeginInstructionEdit`, `BeginLiteralEdit`, `BuildAsmContext`, `SetSymbolResolver`); name lookup [Debug/FunctionSymbol.h](../../../FrontEnd/src/Debug/FunctionSymbol.h): `ResolveFunctionSymbol` |
 | Register display | [App.cpp](../../../FrontEnd/src/App.cpp): `DrawRegisters`, `DrawSh2Registers`; [Debug/Sh2RegInfo.h](../../../FrontEnd/src/Debug/Sh2RegInfo.h): `Sh2RegTable`, `Sh2RegValue` |
 | Watch model and UI | [Debug/WatchList.cpp](../../../FrontEnd/src/Debug/WatchList.cpp): `WatchList`, `SimpleExpressionResolver::Resolve`, `FormatWatchValue`; [WatchPanel.cpp](../../../FrontEnd/src/WatchPanel.cpp): `WatchPanel::Draw`, `Refresh` |
 | Conditions and log formatting | [Debug/ConditionEval.cpp](../../../FrontEnd/src/Debug/ConditionEval.cpp): `ConditionEval`, `ConditionValidate`; [Debug/FormatString.h](../../../FrontEnd/src/Debug/FormatString.h): `IFormatContext`; [LogPanel.cpp](../../../FrontEnd/src/LogPanel.cpp) |
@@ -46,6 +47,19 @@ The frontend coordinates instruction-level debugging of the two SH-2 CPUs, while
 `WatchPanel::Draw` schedules a roughly 10 Hz `Refresh`. It resolves changed address text, batches enabled memory reads through `IMemoryBackend`, then calls `FormatWatchValue` for type interpretation and change highlighting. `SimpleExpressionResolver` accepts a base address plus at most one numeric `+`/`-` offset and rejects overflow/underflow. It is **not** the condition-expression parser.
 
 `AssemblyPanel::Draw` reads registers through `se_get_sh2_regs` and code through the backend. It caches decoded pages, distinguishes source changes through `SourceId`, and returns user intentions in `AssemblyPanel::Request`; App performs run-control, hex navigation, disc search and decompiler actions. `GoTo` is browsing navigation; `Reveal` resumes Follow PC without adding browsing history.
+
+### Editing an instruction in place
+
+The Assembly row menu (Assemble..., F2, double-click on the Instr or Bytes cell) opens a one-line editor seeded with the row's own text. `Sh2Assemble` turns one line into one 16-bit opcode, using the same spelling `Sh2Decode` prints plus a few aliases, and decodes the result back and compares it before returning bytes. The panel then commits the opcode as a single two-byte `IMemoryBackend::WriteMemory`, so it is one poke or one staged record, and it drops its page cache because a backend write does not move `SourceId`. Rows holding an unambiguous PC-relative load also offer Edit Literal Value..., which writes the 2 or 4 bytes at the effective address through the same path.
+
+`App::Initialize` gives the panel a symbol resolver (`ResolveFunctionSymbol` over `FunctionNames::All()` plus the default `sub_XXXXXX` spelling; a name held by several addresses is refused with the addresses listed). `App::DrawAssembly` copies `Request::asmNote` into the Log when `Request::assembled` is set.
+
+Constraints:
+- One instruction per edit. The assembler never allocates or moves a literal pool: `mov.l #imm32,rN` is refused with a message pointing at Edit Literal Value or the `@(addr)` form.
+- Delay-slot problems are warnings, not errors, because the same row can also be reached directly.
+- The "also loaded by N other instructions" count for a literal is a heuristic decode of the instructions that could reach the slot.
+- Editing a running CPU does not pause it. The poke lands at the emulator's next frame gate. Whether the emulated instruction cache can keep running the old opcode after a poke was not investigated.
+- An edit is cancelled when `SourceId` or the CPU selection changes.
 
 The pseudocode panel adds fixed-address shortcuts through `App::UpdateDecompiler` into the same
 Watch window. Storage of a pointer object and memory at its captured target are distinct actions.
@@ -89,10 +103,12 @@ Watches, assembly comments and function names have explicit load/save methods ca
 From `SaturnExplorer/`, configure/build as described in [BUILD.md](../../BUILD.md), then select relevant registered tests:
 
 ```sh
-ctest --test-dir build --output-on-failure -R 'StepHaltMachine|BreakpointManager|ExecutionActions|ConditionEval|ExpressionResolver|CallStack|FunctionNames|AssemblyPanel|Sh2Decode|Sh2OperandHover|Sh2RegInfo|PanelInteraction'
+ctest --test-dir build --output-on-failure -R 'StepHaltMachine|BreakpointManager|ExecutionActions|ConditionEval|ExpressionResolver|CallStack|FunctionNames|AssemblyPanel|Sh2Asm|FunctionSymbol|Sh2Decode|Sh2OperandHover|Sh2RegInfo|PanelInteraction'
 ```
 
 The corresponding `FrontEnd/tests/*Tests.cpp` files isolate models or use headless ImGui. Important examples: [StepHaltMachineTests.cpp](../../../FrontEnd/tests/StepHaltMachineTests.cpp) exercises halt identity/races; [BreakpointManagerTests.cpp](../../../FrontEnd/tests/BreakpointManagerTests.cpp) exercises guards and shared breakpoint identity; [CallStackHeuristicTests.cpp](../../../FrontEnd/tests/CallStackHeuristicTests.cpp) exercises reconstruction and Step Out; [PanelInteractionTests.cpp](../../../FrontEnd/tests/PanelInteractionTests.cpp) exercises input routing. Live exporter stop races also have [LiveHaltRaceTests.cpp](../../../FrontEnd/tests/LiveHaltRaceTests.cpp). Availability of targets depends on build options in [CMakeLists.txt](../../../CMakeLists.txt).
+
+The assembler's exhaustive round trip (every opcode at five addresses against `Sh2Decode`) is `Sh2AsmTests`; the panel's editing is covered by `AssemblyPanelTests`; an assembled write against a real core context is `TestAssembledWrite` in `MemoryBackendTests`.
 
 Investigation coverage: frontend orchestration and models were traced; real Windows/macOS gameplay, every operand decoder and all emulator hook internals were not independently exercised in this documentation pass.
 
