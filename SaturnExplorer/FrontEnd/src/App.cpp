@@ -2460,6 +2460,10 @@ void App::StepFrameForward(se_context* ctl)
         VoidEditTarget();
         return;
     }
+    // The emulator moves on from the frame the edits were staged on, as with Play: left pending, they
+    // stayed attached to the newest recorded frame with no "Staged" note in sight, and a later Play
+    // From Here on the resting bar replayed them.
+    DiscardPendingEdits();
     ScrubBarLeave(mbScrubbing, mScrubIndex);
     VoidEditTarget();
     se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
