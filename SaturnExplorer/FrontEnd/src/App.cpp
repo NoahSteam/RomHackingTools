@@ -8054,7 +8054,7 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
             {
                 if (ImGui::MenuItem("Help")) commands.emplace_back(TopBarCommandType::OpenHelp);
                 if (ImGui::MenuItem("Hardware Guides (web)...")) commands.emplace_back(TopBarCommandType::OpenGuides);
-                    if (ImGui::MenuItem("Profiler Reference (web)...")) commands.emplace_back(TopBarCommandType::OpenProfilerReference);
+                if (ImGui::MenuItem("Profiler Reference (web)...")) commands.emplace_back(TopBarCommandType::OpenProfilerReference);
                 ImGui::MenuItem("Check for Updates...", nullptr, false, false);
                 if (ImGui::MenuItem("About")) commands.emplace_back(TopBarCommandType::OpenAbout);
                 ImGui::EndPopup();
