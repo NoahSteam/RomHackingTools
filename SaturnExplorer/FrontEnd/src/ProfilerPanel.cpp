@@ -335,7 +335,8 @@ void ProfilerPanel::ResolveView(const ProfilerModel& model, const Host& host)
                       "No profiler data for frame %llu (its timeline is not known, so no record can be matched to "
                       "it: an emulator that does not state its timeline, or a frame recorded without one)",
                       static_cast<unsigned long long>(host.scrubFrame));
-    mMissingText = buf;
+    // The tab bodies say only that there is nothing to show; the reason is in the status line above.
+    mMissingText = "No Profiling Data";
     mViewNote = buf;
 }
 

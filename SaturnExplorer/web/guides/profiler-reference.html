@@ -121,7 +121,7 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
   <h2>Opening the panel</h2>
   <p>Open it from <span class="ui">Windows → Debugger → Profiler</span>. It docks beside Watch by default and can be dragged out into its own window.</p>
   <p>The profiler reads a <strong>running game in the patched Mednafen</strong>. Connect with <span class="ui">Session → Source → Connect to Emulator (live)</span>. With a saved dump or savestate loaded, only the Memory tab has anything to show.</p>
-  <p>The panel keeps the last <span class="num">1800</span> frames (30 seconds, as long as the longest scrub history). The averaging spans and the History strips use at most the newest <span class="num">600</span> (10 seconds). It shows them while the emulator is paused or stopped at a breakpoint, so you can stop the game and read the moment that just happened.</p>
+  <p>The panel keeps the last <span class="num">3600</span> frames (60 seconds, twice the longest scrub history). The averaging spans and the History strips use at most the newest <span class="num">600</span> (10 seconds). It shows them while the emulator is paused or stopped at a breakpoint, so you can stop the game and read the moment that just happened.</p>
 </section>
 
 <section id="top">
@@ -132,7 +132,7 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
   <ol class="callouts">
     <li><b>Average over.</b> The time span every figure on the Frame, Buses and Functions tabs is averaged over: <span class="ui">Last frame</span>, <span class="ui">0.5 s</span> (30 frames), <span class="ui">1 s</span> (60), <span class="ui">5 s</span> (300) or <span class="ui">10 s</span> (600). Short spans react quickly; long ones smooth out spikes. The History strips always show the newest 600 frames, whatever this is set to.</li>
     <li><b>Clear.</b> Forgets every recorded frame and the Memory tab's last sample. Use it to start a measurement fresh, for example just before the part of the game you care about.</li>
-    <li><b>N frames recorded.</b> How many frames the panel holds, up to 1800. A span longer than this averages only the frames that exist. (The screenshot is from before the limit was raised from 600.)</li>
+    <li><b>N frames recorded.</b> How many frames the panel holds, up to 3600. A span longer than this averages only the frames that exist. (The screenshot is from before the limit was raised.)</li>
     <li><b>Tabs.</b> Frame, Buses, Memory and Functions, described below.</li>
   </ol>
   <figure class="shot narrow">
@@ -309,7 +309,7 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
     <li><b>Figures.</b> Every bar, table and count is for the scrubbed frame. With a longer <span class="ui">Average over</span> span, the average is over the frames ending at it, not the newest ones.</li>
     <li><b>Status line.</b> A line under the top bar reads <code>Showing frame N (scrubbed), newest is M</code>. It is empty while live, and when you are scrubbed to the newest frame.</li>
     <li><b>History strips.</b> A red line with a small triangle marks the scrubbed frame. If that frame is older than the strip's 600 frames, the strip shifts back so the mark stays in view, and its heading says <span class="ui">the red mark is the frame shown</span>.</li>
-    <li><b>No data.</b> If the panel has no record of that frame, the status line and the tab say <code>No profiler data for frame N</code> and no figures are drawn. This happens when the Profiler was not capturing then (for example after <span class="ui">Clear</span>), when the frame is older than the 1800 kept, or when the emulator does not report which timeline a frame belongs to.</li>
+    <li><b>No data.</b> If the panel has no record of that frame, the tab says <code>No Profiling Data</code>, the status line gives the frame and the reason (<code>No profiler data for frame N (…)</code>), and no figures are drawn. Frames far back in the history can be like this; it is expected. This happens when the Profiler was not capturing then (for example after <span class="ui">Clear</span>), when the frame is older than the 3600 kept, or when the emulator does not report which timeline a frame belongs to.</li>
     <li><b>After a rewind.</b> Frames are matched by timeline and frame number together, so a frame replayed after a rewind is never shown with the figures of the frame it replaced.</li>
     <li><b>Memory tab.</b> Unchanged: it already samples the memory of whichever frame is displayed.</li>
   </ul>

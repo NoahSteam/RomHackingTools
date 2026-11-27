@@ -720,14 +720,15 @@ void TestScrubbedMissingRecord()
         std::snprintf(want, sizeof(want), "No profiler data for frame %llu", static_cast<unsigned long long>(c.frame));
         if (!Drawn(want)) std::printf("drawn: %s\n", Dump().c_str());
         CHECK(Drawn(want));
+        CHECK(Drawn("No Profiling Data"));                        // the tab body itself
         CHECK(!Drawn("% busy") && !Drawn("Frame length"));       // nothing from another frame
         CHECK(!Drawn("Showing frame"));
         ClickAt(harness, Where("Buses"));
         harness.Settle();
-        CHECK(Drawn(want) && !Drawn("1000") && !Drawn("9000"));
+        CHECK(Drawn(want) && Drawn("No Profiling Data") && !Drawn("1000") && !Drawn("9000"));
         ClickAt(harness, Where("Functions"));
         harness.Settle();
-        CHECK(Drawn(want) && !Drawn("UpdatePlayer") && !Drawn("sub_06008000"));
+        CHECK(Drawn(want) && Drawn("No Profiling Data") && !Drawn("UpdatePlayer") && !Drawn("sub_06008000"));
     }
     // The message names the limit it can be (the ring's capacity).
     Rig rig;

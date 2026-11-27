@@ -81,7 +81,7 @@ private:
     size_t      mStripEnd = 0;   // where the history strips end (the newest frame unless the mark would fall off)
     bool        mViewMissing = false;
     std::string mViewNote;       // the fixed status line's text
-    std::string mMissingText;    // the full "no data" message the tab bodies show
+    std::string mMissingText;    // what the tab bodies show when the scrubbed frame has no record
 };
 
 }  // namespace sfe

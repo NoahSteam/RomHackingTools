@@ -561,7 +561,8 @@ History strips' marker at the record with exactly that identity.
   (the rest are from before a rewind or state load)" (after the scrub note, separated by "; ") when the rule, not the ring, made
   the window shorter than asked.
 - **No record** (profiler off then, evicted, lost on the wire, other timeline, older emulator): a
-  fixed status line and every per-frame tab body say "No profiler data for frame N (...)" and show no
+  fixed status line says "No profiler data for frame N (...)", every per-frame tab body says
+  "No Profiling Data", and they show no
   figures; it never falls back to the newest. When the anchor is not the newest, the same fixed line
   (`FixedStatusLine`, always reserved so rows do not move) says "Showing frame N (scrubbed), newest is
   M".
