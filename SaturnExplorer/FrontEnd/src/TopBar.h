@@ -68,6 +68,7 @@ enum class TopBarCommandType
     OpenHelp,
     OpenAbout,
     OpenGuides,
+    OpenProfilerReference,   // the Profiler's field-by-field reference page on the guides site
     CheckForUpdates,
     // Patch feature (desktop only)
     ApplyChangesToDisc,

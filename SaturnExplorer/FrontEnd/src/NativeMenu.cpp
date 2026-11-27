@@ -114,6 +114,7 @@ bool NativeMenuActionToCommand(const NativeMenuAction& a, TopBarCommand& out)
     case MenuCommand::ShowInputSettings: out = TopBarCommand(TopBarCommandType::ShowWindow, kControllerPanel); return true;
     case MenuCommand::OpenHelp:          out = TopBarCommand(TopBarCommandType::OpenHelp); return true;
     case MenuCommand::OpenGuides:        out = TopBarCommand(TopBarCommandType::OpenGuides); return true;
+    case MenuCommand::OpenProfilerReference: out = TopBarCommand(TopBarCommandType::OpenProfilerReference); return true;
     case MenuCommand::CheckForUpdates:   out = TopBarCommand(TopBarCommandType::CheckForUpdates); return true;
     case MenuCommand::OpenAbout:         out = TopBarCommand(TopBarCommandType::OpenAbout); return true;
 

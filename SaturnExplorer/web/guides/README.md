@@ -8,6 +8,9 @@ guides (audio, VDP1, VDP2). Edit the content here.
   requests, theme-aware via `prefers-color-scheme`).
 - `features.html` — a tour of the Saturn Explorer app itself: every panel, tool, and workflow.
 - `profiler.html` — how the profiler works and how its numbers were verified.
+- `profiler-reference.html` — the Profiler panel field by field, with annotated screenshots from
+  `img/profiler/` (the only images the guides use; keep them cropped to the panel). Saturn Explorer's
+  Help > Profiler Reference (web) opens it on the published site.
 
 The `../../Docs/AUDIO_GUIDE.md`, `../../Docs/VDP1_GUIDE.md`, and `../../Docs/VDP2_GUIDE.md` are
 thin pointer stubs, not copies — so there is nothing to keep in sync.
