@@ -151,6 +151,18 @@ void WrappedDisabled(const char* fmt, ...)
 
 constexpr double kNoData = std::numeric_limits<double>::quiet_NaN();
 
+// True when 'newer' follows 'older' across a timeline change (a rewind or state load replaced what
+// came before): the same notion of "has a timeline" as ProfilerModel::UsableFrames, so the strips and
+// the averaging windows agree about where one machine history ends. Two records that both state no
+// timeline have no boundary between them.
+bool TimelineChangedBetween(const PerfFrame& older, const PerfFrame& newer)
+{
+    const bool a = !older.LegacyVdp1() && older.Has(SE_PERF_VALID_IDENTITY);
+    const bool b = !newer.LegacyVdp1() && newer.Has(SE_PERF_VALID_IDENTITY);
+    if (a != b) return true;
+    return a && older.timelineId != newer.timelineId;
+}
+
 // One measure over the retained history, 0..100% on a fixed scale, with a crosshair readout.
 // valueAt returns kNoData (NaN) for a frame that did not measure it: that frame is a gap in the
 // line and a "no data" mark, never a point at 0%.
@@ -175,16 +187,27 @@ void HistoryStrip(const char* id, const ProfilerModel& model, size_t end, long a
     const float pad = 2.0f;
     std::vector<ImVec2> pts(n);
     std::vector<HistoryPoint> hp(n);
+    std::vector<size_t> dividers;   // points whose record starts a new timeline
     for (size_t i = 0; i < n; ++i)
     {
         const PerfFrame& pf = model.At(begin + i);
         const double raw = valueAt(pf);
         hp[i].available = !std::isnan(raw);
         hp[i].value = hp[i].available ? raw : 0.0;
-        hp[i].breakBefore = pf.HasGap();
+        // A timeline change breaks the line like missing records do: the replaced timeline's tail and
+        // the new frames are not one trend.
+        const bool tlChange = i > 0 && TimelineChangedBetween(model.At(begin + i - 1), pf);
+        hp[i].breakBefore = pf.HasGap() || tlChange;
+        if (tlChange) dividers.push_back(i);
         const double v = std::min(1.0, std::max(0.0, hp[i].value));
         pts[i] = ImVec2(p0.x + width - step * static_cast<float>(n - 1 - i),
                         p0.y + height - pad - static_cast<float>(v) * (height - pad * 2.0f));
+    }
+    // A faint vertical divider half a step before the first frame of a new timeline.
+    for (size_t i : dividers)
+    {
+        const float dx = pts[i].x - step * 0.5f;
+        dl->AddLine(ImVec2(dx, p0.y), ImVec2(dx, p0.y + height), ColGrid(), 1.0f);
     }
     // The line breaks wherever records are missing (lost by the server's ring, or evicted from the
     // driver's queue) and wherever a frame did not measure the quantity: joining the two sides would
@@ -244,6 +267,21 @@ size_t ProfilerPanel::WindowFrames() const
     return kWindowFrames[std::min(std::max(mWindow, 0), kWindowCount - 1)];
 }
 
+// When a timeline boundary shortened the averaging window, say so in the status line (already
+// reserved, so no row moves): a "10 s" span that covers 24 frames would otherwise be a surprise.
+// Appended to the scrub note when there is one. Needs mViewEnd and mViewNote to be set.
+void ProfilerPanel::NoteWindowCut(const ProfilerModel& model)
+{
+    bool cut = false;
+    const size_t used = model.UsableFrames(WindowFrames(), mViewEnd, &cut);
+    if (!cut) return;
+    char buf[96];
+    std::snprintf(buf, sizeof(buf), "Window cut at a timeline change: %zu of %zu frames",
+                  used, (std::min)(WindowFrames(), mViewEnd));
+    if (!mViewNote.empty()) mViewNote += "; ";
+    mViewNote += buf;
+}
+
 void ProfilerPanel::ResolveView(const ProfilerModel& model, const Host& host)
 {
     mViewEnd = model.Count();
@@ -252,7 +290,11 @@ void ProfilerPanel::ResolveView(const ProfilerModel& model, const Host& host)
     mViewMissing = false;
     mViewNote.clear();
     mMissingText.clear();
-    if (!host.scrubbed) return;   // live: the newest frame, exactly as before scrubbing existed
+    if (!host.scrubbed)   // live: the newest frame, exactly as before scrubbing existed
+    {
+        NoteWindowCut(model);
+        return;
+    }
 
     size_t at = 0;
     if (host.scrubIdentityKnown && model.FindIdentity(host.scrubTimeline, host.scrubFrame, &at))
@@ -274,6 +316,7 @@ void ProfilerPanel::ResolveView(const ProfilerModel& model, const Host& host)
                 std::snprintf(buf, sizeof(buf), "Showing frame %llu (scrubbed)", static_cast<unsigned long long>(host.scrubFrame));
             mViewNote = buf;
         }
+        NoteWindowCut(model);
         return;
     }
 

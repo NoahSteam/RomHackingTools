@@ -79,7 +79,8 @@ const char* const kGuidesSiteUrl = "https://noahsteam.github.io/RomHackingTools/
 constexpr int    kFramesPerSecond   = 60;
 constexpr int    kMaxRecordSeconds  = 30;   // the longest scrub history the user can ask for
 // The Profiler keeps a record for every frame the user can scrub to, or the panel would have nothing to
-// show for the older ones.
+// show for the older ones. Its ring is twice that (kProfilerScrubCapacity): the frame recorder drops
+// frames while its compressor is behind, so its entries span more emulated frames than they number.
 static_assert(static_cast<size_t>(kMaxRecordSeconds) * kFramesPerSecond <= kProfilerScrubCapacity,
               "the profiler ring must cover the longest scrub history");
 constexpr double kEstBytesPerFrame  = 1.3 * 1024.0 * 1024.0;
