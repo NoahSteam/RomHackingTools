@@ -69,6 +69,9 @@ namespace
 {
 
 
+// The web guides (SaturnExplorer/web/guides), deployed to GitHub Pages by saturn-explorer-guides.yml.
+const char* const kGuidesSiteUrl = "https://noahsteam.github.io/RomHackingTools/";
+
 #ifdef SE_ENABLE_LIVE
 // Saturn runs at ~60 fps; the recorder's window is expressed in frames, so the
 // UI converts its seconds knob through this. Pre-capture memory estimate uses a
@@ -8002,6 +8005,7 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                 {
                     if (ImGui::MenuItem("Help")) commands.emplace_back(TopBarCommandType::OpenHelp);
                     if (ImGui::MenuItem("Hardware Guides (web)...")) commands.emplace_back(TopBarCommandType::OpenGuides);
+                    if (ImGui::MenuItem("Profiler Reference (web)...")) commands.emplace_back(TopBarCommandType::OpenProfilerReference);
                     if (ImGui::MenuItem("Check for Updates...")) commands.emplace_back(TopBarCommandType::CheckForUpdates);
                     if (ImGui::MenuItem("About")) commands.emplace_back(TopBarCommandType::OpenAbout);
                     ImGui::EndMenu();
@@ -8050,6 +8054,7 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
             {
                 if (ImGui::MenuItem("Help")) commands.emplace_back(TopBarCommandType::OpenHelp);
                 if (ImGui::MenuItem("Hardware Guides (web)...")) commands.emplace_back(TopBarCommandType::OpenGuides);
+                    if (ImGui::MenuItem("Profiler Reference (web)...")) commands.emplace_back(TopBarCommandType::OpenProfilerReference);
                 ImGui::MenuItem("Check for Updates...", nullptr, false, false);
                 if (ImGui::MenuItem("About")) commands.emplace_back(TopBarCommandType::OpenAbout);
                 ImGui::EndPopup();
@@ -9140,7 +9145,11 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         break;
     case TopBarCommandType::OpenGuides:
         // Plain-English hardware guides (audio / VDP1 / VDP2), hosted on GitHub Pages.
-        platform.OpenURL("https://noahsteam.github.io/RomHackingTools/");
+        platform.OpenURL(kGuidesSiteUrl);
+        break;
+    case TopBarCommandType::OpenProfilerReference:
+        // web/guides/profiler-reference.html, published with the guides.
+        platform.OpenURL((std::string(kGuidesSiteUrl) + "profiler-reference.html").c_str());
         break;
     case TopBarCommandType::CheckForUpdates:
         mOpenUpdate = true;

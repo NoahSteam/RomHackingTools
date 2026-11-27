@@ -139,6 +139,7 @@ enum class MenuCommand
     // Help
     OpenHelp,
     OpenGuides,
+    OpenProfilerReference,
     CheckForUpdates,
     OpenAbout,
     // View-only toggles (handled directly by App, not via the command queue)
