@@ -289,7 +289,6 @@ public:
     const PerfFrame& At(size_t i) const;
     const PerfFrame& Latest() const { return At(mCount - 1); }
 
-    // Counters summed over the newest min(window, Count()) frames; returns how many were summed.
     // How many frames a window of min(window, end) frames ENDING at At(end - 1) may use ('end'
     // clamped to Count()): every windowed figure below (Shares, Sum, Functions, LostIn, HotFunctions)
     // takes its length from here, so they cannot disagree. A window holds only records of the SAME
@@ -302,6 +301,7 @@ public:
     // *cutByTimeline is set when that rule, not the ring or the span asked for, shortened it.
     size_t UsableFrames(size_t window, size_t end, bool* cutByTimeline = nullptr) const;
 
+    // Counters summed over the newest min(window, Count()) frames; returns how many were summed.
     size_t Sum(size_t window, uint64_t out[SE_PERF_COUNT]) const;
     size_t Sum(size_t window, size_t end, uint64_t out[SE_PERF_COUNT]) const;
 

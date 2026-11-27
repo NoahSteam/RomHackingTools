@@ -275,8 +275,8 @@ void ProfilerPanel::NoteWindowCut(const ProfilerModel& model)
     bool cut = false;
     const size_t used = model.UsableFrames(WindowFrames(), mViewEnd, &cut);
     if (!cut) return;
-    char buf[96];
-    std::snprintf(buf, sizeof(buf), "Window cut at a timeline change: %zu of %zu frames",
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "Averaging %zu of %zu frames (the rest are from before a rewind or state load)",
                   used, (std::min)(WindowFrames(), mViewEnd));
     if (!mViewNote.empty()) mViewNote += "; ";
     mViewNote += buf;

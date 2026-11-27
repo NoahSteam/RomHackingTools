@@ -869,7 +869,7 @@ void TestRewoundTimelineWindows()
         CHECK(Drawn("80% busy"));                                   // the new timeline's figure alone
         CHECK(!Drawn("50% busy") && !Drawn("20% busy"));
         CHECK(Drawn("on in 8 of 8 frames") && !Drawn("16 of 16"));   // not the replaced timeline's frames
-        CHECK(Drawn("Window cut at a timeline change: 8 of 16 frames"));
+        CHECK(Drawn("Averaging 8 of 16 frames (the rest are from before a rewind or state load)"));
         yLive = Where("Frame length:").y;
     }
     {   // Scrubbed to frame 3920 (index 13 of 16): the six new-timeline frames ending there.
@@ -881,7 +881,7 @@ void TestRewoundTimelineWindows()
         CHECK(Drawn("80% busy") && !Drawn("50% busy") && !Drawn("20% busy"));
         CHECK(Drawn("on in 6 of 6 frames"));
         CHECK(Drawn("Showing frame 3920 (scrubbed), newest is 3922"));
-        CHECK(Drawn("Window cut at a timeline change: 6 of 14 frames"));
+        CHECK(Drawn("Averaging 6 of 14 frames (the rest are from before a rewind or state load)"));
         yScrub = Where("Frame length:").y;
         // Scrubbed back onto the replaced timeline: its own records only, and its own figure.
         Scrub(rig, 1, 5004);
