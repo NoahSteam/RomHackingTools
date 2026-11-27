@@ -30,7 +30,8 @@
 #include "Sh2Dump.h"             // Data > Dump SH-2: the listing as text
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
 #include "CompareMarkers.h"      // Frame Memory Compare: the two timeline markers
-#include "ScrubState.h"          // frame-identity rules for the scrub view and staged edits
+#include "ScrubBar.h"            // what the scrub slider's handle and label show
+#include "ScrubState.h"        // frame-identity rules for the scrub view and staged edits
 #include "CaptureRepeatTracker.h" // which live captures showed nothing new (A1-7)
 #include "MemoryComparePanel.h"  // Frame Memory Compare: the diff window
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)

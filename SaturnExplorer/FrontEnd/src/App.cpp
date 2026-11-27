@@ -1912,7 +1912,7 @@ void App::BuildUI(IPlatform& platform)
     }
     else
     {
-        mbScrubbing = false;
+        ScrubBarLeave(mbScrubbing, mScrubIndex);
     }
     // Editing a scrubbed frame is durable only when the server can rewind (the edits replay on
     // Play). Without rewind, make the Memory panel read-only so no-op edits aren't offered.
@@ -2325,7 +2325,7 @@ void App::DrawTransportBar()
     const int n = static_cast<int>(mRecorder.Count());
 
     // Scrubbing only makes sense while paused with recorded frames.
-    if (!mbPaused || n == 0) { mbScrubbing = false; }
+    if (!mbPaused || n == 0) { ScrubBarLeave(mbScrubbing, mScrubIndex); }
 
     const ImGuiStyle& style = ImGui::GetStyle();
     ImGui::BeginDisabled(!canControl);
@@ -2334,9 +2334,9 @@ void App::DrawTransportBar()
     if (IconButton("##tp_prev", Ico::Prev, "Previous frame") && n > 0)
     {
         if (!mbPaused) { se_frame_pause(ctl); mbPaused = true; }
+        // Step from what the bar shows: a resting bar is on the newest entry, not on an old selection.
+        mScrubIndex = ScrubBarStepBackIndex(mbScrubbing, mScrubIndex, n);
         mbScrubbing = true;
-        if (mScrubIndex < 0 || mScrubIndex >= n) { mScrubIndex = n - 1; }
-        if (mScrubIndex > 0) { --mScrubIndex; }
         VoidEditTarget();
     }
     ImGui::SameLine();
@@ -2350,7 +2350,7 @@ void App::DrawTransportBar()
         {
             se_frame_resume(ctl);
             DiscardPendingEdits();   // the frame they were staged on is being left behind
-            mbScrubbing = false;
+            ScrubBarLeave(mbScrubbing, mScrubIndex);
             mbPaused = false;
             mStepHalt.Resumed();
             VoidEditTarget();
@@ -2391,12 +2391,10 @@ void App::DrawTransportBar()
     ImGui::SetNextItemWidth(scrubW);
     if (mbPaused && n > 0)
     {
-        int idx = (mScrubIndex < 0 || mScrubIndex >= n) ? n - 1 : mScrubIndex;
-        char ov[64];
-        std::snprintf(ov, sizeof(ov), "#%llu   %d / %d",
-                      static_cast<unsigned long long>(mRecorder.FrameNumber((size_t)idx)),
-                      idx + 1, n);
-        if (ImGui::SliderInt("##tp_scrub", &idx, 0, n - 1, ov))
+        // Only a scrub in progress has a selection; otherwise the bar rests on the newest entry.
+        int idx = ScrubBarIndex(mbScrubbing, mScrubIndex, n);
+        const std::string ov = ScrubBarLabel(mRecorder.FrameNumber(static_cast<size_t>(idx)), idx, n);
+        if (ImGui::SliderInt("##tp_scrub", &idx, 0, n - 1, ov.c_str()))
         {
             mbScrubbing = true;
             mScrubIndex = idx;
@@ -2435,7 +2433,7 @@ void App::DrawTransportBar()
         }
         else
         {
-            mbScrubbing = false;
+            ScrubBarLeave(mbScrubbing, mScrubIndex);
             VoidEditTarget();
             se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
             mbPaused = true;
@@ -2571,7 +2569,7 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
     ++mScrubTimeline;                  // ...so a cached result for one of those numbers is not theirs
 #endif
     DiscardPendingEdits();
-    mbScrubbing = false;
+    ScrubBarLeave(mbScrubbing, mScrubIndex);   // the ring was truncated: the old index names nothing real
     mbPaused = false;
     VoidEditTarget();
     BeginRestoreWait(before);   // the emulator applies it asynchronously

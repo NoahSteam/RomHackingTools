@@ -1188,6 +1188,11 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
     add_test(NAME SaturnExplorerScrubStateTests COMMAND SaturnExplorerScrubStateTests)
 
+    # What the scrub slider's label and handle show across Play / Play From Here / eviction.
+    add_executable(SaturnExplorerScrubBarTests FrontEnd/tests/ScrubBarTests.cpp)
+    target_include_directories(SaturnExplorerScrubBarTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerScrubBarTests COMMAND SaturnExplorerScrubBarTests)
+
     # The compare markers' session / timeline-epoch rules, exact frame lookup, and the slider
     # geometry they are drawn with (checked against ImGui's own SliderBehavior).
     add_executable(SaturnExplorerCompareMarkersTests

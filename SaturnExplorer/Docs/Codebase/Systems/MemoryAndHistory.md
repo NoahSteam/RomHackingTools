@@ -48,6 +48,8 @@ The Memory panel's selected-byte search is a different operation, implemented wi
 
 `App::BuildUI` records while playing live, rather than while paused, scrubbing or during an unresolved restore before its timeout. `FrameRecorder::Capture` copies raw snapshot regions/registers on the UI thread; `Worker` compresses them off-thread and publishes into a ring bounded by count and compressed bytes. The bounded raw queue drops work rather than blocking UI. `Clear` advances a generation so a frame already being compressed cannot repopulate a cleared session.
 
+The transport's scrub slider shows `ScrubBarIndex` ([ScrubBar.h](../../../FrontEnd/src/ScrubBar.h)): the selected index only while `mbScrubbing`, otherwise the newest recorded entry. Every exit from scrubbing (Play, Play From Here, step, unpause) goes through `ScrubBarLeave`, which also clears `mScrubIndex`, so a leftover selection can never label or position the bar after the ring grows, evicts or is truncated (`ScrubBarTests`).
+
 `RefreshScrubContext` asks `PlanScrub` whether to retain the shown frame or select another. `SelectFrame` resolves a frame number and decompresses under one ring lock. `Select` supplies `se_data_source` callbacks over recorder scratch; App creates/reuses `mScrubContext` and calls `se_begin_frame`. Panels therefore read an ordinary core snapshot of historical memory.
 
 An index moves when the ring evicts from its front; stable navigation and staged edits use **frame numbers**, not retained indices. Decompression failure refuses the frame, clears the shown identity and falls back to live, rather than displaying invented zeros.
