@@ -278,7 +278,11 @@ void ProfilerPanel::NoteWindowCut(const ProfilerModel& model)
     char buf[128];
     std::snprintf(buf, sizeof(buf), "Averaging %zu of %zu frames (the rest are from before a rewind or state load)",
                   used, (std::min)(WindowFrames(), mViewEnd));
-    if (!mViewNote.empty()) mViewNote += "; ";
+    if (!mViewNote.empty())
+    {
+        buf[0] = 'a';   // it continues the scrub note's sentence
+        mViewNote += "; ";
+    }
     mViewNote += buf;
 }
 
@@ -305,6 +309,11 @@ void ProfilerPanel::ResolveView(const ProfilerModel& model, const Host& host)
         // (half a span of newer frames stay in view) instead of drawing no mark at all.
         if (model.Count() - at > kStripFrames)
             mStripEnd = (std::min)(model.Count(), at + 1 + kStripFrames / 2);
+        // A frame on a timeline that is no longer the newest: the records after it in the ring may be
+        // ones a rewind replaced (they never happened after this frame as far as the game is concerned),
+        // so the strip ends at the mark instead of drawing them to its right.
+        if (!model.Empty() && TimelineChangedBetween(model.At(at), model.Latest()))
+            mStripEnd = at + 1;
         if (at + 1 < model.Count())
         {
             uint32_t tl = 0; uint64_t newest = 0;

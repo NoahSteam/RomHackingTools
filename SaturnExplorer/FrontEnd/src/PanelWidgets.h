@@ -249,7 +249,9 @@ inline void FixedStatusLine(const std::string& text, ImU32 color = 0)
         shown = shown.substr(0, lo) + "...";
     }
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->PushClipRect(pos, ImVec2(pos.x + w, pos.y + h), true);
+    // Clip the width only as far as it matters: the vertical bound runs into the item spacing below,
+    // because some fonts draw descenders past the nominal line height and a tight clip shaves them.
+    dl->PushClipRect(pos, ImVec2(pos.x + w, pos.y + ImGui::GetTextLineHeightWithSpacing()), true);
     dl->AddText(pos, color ? color : ImGui::GetColorU32(ImGuiCol_Text), shown.c_str());
     dl->PopClipRect();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))

@@ -882,11 +882,14 @@ void TestRewoundTimelineWindows()
         CHECK(Drawn("80% busy") && !Drawn("50% busy") && !Drawn("20% busy"));
         CHECK(Drawn("on in 6 of 6 frames"));
         CHECK(Drawn("Showing frame 3920 (scrubbed), newest is 3922"));
-        CHECK(Drawn("Averaging 6 of 14 frames (the rest are from before a rewind or state load)"));
+        CHECK(Drawn("; averaging 6 of 14 frames (the rest are from before a rewind or state load)"));
         yScrub = Where("Frame length:").y;
         // Scrubbed back onto the replaced timeline: its own records only, and its own figure.
         Scrub(rig, 1, 5004);
         harness.Settle();
+        // The strip ends at the mark there: the ring's later records are the ones the rewind replaced
+        // and the new timeline, neither of which followed this frame.
+        CHECK(Drawn("the red mark is the frame shown"));
         CHECK(Drawn("20% busy") && !Drawn("50% busy") && !Drawn("80% busy"));
         CHECK(Drawn("on in 5 of 5 frames"));
         CHECK(!Drawn("timeline change"));                            // the five records before it are all timeline 1
