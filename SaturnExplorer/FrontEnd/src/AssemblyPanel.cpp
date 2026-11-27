@@ -313,8 +313,11 @@ void AssemblyPanel::UpdatePreview()
 // stage behind decode, IF, holds PC+2). Both are latched opcodes: Pipe_ID at PC and Pipe_IF at PC+2, so a write
 // to [PC, PC+4) is never seen. The instruction cache fetches a longword at a time (sh7095.inc FetchIF keeps the
 // other half in IBuffer): when PC+2 is longword aligned (PC & 2) its fetch read PC+2..PC+5, so the half at
-// PC+4 is already buffered as well (found by reading the core: a 2-byte write at PC+2 ran its old opcode
-// once on a real Mednafen; PC+4 follows from FetchIF but was not run). Returned as the end, exclusive.
+// PC+4 may be buffered as well. On a real Mednafen with cache emulation off, a write at PC+2 ran its old
+// opcode once in both alignments and a write at PC+4 ran the NEW one in both (2026-11-27), so [PC, PC+4) is
+// the observed window and the extra half is a possibility only with cache emulation on (not run). Returned
+// as the end, exclusive; PrefetchedSure is the end of the observed part.
+static uint32_t PrefetchedSure(uint32_t pc) { return pc + 4u; }
 static uint32_t PrefetchedEnd(uint32_t pc)
 {
     return pc + ((pc & 2u) ? 6u : 4u);
@@ -432,8 +435,16 @@ void AssemblyPanel::CommitEdit(IMemoryBackend& backend, Request& req)
             if (!literal && n == size && mBpStopActive && mCpu == mBpStopCpu)
             {
                 if (WritesAlreadyFetched(mBpStopPc, addr, size))
-                    warnings.push_back("the CPU is halted and had already fetched this instruction (the pipeline holds PC.." +
-                                       Hex8(PrefetchedEnd(mBpStopPc) - 1) + "): it may execute the OLD instruction once before the new one runs");
+                {
+                    // The key words come first: the status line shows one clipped line.
+                    const bool sure = (uint64_t)(addr & 0x0FFFFFFFu) < (uint64_t)(mBpStopPc & 0x0FFFFFFFu) + (PrefetchedSure(mBpStopPc) - mBpStopPc);
+                    if (sure)
+                        warnings.push_back("the CPU may execute the OLD instruction once: it is halted and had already fetched this one (the pipeline holds PC.." +
+                                           Hex8(PrefetchedSure(mBpStopPc) - 1) + ")");
+                    else
+                        warnings.push_back("the CPU may execute the OLD instruction once if the emulator's cache emulation is on (its fetch of " +
+                                           Hex8(mBpStopPc + 2) + " reads up to " + Hex8(PrefetchedEnd(mBpStopPc) - 1) + "; with it off the new one ran)");
+                }
                 else
                 {
                     // Halted in a delay slot, the fetch stage is not at PC+2: the taken branch already refilled it
@@ -462,12 +473,12 @@ void AssemblyPanel::CommitEdit(IMemoryBackend& backend, Request& req)
                             if (wlo < hi && whi > lo)
                                 warnings.push_back("the CPU is halted in the delay slot of the branch at " + Hex8(prevAddr) +
                                                    " and had already fetched its target (" + Hex8(prev.BranchTarget) +
-                                                   "): it may execute the OLD instruction once before the new one runs");
+                                                   ") and may execute the OLD instruction once");
                         }
                         else
                             warnings.push_back("the CPU is halted in the delay slot of the branch at " + Hex8(prevAddr) +
                                                ", whose target is not known here and is already fetched: if this is that target, "
-                                               "it may execute the OLD instruction once before the new one runs");
+                                               "the CPU may execute the OLD instruction once");
                     }
                 }
             }
@@ -478,7 +489,9 @@ void AssemblyPanel::CommitEdit(IMemoryBackend& backend, Request& req)
                 result += "; the literal is " + SharersText(sharers, firstSharer);
                 level = 1;
             }
-            if (!warnings.empty()) { result += ". Warning: " + JoinWarnings(warnings); level = 1; }
+            // Warnings lead: the status line is one clipped line and the Log shows the start of a row, so what
+            // the user must not miss cannot sit after the routine "Wrote ..." text.
+            if (!warnings.empty()) { result = "Warning: " + JoinWarnings(warnings) + ". " + result; level = 1; }
             req.assembled = true;
             req.asmAddr = addr;
             req.asmSize = size;
@@ -924,7 +937,12 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                 // Enter commits (and leaves the box open when the text is bad). Anything else that
                 // ends the activation -- Escape, a click elsewhere, focus moving away -- cancels.
                 if (enter) CommitEdit(backend, req);
-                else if (ImGui::IsItemDeactivated()) CancelEdit();
+                else if (ImGui::IsItemDeactivated())
+                {
+                    // An error left by a failed Enter described the text that is now gone.
+                    if (mNoticeLevel == 2) { mNotice.clear(); mNoticeLevel = 0; }
+                    CancelEdit();
+                }
             }
             else if (ln.readable) ops = DrawSh2Operands(ln.ins);
             if (openAsm && !editingRow) BeginInstructionEdit(backend, ln);

@@ -26,6 +26,13 @@ and read the rows of a 16-frame window centred in the phase. Two reading rules:
   device in any phase is a finding. The one expected exception is phase 9, where the slave overflows its own
   budget (below).
 
+
+> **Order and stamp of the `SUPPRESSED` row (observed on a real run, 2026-11-27).** The row is queued at the end
+> of the frame it summarises, after that frame was committed, so it carries the NEXT frame's number and comes
+> before that frame's own slave rows: a steady phase-9 stamp reads master `SH2_EXCEPTION`, `SCU_INT_MASK`,
+> `SUPPRESSED` (cpu 1, n = 13,444), then 64 slave `SH2_EXCEPTION` rows. The phase's entry frame holds 64 rows, a
+> smaller `SUPPRESSED` and 64 more. Count rows per phase rather than relying on "64 then SUPPRESSED" inside one stamp.
+
 ## Events in every phase (steady frames)
 
 | Source / kind | Expected per steady frame | Mark | Why |

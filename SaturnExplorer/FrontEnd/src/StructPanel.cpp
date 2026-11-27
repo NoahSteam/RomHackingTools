@@ -1493,7 +1493,7 @@ void StructPanel::DrawToolbar(IPlatform& platform)
         status += part;
     };
     if (mLoadFailed) addPart(mLoadError);
-    if (mEdit.active) addPart("Editing " + Hex8(mEdit.addr) + ": " + WriteDestText(mBe->WriteDestination(mEdit.addr)));
+    if (mEdit.active) addPart("Editing " + Hex8(mEdit.addr) + " (a write here: " + WriteDestText(mBe->WriteDestination(mEdit.addr)) + ")");
     addPart(mNotice);
     const bool isError = mLoadFailed || (mNoticeError && !mNotice.empty());
     FixedStatusLine(status, isError ? ImGui::GetColorU32(ui::Color(ImVec4(0.9f, 0.45f, 0.4f, 1), ImVec4(0.65f, 0.11f, 0.14f, 1))) : 0);

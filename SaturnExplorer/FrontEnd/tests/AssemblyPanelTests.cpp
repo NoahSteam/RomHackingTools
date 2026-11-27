@@ -545,6 +545,12 @@ void TestWriteIntoPrefetchedWindowWarns()
         CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, row).find(kWarn) != std::string::npos);
     for (int row : { 8, 12 })
         CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, row).find(kWarn) == std::string::npos);
+    // The observed window is [PC, PC+4) in both alignments (real Mednafen, cache emulation off); the half at PC+4
+    // is only a possibility with cache emulation on, and is worded as one.
+    CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, 10).find("cache emulation") == std::string::npos);
+    CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, 11).find("cache emulation") != std::string::npos);
+    // The warning leads the line: the status line is clipped to one line and must show it.
+    CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x10, 9).compare(0, 8, "Warning:") == 0);
     // The cache-through mirror of the same RAM is the same bytes.
     CHECK(NoticeAfterEditWhileHalted(true, 0, 0x26000010u, 9).find(kWarn) != std::string::npos);
     // Running (not halted), or halted on the CPU that is not shown: no pipeline to be stale.
@@ -672,6 +678,25 @@ void TestInvalidTextWritesNothing()
     PressKey(f, ImGuiKey_Enter);
     CHECK(f.backend.writes.size() == 1);
     CHECK(!f.panel.Editing());
+}
+
+// An error from a failed Enter describes text that Escape then throws away: it must not stay on screen.
+void TestEscapeClearsTheAssembleError()
+{
+    Fixture f;
+    Prepare(f);
+    f.backend.Put(kBase + 2, kAddR1);
+    OpenRow(f, 1);
+    Type(f, "frob r1");
+    PressKey(f, ImGuiKey_Enter);
+    CHECK(f.panel.NoticeIsError());
+    f.h.Settle();                            // the box takes the keyboard back after the failed Enter
+    CHECK(f.panel.Editing());
+    PressKey(f, ImGuiKey_Escape);
+    f.h.Settle();
+    CHECK(!f.panel.Editing());
+    CHECK(f.panel.Notice().empty());
+    CHECK(f.backend.writes.empty());
 }
 
 // A backend that refuses: with CanWrite false no editor opens and the backend's reason is shown; with
@@ -900,6 +925,7 @@ int main()
     TestPrefetchWarningReachesTheLog();
     TestNoticeNeverMovesRows();
     TestInvalidTextWritesNothing();
+    TestEscapeClearsTheAssembleError();
     TestRefusedWritesShowTheBackendsReason();
     TestEscapeAndFocusLossCancel();
     TestEditBoxKeepsRowHeight();

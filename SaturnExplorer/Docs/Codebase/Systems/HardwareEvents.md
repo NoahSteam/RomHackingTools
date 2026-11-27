@@ -143,7 +143,7 @@ and the master's one vector-0x40 exception was dropped in 212 of 214 frames. `Se
 `SeMednafenEndFrameHook` after the profiler's frame and before `SeExportApplyInstalls`, queues one
 `SE_HWEV_K_SUPPRESSED` record per (source, CPU) whose count exceeded the cap and whose bit is still set (arg0 =
 suppressed count, arg1 = the cap, `source` = the source, `cpu` = whose events were dropped, `SE_HWEV_CPU_NONE` for
-a device source; the 32-byte record and protocol v27 are unchanged), then zeroes the counters. The counters are also
+a device source; the 32-byte record and protocol v27 are unchanged), then zeroes the counters. Because the exporter stamps a record with the committed frame number and the frame has been committed by then, a `SUPPRESSED` record carries the number of the frame AFTER the one it summarises and arrives before that next frame's own records (seen on a real run: stamp N holds the master's rows, the `SUPPRESSED` for N-1's slave flood, then N's first 64 slave rows). The counters are also
 zeroed by `SeMednafenSetHwEvents` (any mask change) and by `SeMdfnHwEvForget` (a state load, through
 `SeMednafenStateLoaded`). The panel renders the record as "... +N more [MSH2 |SSH2 ]<source> events this frame (cap 64)" in
 the chip of its source (the CPU name only when the record has one). The cap is a compile-time constant; the 8192-record ring and the 512-record reply cap
