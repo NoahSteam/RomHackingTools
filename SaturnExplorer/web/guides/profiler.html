@@ -176,7 +176,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   <p>The same program was recorded with function timing off and on. Every counter other than the function table is identical in both recordings. An earlier build did not pass this check: turning function timing on shifted two figures slightly. That was traced to the emulator updating every device before each instruction, and fixed.</p>
 
   <h3>Working alongside the debugger</h3>
-  <p>Breakpoints, single-stepping and tracepoints were exercised with the profiler running, including Mednafen's own built-in debugger. One real bug was found this way: after stepping in the built-in debugger, the function table froze on one function. It now recovers on the next frame, and a frame the profiler could not observe fully is reported as "not attributed" instead of showing a wrong split.</p>
+  <p>Breakpoints, single-stepping and tracepoints were exercised with the profiler running, including Mednafen's own built-in debugger. One real bug was found this way: after stepping in the built-in debugger, the function table froze on one function. It now recovers on the next frame, and a frame the profiler could not observe fully is left out of the function table instead of showing a wrong split (the Frame tab counts it in "Function attribution: on in k of n frames").</p>
 
   <h3>Measuring the cost on a real game</h3>
   <figure class="chart">
@@ -224,7 +224,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
       <li><strong>It measures the emulator, not the console.</strong> The figures are faithful to what Mednafen emulates. They were not compared with real Saturn hardware.</li>
       <li><strong>"Busy" includes slow bus waits.</strong> Only sleep and DMA stalls are separated out.</li>
       <li><strong>Function time is self time.</strong> Time in a function's callees is charged to the callees.</li>
-      <li><strong>A breakpoint left set in Mednafen's own debugger pauses function timing</strong> until it is cleared. Those frames are marked as not attributed.</li>
+      <li><strong>A breakpoint left set in Mednafen's own debugger pauses function timing</strong> until it is cleared. Those frames are left out of the function table.</li>
       <li><strong>The panel was checked by hand once,</strong> on the test program: every tab showed the expected values, and breakpoints and stepping worked alongside it. Its automated tests run without a display.</li>
     </ul>
   </div>

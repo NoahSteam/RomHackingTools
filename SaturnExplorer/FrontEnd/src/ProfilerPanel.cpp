@@ -230,7 +230,7 @@ void EmptyState(const ProfilerPanel::Host& host, bool modelEmpty)
 {
     if (!host.live)
         ImGui::TextWrapped("The profiler measures a running game. Connect to a live emulator "
-                           "(Emulator menu) to see where each frame's time goes.");
+                           "(Session > Source > Connect to Emulator) to see where each frame's time goes.");
     else if (!host.hasCounters)
         ImGui::TextWrapped("This emulator build does not report profiler counters. Rebuild the "
                            "patched Mednafen with the current Saturn Explorer (update.sh / update.bat).");
