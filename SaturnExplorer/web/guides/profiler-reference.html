@@ -127,12 +127,13 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
 <section id="top">
   <h2>Top bar and tabs</h2>
   <figure class="shot narrow">
-    <a class="full" href="img/profiler/header.png" title="Open full size"><img src="img/profiler/header.png" width="748" height="78" alt="The Profiler's top bar: an Average over list set to 1 s, a Clear button, the text 600 frames recorded, and the four tabs Frame, Buses, Memory and Functions. Yellow numbered boxes mark each part."></a>
+    <a class="full" href="img/profiler/header.png" title="Open full size"><img src="img/profiler/header.png" width="746" height="98" alt="The Profiler's top bar: an Average over list set to 1 s, a Clear button, the text 1800 frames recorded, an empty status line, and the four tabs Frame, Buses, Memory and Functions. Yellow numbered boxes mark each part."></a>
   </figure>
   <ol class="callouts">
     <li><b>Average over.</b> The time span every figure on the Frame, Buses and Functions tabs is averaged over: <span class="ui">Last frame</span>, <span class="ui">0.5 s</span> (30 frames), <span class="ui">1 s</span> (60), <span class="ui">5 s</span> (300) or <span class="ui">10 s</span> (600). Short spans react quickly; long ones smooth out spikes. The History strips always show the newest 600 frames, whatever this is set to.</li>
     <li><b>Clear.</b> Forgets every recorded frame and the Memory tab's last sample. Use it to start a measurement fresh, for example just before the part of the game you care about.</li>
-    <li><b>N frames recorded.</b> How many frames the panel holds, up to 3600. A span longer than this averages only the frames that exist. (The screenshot is from before the limit was raised.)</li>
+    <li><b>N frames recorded.</b> How many frames the panel holds, up to 3600. A span longer than this averages only the frames that exist.</li>
+    <li><b>Status line.</b> One line kept free under the top bar. It is empty while the game runs live, and shows the scrubbed frame or a "no data" message when you scrub back (see <a href="#scrub">Scrubbing back</a>). It always takes the same space, so nothing below it moves.</li>
     <li><b>Tabs.</b> Frame, Buses, Memory and Functions, described below.</li>
   </ol>
   <figure class="shot narrow">
@@ -310,9 +311,17 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
     <li><b>Status line.</b> A line under the top bar reads <code>Showing frame N (scrubbed), newest is M</code>. It is empty while live, and when you are scrubbed to the newest frame.</li>
     <li><b>History strips.</b> A red line with a small triangle marks the scrubbed frame. If that frame is older than the strip's 600 frames, the strip shifts back so the mark stays in view, and its heading says <span class="ui">the red mark is the frame shown</span>.</li>
     <li><b>No data.</b> If the panel has no record of that frame, the tab says <code>No Profiling Data</code>, the status line gives the frame and the reason (<code>No profiler data for frame N (…)</code>), and no figures are drawn. Frames far back in the history can be like this; it is expected. This happens when the Profiler was not capturing then (for example after <span class="ui">Clear</span>), when the frame is older than the 3600 kept, or when the emulator does not report which timeline a frame belongs to.</li>
-    <li><b>After a rewind.</b> Frames are matched by timeline and frame number together, so a frame replayed after a rewind is never shown with the figures of the frame it replaced.</li>
+    <li><b>After a rewind.</b> Frames are matched by timeline and frame number together, so a frame replayed after a rewind (<span class="ui">Play From Here</span>) is never shown with the figures of the frame it replaced. A span longer than <span class="ui">Last frame</span> that ends shortly after the rewind point can still reach back into frames recorded before the rewind, and the History strips still show those older frames to the left. For a frame just after a rewind, read it with <span class="ui">Last frame</span>.</li>
     <li><b>Memory tab.</b> Unchanged: it already samples the memory of whichever frame is displayed.</li>
   </ul>
+  <figure class="shot">
+    <a class="full" href="img/profiler/scrub-status-mark.png" title="Open full size"><img src="img/profiler/scrub-status-mark.png" width="1014" height="524" alt="The Frame tab scrubbed back: the status line reads Showing frame 4282 (scrubbed), newest is 4317, and a red vertical mark with a small triangle crosses all three History strips just after a busy plateau ends."></a>
+    <figcaption>V1 scrubbed to frame 4282, the third frame of its function phase, with <span class="ui">Average over</span> at <span class="ui">Last frame</span>. The status line names the frame (1) and the red mark shows where it sits in the History strips (2), just after the busy-loop phase ended.</figcaption>
+  </figure>
+  <figure class="shot">
+    <a class="full" href="img/profiler/scrub-no-data.png" title="Open full size"><img src="img/profiler/scrub-no-data.png" width="720" height="184" alt="The Functions tab scrubbed to a frame with no record: the status line, in orange, and the tab both read No profiler data for frame 3912 (the Profiler was not capturing then, or the frame is older than the last 1800 kept)."></a>
+    <figcaption>Scrubbed to a frame the panel no longer holds: the status line (1) and the tab (2) say so, and no figures are drawn. The frame history can reach further back than the Profiler's 1800 records, because the history does not always keep every frame, so its oldest frames often show this.</figcaption>
+  </figure>
 </section>
 
 <section id="states">
@@ -340,7 +349,7 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
   </table>
   </div>
   <figure class="shot narrow">
-    <a class="full" href="img/profiler/state-disconnected.png" title="Open full size"><img src="img/profiler/state-disconnected.png" width="758" height="92" alt="The Frame tab with no emulator connected, reading The profiler measures a running game. Connect to a live emulator (Emulator menu) to see where each frame's time goes."></a>
+    <a class="full" href="img/profiler/state-disconnected.png" title="Open full size"><img src="img/profiler/state-disconnected.png" width="890" height="112" alt="The Frame tab with no emulator connected, reading The profiler measures a running game. Connect to a live emulator (Session &gt; Source &gt; Connect to Emulator) to see where each frame's time goes."></a>
     <figcaption>Not connected.</figcaption>
   </figure>
   <figure class="shot narrow">
