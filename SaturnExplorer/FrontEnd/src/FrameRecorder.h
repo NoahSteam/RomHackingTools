@@ -44,6 +44,10 @@ public:
     struct Frame
     {
         uint64_t frameNumber = 0;
+        // The machine-state timeline the capture was taken on (0 = not stated). A frame number alone
+        // repeats across timelines (a rewind replays them), so anything that pairs a recorded frame
+        // with another source's data -- the Profiler's per-frame records -- needs both.
+        uint32_t timelineId = 0;
         Region   vdp1Vram, vdp2Vram, cram, wramLow, wramHigh, vdp1Fb, soundRam;
         std::vector<uint16_t> vdp1Regs;   // by hw offset >> 1; empty = the frame had none
         std::vector<uint16_t> vdp2Regs;
@@ -91,10 +95,12 @@ public:
     // Read the context's current frame (raw) and queue it for background
     // compression. Fast: only the region reads happen on the calling (UI) thread.
     // If the compressor is behind, the frame is dropped rather than blocking.
-    void Capture(se_context* ctx, uint64_t frameNumber);
+    void Capture(se_context* ctx, uint64_t frameNumber, uint32_t timelineId = 0);
 
     size_t   Count() const;
     uint64_t FrameNumber(size_t i) const;
+    // The timeline Capture() was told frame i belongs to (0 = unknown or no such frame).
+    uint32_t FrameTimeline(size_t i) const;
     size_t   BytesUsed() const;
 
     // Build a data source over frame i. The decompressed regions live in this
@@ -182,6 +188,7 @@ private:
     {
         uint64_t generation = 0;
         uint64_t frameNumber = 0;
+        uint32_t timelineId = 0;
         std::vector<uint8_t>  vdp1Vram, vdp2Vram, cram, wramLow, wramHigh, vdp1Fb, soundRam;
         std::vector<uint16_t> vdp1Regs, vdp2Regs;
         se_sh2_regs sh2[2] = {};

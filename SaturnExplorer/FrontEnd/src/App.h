@@ -430,7 +430,7 @@ private:
     // Profiler: the emulator's per-frame counters (live only) and the occupancy of the fixed
     // RAMs (any source). mPoolSampledSerial / mPoolSampleCountdown pace the pool sampling, which
     // hashes every captured region.
-    ProfilerModel     mProfiler;
+    ProfilerModel     mProfiler{ kProfilerScrubCapacity };
     MemoryPoolTracker mPoolTracker;
     ProfilerPanel     mProfilerPanel;
     uint64_t          mPoolSampledSource = 0;

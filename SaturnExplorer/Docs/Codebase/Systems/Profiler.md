@@ -1,5 +1,6 @@
 # Profiler
 
+Scrubbed view (anchoring, capacity) added on `prof-scrub` on top of `f61913a`.
 Inspected revision: the change that introduced it (protocol v26), on top of
 `6491e73`, plus the v27 wire/counter freeze; "Cost of attribution" re-inspected against `ece035f` and the pinned Mednafen 1.32.1 fork base `783518d` (Step 0 of [ProfilerFixPlan](../../ProfilerFixPlan.md)).
 **v27 status:** the record layout and counter indices below are frozen; the fields the fix plan
@@ -38,9 +39,9 @@ transport (see [State sources](StateSources.md)).
 | Server | [se_export.c](../../../Integration/Common/se_export.c): `SeExportPublishPerf`, `SeExportBuildPerfSection` (a connection's reply section and its lost range), `SeExportFrameIdentity` / `SeIdReserve` / `SeExportEndFrame` (frame identity), `SeExportNotifyStateLoaded` (timeline), `SeExportPrepare` / `SeExportStart` (startup), `SeExportSetProfilerHook`, `SeExportSetPerfCapable`, `SeExportCurrentFunction`, `SePublishProfiler` |
 | Wire contract | [SeLiveProtocol.h](../../../Integration/Common/SeLiveProtocol.h): `SE_LIVE_VERB_PROFILE`, `SE_LIVE_PROF_FUNCTIONS`, `SE_LIVE_CAP_PROFILER`, `SE_LIVE_CAP_PROF_FUNCTIONS`, "Perf section" |
 | Client | [LiveDriver.cpp](../../../Drivers/Live/src/LiveDriver.cpp): `LivePerf`, the v26 and v27 parse in `ReadSnapshot`, `IngestPerf` (ordering, gaps, eviction); [LiveDriver.h](../../../Drivers/Live/src/LiveDriver.h): `se_live_perf_frame`, `se_live_drain_perf`, `se_live_perf_status_get`, `se_live_set_profiler` |
-| Model (UI-free) | [ProfilerModel.h](../../../FrontEnd/src/Debug/ProfilerModel.h): `PerfFrame`, `ComputePerfShares`, `ComputeBusTotals`, `ProfilerModel` (ordering, `LostIn`, lost totals, `Shares` / `WindowShares` / `Coverage`, `Functions` / `FunctionWindow`, `LatestIdentity`), `SplitHistoryRuns`, `PerfFrameLabel`, `MemoryPoolTracker` (`SetSource`) |
+| Model (UI-free) | [ProfilerModel.h](../../../FrontEnd/src/Debug/ProfilerModel.h): `PerfFrame`, `ComputePerfShares`, `ComputeBusTotals`, `ProfilerModel` (ordering, `LostIn`, lost totals, `Shares` / `WindowShares` / `Coverage`, `Functions` / `FunctionWindow`, `LatestIdentity`, `FindIdentity`, the `end`-anchored window overloads), `SplitHistoryRuns`, `PerfFrameLabel`, `MemoryPoolTracker` (`SetSource`) |
 | Panel | [ProfilerPanel.cpp](../../../FrontEnd/src/ProfilerPanel.cpp): `ProfilerPanel::Draw`, `Host` |
-| App glue | [App.cpp](../../../FrontEnd/src/App.cpp): `App::UpdateProfiler`, `App::DrawProfiler`; registered in `App::PanelList` (Windows → Debugger → Profiler, hidden by default) |
+| App glue | [App.cpp](../../../FrontEnd/src/App.cpp): `App::UpdateProfiler`, `App::DrawProfiler`; scrub identity from `FrameRecorder::FrameTimeline`; registered in `App::PanelList` (Windows → Debugger → Profiler, hidden by default) |
 
 ## Execution flow
 
@@ -525,6 +526,48 @@ functions-on count of the latched mode, and the lost-record counts (`TotalServer
 `TotalDriverEvicted`, `LostIn(window)`). The Buses tab names its unit ("bus requests"), the cache mode and
 the A-bus dummy and unmapped buckets. "Busy" is labelled as including bus waits.
 
+### Scrubbed view (anchoring at the displayed frame)
+
+Live, the panel shows the newest record and windows that end at it. When the user has scrubbed the
+frame history back (`App::mScrubContext` is the displayed context, `App::mScrubShownFrame` the frame
+it shows), `App::DrawProfiler` fills `Host::scrubbed / scrubFrame / scrubTimeline / scrubIdentityKnown`
+and the panel (`ProfilerPanel::ResolveView`) anchors the Frame, Buses and Functions tabs and the
+History strips' marker at the record with exactly that identity.
+
+- **Identity of a scrubbed frame.** The recorder stores, with each frame, the timeline the server
+  stamped on the snapshot it was captured from (`FrameRecorder::Frame::timelineId`, from
+  `se_live_captured_identity`, kept only when that snapshot's frame equals the frame being recorded;
+  0 = unknown). The frame number is the snapshot's (`se_frame_number`), which for a normally delivered
+  snapshot is the same number the perf record carries as `frameNo` (a halt snapshot carries the last
+  committed frame, but nothing is recorded while halted). `App` has its own `mScrubTimeline`, a counter
+  of its own history epochs; it is **not** the emulator's timeline and is not used here.
+- **Matching** is `ProfilerModel::FindIdentity(timeline, frame)`: exact on both, only for a v27 record
+  carrying `SE_PERF_VALID_IDENTITY`. Never by ring position and never by frame number alone (a rewind
+  replays numbers on a new timeline). A frame recorded with an unknown timeline never matches.
+- **Windows.** `Shares / Sum / Functions / LostIn` take an `end` (count from the oldest, anchor index
+  + 1): the window is the `min(window, end)` frames ending at the anchor, with the usual validity and
+  coverage ("k of n frames"). A window near the oldest retained record is simply shorter. Without
+  `end` they end at the newest frame, as before.
+- **No record** (profiler off then, evicted, lost on the wire, other timeline, older emulator): a
+  fixed status line and every per-frame tab body say "No profiler data for frame N (...)" and show no
+  figures; it never falls back to the newest. When the anchor is not the newest, the same fixed line
+  (`FixedStatusLine`, always reserved so rows do not move) says "Showing frame N (scrubbed), newest is
+  M".
+- **History strips.** Each strip still spans at most 600 frames (`kStripFrames`, independent of the
+  model's capacity, so the live view is unchanged); the anchored frame is drawn as a red mark, and
+  when it is older than the span the span is shifted to keep it in view. Hovering a bar is unchanged
+  (the strips do not take clicks).
+- **Memory tab: not anchored, on purpose.** It samples the bytes of the displayed capture itself
+  (`MemoryPoolTracker`, which already follows a scrubbed frame and re-primes on every scrub step and
+  on going backward), so there is no per-frame perf record to anchor, and "changed since sample"
+  between scrub steps has its own timeline rules above.
+- **Capacity.** The scrub history is `mRecordSeconds` (5..30, `kMaxRecordSeconds`) x 60 = up to 1,800
+  frames (also bounded by the recorder's byte cap). The App's `ProfilerModel` is therefore created
+  with `kProfilerScrubCapacity` = 1,800 records (a `static_assert` ties the two); the model's own
+  default stays 600. `sizeof(PerfFrame)` is 688 bytes, so the ring is about
+  1.2 MiB (688 x 1,800) before the optional per-frame function list (up to 64 x 8 bytes on the heap).
+  The averaging-window choices still top out at 10 s.
+
 ### Functions: rows, Other and denominators (F7)
 
 The emulator tracks up to 3,072 keys per frame and publishes the 64 hottest. Cycles of keys the table
@@ -627,6 +670,11 @@ ctest --test-dir build --output-on-failure -R 'ProfilerModel|ProfilerPanel|LiveP
   v27 detail lines and labels, the Buses tab's unit / cache mode / buckets, history-strip tooltips (real
   frame identity, "no data" for an unmeasured frame, identity "not available" for v26), and the
   Functions tab (Other row, 30% of 100,000, per-CPU filters, saturation notes, "Not observed").
+  The scrubbed view: figures anchored at the scrubbed frame in all three tabs, the "Showing frame" note
+  and its fixed row, "No profiler data" (evicted, newer, other timeline, unknown timeline, no identity
+  bit) with no figures, and strip hover unchanged. `ProfilerModelTests` pins `FindIdentity` (exact, same
+  number on another timeline, no identity bit, evicted, wrap-around) and windows ending at an anchor
+  (near the ring start, anchor beyond the end, coverage and lost counts of the anchored window).
 - [ProfilerOtherTests.c](../../../Integration/tests/ProfilerOtherTests.c) (ctest
   `SaturnExplorerProfilerOtherTests`): F7 producer side on the real glue table and end-of-frame code, the
   publication captured: a 65th key, an evicted key charged to its own CPU, a late dominant 3,073rd key
