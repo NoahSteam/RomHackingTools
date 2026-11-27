@@ -429,9 +429,48 @@ void AssemblyPanel::CommitEdit(IMemoryBackend& backend, Request& req)
             // A halted CPU has already pulled the next instructions into its pipeline; patching memory
             // does not reach them (the emulator's own cache invalidation cannot), so the old opcode can
             // run once. Only an instruction edit matters: a literal is read when its load executes.
-            if (!literal && n == size && mBpStopActive && mCpu == mBpStopCpu && WritesAlreadyFetched(mBpStopPc, addr, size))
-                warnings.push_back("the CPU is halted and had already fetched this instruction (the pipeline holds PC.." +
-                                   Hex8(PrefetchedEnd(mBpStopPc) - 1) + "): it may execute the OLD instruction once before the new one runs");
+            if (!literal && n == size && mBpStopActive && mCpu == mBpStopCpu)
+            {
+                if (WritesAlreadyFetched(mBpStopPc, addr, size))
+                    warnings.push_back("the CPU is halted and had already fetched this instruction (the pipeline holds PC.." +
+                                       Hex8(PrefetchedEnd(mBpStopPc) - 1) + "): it may execute the OLD instruction once before the new one runs");
+                else
+                {
+                    // Halted in a delay slot, the fetch stage is not at PC+2: the taken branch already refilled it
+                    // from its TARGET (sh7095.inc UCDelayBranch keeps the slot in PC_ID and calls
+                    // FetchIF_ForceIBufferFill at the target, a longword read). The panel is not told the
+                    // pipeline-stage addresses, so it works from the instruction before the PC: a static target
+                    // gives the longword that was read; a register or stack target (jmp, jsr, rts, rte, braf,
+                    // bsrf) cannot be derived here, so every instruction edit is warned about. A conditional
+                    // bt/s / bf/s may not have been taken; warning anyway is the safe side.
+                    const uint32_t prevAddr = mBpStopPc - 2;
+                    uint16_t prevOp = 0;
+                    bool havePrev = false;
+                    if ((prevAddr & 0x0FFFFFFFu) == (addr & 0x0FFFFFFFu)) { prevOp = (uint16_t)oldValue; havePrev = true; }
+                    else
+                    {
+                        const auto pr = backend.ReadMemoryBatch({ { prevAddr, 2 } });
+                        if (!pr.empty() && pr[0].success && pr[0].bytes.size() >= 2) { prevOp = BE16(pr[0].bytes); havePrev = true; }
+                    }
+                    const DisassembledInstruction prev = havePrev ? Sh2Decode(prevAddr, prevOp) : DisassembledInstruction();
+                    if (havePrev && prev.HasDelaySlot)
+                    {
+                        if (prev.HasBranchTarget)
+                        {
+                            const uint64_t lo = prev.BranchTarget & 0x0FFFFFFFu, hi = (lo | 3u) + 1u;
+                            const uint64_t wlo = addr & 0x0FFFFFFFu, whi = wlo + size;
+                            if (wlo < hi && whi > lo)
+                                warnings.push_back("the CPU is halted in the delay slot of the branch at " + Hex8(prevAddr) +
+                                                   " and had already fetched its target (" + Hex8(prev.BranchTarget) +
+                                                   "): it may execute the OLD instruction once before the new one runs");
+                        }
+                        else
+                            warnings.push_back("the CPU is halted in the delay slot of the branch at " + Hex8(prevAddr) +
+                                               ", whose target is not known here and is already fetched: if this is that target, "
+                                               "it may execute the OLD instruction once before the new one runs");
+                    }
+                }
+            }
             result = "Wrote " + std::to_string(size) + " bytes at " + Hex8(addr) + " (" + what + "): " +
                      WriteDestText(backend.WriteDestination(addr));
             if (literal && sharers)

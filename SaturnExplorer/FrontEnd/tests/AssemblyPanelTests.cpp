@@ -508,10 +508,12 @@ void TestContextFromRowAndWarningsAfterWrite()
 // An instruction written where a halted CPU has already fetched it: the old opcode can run once, and the
 // notice says so. The window (see CommitEdit): [PC, PC+4), and PC+4 too when PC+2 is longword aligned.
 // 'row' is the instruction to rewrite (kBase + 2 * row); returns the notice after the write.
-std::string NoticeAfterEditWhileHalted(bool halted, int stopCpu, uint32_t stopPc, int row, bool* wrote = nullptr)
+std::string NoticeAfterEditWhileHalted(bool halted, int stopCpu, uint32_t stopPc, int row, bool* wrote = nullptr,
+                                       int extraRow = -1, uint16_t extraOp = 0)
 {
     Fixture f;
     Prepare(f);
+    if (extraRow >= 0) f.backend.Put(kBase + 2 * extraRow, extraOp);
     if (halted) f.panel.SetBreakpointStop(true, stopCpu, stopPc);
     f.h.Settle();
     ScrollToTop(f.h);
@@ -548,6 +550,32 @@ void TestWriteIntoPrefetchedWindowWarns()
     // Running (not halted), or halted on the CPU that is not shown: no pipeline to be stale.
     CHECK(NoticeAfterEditWhileHalted(false, 0, 0, 9).find(kWarn) == std::string::npos);
     CHECK(NoticeAfterEditWhileHalted(true, 1, kBase + 0x10, 9).find(kWarn) == std::string::npos);
+}
+
+// Halted in a delay slot, the fetch stage holds the branch TARGET, not PC+2 (sh7095.inc UCDelayBranch): an
+// edit there must warn too, and when the target is a register's the panel cannot know it and warns on any edit.
+void TestWriteIntoFetchedBranchTargetWarns()
+{
+    const char* kWarn = "may execute the OLD instruction once";
+    // bra 06000020 at 06000010 (row 8), halted on its slot at 06000012. The target is longword aligned, so the
+    // forced fill read 06000020..06000023: rows 16 and 17.
+    for (int row : { 16, 17 })
+    {
+        bool wrote = false;
+        const std::string n = NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, row, &wrote, 8, 0xA006);
+        CHECK(wrote);
+        CHECK(n.find(kWarn) != std::string::npos);
+        CHECK(n.find("06000020") != std::string::npos);
+    }
+    for (int row : { 15, 18 })
+        CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, row, nullptr, 8, 0xA006).find(kWarn) == std::string::npos);
+    // bra 06000022 (target & 2): only the half at the target was read.
+    CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, 17, nullptr, 8, 0xA007).find(kWarn) != std::string::npos);
+    CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, 18, nullptr, 8, 0xA007).find(kWarn) == std::string::npos);
+    // jmp @r0: the target is a register's, so any instruction edit is warned about.
+    CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, 20, nullptr, 8, 0x402B).find(kWarn) != std::string::npos);
+    // Without a delayed branch before the PC, a far edit stays quiet.
+    CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, 16).find(kWarn) == std::string::npos);
 }
 
 // The warning is part of the Log line too (req.asmNote), and the notice is a warning, not an error.
@@ -868,6 +896,7 @@ int main()
     TestContextFromRowAndWarningsAfterWrite();
     TestReplacingDelayedBranchWarns();
     TestWriteIntoPrefetchedWindowWarns();
+    TestWriteIntoFetchedBranchTargetWarns();
     TestPrefetchWarningReachesTheLog();
     TestNoticeNeverMovesRows();
     TestInvalidTextWritesNothing();
