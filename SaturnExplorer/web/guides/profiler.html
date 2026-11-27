@@ -135,6 +135,10 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   <p>To know which function is running, the profiler has to look at every instruction both processors execute. It follows calls and returns to keep track of the current function, and charges the cycles since the previous instruction to it. Time spent asleep or stalled is not charged to any function.</p>
   <p>When the profiler cannot be sure which function owns some code (for example code that was already running when profiling began, or an interrupt handler), it files that time under the raw address instead of guessing. Time it could not assign at all appears in separate rows labelled <em>Other</em> and <em>Not observed</em>.</p>
 
+  <h3>Scrubbing back</h3>
+  <p>While you are live the panel shows the newest frame and averages the frames ending at it. When you scrub the emulator's recorded history back to an earlier frame, the Frame, Buses and Functions tabs show that frame instead, and an averaging window is the frames ending at it. A line under the controls says which frame is shown and which is newest, and the history strips mark it with a red line. The frame is matched by its identity (timeline and frame number), so after a rewind the replayed frames are never confused with the ones they replaced.</p>
+  <p>If the profiler has no record of that frame (it was off then, the frame is older than the profiler keeps, or the emulator does not report frame identity) the panel says so and shows no figures; it never falls back to the newest frame. The Memory tab keeps showing the bytes of the displayed frame, as before.</p>
+
   <h3>It says when it does not know</h3>
   <p>Every record carries flags for which measurements it actually contains. The panel shows "not available" or "1 of 4 frames" where a value was not measured, and never treats a missing measurement as zero.</p>
 </section>

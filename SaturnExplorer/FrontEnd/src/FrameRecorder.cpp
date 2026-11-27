@@ -106,7 +106,7 @@ void FrameRecorder::Configure(size_t maxFrames, uint64_t maxBytes)
     Evict();
 }
 
-void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
+void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber, uint32_t timelineId)
 {
     if (!ctx)
     {
@@ -125,6 +125,7 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
     RawFrame raw;
     raw.generation = mGeneration.load(std::memory_order_acquire);
     raw.frameNumber = frameNumber;
+    raw.timelineId = timelineId;
     ReadRegion(ctx, SE_VRAM_KIND_VDP1_VRAM, kVdp1VramSize, raw.vdp1Vram);
     ReadRegion(ctx, SE_VRAM_KIND_VDP2_VRAM, kVdp2VramSize, raw.vdp2Vram);
     ReadRegion(ctx, SE_VRAM_KIND_CRAM,      kCramSize,     raw.cram);
@@ -196,6 +197,7 @@ void FrameRecorder::Worker()
 
         Frame f;
         f.frameNumber = raw.frameNumber;
+        f.timelineId = raw.timelineId;
         CompressRegion(raw.vdp1Vram, f.vdp1Vram, mLzScratch);
         CompressRegion(raw.vdp2Vram, f.vdp2Vram, mLzScratch);
         CompressRegion(raw.cram,     f.cram,     mLzScratch);
@@ -269,6 +271,12 @@ uint64_t FrameRecorder::FrameNumber(size_t i) const
 {
     std::lock_guard<std::mutex> lk(mRingMtx);
     return i < mFrames.size() ? mFrames[i].frameNumber : 0;
+}
+
+uint32_t FrameRecorder::FrameTimeline(size_t i) const
+{
+    std::lock_guard<std::mutex> lk(mRingMtx);
+    return i < mFrames.size() ? mFrames[i].timelineId : 0;
 }
 
 size_t FrameRecorder::BytesUsed() const

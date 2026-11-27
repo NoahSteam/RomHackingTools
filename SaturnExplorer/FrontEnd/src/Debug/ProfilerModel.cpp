@@ -254,11 +254,20 @@ void ProfilerModel::Push(PerfFrame frame)
 
 void ProfilerModel::LostIn(size_t window, uint64_t* serverLost, uint64_t* driverEvicted) const
 {
+    LostIn(window, mCount, serverLost, driverEvicted);
+}
+
+// 'end' (frames counted from the oldest) anchors the window at the frame just before it, so a
+// scrubbed view averages the frames ENDING at the anchor; clamped so a stale anchor cannot read
+// past what the ring holds.
+void ProfilerModel::LostIn(size_t window, size_t end, uint64_t* serverLost, uint64_t* driverEvicted) const
+{
+    end = (std::min)(end, mCount);
     uint64_t srv = 0, drv = 0;
-    const size_t n = std::min(window, mCount);
+    const size_t n = std::min(window, end);
     for (size_t k = 0; k + 1 < n; ++k)   // the oldest frame's own gap lies before the window
     {
-        const PerfFrame& f = At(mCount - 1 - k);
+        const PerfFrame& f = At(end - 1 - k);
         srv += f.gapCount;
         drv += f.evictCount;
     }
@@ -268,11 +277,17 @@ void ProfilerModel::LostIn(size_t window, uint64_t* serverLost, uint64_t* driver
 
 size_t ProfilerModel::Sum(size_t window, uint64_t out[SE_PERF_COUNT]) const
 {
+    return Sum(window, mCount, out);
+}
+
+size_t ProfilerModel::Sum(size_t window, size_t end, uint64_t out[SE_PERF_COUNT]) const
+{
+    end = (std::min)(end, mCount);
     for (int i = 0; i < SE_PERF_COUNT; ++i) out[i] = 0;
-    const size_t n = std::min(window, mCount);
+    const size_t n = std::min(window, end);
     for (size_t k = 0; k < n; ++k)
     {
-        const PerfFrame& f = At(mCount - 1 - k);
+        const PerfFrame& f = At(end - 1 - k);
         for (int i = 0; i < SE_PERF_COUNT; ++i) out[i] += f.c[i];
     }
     return n;
@@ -284,10 +299,11 @@ std::vector<PerfFunction> ProfilerModel::HotFunctions(size_t window, uint64_t* t
     std::unordered_map<uint32_t, uint64_t> sum;
     uint64_t total = 0;
     size_t used = 0;
-    const size_t n = std::min(window, mCount);
+    const size_t end = mCount;
+    const size_t n = std::min(window, end);
     for (size_t k = 0; k < n; ++k)
     {
-        const PerfFrame& f = At(mCount - 1 - k);
+        const PerfFrame& f = At(end - 1 - k);
         if (!f.functions) continue;
         ++used;
         total += f.fnOther;
@@ -365,14 +381,20 @@ bool SlaveKnown(const PerfFrame& f) { return f.SlaveOnTimeKnown(); }
 
 WindowShares ProfilerModel::Shares(size_t window) const
 {
+    return Shares(window, mCount);
+}
+
+WindowShares ProfilerModel::Shares(size_t window, size_t end) const
+{
+    end = (std::min)(end, mCount);
     WindowShares out;
-    const size_t n = std::min(window, mCount);
+    const size_t n = std::min(window, end);
     out.frames = n;
     Part all, slave, draw, work, idle, busx;
     size_t cacheOff = 0, cacheOn = 0;
     for (size_t k = 0; k < n; ++k)
     {
-        const PerfFrame& f = At(mCount - 1 - k);
+        const PerfFrame& f = At(end - 1 - k);
         all.Add(f);
         if (V27(f)) ++out.v27Frames;
         if (SlaveKnown(f)) slave.Add(f);
@@ -431,6 +453,23 @@ WindowShares ProfilerModel::Shares(size_t window) const
     return out;
 }
 
+bool ProfilerModel::FindIdentity(uint32_t timelineId, uint64_t frameNo, size_t* index) const
+{
+    // Identity only: a frame number alone repeats across timelines (a rewind replays them), and a
+    // record without SE_PERF_VALID_IDENTITY carries no timelineId/frameNo to compare. Newest first,
+    // since a scrub near the live edge is the common case; ids are unique within a timeline.
+    for (size_t k = 0; k < mCount; ++k)
+    {
+        const PerfFrame& f = At(mCount - 1 - k);
+        if (V27(f) && f.Has(SE_PERF_VALID_IDENTITY) && f.timelineId == timelineId && f.frameNo == frameNo)
+        {
+            if (index) *index = mCount - 1 - k;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool ProfilerModel::LatestIdentity(uint32_t* timelineId, uint64_t* frameNo) const
 {
     for (size_t k = 0; k < mCount; ++k)
@@ -448,14 +487,20 @@ bool ProfilerModel::LatestIdentity(uint32_t* timelineId, uint64_t* frameNo) cons
 
 FunctionWindow ProfilerModel::Functions(size_t window, FnCpu cpu) const
 {
+    return Functions(window, mCount, cpu);
+}
+
+FunctionWindow ProfilerModel::Functions(size_t window, size_t end, FnCpu cpu) const
+{
+    end = (std::min)(end, mCount);
     FunctionWindow out;
-    const size_t n = std::min(window, mCount);
+    const size_t n = std::min(window, end);
     out.frames = n;
     std::unordered_map<uint32_t, uint64_t> sum;
     bool busyKnown = true;
     for (size_t k = 0; k < n; ++k)
     {
-        const PerfFrame& f = At(mCount - 1 - k);
+        const PerfFrame& f = At(end - 1 - k);
         if (!f.functions) continue;
         ++out.attributed;
         const bool split = V27(f) && f.Has(SE_PERF_VALID_OTHER);

@@ -762,10 +762,134 @@ void TestPoolScrubBackward()
     t.Sample(0, "VDP2 VRAM", 0x05E00000u, b.data(), 4096);
     CHECK(t.Pool(0).changedBlocks == 1);
 }
+// ---- Scrubbed view: find a record by identity, windows that end at it ----
+
+// A v27 frame with an identity and a distinguishing cycle count (its frame number), so a window's
+// summed cycles say exactly which frames it held.
+PerfFrame IdFrame(uint64_t seq, uint32_t timeline, uint64_t frameNo, bool identity = true)
+{
+    PerfFrame f = Seq64(seq, frameNo);
+    f.valid = SE_PERF_VALID_SSH2_INT | (identity ? SE_PERF_VALID_IDENTITY : 0u);
+    f.timelineId = timeline;
+    f.frameNo = frameNo;
+    return f;
+}
+
+void TestFindIdentity()
+{
+    ProfilerModel m(16);
+    // Timeline 1 frames 10..14, then a rewind: timeline 2 replays 12..14.
+    for (uint64_t n = 10; n <= 14; ++n) m.Push(IdFrame(n, 1, n));
+    for (uint64_t n = 12; n <= 14; ++n) m.Push(IdFrame(100 + n, 2, n));
+    size_t at = 99;
+    CHECK(m.FindIdentity(1, 12, &at) && at == 2);        // exact match
+    CHECK(m.FindIdentity(2, 12, &at) && at == 5);        // same frameNo, the other timeline: its own record
+    CHECK(m.FindIdentity(2, 14, &at) && at == 7);
+    CHECK(!m.FindIdentity(2, 11, &at));                  // 11 exists only on timeline 1: never a match
+    CHECK(!m.FindIdentity(3, 12, &at));                  // unknown timeline
+    CHECK(!m.FindIdentity(1, 15, &at));                  // newer than anything stored
+    CHECK(!m.FindIdentity(1, 9, &at));                   // older than anything stored
+    CHECK(m.FindIdentity(1, 14, nullptr));               // the index is optional
+
+    // A record without SE_PERF_VALID_IDENTITY has no identity to match, whatever its fields hold; and
+    // neither does a v26 record whose identity bit happens to be set.
+    ProfilerModel n(16);
+    n.Push(IdFrame(1, 1, 50, false));
+    PerfFrame v26 = IdFrame(2, 1, 51);
+    v26.wireVersion = 26;
+    n.Push(v26);
+    CHECK(!n.FindIdentity(1, 50, &at));
+    CHECK(!n.FindIdentity(1, 51, &at));
+    CHECK(!n.FindIdentity(0, 0, &at));                   // a zeroed record is not "timeline 0, frame 0"
+}
+
+void TestFindIdentityEvictedAndWrapped()
+{
+    ProfilerModel m(8);
+    for (uint64_t n = 1; n <= 20; ++n) m.Push(IdFrame(n, 1, n));   // the ring wrapped twice: 13..20 kept
+    size_t at = 99;
+    CHECK(m.Count() == 8);
+    CHECK(!m.FindIdentity(1, 12, &at));                  // evicted
+    CHECK(m.FindIdentity(1, 13, &at) && at == 0);        // the oldest retained
+    CHECK(m.FindIdentity(1, 20, &at) && at == 7);        // the newest
+    CHECK(m.FindIdentity(1, 16, &at) && at == 3 && m.At(at).frameNo == 16);   // through the wrap
+}
+
+void TestWindowEndingAtAnchor()
+{
+    ProfilerModel m(16);
+    for (uint64_t n = 1; n <= 10; ++n) m.Push(IdFrame(n, 1, n));   // cycles of frame n are n
+    size_t at = 0;
+    CHECK(m.FindIdentity(1, 6, &at) && at == 5);
+    // Four frames ending at frame 6: 3+4+5+6, not the newest four (7..10).
+    const WindowShares w = m.Shares(4, at + 1);
+    CHECK(w.frames == 4 && Near(w.shares.frameCycles, (3 + 4 + 5 + 6) / 4.0));
+    uint64_t sum[SE_PERF_COUNT];
+    CHECK(m.Sum(4, at + 1, sum) == 4 && sum[SE_PERF_FRAME_CYCLES] == 18);
+    // The unanchored forms are the newest window, unchanged.
+    CHECK(m.Shares(4).frames == 4 && Near(m.Shares(4).shares.frameCycles, (7 + 8 + 9 + 10) / 4.0));
+    CHECK(Near(m.Shares(4, m.Count()).shares.frameCycles, m.Shares(4).shares.frameCycles));
+
+    // Near the start of the ring: asking for ten frames ending at frame 3 holds only 1, 2, 3.
+    CHECK(m.FindIdentity(1, 3, &at));
+    const WindowShares early = m.Shares(10, at + 1);
+    CHECK(early.frames == 3 && Near(early.shares.frameCycles, 2.0));
+    CHECK(m.Sum(10, at + 1, sum) == 3);
+    // The oldest record alone.
+    CHECK(m.FindIdentity(1, 1, &at) && m.Shares(5, at + 1).frames == 1);
+
+    // An anchor past the end clamps to what is stored rather than reading beyond it.
+    CHECK(m.Shares(3, 1000).frames == 3 && Near(m.Shares(3, 1000).shares.frameCycles, 9.0));
+    CHECK(m.Shares(3, 0).frames == 0);
+}
+
+void TestWindowEndingAtAnchorWrapped()
+{
+    ProfilerModel m(8);
+    for (uint64_t n = 1; n <= 13; ++n) m.Push(IdFrame(n, 1, n));   // holds 6..13, head is mid-array
+    size_t at = 0;
+    CHECK(m.FindIdentity(1, 9, &at) && at == 3);
+    const WindowShares w = m.Shares(3, at + 1);                    // 7, 8, 9
+    CHECK(w.frames == 3 && Near(w.shares.frameCycles, 8.0));
+    // Asking for more than the ring holds before the anchor: 6, 7, 8, 9.
+    CHECK(m.Shares(100, at + 1).frames == 4);
+}
+
+// Validity and coverage are the existing rules, just over the anchored frames, and the lost-record
+// count of the window is the anchored window's, not the newest one's.
+void TestAnchoredWindowCoverageAndLoss()
+{
+    ProfilerModel m(16);
+    for (uint64_t n = 1; n <= 8; ++n)
+    {
+        PerfFrame f = IdFrame(n, 1, n);
+        if (n >= 3 && n <= 4) f.valid |= SE_PERF_VALID_VDP1_WORK;   // only 3 and 4 measured it
+        if (n == 4) f.gapCount = 2;                                  // two records lost just before frame 4
+        if (n == 8) f.gapCount = 5;
+        m.Push(f);
+    }
+    size_t at = 0;
+    CHECK(m.FindIdentity(1, 5, &at));
+    const WindowShares w = m.Shares(4, at + 1);                      // frames 2..5
+    CHECK(w.vdp1Work.covered == 2 && w.vdp1Work.frames == 4);        // "2 of 4 frames"
+    const WindowShares live = m.Shares(4);                           // frames 5..8
+    CHECK(live.vdp1Work.covered == 0);
+    uint64_t srv = 0, drv = 0;
+    m.LostIn(4, at + 1, &srv, &drv);
+    CHECK(srv == 2);                                                 // frame 4's gap, inside frames 2..5
+    m.LostIn(4, &srv, &drv);
+    CHECK(srv == 5);                                                 // the newest window's: frame 8's
+}
+
 }  // namespace
 
 int main()
 {
+    TestFindIdentity();
+    TestFindIdentityEvictedAndWrapped();
+    TestWindowEndingAtAnchor();
+    TestWindowEndingAtAnchorWrapped();
+    TestAnchoredWindowCoverageAndLoss();
     TestShares();
     TestBuses();
     TestHistory();

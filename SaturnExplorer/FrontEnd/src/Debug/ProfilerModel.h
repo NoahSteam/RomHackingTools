@@ -230,6 +230,10 @@ std::vector<HistoryRun> SplitHistoryRuns(const std::vector<HistoryPoint>& points
 std::string PerfFrameLabel(const PerfFrame& frame);
 
 // ---- History ----
+// Records the App's profiler keeps: one per frame of the longest scrub history (30 s at 60 fps), so
+// a scrubbed frame still has its record. The model's own default stays ten seconds.
+constexpr size_t kProfilerScrubCapacity = 30 * 60;
+
 class ProfilerModel
 {
 public:
@@ -265,6 +269,10 @@ public:
     // Frames missing from the newest min(window, Count()) frames' span, by cause: the gaps carried
     // by every one of them except the oldest (its gap precedes the window).
     void LostIn(size_t window, uint64_t* serverLost, uint64_t* driverEvicted) const;
+    // The same for the window of min(window, end) frames that ENDS at At(end - 1): 'end' is a count
+    // from the oldest retained frame (anchor index + 1), clamped to Count(). The overloads below
+    // taking 'end' anchor their window the same way; the ones without it end at the newest frame.
+    void LostIn(size_t window, size_t end, uint64_t* serverLost, uint64_t* driverEvicted) const;
 
     size_t Count() const { return mCount; }
     size_t Capacity() const { return mFrames.size(); }
@@ -275,6 +283,7 @@ public:
 
     // Counters summed over the newest min(window, Count()) frames; returns how many were summed.
     size_t Sum(size_t window, uint64_t out[SE_PERF_COUNT]) const;
+    size_t Sum(size_t window, size_t end, uint64_t out[SE_PERF_COUNT]) const;
 
     // Functions over the same window, hottest first, and the cycles attributed in total
     // (including what fell outside the per-frame lists). Frames without attribution are skipped;
@@ -284,12 +293,18 @@ public:
 
     // The figures of the newest min(window, Count()) frames, each over the frames that carry it.
     WindowShares Shares(size_t window) const;
+    WindowShares Shares(size_t window, size_t end) const;
     // The Functions tab's view: rows, Other and the denominators for one CPU filter (see
     // FunctionWindow). A CPU filter uses only frames that carry the per-CPU Other split, because a
     // v26 remainder cannot be assigned to a CPU; "Both" uses every attributed frame.
     FunctionWindow Functions(size_t window, FnCpu cpu) const;
+    FunctionWindow Functions(size_t window, size_t end, FnCpu cpu) const;
     // The identity of the newest frame that has one (false if none): what the memory tab keys on.
     bool LatestIdentity(uint32_t* timelineId, uint64_t* frameNo) const;
+    // The retained record whose identity is EXACTLY (timelineId, frameNo): never a position, never a
+    // frame number alone (the same number on another timeline is a different frame), and never a
+    // record without SE_PERF_VALID_IDENTITY. On success *index is its At() index.
+    bool FindIdentity(uint32_t timelineId, uint64_t frameNo, size_t* index) const;
 
 private:
     std::vector<PerfFrame> mFrames;   // ring
