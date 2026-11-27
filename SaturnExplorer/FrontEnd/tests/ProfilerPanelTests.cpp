@@ -628,8 +628,305 @@ void TestFunctionsOtherAndDenominators()
 }
 }  // namespace
 
+// ---- A scrubbed frame: the panel shows that frame's record, found by identity ----
+
+// Frames 100..110 on timeline 2. Frames up to 105 kept the master 80% asleep (20% busy), the later
+// ones 20% asleep (80% busy), so which frames a window held is visible in the figure; a different
+// slave on-time per half lets the Buses / Functions tabs be told apart too.
+void FillScrubModel(Rig& rig, uint32_t timeline = 2)
+{
+    rig.model.Clear();
+    for (uint64_t n = 100; n <= 110; ++n)
+    {
+        PerfFrame f = V27(n, SE_PERF_VALID_SSH2_INT | SE_PERF_VALID_IDENTITY);
+        f.timelineId = timeline;
+        f.frameNo = n;
+        f.frame = 7;   // the snapshot number of the batch: never the key
+        f.c[SE_PERF_SH2_SLEEP] = n <= 105 ? 320000 : 80000;
+        f.c[SE_PERF_BUS_ACCESS + SE_PERF_DEV_WRAM_H * 2] = n <= 105 ? 1000 : 9000;
+        f.functions = true;
+        f.fns = { { n <= 105 ? 0x06004000u : 0x06008000u, 1000 } };
+        rig.model.Push(f);
+    }
+}
+
+void Scrub(Rig& rig, uint32_t timeline, uint64_t frame, bool known = true)
+{
+    rig.host.scrubbed = true;
+    rig.host.scrubIdentityKnown = known;
+    rig.host.scrubTimeline = timeline;
+    rig.host.scrubFrame = frame;
+}
+
+void TestScrubbedAnchorsFigures()
+{
+    Rig rig;
+    FillScrubModel(rig);
+    {   // Live: all eleven frames, no "showing" line -- as before this feature.
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        CHECK(!Drawn("(scrubbed)"));
+        CHECK(!Drawn("20% busy") && !Drawn("80% busy"));   // 6 of 11 frames at 20%, 5 at 80%: 47%
+        CHECK(Drawn("47% busy"));
+    }
+    Scrub(rig, 2, 105);
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    // The window of 1 s (60 frames) ends at frame 105: only the six 20% frames.
+    if (!Drawn("20% busy")) std::printf("drawn: %s\n", Dump().c_str());
+    CHECK(Drawn("20% busy"));
+    CHECK(!Drawn("47% busy") && !Drawn("80% busy"));
+    CHECK(Drawn("Showing frame 105 (scrubbed), newest is 110"));
+    // The Buses and Functions tabs follow the same anchor.
+    ClickAt(harness, Where("Buses"));
+    harness.Settle();
+    CHECK(Drawn("1000"));                        // frame <=105's work-RAM count, not the newer 9000
+    CHECK(!Drawn("9000") && !Drawn("5000"));
+    ClickAt(harness, Where("Functions"));
+    harness.Settle();
+    CHECK(Drawn("UpdatePlayer"));                // the function of frames up to 105
+    CHECK(!Drawn("sub_06008000"));
+}
+
+void TestScrubbedNewestHasNoNote()
+{
+    Rig rig;
+    FillScrubModel(rig);
+    Scrub(rig, 2, 110);   // scrubbed, but to the newest recorded frame
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    CHECK(!Drawn("Showing frame"));
+    CHECK(Drawn("47% busy"));   // the window ends at the newest frame: all eleven
+}
+
+void TestScrubbedMissingRecord()
+{
+    // Each of these must say so and show no figure from any other frame.
+    struct Case { uint32_t timeline; uint64_t frame; bool known; };
+    const Case cases[] = {
+        { 2, 99, true },      // evicted / before the profiler was on
+        { 2, 111, true },     // newer than anything stored
+        { 3, 105, true },     // the frame number exists, on another timeline
+        { 2, 105, false },    // the capture's timeline is not known
+    };
+    for (const Case& c : cases)
+    {
+        Rig rig;
+        FillScrubModel(rig);
+        Scrub(rig, c.timeline, c.frame, c.known);
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        char want[64];
+        std::snprintf(want, sizeof(want), "No profiler data for frame %llu", static_cast<unsigned long long>(c.frame));
+        if (!Drawn(want)) std::printf("drawn: %s\n", Dump().c_str());
+        CHECK(Drawn(want));
+        CHECK(Drawn("No Profiling Data"));                        // the tab body itself
+        CHECK(!Drawn("% busy") && !Drawn("Frame length"));       // nothing from another frame
+        CHECK(!Drawn("Showing frame"));
+        ClickAt(harness, Where("Buses"));
+        harness.Settle();
+        CHECK(Drawn(want) && Drawn("No Profiling Data") && !Drawn("1000") && !Drawn("9000"));
+        ClickAt(harness, Where("Functions"));
+        harness.Settle();
+        CHECK(Drawn(want) && Drawn("No Profiling Data") && !Drawn("UpdatePlayer") && !Drawn("sub_06008000"));
+    }
+    // The message names the limit it can be (the ring's capacity).
+    Rig rig;
+    FillScrubModel(rig);
+    Scrub(rig, 2, 99);
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    CHECK(Drawn("older than the last 16 kept"));
+}
+
+// After Clear while scrubbed the history is empty, and the scrubbed frame is still one with no record:
+// every per-frame tab says so instead of "waiting for a frame" (seen on the real emulator).
+void TestScrubbedAfterClear()
+{
+    Rig rig;
+    rig.model.Clear();
+    Scrub(rig, 2, 105);
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    CHECK(Drawn("No profiler data for frame 105"));
+    CHECK(Drawn("No Profiling Data") && !Drawn("Waiting for the emulator"));
+    ClickAt(harness, Where("Buses"));
+    harness.Settle();
+    CHECK(Drawn("No Profiling Data") && !Drawn("Waiting for the emulator"));
+    ClickAt(harness, Where("Functions"));
+    harness.Settle();
+    CHECK(Drawn("No Profiling Data"));
+}
+
+void TestScrubbedRecordWithoutIdentity()
+{
+    Rig rig;
+    rig.model.Clear();
+    for (uint64_t n = 100; n <= 103; ++n)
+    {
+        PerfFrame f = V27(n, SE_PERF_VALID_SSH2_INT);   // no identity bit
+        f.timelineId = 2;
+        f.frameNo = n;
+        rig.model.Push(f);
+    }
+    Scrub(rig, 2, 102);
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    CHECK(Drawn("No profiler data for frame 102"));
+}
+
+// The status line has a fixed place: a row below it sits at the same y whether the line is empty,
+// a "showing" note, or a "no data" message.
+void TestScrubNoteDoesNotMoveRows()
+{
+    float yLive = 0, yNote = 0, yMissing = 0;
+    {
+        Rig rig;
+        FillScrubModel(rig);
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        yLive = Where("Frame length:").y;
+    }
+    {
+        Rig rig;
+        FillScrubModel(rig);
+        Scrub(rig, 2, 105);
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        CHECK(Drawn("Showing frame 105"));
+        yNote = Where("Frame length:").y;
+    }
+    {
+        Rig rig;
+        FillScrubModel(rig);
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        rig.host.scrubbed = true; rig.host.scrubIdentityKnown = true; rig.host.scrubTimeline = 2; rig.host.scrubFrame = 105;
+        harness.Settle();
+        CHECK(Drawn("Showing frame 105"));
+        // And it appearing / disappearing in one panel: the row stays where it was.
+        const float before = Where("Frame length:").y;
+        rig.host.scrubbed = false;
+        harness.Settle();
+        CHECK(!Drawn("Showing frame"));
+        CHECK(Where("Frame length:").y == before);
+        yMissing = before;
+    }
+    CHECK(yLive > 0 && yLive == yNote && yNote == yMissing);
+
+    // The missing-data message is in the same place as the note (its tab body then replaces the
+    // figures, so the check is on the Window row above the tabs).
+    Rig rig;
+    FillScrubModel(rig);
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    const float tabsLive = Where("Frame").y;
+    Scrub(rig, 2, 999);
+    harness.Settle();
+    CHECK(Drawn("No profiler data for frame 999"));
+    CHECK(Where("Frame").y == tabsLive);
+}
+
+// Hover on a strip still names the frame under the pointer, scrubbed or not.
+void TestScrubbedStripHoverUnchanged()
+{
+    Rig rig;
+    FillScrubModel(rig);
+    Scrub(rig, 2, 105);
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    harness.Hover(StripNewest("Master SH-2 busy"));
+    CHECK(Tip("Frame 110 (timeline 2)"));   // the newest is still at the right edge: the strip is not re-anchored
+}
+
+// ---- After a rewind the ring still holds the replaced timeline's records ----
+
+// Eight records of timeline 1 (frames 5000..5007, master 20% busy, on in functions mode) directly
+// followed by eight of timeline 2 (frames 3915..3922, master 80% busy): the shape the real emulator
+// showed after "Play from here". An average that crossed the boundary would read 50% and "16 of 16".
+void FillRewoundModel(Rig& rig)
+{
+    rig.model.Clear();
+    uint64_t seq = 1;
+    for (int tl = 1; tl <= 2; ++tl)
+    {
+        for (uint64_t i = 0; i < 8; ++i)
+        {
+            PerfFrame f = V27(seq++, SE_PERF_VALID_SSH2_INT | SE_PERF_VALID_IDENTITY | SE_PERF_VALID_MODE);
+            f.timelineId = tl;
+            f.frameNo = (tl == 1 ? 5000 : 3915) + i;
+            f.mode = SE_LIVE_PROF_FUNCTIONS;
+            f.c[SE_PERF_SH2_SLEEP] = tl == 1 ? 320000 : 80000;
+            rig.model.Push(f);
+        }
+    }
+}
+
+void TestRewoundTimelineWindows()
+{
+    float yClean = 0, yLive = 0, yScrub = 0;
+    {   // One timeline only: no cut, no note -- and where the rows are.
+        Rig rig;
+        rig.model.Clear();
+        for (uint64_t n = 0; n < 8; ++n)
+        {
+            PerfFrame f = V27(n + 1, SE_PERF_VALID_SSH2_INT | SE_PERF_VALID_IDENTITY | SE_PERF_VALID_MODE);
+            f.timelineId = 2; f.frameNo = 3915 + n; f.mode = SE_LIVE_PROF_FUNCTIONS;
+            f.c[SE_PERF_SH2_SLEEP] = 80000;
+            rig.model.Push(f);
+        }
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        CHECK(!Drawn("timeline change"));
+        yClean = Where("Frame length:").y;
+    }
+    {   // Live view of the rewound ring.
+        Rig rig;
+        FillRewoundModel(rig);
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        if (!Drawn("80% busy")) std::printf("drawn: %s\n", Dump().c_str());
+        CHECK(Drawn("80% busy"));                                   // the new timeline's figure alone
+        CHECK(!Drawn("50% busy") && !Drawn("20% busy"));
+        CHECK(Drawn("on in 8 of 8 frames") && !Drawn("16 of 16"));   // not the replaced timeline's frames
+        CHECK(Drawn("Averaging 8 of 16 frames (the rest are from before a rewind or state load)"));
+        yLive = Where("Frame length:").y;
+    }
+    {   // Scrubbed to frame 3920 (index 13 of 16): the six new-timeline frames ending there.
+        Rig rig;
+        FillRewoundModel(rig);
+        Scrub(rig, 2, 3920);
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        CHECK(Drawn("80% busy") && !Drawn("50% busy") && !Drawn("20% busy"));
+        CHECK(Drawn("on in 6 of 6 frames"));
+        CHECK(Drawn("Showing frame 3920 (scrubbed), newest is 3922"));
+        CHECK(Drawn("; averaging 6 of 14 frames (the rest are from before a rewind or state load)"));
+        yScrub = Where("Frame length:").y;
+        // Scrubbed back onto the replaced timeline: its own records only, and its own figure.
+        Scrub(rig, 1, 5004);
+        harness.Settle();
+        // The strip ends at the mark there: the ring's later records are the ones the rewind replaced
+        // and the new timeline, neither of which followed this frame.
+        CHECK(Drawn("the red mark is the frame shown"));
+        CHECK(Drawn("20% busy") && !Drawn("50% busy") && !Drawn("80% busy"));
+        CHECK(Drawn("on in 5 of 5 frames"));
+        CHECK(!Drawn("timeline change"));                            // the five records before it are all timeline 1
+    }
+    // The status line is reserved either way: nothing moves when the cut note appears.
+    CHECK(yClean > 0 && yClean == yLive && yLive == yScrub);
+}
+
 int main()
 {
+    TestRewoundTimelineWindows();
+    TestScrubbedAnchorsFigures();
+    TestScrubbedNewestHasNoNote();
+    TestScrubbedMissingRecord();
+    TestScrubbedAfterClear();
+    TestScrubbedRecordWithoutIdentity();
+    TestScrubNoteDoesNotMoveRows();
+    TestScrubbedStripHoverUnchanged();
     TestFrameTab();
     TestVdp1Presentation();
     TestBusTab();

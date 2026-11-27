@@ -32,6 +32,7 @@ ImU32 ColNoData()  { return ui::Color(IM_COL32(0x8a, 0x8a, 0x92, 255), IM_COL32(
 ImU32 ColTrack()   { return ui::Color(IM_COL32(0x2a, 0x2a, 0x30, 255), IM_COL32(0xe4, 0xe4, 0xe0, 255)); }
 ImU32 ColGrid()    { return ui::Color(IM_COL32(255, 255, 255, 28), IM_COL32(0, 0, 0, 28)); }
 ImU32 ColCross()   { return ui::Color(IM_COL32(255, 255, 255, 110), IM_COL32(0, 0, 0, 110)); }
+ImU32 ColMarker()  { return ui::Color(IM_COL32(0xd0, 0x2f, 0x2f, 255), IM_COL32(0xff, 0x6b, 0x6b, 255)); }
 ImU32 ColData()    { return ui::Color(IM_COL32(0x2b, 0x5a, 0x92, 255), IM_COL32(0x9c, 0xc0, 0xec, 255)); }
 
 ImU32 Lerp(ImU32 a, ImU32 b, float t)
@@ -46,6 +47,10 @@ struct Segment { double fraction; ImU32 color; const char* name; };
 const size_t kWindowFrames[] = { 1, 30, 60, 300, 600 };
 const char* const kWindowNames[] = { "Last frame", "0.5 s", "1 s", "5 s", "10 s" };
 const int kWindowCount = 5;
+// A history strip spans this many frames whatever the model holds: the model keeps as many as the
+// scrub history (deeper than ten seconds), and a strip that rescaled with that would change how the
+// live view looks.
+const size_t kStripFrames = 600;
 
 void Swatch(ImU32 color, const char* label)
 {
@@ -146,11 +151,24 @@ void WrappedDisabled(const char* fmt, ...)
 
 constexpr double kNoData = std::numeric_limits<double>::quiet_NaN();
 
+// True when 'newer' follows 'older' across a timeline change (a rewind or state load replaced what
+// came before): the same notion of "has a timeline" as ProfilerModel::UsableFrames, so the strips and
+// the averaging windows agree about where one machine history ends. Two records that both state no
+// timeline have no boundary between them.
+bool TimelineChangedBetween(const PerfFrame& older, const PerfFrame& newer)
+{
+    const bool a = !older.LegacyVdp1() && older.Has(SE_PERF_VALID_IDENTITY);
+    const bool b = !newer.LegacyVdp1() && newer.Has(SE_PERF_VALID_IDENTITY);
+    if (a != b) return true;
+    return a && older.timelineId != newer.timelineId;
+}
+
 // One measure over the retained history, 0..100% on a fixed scale, with a crosshair readout.
 // valueAt returns kNoData (NaN) for a frame that did not measure it: that frame is a gap in the
 // line and a "no data" mark, never a point at 0%.
 template <typename ValueAt>
-void HistoryStrip(const char* id, const ProfilerModel& model, ImU32 color, float height, ValueAt valueAt)
+void HistoryStrip(const char* id, const ProfilerModel& model, size_t end, long anchor, ImU32 color,
+                  float height, ValueAt valueAt)
 {
     const float width = std::max(ImGui::GetContentRegionAvail().x, 40.0f);
     const ImVec2 p0 = ImGui::GetCursorScreenPos();
@@ -158,23 +176,38 @@ void HistoryStrip(const char* id, const ProfilerModel& model, ImU32 color, float
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled(p0, ImVec2(p0.x + width, p0.y + height), ColTrack(), 3.0f);
     dl->AddLine(ImVec2(p0.x, p0.y + height * 0.5f), ImVec2(p0.x + width, p0.y + height * 0.5f), ColGrid());
-    const size_t n = model.Count();
+    // The frames [begin, end) of the model; 'end' is the newest one unless the view is scrolled to keep
+    // a scrubbed frame in sight.
+    const size_t cap = (std::min)(model.Capacity(), kStripFrames);
+    const size_t begin = end > cap ? end - cap : 0;
+    const size_t n = end - begin;
     if (n < 2) return;
     // The newest frame sits at the right edge; a short history fills from the right.
-    const size_t cap = model.Capacity();
     const float step = width / static_cast<float>(cap > 1 ? cap - 1 : 1);
     const float pad = 2.0f;
     std::vector<ImVec2> pts(n);
     std::vector<HistoryPoint> hp(n);
+    std::vector<size_t> dividers;   // points whose record starts a new timeline
     for (size_t i = 0; i < n; ++i)
     {
-        const double raw = valueAt(model.At(i));
+        const PerfFrame& pf = model.At(begin + i);
+        const double raw = valueAt(pf);
         hp[i].available = !std::isnan(raw);
         hp[i].value = hp[i].available ? raw : 0.0;
-        hp[i].breakBefore = model.At(i).HasGap();
+        // A timeline change breaks the line like missing records do: the replaced timeline's tail and
+        // the new frames are not one trend.
+        const bool tlChange = i > 0 && TimelineChangedBetween(model.At(begin + i - 1), pf);
+        hp[i].breakBefore = pf.HasGap() || tlChange;
+        if (tlChange) dividers.push_back(i);
         const double v = std::min(1.0, std::max(0.0, hp[i].value));
         pts[i] = ImVec2(p0.x + width - step * static_cast<float>(n - 1 - i),
                         p0.y + height - pad - static_cast<float>(v) * (height - pad * 2.0f));
+    }
+    // A faint vertical divider half a step before the first frame of a new timeline.
+    for (size_t i : dividers)
+    {
+        const float dx = pts[i].x - step * 0.5f;
+        dl->AddLine(ImVec2(dx, p0.y), ImVec2(dx, p0.y + height), ColGrid(), 1.0f);
     }
     // The line breaks wherever records are missing (lost by the server's ring, or evicted from the
     // driver's queue) and wherever a frame did not measure the quantity: joining the two sides would
@@ -190,6 +223,14 @@ void HistoryStrip(const char* id, const ProfilerModel& model, ImU32 color, float
         if (!hp[i].available)   // distinct from every value, 0% included: a short tick mid-strip
             dl->AddLine(ImVec2(pts[i].x, p0.y + height * 0.35f), ImVec2(pts[i].x, p0.y + height * 0.65f),
                         ColNoData(), 1.0f);
+    // The frame the panel is anchored at (scrubbed): a mark across the strip, drawn before the hover
+    // crosshair so hovering still reads as before.
+    if (anchor >= 0 && static_cast<size_t>(anchor) >= begin && static_cast<size_t>(anchor) < end)
+    {
+        const float ax = pts[static_cast<size_t>(anchor) - begin].x;
+        dl->AddLine(ImVec2(ax, p0.y), ImVec2(ax, p0.y + height), ColMarker(), 2.0f);
+        dl->AddTriangleFilled(ImVec2(ax - 4.0f, p0.y), ImVec2(ax + 4.0f, p0.y), ImVec2(ax, p0.y + 5.0f), ColMarker());
+    }
     if (ImGui::IsItemHovered())
     {
         const float mx = ImGui::GetIO().MousePos.x;
@@ -201,7 +242,7 @@ void HistoryStrip(const char* id, const ProfilerModel& model, ImU32 color, float
             dl->AddLine(ImVec2(pts[i].x, p0.y), ImVec2(pts[i].x, p0.y + height), ColCross());
             if (hp[i].available) dl->AddCircleFilled(pts[i], 4.0f, color);
             // The frame's own identity (F3), not the snapshot number its batch happened to arrive with.
-            const std::string label = PerfFrameLabel(model.At(i));
+            const std::string label = PerfFrameLabel(model.At(begin + i));
             ImGui::SetTooltip("%s\n%s", label.c_str(),
                               hp[i].available ? Percent(hp[i].value).c_str() : "no data (not measured in this frame)");
         }
@@ -212,7 +253,7 @@ void EmptyState(const ProfilerPanel::Host& host, bool modelEmpty)
 {
     if (!host.live)
         ImGui::TextWrapped("The profiler measures a running game. Connect to a live emulator "
-                           "(Emulator menu) to see where each frame's time goes.");
+                           "(Session > Source > Connect to Emulator) to see where each frame's time goes.");
     else if (!host.hasCounters)
         ImGui::TextWrapped("This emulator build does not report profiler counters. Rebuild the "
                            "patched Mednafen with the current Saturn Explorer (update.sh / update.bat).");
@@ -226,11 +267,94 @@ size_t ProfilerPanel::WindowFrames() const
     return kWindowFrames[std::min(std::max(mWindow, 0), kWindowCount - 1)];
 }
 
+// When a timeline boundary shortened the averaging window, say so in the status line (already
+// reserved, so no row moves): a "10 s" span that covers 24 frames would otherwise be a surprise.
+// Appended to the scrub note when there is one. Needs mViewEnd and mViewNote to be set.
+void ProfilerPanel::NoteWindowCut(const ProfilerModel& model)
+{
+    bool cut = false;
+    const size_t used = model.UsableFrames(WindowFrames(), mViewEnd, &cut);
+    if (!cut) return;
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "Averaging %zu of %zu frames (the rest are from before a rewind or state load)",
+                  used, (std::min)(WindowFrames(), mViewEnd));
+    if (!mViewNote.empty())
+    {
+        buf[0] = 'a';   // it continues the scrub note's sentence
+        mViewNote += "; ";
+    }
+    mViewNote += buf;
+}
+
+void ProfilerPanel::ResolveView(const ProfilerModel& model, const Host& host)
+{
+    mViewEnd = model.Count();
+    mStripEnd = model.Count();
+    mAnchor = -1;
+    mViewMissing = false;
+    mViewNote.clear();
+    mMissingText.clear();
+    if (!host.scrubbed)   // live: the newest frame, exactly as before scrubbing existed
+    {
+        NoteWindowCut(model);
+        return;
+    }
+
+    size_t at = 0;
+    if (host.scrubIdentityKnown && model.FindIdentity(host.scrubTimeline, host.scrubFrame, &at))
+    {
+        mAnchor = static_cast<long>(at);
+        mViewEnd = at + 1;
+        // Keep the mark inside the strip's fixed span: a frame older than it moves the span back
+        // (half a span of newer frames stay in view) instead of drawing no mark at all.
+        if (model.Count() - at > kStripFrames)
+            mStripEnd = (std::min)(model.Count(), at + 1 + kStripFrames / 2);
+        // A frame on a timeline that is no longer the newest: the records after it in the ring may be
+        // ones a rewind replaced (they never happened after this frame as far as the game is concerned),
+        // so the strip ends at the mark instead of drawing them to its right.
+        if (!model.Empty() && TimelineChangedBetween(model.At(at), model.Latest()))
+            mStripEnd = at + 1;
+        if (at + 1 < model.Count())
+        {
+            uint32_t tl = 0; uint64_t newest = 0;
+            char buf[128];
+            if (model.LatestIdentity(&tl, &newest))
+                std::snprintf(buf, sizeof(buf), "Showing frame %llu (scrubbed), newest is %llu",
+                              static_cast<unsigned long long>(host.scrubFrame), static_cast<unsigned long long>(newest));
+            else
+                std::snprintf(buf, sizeof(buf), "Showing frame %llu (scrubbed)", static_cast<unsigned long long>(host.scrubFrame));
+            mViewNote = buf;
+        }
+        NoteWindowCut(model);
+        return;
+    }
+
+    // No record for the displayed frame. Say so and show nothing per-frame: the newest frame's
+    // figures under a scrubbed frame's number would be a plausible, wrong answer.
+    mViewMissing = true;
+    mViewEnd = 0;
+    char buf[320];
+    if (host.scrubIdentityKnown)
+        std::snprintf(buf, sizeof(buf),
+                      "No profiler data for frame %llu (the Profiler was not capturing then, or the frame is older "
+                      "than the last %zu kept)",
+                      static_cast<unsigned long long>(host.scrubFrame), model.Capacity());
+    else
+        std::snprintf(buf, sizeof(buf),
+                      "No profiler data for frame %llu (its timeline is not known, so no record can be matched to "
+                      "it: an emulator that does not state its timeline, or a frame recorded without one)",
+                      static_cast<unsigned long long>(host.scrubFrame));
+    // The tab bodies say only that there is nothing to show; the reason is in the status line above.
+    mMissingText = "No Profiling Data";
+    mViewNote = buf;
+}
+
 bool ProfilerPanel::Draw(const ProfilerModel& model, const MemoryPoolTracker& pools, const Host& host)
 {
     bool clear = false;
     mPoolsVisible = false;
     if (!ImGui::Begin("Profiler")) { ImGui::End(); return false; }
+    ResolveView(model, host);
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Average over");
@@ -244,19 +368,33 @@ bool ProfilerPanel::Draw(const ProfilerModel& model, const MemoryPoolTracker& po
         ImGui::SameLine();
         ImGui::TextDisabled("%zu frame%s recorded", model.Count(), model.Count() == 1 ? "" : "s");
     }
+    // Always one reserved line, so the rows under it do not move when it gains or loses text.
+    FixedStatusLine(mViewNote, mViewMissing ? ColStall() : 0);
 
     if (ImGui::BeginTabBar("##profiler-tabs"))
     {
         if (ImGui::BeginTabItem("Frame"))
         {
-            if (model.Empty() || !host.hasCounters) EmptyState(host, model.Empty());
-            if (!model.Empty()) DrawFrameTab(model);
+            // A scrubbed frame with no record says so even when the whole history is empty (after
+            // Clear): "waiting for a frame" would be wrong for a frame that is already in the past.
+            if (mViewMissing) WrappedText("%s", mMissingText.c_str());
+            else
+            {
+                if (model.Empty() || !host.hasCounters) EmptyState(host, model.Empty());
+                if (!model.Empty()) DrawFrameTab(model);
+            }
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Buses"))
         {
-            if (model.Empty() || !host.hasCounters) EmptyState(host, model.Empty());
-            if (!model.Empty()) DrawBusTab(model);
+            // A scrubbed frame with no record says so even when the whole history is empty (after
+            // Clear): "waiting for a frame" would be wrong for a frame that is already in the past.
+            if (mViewMissing) WrappedText("%s", mMissingText.c_str());
+            else
+            {
+                if (model.Empty() || !host.hasCounters) EmptyState(host, model.Empty());
+                if (!model.Empty()) DrawBusTab(model);
+            }
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Memory"))
@@ -280,7 +418,7 @@ void ProfilerPanel::DrawFrameTab(const ProfilerModel& model)
 {
     // Every figure is over the frames of the window that CARRY it (see WindowShares): one frame with a
     // measurement does not turn its three neighbours without one into zeros.
-    const WindowShares w = model.Shares(WindowFrames());
+    const WindowShares w = model.Shares(WindowFrames(), mViewEnd);
     const PerfShares& s = w.shares;
     const float barH = ImGui::GetTextLineHeight();
 
@@ -395,7 +533,7 @@ void ProfilerPanel::DrawFrameTab(const ProfilerModel& model)
     // history line breaks where records are missing.
     {
         uint64_t winServer = 0, winDriver = 0;
-        model.LostIn(WindowFrames(), &winServer, &winDriver);
+        model.LostIn(WindowFrames(), mViewEnd, &winServer, &winDriver);
         if (model.TotalServerLost() || model.TotalDriverEvicted())
             WrappedText("Lost records: %llu dropped by the emulator's ring, %llu evicted by the driver's queue "
                         "(in this window: %llu and %llu)",
@@ -404,7 +542,9 @@ void ProfilerPanel::DrawFrameTab(const ProfilerModel& model)
                         static_cast<unsigned long long>(winServer), static_cast<unsigned long long>(winDriver));
     }
 
-    ImGui::SeparatorText("History (0-100% of the frame, newest on the right)");
+    ImGui::SeparatorText(mStripEnd < model.Count()
+                             ? "History (0-100% of the frame, the red mark is the frame shown)"
+                             : "History (0-100% of the frame, newest on the right)");
     const float stripH = ImGui::GetTextLineHeight() * 2.6f;
     const WindowShares whole = model.Shares(model.Count());
     const char* vdp1Name = whole.v27Frames == 0 ? "VDP1 drawing"
@@ -416,17 +556,17 @@ void ProfilerPanel::DrawFrameTab(const ProfilerModel& model)
         ImGui::TableNextRow();
         ImGui::TableNextColumn(); ImGui::TextUnformatted("Master SH-2 busy");
         ImGui::TableNextColumn();
-        HistoryStrip("##h-msh2", model, ColBusy(), stripH,
+        HistoryStrip("##h-msh2", model, mStripEnd, mAnchor, ColBusy(), stripH,
                      [](const PerfFrame& f) { return ComputePerfShares(f.c).cpu[0].busy; });
         ImGui::TableNextRow();
         ImGui::TableNextColumn(); ImGui::TextUnformatted("Slave SH-2 busy");
         ImGui::TableNextColumn();
-        HistoryStrip("##h-ssh2", model, ColBusy(), stripH,
+        HistoryStrip("##h-ssh2", model, mStripEnd, mAnchor, ColBusy(), stripH,
                      [](const PerfFrame& f) { return f.SlaveOnTimeKnown() ? ComputePerfShares(f.c).cpu[1].busy : kNoData; });
         ImGui::TableNextRow();
         ImGui::TableNextColumn(); ImGui::TextUnformatted(vdp1Name);
         ImGui::TableNextColumn();
-        HistoryStrip("##h-vdp1", model, ColVdp1(), stripH,
+        HistoryStrip("##h-vdp1", model, mStripEnd, mAnchor, ColVdp1(), stripH,
                      [](const PerfFrame& f) {
                          const PerfShares sh = ComputePerfShares(f.c);
                          if (f.LegacyVdp1()) return sh.vdp1Draw;
@@ -439,7 +579,7 @@ void ProfilerPanel::DrawFrameTab(const ProfilerModel& model)
 void ProfilerPanel::DrawBusTab(const ProfilerModel& model)
 {
     uint64_t sum[SE_PERF_COUNT];
-    const double frames = static_cast<double>(std::max<size_t>(model.Sum(WindowFrames(), sum), 1));
+    const double frames = static_cast<double>(std::max<size_t>(model.Sum(WindowFrames(), mViewEnd, sum), 1));
     const BusTotals totals = ComputeBusTotals(sum);
     const float barH = ImGui::GetTextLineHeight();
 
@@ -447,7 +587,7 @@ void ProfilerPanel::DrawBusTab(const ProfilerModel& model)
     for (int d = 0; d < SE_PERF_DEV_COUNT; ++d)
         maxDev = std::max(maxDev, sum[SE_PERF_BUS_ACCESS + d * 2] + sum[SE_PERF_BUS_ACCESS + d * 2 + 1]);
 
-    const WindowShares w = model.Shares(WindowFrames());
+    const WindowShares w = model.Shares(WindowFrames(), mViewEnd);
     WrappedText("SH-2 %s per frame", PerfBusUnitLabel());
     ImGui::SameLine(0.0f, 24.0f);
     Swatch(ColBusy(), "Reads");
@@ -652,14 +792,19 @@ void ProfilerPanel::DrawFunctionsTab(const ProfilerModel& model, const Host& hos
     ImGui::SetNextItemWidth(ComboWidth(kCpus, 3));
     ImGui::Combo("##fncpu", &mFnCpu, kCpus, 3);
 
+    if (mViewMissing)
+    {
+        WrappedText("%s", mMissingText.c_str());
+        return;
+    }
     // The model's view for this CPU filter: the retained rows, Other, and the denominator they
     // share. Percentages are of Attributed() = listed + Other, so dropping a row to the bounded
     // table cannot make the rest look bigger.
-    const FunctionWindow fw = model.Functions(WindowFrames(), static_cast<FnCpu>(std::min(std::max(mFnCpu, 0), 2)));
+    const FunctionWindow fw = model.Functions(WindowFrames(), mViewEnd, static_cast<FnCpu>(std::min(std::max(mFnCpu, 0), 2)));
     const size_t frames = fw.used;
     if (!frames)
     {
-        if (mFnCpu != 0 && model.Functions(WindowFrames(), FnCpu::Both).attributed > 0)
+        if (mFnCpu != 0 && model.Functions(WindowFrames(), mViewEnd, FnCpu::Both).attributed > 0)
             ImGui::TextWrapped("No frame in this window carries the per-CPU split of the unlisted time (an "
                                "older emulator). Choose both CPUs to see its functions.");
         else

@@ -391,7 +391,10 @@ void CheckOtherGated(bool validFirst)
     {
         const bool v = validFirst ? i == 1 : i == 4;
         uint32_t valid = v ? (SE_PERF_VALID_SSH2_INT | SE_PERF_VALID_M68K_IDLE | SE_PERF_VALID_BUS_X |
-                              SE_PERF_VALID_CACHE | SE_PERF_VALID_MODE | SE_PERF_VALID_IDENTITY) : 0;
+                              SE_PERF_VALID_CACHE | SE_PERF_VALID_MODE) : 0;
+        // The identity bit is not part of this mix: a window now ends at a timeline boundary, so a
+        // window whose newest record states an identity and whose older ones do not would be cut to
+        // one frame and stop testing the other gates. Identity coverage has its own test below.
         PerfFrame f = V27Frame(i, valid);
         f.c[SE_PERF_SSH2_ON_CYCLES] = v ? 200000 : 400000;          // unintegrated frames claim 100% on
         f.c[SE_PERF_SH2_SLEEP + 1] = v ? 100000 : 0;                // integrated: on half, a quarter busy
@@ -413,12 +416,33 @@ void CheckOtherGated(bool validFirst)
           w.busXTotals.dummyWrites == 0 && w.busXTotals.unmappedReads == 0);
     CHECK(w.cache.covered == 1 && w.cacheMode == SE_PERF_CACHE_ON && !w.cacheMixed);
     CHECK(w.mode.covered == 1 && w.modeFunctionsOn == 1);
-    CHECK(w.identity.covered == 1);
+    CHECK(!w.identity.Any());
     // None of them is "available" in a window of only the frames without the bit.
     ProfilerModel n(8);
     for (uint64_t i = 1; i <= 3; ++i) n.Push(V27Frame(i, 0));
     const WindowShares z = n.Shares(3);
     CHECK(!z.slave.Any() && !z.m68kIdle.Any() && !z.busX.Any() && !z.cache.Any() && !z.mode.Any() && !z.identity.Any());
+}
+
+// Identity coverage in a window where only one record states one. The newest record decides: with no
+// identity on it there is no timeline to hold the others to (the window is whole and says "1 of 4");
+// with one on it, the records before it that state none cannot be shown to share its timeline.
+void TestIdentityCoverageInMixedWindow()
+{
+    for (int validFirst = 0; validFirst < 2; ++validFirst)
+    {
+        ProfilerModel m(16);
+        for (uint64_t i = 1; i <= 4; ++i)
+        {
+            const bool v = validFirst ? i == 1 : i == 4;
+            PerfFrame f = V27Frame(i, v ? SE_PERF_VALID_IDENTITY : 0u);
+            f.frameNo = 100 + i; f.timelineId = 3;
+            m.Push(f);
+        }
+        const WindowShares w = m.Shares(4);
+        if (validFirst) CHECK(w.frames == 4 && w.identity.covered == 1 && w.identity.frames == 4 && !w.timelineCut);
+        else            CHECK(w.frames == 1 && w.identity.covered == 1 && w.timelineCut);
+    }
 }
 
 // The paired 68000 figures are one subset: idle and executing over the frames that carry the idle
@@ -762,10 +786,268 @@ void TestPoolScrubBackward()
     t.Sample(0, "VDP2 VRAM", 0x05E00000u, b.data(), 4096);
     CHECK(t.Pool(0).changedBlocks == 1);
 }
+// ---- Scrubbed view: find a record by identity, windows that end at it ----
+
+// A v27 frame with an identity and a distinguishing cycle count (its frame number), so a window's
+// summed cycles say exactly which frames it held.
+PerfFrame IdFrame(uint64_t seq, uint32_t timeline, uint64_t frameNo, bool identity = true)
+{
+    PerfFrame f = Seq64(seq, frameNo);
+    f.valid = SE_PERF_VALID_SSH2_INT | (identity ? SE_PERF_VALID_IDENTITY : 0u);
+    f.timelineId = timeline;
+    f.frameNo = frameNo;
+    return f;
+}
+
+void TestFindIdentity()
+{
+    ProfilerModel m(16);
+    // Timeline 1 frames 10..14, then a rewind: timeline 2 replays 12..14.
+    for (uint64_t n = 10; n <= 14; ++n) m.Push(IdFrame(n, 1, n));
+    for (uint64_t n = 12; n <= 14; ++n) m.Push(IdFrame(100 + n, 2, n));
+    size_t at = 99;
+    CHECK(m.FindIdentity(1, 12, &at) && at == 2);        // exact match
+    CHECK(m.FindIdentity(2, 12, &at) && at == 5);        // same frameNo, the other timeline: its own record
+    CHECK(m.FindIdentity(2, 14, &at) && at == 7);
+    CHECK(!m.FindIdentity(2, 11, &at));                  // 11 exists only on timeline 1: never a match
+    CHECK(!m.FindIdentity(3, 12, &at));                  // unknown timeline
+    CHECK(!m.FindIdentity(1, 15, &at));                  // newer than anything stored
+    CHECK(!m.FindIdentity(1, 9, &at));                   // older than anything stored
+    CHECK(m.FindIdentity(1, 14, nullptr));               // the index is optional
+
+    // A record without SE_PERF_VALID_IDENTITY has no identity to match, whatever its fields hold; and
+    // neither does a v26 record whose identity bit happens to be set.
+    ProfilerModel n(16);
+    n.Push(IdFrame(1, 1, 50, false));
+    PerfFrame v26 = IdFrame(2, 1, 51);
+    v26.wireVersion = 26;
+    n.Push(v26);
+    CHECK(!n.FindIdentity(1, 50, &at));
+    CHECK(!n.FindIdentity(1, 51, &at));
+    CHECK(!n.FindIdentity(0, 0, &at));                   // a zeroed record is not "timeline 0, frame 0"
+}
+
+void TestFindIdentityEvictedAndWrapped()
+{
+    ProfilerModel m(8);
+    for (uint64_t n = 1; n <= 20; ++n) m.Push(IdFrame(n, 1, n));   // the ring wrapped twice: 13..20 kept
+    size_t at = 99;
+    CHECK(m.Count() == 8);
+    CHECK(!m.FindIdentity(1, 12, &at));                  // evicted
+    CHECK(m.FindIdentity(1, 13, &at) && at == 0);        // the oldest retained
+    CHECK(m.FindIdentity(1, 20, &at) && at == 7);        // the newest
+    CHECK(m.FindIdentity(1, 16, &at) && at == 3 && m.At(at).frameNo == 16);   // through the wrap
+}
+
+void TestWindowEndingAtAnchor()
+{
+    ProfilerModel m(16);
+    for (uint64_t n = 1; n <= 10; ++n) m.Push(IdFrame(n, 1, n));   // cycles of frame n are n
+    size_t at = 0;
+    CHECK(m.FindIdentity(1, 6, &at) && at == 5);
+    // Four frames ending at frame 6: 3+4+5+6, not the newest four (7..10).
+    const WindowShares w = m.Shares(4, at + 1);
+    CHECK(w.frames == 4 && Near(w.shares.frameCycles, (3 + 4 + 5 + 6) / 4.0));
+    uint64_t sum[SE_PERF_COUNT];
+    CHECK(m.Sum(4, at + 1, sum) == 4 && sum[SE_PERF_FRAME_CYCLES] == 18);
+    // The unanchored forms are the newest window, unchanged.
+    CHECK(m.Shares(4).frames == 4 && Near(m.Shares(4).shares.frameCycles, (7 + 8 + 9 + 10) / 4.0));
+    CHECK(Near(m.Shares(4, m.Count()).shares.frameCycles, m.Shares(4).shares.frameCycles));
+
+    // Near the start of the ring: asking for ten frames ending at frame 3 holds only 1, 2, 3.
+    CHECK(m.FindIdentity(1, 3, &at));
+    const WindowShares early = m.Shares(10, at + 1);
+    CHECK(early.frames == 3 && Near(early.shares.frameCycles, 2.0));
+    CHECK(m.Sum(10, at + 1, sum) == 3);
+    // The oldest record alone.
+    CHECK(m.FindIdentity(1, 1, &at) && m.Shares(5, at + 1).frames == 1);
+
+    // An anchor past the end clamps to what is stored rather than reading beyond it.
+    CHECK(m.Shares(3, 1000).frames == 3 && Near(m.Shares(3, 1000).shares.frameCycles, 9.0));
+    CHECK(m.Shares(3, 0).frames == 0);
+}
+
+void TestWindowEndingAtAnchorWrapped()
+{
+    ProfilerModel m(8);
+    for (uint64_t n = 1; n <= 13; ++n) m.Push(IdFrame(n, 1, n));   // holds 6..13, head is mid-array
+    size_t at = 0;
+    CHECK(m.FindIdentity(1, 9, &at) && at == 3);
+    const WindowShares w = m.Shares(3, at + 1);                    // 7, 8, 9
+    CHECK(w.frames == 3 && Near(w.shares.frameCycles, 8.0));
+    // Asking for more than the ring holds before the anchor: 6, 7, 8, 9.
+    CHECK(m.Shares(100, at + 1).frames == 4);
+}
+
+// Validity and coverage are the existing rules, just over the anchored frames, and the lost-record
+// count of the window is the anchored window's, not the newest one's.
+void TestAnchoredWindowCoverageAndLoss()
+{
+    ProfilerModel m(16);
+    for (uint64_t n = 1; n <= 8; ++n)
+    {
+        PerfFrame f = IdFrame(n, 1, n);
+        if (n >= 3 && n <= 4) f.valid |= SE_PERF_VALID_VDP1_WORK;   // only 3 and 4 measured it
+        if (n == 4) f.gapCount = 2;                                  // two records lost just before frame 4
+        if (n == 8) f.gapCount = 5;
+        m.Push(f);
+    }
+    size_t at = 0;
+    CHECK(m.FindIdentity(1, 5, &at));
+    const WindowShares w = m.Shares(4, at + 1);                      // frames 2..5
+    CHECK(w.vdp1Work.covered == 2 && w.vdp1Work.frames == 4);        // "2 of 4 frames"
+    const WindowShares live = m.Shares(4);                           // frames 5..8
+    CHECK(live.vdp1Work.covered == 0);
+    uint64_t srv = 0, drv = 0;
+    m.LostIn(4, at + 1, &srv, &drv);
+    CHECK(srv == 2);                                                 // frame 4's gap, inside frames 2..5
+    m.LostIn(4, &srv, &drv);
+    CHECK(srv == 5);                                                 // the newest window's: frame 8's
+}
+
+// ---- A window never crosses a timeline change ----
+// After a rewind the ring holds the replaced timeline's records right before the new one's. A frame's
+// cycle count is its frame number here, so a window's sum says which records it held.
+
+// Timeline 1 frames 100..104 (5), then timeline 2 frames 50..52 (3); sampleSeq keeps rising.
+void FillRewound(ProfilerModel& m)
+{
+    uint64_t seq = 1;
+    for (uint64_t n = 100; n <= 104; ++n) m.Push(IdFrame(seq++, 1, n));
+    for (uint64_t n = 50; n <= 52; ++n)
+    {
+        PerfFrame f = IdFrame(seq++, 2, n);
+        f.functions = true;
+        f.valid |= SE_PERF_VALID_OTHER;
+        f.fns = { { 0x06000100u, static_cast<uint32_t>(10 * n) } };
+        m.Push(f);
+    }
+}
+
+void TestWindowStopsAtTimelineChange()
+{
+    ProfilerModel m(16);
+    FillRewound(m);
+    uint64_t sum[SE_PERF_COUNT];
+
+    // Live view: ten frames asked for, only the three of timeline 2 are used.
+    const WindowShares live = m.Shares(10);
+    CHECK(live.frames == 3 && live.timelineCut);
+    CHECK(Near(live.shares.frameCycles, (50 + 51 + 52) / 3.0));
+    CHECK(live.identity.frames == 3 && live.identity.covered == 3);   // "k of n" says 3 of 3
+    CHECK(m.Sum(10, sum) == 3 && sum[SE_PERF_FRAME_CYCLES] == 153);
+    const FunctionWindow fw = m.Functions(10, FnCpu::Both);
+    CHECK(fw.frames == 3 && fw.attributed == 3 && fw.used == 3 && fw.timelineCut);
+    CHECK(fw.listed == 10 * (50 + 51 + 52));
+    uint64_t total = 0; size_t used = 0;
+    m.HotFunctions(10, &total, &used);
+    CHECK(used == 3 && total == 10 * (50 + 51 + 52));
+    uint64_t srv = 0, drv = 0;
+    CHECK(m.UsableFrames(10, m.Count()) == 3);
+
+    // A window that fits inside the new timeline is not "cut".
+    const WindowShares two = m.Shares(2);
+    CHECK(two.frames == 2 && !two.timelineCut && Near(two.shares.frameCycles, 51.5));
+
+    // Anchored at a timeline-1 record: only timeline 1 (the newer records are not in the window).
+    size_t at = 0;
+    CHECK(m.FindIdentity(1, 103, &at) && at == 3);
+    const WindowShares a = m.Shares(10, at + 1);
+    CHECK(a.frames == 4 && !a.timelineCut && Near(a.shares.frameCycles, (100 + 101 + 102 + 103) / 4.0));
+    // Anchored at the FIRST record of timeline 2: just itself (the one before is the old timeline).
+    CHECK(m.FindIdentity(2, 50, &at) && at == 5);
+    const WindowShares first = m.Shares(10, at + 1);
+    CHECK(first.frames == 1 && first.timelineCut && Near(first.shares.frameCycles, 50.0));
+    CHECK(m.Sum(10, at + 1, sum) == 1 && sum[SE_PERF_FRAME_CYCLES] == 50);
+    CHECK(m.Functions(10, at + 1, FnCpu::Both).used == 1);
+    // Anchored at the middle of timeline 2: 50 and 51.
+    CHECK(m.FindIdentity(2, 51, &at));
+    CHECK(m.Shares(10, at + 1).frames == 2);
+    // The boundary exactly at the window's edge: two frames asked for ending at 51 are 50, 51 -- all
+    // timeline 2, nothing cut; three asked for would reach frame 104 and is cut to two.
+    CHECK(m.Shares(2, at + 1).frames == 2 && !m.Shares(2, at + 1).timelineCut);
+    CHECK(m.Shares(3, at + 1).frames == 2 && m.Shares(3, at + 1).timelineCut);
+
+    // Lost records: the boundary frame's gap lies before the window, as for any oldest frame, and a
+    // gap carried by an old-timeline record is not counted.
+    ProfilerModel g(16);
+    uint64_t seq = 1;
+    PerfFrame o = IdFrame(seq++, 1, 10); o.gapCount = 7; g.Push(o);
+    PerfFrame n1 = IdFrame(seq++, 2, 3); n1.gapCount = 4; g.Push(n1);   // first of the new timeline
+    PerfFrame n2 = IdFrame(seq++, 2, 4); n2.gapCount = 2; g.Push(n2);
+    g.LostIn(10, &srv, &drv);
+    CHECK(srv == 2);                       // n2's own gap; n1's precedes the window, o's is not in it
+    CHECK(g.Shares(10).frames == 2);
+}
+
+void TestTimelineWindowWithoutIdentity()
+{
+    // The end record has no identity: no boundary is invented, the old position-only behaviour.
+    ProfilerModel m(16);
+    uint64_t seq = 1;
+    for (uint64_t n = 1; n <= 3; ++n) m.Push(IdFrame(seq++, 1, n));
+    for (uint64_t n = 4; n <= 5; ++n) m.Push(IdFrame(seq++, 2, n, false));
+    CHECK(m.Shares(10).frames == 5 && !m.Shares(10).timelineCut);
+    uint64_t sum[SE_PERF_COUNT];
+    CHECK(m.Sum(10, sum) == 5);
+
+    // The end record has identity but one before it does not: that record ends the window.
+    ProfilerModel k(16);
+    seq = 1;
+    k.Push(IdFrame(seq++, 2, 1));
+    k.Push(IdFrame(seq++, 2, 2, false));
+    k.Push(IdFrame(seq++, 2, 3));
+    k.Push(IdFrame(seq++, 2, 4));
+    CHECK(k.Shares(10).frames == 2 && k.Shares(10).timelineCut);
+    // A v26 record before a v27 one with identity likewise (it cannot state a timeline).
+    ProfilerModel v(16);
+    seq = 1;
+    PerfFrame old = IdFrame(seq++, 2, 1);
+    old.wireVersion = 26;
+    v.Push(old);
+    v.Push(IdFrame(seq++, 2, 2));
+    CHECK(v.Shares(10).frames == 1 && v.Shares(10).timelineCut);
+
+    // Ordinary frame-number gaps on one timeline are not a boundary.
+    ProfilerModel gap(16);
+    seq = 1;
+    for (uint64_t n : { 10u, 11u, 40u, 41u }) gap.Push(IdFrame(seq++, 1, n));
+    CHECK(gap.Shares(10).frames == 4 && !gap.Shares(10).timelineCut);
+}
+
+void TestTimelineWindowWrappedRing()
+{
+    ProfilerModel m(8);
+    uint64_t seq = 1;
+    for (uint64_t n = 1; n <= 9; ++n) m.Push(IdFrame(seq++, 1, n));    // wraps: head is mid-array
+    for (uint64_t n = 1; n <= 3; ++n) m.Push(IdFrame(seq++, 2, n));    // holds 5 of timeline 1, 3 of 2
+    CHECK(m.Count() == 8);
+    CHECK(m.Shares(100).frames == 3);
+    uint64_t sum[SE_PERF_COUNT];
+    CHECK(m.Sum(100, sum) == 3 && sum[SE_PERF_FRAME_CYCLES] == 6);
+    // Timeline 1 only: records 5..9 survived.
+    size_t at = 0;
+    CHECK(m.FindIdentity(1, 9, &at));
+    CHECK(m.Shares(100, at + 1).frames == 5 && !m.Shares(100, at + 1).timelineCut);
+    // The whole ring on one timeline is unchanged.
+    ProfilerModel one(8);
+    for (uint64_t n = 1; n <= 12; ++n) one.Push(IdFrame(n, 1, n));
+    CHECK(one.Shares(100).frames == 8 && !one.Shares(100).timelineCut);
+}
+
 }  // namespace
 
 int main()
 {
+    TestIdentityCoverageInMixedWindow();
+    TestWindowStopsAtTimelineChange();
+    TestTimelineWindowWithoutIdentity();
+    TestTimelineWindowWrappedRing();
+    TestFindIdentity();
+    TestFindIdentityEvictedAndWrapped();
+    TestWindowEndingAtAnchor();
+    TestWindowEndingAtAnchorWrapped();
+    TestAnchoredWindowCoverageAndLoss();
     TestShares();
     TestBuses();
     TestHistory();

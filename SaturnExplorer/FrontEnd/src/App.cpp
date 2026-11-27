@@ -69,11 +69,20 @@ namespace
 {
 
 
+// The web guides (SaturnExplorer/web/guides), deployed to GitHub Pages by saturn-explorer-guides.yml.
+const char* const kGuidesSiteUrl = "https://noahsteam.github.io/RomHackingTools/";
+
 #ifdef SE_ENABLE_LIVE
 // Saturn runs at ~60 fps; the recorder's window is expressed in frames, so the
 // UI converts its seconds knob through this. Pre-capture memory estimate uses a
 // typical compressed frame size until a real average is available.
 constexpr int    kFramesPerSecond   = 60;
+constexpr int    kMaxRecordSeconds  = 30;   // the longest scrub history the user can ask for
+// The Profiler keeps a record for every frame the user can scrub to, or the panel would have nothing to
+// show for the older ones. Its ring is twice that (kProfilerScrubCapacity): the frame recorder drops
+// frames while its compressor is behind, so its entries span more emulated frames than they number.
+static_assert(static_cast<size_t>(kMaxRecordSeconds) * kFramesPerSecond <= kProfilerScrubCapacity,
+              "the profiler ring must cover the longest scrub history");
 constexpr double kEstBytesPerFrame  = 1.3 * 1024.0 * 1024.0;
 #endif
 
@@ -550,7 +559,7 @@ void App::LoadSettings()
 #ifdef SE_ENABLE_LIVE
     int savedSeconds = mRecordSeconds;
     std::sscanf(mSettings.Get("recording", "maximumseconds", "5").c_str(), "%d", &savedSeconds);
-    mRecordSeconds = std::max(5, std::min(30, savedSeconds));
+    mRecordSeconds = std::max(5, std::min(kMaxRecordSeconds, savedSeconds));
     mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
 #endif
 }
@@ -1809,7 +1818,15 @@ void App::BuildUI(IPlatform& platform)
     const bool restorePending = mRestoreOutstanding > 0 && !mRestoreTimedOut;
     if (mbRecording && mbLiveSource && mContext && !mbPaused && !mbScrubbing && !restorePending)
     {
-        mRecorder.Capture(mContext, se_frame_number(mContext));
+        // The timeline the captured snapshot belongs to, stored with the frame: the Profiler finds
+        // the record of a scrubbed frame by (timeline, frame), and the number alone repeats after a
+        // rewind. Left 0 (unknown) unless the server states it for exactly this frame.
+        uint32_t captureTimeline = 0;
+        uint64_t captureFrame = 0;
+        const uint64_t frameNo = se_frame_number(mContext);
+        if (se_live_captured_identity(&mDataSource, &captureTimeline, &captureFrame) == 0 || captureFrame != frameNo)
+            captureTimeline = 0;
+        mRecorder.Capture(mContext, frameNo, captureTimeline);
     }
     // Drain the emulator's savestate blocks (v16) into the recorder each frame, and track
     // whether the server supports rewind so the transport can offer "Play from here".
@@ -4627,6 +4644,16 @@ void App::DrawProfiler()
         mHexEditor.GoTo(address);
         mPanels.hexEditor = true;
     };
+    // Scrubbed back: the Profiler shows that frame's record, found by identity. The timeline comes
+    // from the recorded frame (0 = unknown, which can never match).
+    if (mScrubContext && mContext == mScrubContext && mScrubShownFrame != 0)
+    {
+        host.scrubbed = true;
+        host.scrubFrame = mScrubShownFrame;
+        const int at = mRecorder.IndexOfFrame(mScrubShownFrame);
+        host.scrubTimeline = at >= 0 ? mRecorder.FrameTimeline(static_cast<size_t>(at)) : 0u;
+        host.scrubIdentityKnown = host.scrubTimeline != 0;
+    }
     if (mProfilerPanel.Draw(mProfiler, mPoolTracker, host))
     {
         mProfiler.Clear();
@@ -8002,6 +8029,7 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                 {
                     if (ImGui::MenuItem("Help")) commands.emplace_back(TopBarCommandType::OpenHelp);
                     if (ImGui::MenuItem("Hardware Guides (web)...")) commands.emplace_back(TopBarCommandType::OpenGuides);
+                    if (ImGui::MenuItem("Profiler Reference (web)...")) commands.emplace_back(TopBarCommandType::OpenProfilerReference);
                     if (ImGui::MenuItem("Check for Updates...")) commands.emplace_back(TopBarCommandType::CheckForUpdates);
                     if (ImGui::MenuItem("About")) commands.emplace_back(TopBarCommandType::OpenAbout);
                     ImGui::EndMenu();
@@ -8050,6 +8078,7 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
             {
                 if (ImGui::MenuItem("Help")) commands.emplace_back(TopBarCommandType::OpenHelp);
                 if (ImGui::MenuItem("Hardware Guides (web)...")) commands.emplace_back(TopBarCommandType::OpenGuides);
+                if (ImGui::MenuItem("Profiler Reference (web)...")) commands.emplace_back(TopBarCommandType::OpenProfilerReference);
                 ImGui::MenuItem("Check for Updates...", nullptr, false, false);
                 if (ImGui::MenuItem("About")) commands.emplace_back(TopBarCommandType::OpenAbout);
                 ImGui::EndPopup();
@@ -9140,7 +9169,11 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         break;
     case TopBarCommandType::OpenGuides:
         // Plain-English hardware guides (audio / VDP1 / VDP2), hosted on GitHub Pages.
-        platform.OpenURL("https://noahsteam.github.io/RomHackingTools/");
+        platform.OpenURL(kGuidesSiteUrl);
+        break;
+    case TopBarCommandType::OpenProfilerReference:
+        // web/guides/profiler-reference.html, published with the guides.
+        platform.OpenURL((std::string(kGuidesSiteUrl) + "profiler-reference.html").c_str());
         break;
     case TopBarCommandType::CheckForUpdates:
         mOpenUpdate = true;
@@ -9314,7 +9347,7 @@ void App::DrawRecordingSettingsModal()
     if (!ImGui::BeginPopupModal("Recording Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
 #ifdef SE_ENABLE_LIVE
     ImGui::TextUnformatted("Frame-history recording");
-    if (ImGui::SliderInt("Maximum Length", &mRecordSeconds, 5, 30, "%d seconds"))
+    if (ImGui::SliderInt("Maximum Length", &mRecordSeconds, 5, kMaxRecordSeconds, "%d seconds"))
     {
         mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
         mSettingsDirty = true;

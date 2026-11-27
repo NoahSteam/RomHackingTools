@@ -67,6 +67,7 @@ enum : UINT
     // Help
     ID_HELP,
     ID_GUIDES,
+    ID_PROFILER_REFERENCE,
     ID_UPDATES,
     ID_ABOUT,
 
@@ -219,6 +220,7 @@ bool Win32MenuBar::OnCommand(int id)
         case ID_REWIND:            c = MenuCommand::ToggleRewind; break;
         case ID_HELP:              c = MenuCommand::OpenHelp; break;
         case ID_GUIDES:            c = MenuCommand::OpenGuides; break;
+        case ID_PROFILER_REFERENCE: c = MenuCommand::OpenProfilerReference; break;
         case ID_UPDATES:           c = MenuCommand::CheckForUpdates; break;
         case ID_ABOUT:             c = MenuCommand::OpenAbout; break;
         case ID_DEMO_TOGGLE:       c = MenuCommand::DemoToggle; break;
@@ -577,6 +579,7 @@ void Win32MenuBar::Rebuild()
         HMENU help = ::CreatePopupMenu();
         AddItem(help, ID_HELP, L"Help");
         AddItem(help, ID_GUIDES, L"Hardware Guides (web)...");
+        AddItem(help, ID_PROFILER_REFERENCE, L"Profiler Reference (web)...");
         AddItem(help, ID_UPDATES, L"Check for Updates...");
         AddItem(help, ID_ABOUT, L"About");
         AddSub(bar, help, L"&Help");

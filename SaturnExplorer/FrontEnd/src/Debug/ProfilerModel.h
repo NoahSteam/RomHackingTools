@@ -182,6 +182,9 @@ struct WindowShares
     size_t   modeFunctionsOn = 0;
     // SE_PERF_VALID_IDENTITY.
     Coverage identity;
+    // The window stopped short of the span asked for because the record before it is on another
+    // timeline (a rewind or state load replaced it); 'frames' is the length actually used.
+    bool timelineCut = false;
 };
 
 // Which SH-2 the Functions tab lists.
@@ -192,6 +195,7 @@ enum class FnCpu { Both = 0, Master = 1, Slave = 2 };
 struct FunctionWindow
 {
     size_t frames = 0;                  // frames in the window
+    bool   timelineCut = false;         // see WindowShares::timelineCut
     size_t attributed = 0;              // frames of the window that ran with function attribution
     size_t used = 0;                    // frames that contributed (attribution on; for a CPU filter,
                                         // also carrying the per-CPU Other split)
@@ -230,6 +234,14 @@ std::vector<HistoryRun> SplitHistoryRuns(const std::vector<HistoryPoint>& points
 std::string PerfFrameLabel(const PerfFrame& frame);
 
 // ---- History ----
+// Records the App's profiler keeps: twice the frames of the longest scrub history (30 s at 60 fps).
+// The factor of two is because the frame recorder drops frames while its compressor is behind, so
+// its 1800 entries spanned ~2640 emulated frames on a real machine; the profiler records every frame,
+// so it needs that much more to still hold a record for the oldest frame the user can scrub to.
+// Cost: sizeof(PerfFrame) is ~688 bytes, so 3600 records are ~2.4 MiB (plus the optional per-frame
+// function lists on the heap). The model's own default stays ten seconds.
+constexpr size_t kProfilerScrubCapacity = 2 * 30 * 60;
+
 class ProfilerModel
 {
 public:
@@ -265,6 +277,10 @@ public:
     // Frames missing from the newest min(window, Count()) frames' span, by cause: the gaps carried
     // by every one of them except the oldest (its gap precedes the window).
     void LostIn(size_t window, uint64_t* serverLost, uint64_t* driverEvicted) const;
+    // The same for the window of min(window, end) frames that ENDS at At(end - 1): 'end' is a count
+    // from the oldest retained frame (anchor index + 1), clamped to Count(). The overloads below
+    // taking 'end' anchor their window the same way; the ones without it end at the newest frame.
+    void LostIn(size_t window, size_t end, uint64_t* serverLost, uint64_t* driverEvicted) const;
 
     size_t Count() const { return mCount; }
     size_t Capacity() const { return mFrames.size(); }
@@ -273,8 +289,21 @@ public:
     const PerfFrame& At(size_t i) const;
     const PerfFrame& Latest() const { return At(mCount - 1); }
 
+    // How many frames a window of min(window, end) frames ENDING at At(end - 1) may use ('end'
+    // clamped to Count()): every windowed figure below (Shares, Sum, Functions, LostIn, HotFunctions)
+    // takes its length from here, so they cannot disagree. A window holds only records of the SAME
+    // TIMELINE as the one it ends at, because after a rewind the ring still holds the replaced
+    // timeline's records directly before the new ones, and averaging them in would report a machine
+    // that never ran together. A record "has a timeline" when it is v27 with SE_PERF_VALID_IDENTITY.
+    // Walking back from the end record, the window stops at the first record that has none or has
+    // another timelineId. If the END record itself has none, nothing is clamped (no boundary is
+    // invented). Frame-number gaps on one timeline are NOT a boundary (lost records are LostIn's).
+    // *cutByTimeline is set when that rule, not the ring or the span asked for, shortened it.
+    size_t UsableFrames(size_t window, size_t end, bool* cutByTimeline = nullptr) const;
+
     // Counters summed over the newest min(window, Count()) frames; returns how many were summed.
     size_t Sum(size_t window, uint64_t out[SE_PERF_COUNT]) const;
+    size_t Sum(size_t window, size_t end, uint64_t out[SE_PERF_COUNT]) const;
 
     // Functions over the same window, hottest first, and the cycles attributed in total
     // (including what fell outside the per-frame lists). Frames without attribution are skipped;
@@ -284,12 +313,18 @@ public:
 
     // The figures of the newest min(window, Count()) frames, each over the frames that carry it.
     WindowShares Shares(size_t window) const;
+    WindowShares Shares(size_t window, size_t end) const;
     // The Functions tab's view: rows, Other and the denominators for one CPU filter (see
     // FunctionWindow). A CPU filter uses only frames that carry the per-CPU Other split, because a
     // v26 remainder cannot be assigned to a CPU; "Both" uses every attributed frame.
     FunctionWindow Functions(size_t window, FnCpu cpu) const;
+    FunctionWindow Functions(size_t window, size_t end, FnCpu cpu) const;
     // The identity of the newest frame that has one (false if none): what the memory tab keys on.
     bool LatestIdentity(uint32_t* timelineId, uint64_t* frameNo) const;
+    // The retained record whose identity is EXACTLY (timelineId, frameNo): never a position, never a
+    // frame number alone (the same number on another timeline is a different frame), and never a
+    // record without SE_PERF_VALID_IDENTITY. On success *index is its At() index.
+    bool FindIdentity(uint32_t timelineId, uint64_t frameNo, size_t* index) const;
 
 private:
     std::vector<PerfFrame> mFrames;   // ring
