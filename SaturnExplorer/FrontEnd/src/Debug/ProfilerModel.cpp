@@ -184,6 +184,32 @@ const PerfFrame& ProfilerModel::At(size_t i) const
     return mFrames[(mHead + i) % mFrames.size()];
 }
 
+// The ONE place a window's length is decided, so Shares / Sum / Functions / LostIn / HotFunctions
+// cannot disagree about which records an average covers. See the declaration for the rule.
+size_t ProfilerModel::UsableFrames(size_t window, size_t end, bool* cutByTimeline) const
+{
+    if (cutByTimeline) *cutByTimeline = false;
+    end = (std::min)(end, mCount);
+    const size_t n = (std::min)(window, end);
+    if (n < 2) return n;
+    const PerfFrame& last = At(end - 1);
+    // No identity on the record the window ends at: there is no timeline to hold the others to, and
+    // inventing a boundary from a record that does not state one would be a guess (old emulators,
+    // v26 servers and hand-built frames keep the position-only behaviour).
+    if (last.LegacyVdp1() || !last.Has(SE_PERF_VALID_IDENTITY)) return n;
+    for (size_t k = 1; k < n; ++k)
+    {
+        const PerfFrame& f = At(end - 1 - k);
+        // A record that does not say which timeline it is on cannot be shown to belong to this one.
+        if (f.LegacyVdp1() || !f.Has(SE_PERF_VALID_IDENTITY) || f.timelineId != last.timelineId)
+        {
+            if (cutByTimeline) *cutByTimeline = true;
+            return k;
+        }
+    }
+    return n;
+}
+
 namespace
 {
 void AddRange(ProfilerModel::SeqRange& r, uint64_t first, uint64_t last, uint64_t count)
@@ -264,7 +290,7 @@ void ProfilerModel::LostIn(size_t window, size_t end, uint64_t* serverLost, uint
 {
     end = (std::min)(end, mCount);
     uint64_t srv = 0, drv = 0;
-    const size_t n = std::min(window, end);
+    const size_t n = UsableFrames(window, end);
     for (size_t k = 0; k + 1 < n; ++k)   // the oldest frame's own gap lies before the window
     {
         const PerfFrame& f = At(end - 1 - k);
@@ -284,7 +310,7 @@ size_t ProfilerModel::Sum(size_t window, size_t end, uint64_t out[SE_PERF_COUNT]
 {
     end = (std::min)(end, mCount);
     for (int i = 0; i < SE_PERF_COUNT; ++i) out[i] = 0;
-    const size_t n = std::min(window, end);
+    const size_t n = UsableFrames(window, end);
     for (size_t k = 0; k < n; ++k)
     {
         const PerfFrame& f = At(end - 1 - k);
@@ -300,7 +326,7 @@ std::vector<PerfFunction> ProfilerModel::HotFunctions(size_t window, uint64_t* t
     uint64_t total = 0;
     size_t used = 0;
     const size_t end = mCount;
-    const size_t n = std::min(window, end);
+    const size_t n = UsableFrames(window, end);
     for (size_t k = 0; k < n; ++k)
     {
         const PerfFrame& f = At(end - 1 - k);
@@ -388,7 +414,7 @@ WindowShares ProfilerModel::Shares(size_t window, size_t end) const
 {
     end = (std::min)(end, mCount);
     WindowShares out;
-    const size_t n = std::min(window, end);
+    const size_t n = UsableFrames(window, end, &out.timelineCut);
     out.frames = n;
     Part all, slave, draw, work, idle, busx;
     size_t cacheOff = 0, cacheOn = 0;
@@ -494,7 +520,7 @@ FunctionWindow ProfilerModel::Functions(size_t window, size_t end, FnCpu cpu) co
 {
     end = (std::min)(end, mCount);
     FunctionWindow out;
-    const size_t n = std::min(window, end);
+    const size_t n = UsableFrames(window, end, &out.timelineCut);
     out.frames = n;
     std::unordered_map<uint32_t, uint64_t> sum;
     bool busyKnown = true;

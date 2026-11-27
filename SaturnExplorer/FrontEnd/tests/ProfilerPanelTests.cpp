@@ -819,8 +819,84 @@ void TestScrubbedStripHoverUnchanged()
     CHECK(Tip("Frame 110 (timeline 2)"));   // the newest is still at the right edge: the strip is not re-anchored
 }
 
+// ---- After a rewind the ring still holds the replaced timeline's records ----
+
+// Eight records of timeline 1 (frames 5000..5007, master 20% busy, on in functions mode) directly
+// followed by eight of timeline 2 (frames 3915..3922, master 80% busy): the shape the real emulator
+// showed after "Play from here". An average that crossed the boundary would read 50% and "16 of 16".
+void FillRewoundModel(Rig& rig)
+{
+    rig.model.Clear();
+    uint64_t seq = 1;
+    for (int tl = 1; tl <= 2; ++tl)
+    {
+        for (uint64_t i = 0; i < 8; ++i)
+        {
+            PerfFrame f = V27(seq++, SE_PERF_VALID_SSH2_INT | SE_PERF_VALID_IDENTITY | SE_PERF_VALID_MODE);
+            f.timelineId = tl;
+            f.frameNo = (tl == 1 ? 5000 : 3915) + i;
+            f.mode = SE_LIVE_PROF_FUNCTIONS;
+            f.c[SE_PERF_SH2_SLEEP] = tl == 1 ? 320000 : 80000;
+            rig.model.Push(f);
+        }
+    }
+}
+
+void TestRewoundTimelineWindows()
+{
+    float yClean = 0, yLive = 0, yScrub = 0;
+    {   // One timeline only: no cut, no note -- and where the rows are.
+        Rig rig;
+        rig.model.Clear();
+        for (uint64_t n = 0; n < 8; ++n)
+        {
+            PerfFrame f = V27(n + 1, SE_PERF_VALID_SSH2_INT | SE_PERF_VALID_IDENTITY | SE_PERF_VALID_MODE);
+            f.timelineId = 2; f.frameNo = 3915 + n; f.mode = SE_LIVE_PROF_FUNCTIONS;
+            f.c[SE_PERF_SH2_SLEEP] = 80000;
+            rig.model.Push(f);
+        }
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        CHECK(!Drawn("timeline change"));
+        yClean = Where("Frame length:").y;
+    }
+    {   // Live view of the rewound ring.
+        Rig rig;
+        FillRewoundModel(rig);
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        if (!Drawn("80% busy")) std::printf("drawn: %s\n", Dump().c_str());
+        CHECK(Drawn("80% busy"));                                   // the new timeline's figure alone
+        CHECK(!Drawn("50% busy") && !Drawn("20% busy"));
+        CHECK(Drawn("on in 8 of 8 frames") && !Drawn("16 of 16"));   // not the replaced timeline's frames
+        CHECK(Drawn("Window cut at a timeline change: 8 of 16 frames"));
+        yLive = Where("Frame length:").y;
+    }
+    {   // Scrubbed to frame 3920 (index 13 of 16): the six new-timeline frames ending there.
+        Rig rig;
+        FillRewoundModel(rig);
+        Scrub(rig, 2, 3920);
+        ImGuiHarness harness([&] { rig.Draw(); });
+        harness.Settle();
+        CHECK(Drawn("80% busy") && !Drawn("50% busy") && !Drawn("20% busy"));
+        CHECK(Drawn("on in 6 of 6 frames"));
+        CHECK(Drawn("Showing frame 3920 (scrubbed), newest is 3922"));
+        CHECK(Drawn("Window cut at a timeline change: 6 of 14 frames"));
+        yScrub = Where("Frame length:").y;
+        // Scrubbed back onto the replaced timeline: its own records only, and its own figure.
+        Scrub(rig, 1, 5004);
+        harness.Settle();
+        CHECK(Drawn("20% busy") && !Drawn("50% busy") && !Drawn("80% busy"));
+        CHECK(Drawn("on in 5 of 5 frames"));
+        CHECK(!Drawn("timeline change"));                            // the five records before it are all timeline 1
+    }
+    // The status line is reserved either way: nothing moves when the cut note appears.
+    CHECK(yClean > 0 && yClean == yLive && yLive == yScrub);
+}
+
 int main()
 {
+    TestRewoundTimelineWindows();
     TestScrubbedAnchorsFigures();
     TestScrubbedNewestHasNoNote();
     TestScrubbedMissingRecord();

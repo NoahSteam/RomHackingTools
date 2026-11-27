@@ -63,6 +63,7 @@ public:
 private:
     // Resolve which record the Frame / Buses / Functions tabs are anchored at for this frame.
     void ResolveView(const ProfilerModel& model, const Host& host);
+    void NoteWindowCut(const ProfilerModel& model);
     void DrawFrameTab(const ProfilerModel& model);
     void DrawBusTab(const ProfilerModel& model);
     void DrawMemoryTab(const MemoryPoolTracker& pools, const Host& host);

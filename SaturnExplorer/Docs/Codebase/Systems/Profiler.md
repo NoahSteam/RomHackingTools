@@ -548,6 +548,18 @@ History strips' marker at the record with exactly that identity.
   + 1): the window is the `min(window, end)` frames ending at the anchor, with the usual validity and
   coverage ("k of n frames"). A window near the oldest retained record is simply shorter. Without
   `end` they end at the newest frame, as before.
+- **Windows stop at a timeline change** (live view too). After a rewind the ring still holds the
+  replaced timeline's records right before the new ones, and an average over both describes a machine
+  that never ran. `ProfilerModel::UsableFrames(window, end, &cut)` is the one place a window's length
+  is decided; `Shares`, `Sum`, `Functions`, `LostIn` (both overloads) and `HotFunctions` all take it, so
+  they cannot disagree. A record "has a timeline" when it is v27 with `SE_PERF_VALID_IDENTITY`. Walking
+  back from the record the window ends at, it stops at the first record that has none or has another
+  `timelineId`. If the END record has no identity nothing is clamped (no boundary is invented). Frame
+  number gaps on one timeline are not a boundary (lost records are reported by `LostIn`). The
+  denominators ("k of n frames", "on in k of n") are over the clamped count; `WindowShares` and
+  `FunctionWindow` carry `timelineCut`, and the fixed status line says "Window cut at a timeline
+  change: k of n frames" (after the scrub note, separated by "; ") when the rule, not the ring, made
+  the window shorter than asked.
 - **No record** (profiler off then, evicted, lost on the wire, other timeline, older emulator): a
   fixed status line and every per-frame tab body say "No profiler data for frame N (...)" and show no
   figures; it never falls back to the newest. When the anchor is not the newest, the same fixed line
@@ -556,16 +568,20 @@ History strips' marker at the record with exactly that identity.
 - **History strips.** Each strip still spans at most 600 frames (`kStripFrames`, independent of the
   model's capacity, so the live view is unchanged); the anchored frame is drawn as a red mark, and
   when it is older than the span the span is shifted to keep it in view. Hovering a bar is unchanged
-  (the strips do not take clicks).
+  (the strips do not take clicks). A timeline change between two records breaks the line (like
+  `HasGap()`) and draws a faint vertical divider (`ColGrid`) just before the new timeline's first
+  frame; the hover tooltip already names the frame and timeline.
 - **Memory tab: not anchored, on purpose.** It samples the bytes of the displayed capture itself
   (`MemoryPoolTracker`, which already follows a scrubbed frame and re-primes on every scrub step and
   on going backward), so there is no per-frame perf record to anchor, and "changed since sample"
   between scrub steps has its own timeline rules above.
 - **Capacity.** The scrub history is `mRecordSeconds` (5..30, `kMaxRecordSeconds`) x 60 = up to 1,800
-  frames (also bounded by the recorder's byte cap). The App's `ProfilerModel` is therefore created
-  with `kProfilerScrubCapacity` = 1,800 records (a `static_assert` ties the two); the model's own
-  default stays 600. `sizeof(PerfFrame)` is 688 bytes, so the ring is about
-  1.2 MiB (688 x 1,800) before the optional per-frame function list (up to 64 x 8 bytes on the heap).
+  frames (also bounded by the recorder's byte cap). The frame recorder drops frames while its
+  compressor is behind (on a real machine its 1,800 entries spanned ~2,640 emulated frames), while the
+  profiler records every frame, so the App's `ProfilerModel` is created with `kProfilerScrubCapacity` =
+  3,600 records, twice the longest scrub history (a `static_assert` ties the two); the model's own
+  default stays 600. `sizeof(PerfFrame)` is about 688 bytes, so the ring is about 2.4 MiB
+  (688 x 3,600) before the optional per-frame function list (up to 64 x 8 bytes on the heap).
   The averaging-window choices still top out at 10 s.
 
 ### Functions: rows, Other and denominators (F7)
