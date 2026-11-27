@@ -1482,19 +1482,21 @@ void StructPanel::DrawToolbar(IPlatform& platform)
     if (!mBe->Connected()) ImGui::TextDisabled("(disconnected)");
     else ImGui::TextDisabled("%d views", (int)mLib.Views().size());
 
-    if (mLoadFailed)
-        ImGui::TextColored(ui::Color(ImVec4(0.9f, 0.45f, 0.4f, 1), ImVec4(0.65f, 0.11f, 0.14f, 1)), "%s", mLoadError.c_str());
-    if (mEdit.active)
+    // One status line, always reserved (see FixedStatusLine): the load-failure banner, the editing hint and
+    // the last notice share it, so none of them appearing, wrapping or expiring moves the rows below. The
+    // parts are joined, and the error colour wins when any part is an error.
+    std::string status;
+    const auto addPart = [&status](const std::string& part)
     {
-        // On the toolbar line so entering edit mode never shifts the rows (a click target) down.
-        ImGui::SameLine();
-        ImGui::TextDisabled("Editing %s: %s", Hex8(mEdit.addr).c_str(), WriteDestText(mBe->WriteDestination(mEdit.addr)));
-    }
-    if (!mNotice.empty())
-    {
-        if (mNoticeError) ImGui::TextColored(ui::Color(ImVec4(0.9f, 0.45f, 0.4f, 1), ImVec4(0.65f, 0.11f, 0.14f, 1)), "%s", mNotice.c_str());
-        else ImGui::TextWrapped("%s", mNotice.c_str());
-    }
+        if (part.empty()) return;
+        if (!status.empty()) status += "  |  ";
+        status += part;
+    };
+    if (mLoadFailed) addPart(mLoadError);
+    if (mEdit.active) addPart("Editing " + Hex8(mEdit.addr) + ": " + WriteDestText(mBe->WriteDestination(mEdit.addr)));
+    addPart(mNotice);
+    const bool isError = mLoadFailed || (mNoticeError && !mNotice.empty());
+    FixedStatusLine(status, isError ? ImGui::GetColorU32(ui::Color(ImVec4(0.9f, 0.45f, 0.4f, 1), ImVec4(0.65f, 0.11f, 0.14f, 1))) : 0);
 }
 
 void StructPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver, IPlatform& platform,

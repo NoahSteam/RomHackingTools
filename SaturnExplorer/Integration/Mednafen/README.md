@@ -841,10 +841,10 @@ start/end, device commands and frame-level VDP code. Two run often, so their mas
 `SCU_SetHBVB` (once per H phase) and `CheckDoMasterInt` (per interrupt check). Nothing needs the debugger loop, so
 the log works in a build without `--enable-debugger`, at full speed.
 
-**Per-frame cap.** The glue lets through at most `SE_HWEV_FRAME_CAP` (64) records per source per frame, counts the
-rest, and at the end of the frame (in `SeMednafenEndFrameHook`, after the profiler's frame and before
-`SeExportApplyInstalls`) queues one `SE_HWEV_K_SUPPRESSED` record per overflowing source: arg0 = how many were
-dropped, arg1 = the cap. A state load clears the counters.
+**Per-frame cap.** The glue lets through at most `SE_HWEV_FRAME_CAP` (64) records per source and per CPU per frame
+(master, slave and no-CPU events each have their own budget), counts the rest, and at the end of the frame (in `SeMednafenEndFrameHook`, after the profiler's frame and before
+`SeExportApplyInstalls`) queues one `SE_HWEV_K_SUPPRESSED` record per overflowing (source, CPU): the record's `cpu` says whose events were
+dropped (`SE_HWEV_CPU_NONE` for a device source), arg0 = how many were dropped, arg1 = the cap. A state load clears the counters.
 
 | Source (bit) | File | Site | Event |
 |---|---|---|---|

@@ -14,6 +14,7 @@
 
 #include "AddressNameLine.h"
 #include "Debug/WriteDestText.h"
+#include "PanelWidgets.h"
 #include "FileRead.h"
 #include "FileWrite.h"
 #include "StoreMerge.h"
@@ -307,6 +308,27 @@ void AssemblyPanel::UpdatePreview()
     }
 }
 
+// Which bytes a halted SH-2 has already fetched, from the PC the panel shows for it. That PC is the decode
+// stage (PC_ID; apply.py's SsDbgSh2Regs: GSREG_RPC, the next fetch address, is 4 bytes ahead of it, so the
+// stage behind decode, IF, holds PC+2). Both are latched opcodes: Pipe_ID at PC and Pipe_IF at PC+2, so a write
+// to [PC, PC+4) is never seen. The instruction cache fetches a longword at a time (sh7095.inc FetchIF keeps the
+// other half in IBuffer): when PC+2 is longword aligned (PC & 2) its fetch read PC+2..PC+5, so the half at
+// PC+4 is already buffered as well (found by reading the core: a 2-byte write at PC+2 ran its old opcode
+// once on a real Mednafen; PC+4 follows from FetchIF but was not run). Returned as the end, exclusive.
+static uint32_t PrefetchedEnd(uint32_t pc)
+{
+    return pc + ((pc & 2u) ? 6u : 4u);
+}
+
+// Does a write of 'size' bytes at 'addr' touch what a halted CPU at 'pc' has already fetched? The 0x0FFFFFFF
+// mask folds the cache-through mirror (0x2....... vs 0x0.......) of the same RAM.
+static bool WritesAlreadyFetched(uint32_t pc, uint32_t addr, uint32_t size)
+{
+    const uint64_t lo = pc & 0x0FFFFFFFu, hi = lo + (PrefetchedEnd(pc) - pc);
+    const uint64_t wlo = addr & 0x0FFFFFFFu, whi = wlo + size;
+    return wlo < hi && whi > lo;
+}
+
 // Enter on the edit box. Everything that can be checked is checked before the one WriteMemory call:
 // the source is still the one the edit was opened on, the text assembles against memory as it is now,
 // the backend accepts the address. A bad text keeps the editor open; a refusal ends it, leaving the bytes.
@@ -404,6 +426,12 @@ void AssemblyPanel::CommitEdit(IMemoryBackend& backend, Request& req)
         const size_t n = backend.WriteMemory(addr, bytes, size);
         if (n == size)
         {
+            // A halted CPU has already pulled the next instructions into its pipeline; patching memory
+            // does not reach them (the emulator's own cache invalidation cannot), so the old opcode can
+            // run once. Only an instruction edit matters: a literal is read when its load executes.
+            if (!literal && n == size && mBpStopActive && mCpu == mBpStopCpu && WritesAlreadyFetched(mBpStopPc, addr, size))
+                warnings.push_back("the CPU is halted and had already fetched this instruction (the pipeline holds PC.." +
+                                   Hex8(PrefetchedEnd(mBpStopPc) - 1) + "): it may execute the OLD instruction once before the new one runs");
             result = "Wrote " + std::to_string(size) + " bytes at " + Hex8(addr) + " (" + what + "): " +
                      WriteDestText(backend.WriteDestination(addr));
             if (literal && sharers)
@@ -625,20 +653,17 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         }
     }
 
-    // The last edit's outcome (a refusal, an assembler error, "Wrote ..."), until it times out.
+    // The last edit's outcome (a refusal, an assembler error, "Wrote ..."), until it times out. The line is
+    // reserved whether or not there is a notice, so the rows below it never move when one comes and goes.
     if (!mNotice.empty())
     {
         mNoticeAge -= ImGui::GetIO().DeltaTime;
         if (mNoticeAge <= 0.0f) mNotice.clear();
-        else
-        {
-            ImGui::PushStyleColor(ImGuiCol_Text, mNoticeLevel == 2 ? ui::Color(IM_COL32(235, 100, 100, 255), IM_COL32(176, 32, 32, 255))
-                                               : mNoticeLevel == 1 ? ui::Color(IM_COL32(230, 180, 80, 255), IM_COL32(140, 90, 0, 255))
-                                                                   : ui::Color(IM_COL32(150, 210, 150, 255), IM_COL32(30, 110, 50, 255)));
-            ImGui::TextWrapped("%s", mNotice.c_str());
-            ImGui::PopStyleColor();
-        }
     }
+    FixedStatusLine(mNotice,
+                    mNoticeLevel == 2 ? ui::Color(IM_COL32(235, 100, 100, 255), IM_COL32(176, 32, 32, 255))
+                  : mNoticeLevel == 1 ? ui::Color(IM_COL32(230, 180, 80, 255), IM_COL32(140, 90, 0, 255))
+                                      : ui::Color(IM_COL32(150, 210, 150, 255), IM_COL32(30, 110, 50, 255)));
 
     // --- Frame the view: follow PC unless browsing ---
     // While an edit box is open the view stays put: a PC that moves would re-scroll the list (and, when

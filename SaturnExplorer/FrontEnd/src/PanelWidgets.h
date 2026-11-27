@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
+#include <string>
 
 #include "imgui.h"
 #include "Theme.h"
@@ -215,6 +216,50 @@ inline float ComboWidth(const char* const items[], int count)
         if (w > widest) widest = w;
     }
     return widest + ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetFrameHeight();
+}
+
+// A status line whose height is ALWAYS reserved: exactly one text line, whether or not there is text.
+//
+// A notice that appears, wraps onto a second line and then expires used to push every row below it
+// down and pull them back up, so a click, F2 or a right-click aimed at a row landed one row off. The
+// space here never changes: the text is cut to the width with an ellipsis (never wrapped) and the
+// full text is in a tooltip while the pointer is over the line. 'color' 0 = the normal text colour.
+inline void FixedStatusLine(const std::string& text, ImU32 color = 0)
+{
+    const float h = ImGui::GetTextLineHeight();
+    const float w = (std::max)(1.0f, ImGui::GetContentRegionAvail().x);
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImGui::Dummy(ImVec2(w, h));
+    if (text.empty()) return;
+
+    std::string shown = text;
+    for (char& c : shown) if (c == '\n' || c == '\r' || c == '\t') c = ' ';
+    if (ImGui::CalcTextSize(shown.c_str()).x > w)
+    {
+        // Longest prefix that fits with "..." after it, found by bisection on UTF-8 boundaries.
+        size_t lo = 0, hi = shown.size();
+        while (lo < hi)
+        {
+            size_t mid = lo + (hi - lo + 1) / 2;
+            while (mid > lo && (static_cast<unsigned char>(shown[mid]) & 0xC0) == 0x80) --mid;   // not inside a character
+            if (mid <= lo) { hi = lo; break; }
+            const std::string cand = shown.substr(0, mid) + "...";
+            if (ImGui::CalcTextSize(cand.c_str()).x <= w) lo = mid; else hi = mid - 1;
+        }
+        shown = shown.substr(0, lo) + "...";
+    }
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->PushClipRect(pos, ImVec2(pos.x + w, pos.y + h), true);
+    dl->AddText(pos, color ? color : ImGui::GetColorU32(ImGuiCol_Text), shown.c_str());
+    dl->PopClipRect();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 40.0f);
+        ImGui::TextUnformatted(text.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
 }
 
 // Horizontally centre 'width' worth of content in the current table cell, for a column

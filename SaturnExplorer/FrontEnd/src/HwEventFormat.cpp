@@ -154,6 +154,23 @@ std::string HwSh2VectorName(unsigned v)
     return std::string();
 }
 
+std::string HwSh2InterruptVectorName(unsigned v, unsigned cpu)
+{
+    // The SCU's vector table is the MASTER's: scu.inc CheckDoMasterInt hands the master SCU vectors 0x40..
+    // The slave takes no SCU interrupts. Its only interrupt input is the IRL auto-vector: scu.inc
+    // SCU_SetHBVB drives CPU[1].SetIRL(((VB | HB) << 1) | (VB << 2)) and sh7095.inc GetPendingInt takes
+    // vector (IRL >> 1) + VECNUM_INT_BASE (64). So VBlank (IRL 6) is vector 0x43 and HBlank alone (IRL 2)
+    // is vector 0x41, neither of which is the "SCU Timer 0" / "VBlank-OUT" the master's table gives them.
+    if (cpu == 1)
+    {
+        if (v == 0x43) return "VBlank-IN (IRL 6 auto-vector)";
+        if (v == 0x41) return "HBlank-IN (IRL 2 auto-vector)";
+        return std::string();
+    }
+    if (cpu == 0 && v >= 0x40 && v <= 0x5F) return HwSh2VectorName(v);
+    return std::string();
+}
+
 const char* HwCdCommandName(unsigned c)
 {
     for (const Named& n : kCdCommands) if (n.id == c) return n.name;
@@ -213,7 +230,7 @@ static std::string Message(const SeHwEvent& e)
                 {
                     // Only the SCU's vectors have a fixed meaning for an interrupt: an on-chip source's vector is
                     // whatever the game programmed, so a number that happens to equal a fixed exception's is not it.
-                    const std::string n = (a[0] >= 0x40 && a[0] <= 0x5F) ? HwSh2VectorName(a[0]) : std::string();
+                    const std::string n = HwSh2InterruptVectorName(a[0], e.cpu);
                     what = "interrupt " + (n.empty() ? std::string("on-chip/other") : n) +
                            Fmt(" (vec 0x%02X, level %u)", a[0], a[2]);
                     break;
@@ -326,7 +343,10 @@ static std::string Message(const SeHwEvent& e)
         case SE_HWEV_K_SUPPRESSED:
         {
             const char* s = HwSourceName(e.source);
-            return Fmt("... +%u more %s events this frame (cap %u)", a[0], s ? s : "hardware", a[1]);
+            // The cap is per CPU: say whose events were dropped when the record names a CPU.
+            const char* cpu = CpuName(e.cpu);
+            return Fmt("... +%u more %s%s%s events this frame (cap %u)", a[0], cpu, *cpu ? " " : "",
+                       s ? s : "hardware", a[1]);
         }
         default:
             return Fmt("kind 0x%02X %08X %08X %08X %08X", e.kind, a[0], a[1], a[2], a[3]);
@@ -381,7 +401,10 @@ std::vector<std::pair<std::string, std::string>> HwEventDetail(const SeHwEvent& 
             // without being that event.
             std::string vn;
             if (a[1] == SE_HWEV_EXC_TRAP) vn = Fmt("TRAPA #%u", a[0]);
-            else if (a[1] == SE_HWEV_EXC_INT) vn = (a[0] >= 0x40 && a[0] <= 0x5F) ? HwSh2VectorName(a[0]) : std::string("on-chip/other interrupt");
+            else if (a[1] == SE_HWEV_EXC_INT) {
+                vn = HwSh2InterruptVectorName(a[0], e.cpu);
+                if (vn.empty()) vn = "on-chip/other interrupt";
+            }
             else vn = HwSh2VectorName(a[0]);
             r.emplace_back("Vector", vn.empty() ? Fmt("0x%02X", a[0]) : Fmt("0x%02X %s", a[0], vn.c_str()));
             r.emplace_back("Class", Fmt("%u", a[1]));
@@ -479,7 +502,8 @@ std::vector<std::pair<std::string, std::string>> HwEventDetail(const SeHwEvent& 
         case SE_HWEV_K_VDP2_DISPLAY: r.emplace_back("TVMD", Fmt("%04X", a[1] & 0xFFFF)); break;
         case SE_HWEV_K_SUPPRESSED:
             r.emplace_back("Suppressed", Fmt("%u", a[0]));
-            r.emplace_back("Per-frame cap", Fmt("%u", a[1]));
+            r.emplace_back("Per-frame cap", Fmt("%u (per source and CPU)", a[1]));
+            if (e.cpu == 0 || e.cpu == 1) r.emplace_back("CPU", e.cpu ? "Slave SH-2" : "Master SH-2");
             break;
         default:
             for (int i = 0; i < 4; ++i) r.emplace_back(Fmt("arg%d", i), Fmt("%08X", a[i]));

@@ -135,14 +135,18 @@ waiting for an applied mask that cannot come. The profiler verb has no such repo
 ## Per-frame cap and the SUPPRESSED record
 
 `SeMednafenHwEvent` re-tests the mask (so a call that raced a boundary is inert), maps the kind to its source
-(`SeMdfnHwEvSource`), and lets through at most `SE_HWEV_FRAME_CAP` (64) records per source per frame; the DMAC
-hook applies the same counter itself. The excess is counted. `SeMdfnHwEvEndFrame`, called from
+(`SeMdfnHwEvSource`), and lets through at most `SE_HWEV_FRAME_CAP` (64) records per source **and per CPU** per frame (`sHwEvCount[source][cpu slot]`:
+master, slave, no CPU); the DMAC hook applies the same counter itself. The excess is counted. The cap is per
+CPU because V1 phase 9 showed a shared one failing: the slave SH-2 takes about 13,500 interrupts per frame
+(vector 0x43, level 6, while its IRL 6 is held through VBlank, `scu.inc` around line 394), filled the CPU_EXC budget
+and the master's one vector-0x40 exception was dropped in 212 of 214 frames. `SeMdfnHwEvEndFrame`, called from
 `SeMednafenEndFrameHook` after the profiler's frame and before `SeExportApplyInstalls`, queues one
-`SE_HWEV_K_SUPPRESSED` record per source whose count exceeded the cap and whose bit is still set (arg0 =
-suppressed count, arg1 = the cap, `source` = the source), then zeroes the counters. The counters are also
+`SE_HWEV_K_SUPPRESSED` record per (source, CPU) whose count exceeded the cap and whose bit is still set (arg0 =
+suppressed count, arg1 = the cap, `source` = the source, `cpu` = whose events were dropped, `SE_HWEV_CPU_NONE` for
+a device source; the 32-byte record and protocol v27 are unchanged), then zeroes the counters. The counters are also
 zeroed by `SeMednafenSetHwEvents` (any mask change) and by `SeMdfnHwEvForget` (a state load, through
-`SeMednafenStateLoaded`). The panel renders the record as "... +N more <source> events this frame (cap 64)" in
-the chip of its source. The cap is a compile-time constant; the 8192-record ring and the 512-record reply cap
+`SeMednafenStateLoaded`). The panel renders the record as "... +N more [MSH2 |SSH2 ]<source> events this frame (cap 64)" in
+the chip of its source (the CPU name only when the record has one). The cap is a compile-time constant; the 8192-record ring and the 512-record reply cap
 are separate limits.
 
 ## Loss accounting
@@ -213,7 +217,11 @@ declaration. Device events carry no CPU and no PC.
   clickable source (the SH-2 exception PC, exact; the on-chip DMAC start PC, marked approximate). The decoded
   arguments are not built per row: the raw record stays on the entry and `HwEventDetail` decodes it when the row
   is selected. An unknown kind renders as `kind 0x.. a0 a1 a2 a3`. Name tables (vectors, CD commands, SMPC
-  commands, SCU sources and buses) exist only in `HwEventFormat.cpp`.
+  commands, SCU sources and buses) exist only in `HwEventFormat.cpp`. An INT-class vector is named per CPU
+  (`HwSh2InterruptVectorName`): the SCU table (0x40..0x5F) applies to the master only; on the slave vector 0x43
+  is "VBlank-IN (IRL 6 auto-vector)" and 0x41 "HBlank-IN (IRL 2 auto-vector)" (`scu.inc` `SCU_SetHBVB`:
+  `CPU[1].SetIRL(((VB | HB) << 1) | (VB << 2))`; `sh7095.inc` `GetPendingInt`: vector `(IRL >> 1) + 64`), any
+  other slave vector is "on-chip/other".
 - **Row budget.** Hardware rows live in their own deque (`kHwCap` = 40000) apart from everything else
   (`kOtherCap` = 10000), so a flood cannot push tracepoint or Info rows out; the oldest hardware row is always
   the one to go, whatever its category or visibility. `PushEvent` appends to the filtered index in O(1) while

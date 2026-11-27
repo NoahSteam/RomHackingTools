@@ -505,6 +505,100 @@ void TestContextFromRowAndWarningsAfterWrite()
     CHECK(!f.panel.NoticeIsError());
 }
 
+// An instruction written where a halted CPU has already fetched it: the old opcode can run once, and the
+// notice says so. The window (see CommitEdit): [PC, PC+4), and PC+4 too when PC+2 is longword aligned.
+// 'row' is the instruction to rewrite (kBase + 2 * row); returns the notice after the write.
+std::string NoticeAfterEditWhileHalted(bool halted, int stopCpu, uint32_t stopPc, int row, bool* wrote = nullptr)
+{
+    Fixture f;
+    Prepare(f);
+    if (halted) f.panel.SetBreakpointStop(true, stopCpu, stopPc);
+    f.h.Settle();
+    ScrollToTop(f.h);
+    f.backend.Put(kBase + 2 * row, kAddR1);
+    OpenRow(f, row);
+    Type(f, "nop");
+    PressKey(f, ImGuiKey_Enter);
+    if (wrote) *wrote = f.backend.writes.size() == 1 && f.req.assembled;
+    return f.panel.Notice();
+}
+
+void TestWriteIntoPrefetchedWindowWarns()
+{
+    const char* kWarn = "may execute the OLD instruction once";
+    // PC 06000010 (longword aligned): PC and PC+2 are in the pipeline, PC+4 is not fetched yet.
+    for (int row : { 8, 9 })
+    {
+        bool wrote = false;
+        const std::string n = NoticeAfterEditWhileHalted(true, 0, kBase + 0x10, row, &wrote);
+        CHECK(wrote);
+        CHECK(n.find("Wrote 2 bytes") != std::string::npos);
+        CHECK(n.find(kWarn) != std::string::npos);
+        CHECK(n.find("06000013") != std::string::npos);   // the end of the window is named
+    }
+    for (int row : { 7, 10, 11 })
+        CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x10, row).find(kWarn) == std::string::npos);
+    // PC 06000012 (PC & 2): the longword read for PC+2 also buffered PC+4.
+    for (int row : { 9, 10, 11 })
+        CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, row).find(kWarn) != std::string::npos);
+    for (int row : { 8, 12 })
+        CHECK(NoticeAfterEditWhileHalted(true, 0, kBase + 0x12, row).find(kWarn) == std::string::npos);
+    // The cache-through mirror of the same RAM is the same bytes.
+    CHECK(NoticeAfterEditWhileHalted(true, 0, 0x26000010u, 9).find(kWarn) != std::string::npos);
+    // Running (not halted), or halted on the CPU that is not shown: no pipeline to be stale.
+    CHECK(NoticeAfterEditWhileHalted(false, 0, 0, 9).find(kWarn) == std::string::npos);
+    CHECK(NoticeAfterEditWhileHalted(true, 1, kBase + 0x10, 9).find(kWarn) == std::string::npos);
+}
+
+// The warning is part of the Log line too (req.asmNote), and the notice is a warning, not an error.
+void TestPrefetchWarningReachesTheLog()
+{
+    Fixture f;
+    Prepare(f);
+    f.panel.SetBreakpointStop(true, 0, kBase + 0x10);
+    f.h.Settle();
+    ScrollToTop(f.h);
+    f.backend.Put(kBase + 18, kAddR1);
+    OpenRow(f, 9);
+    Type(f, "nop");
+    PressKey(f, ImGuiKey_Enter);
+    CHECK(!f.panel.NoticeIsError());
+    CHECK(f.req.asmNote.find("may execute the OLD instruction once") != std::string::npos);
+}
+
+// The notice under the header comes, wraps and expires; the rows must stay where they were, or a click or F2
+// aimed at one lands on the next. Rows are compared by screen Y while no notice is shown, while a short one is,
+// while a very long one is, and after it expires.
+void TestNoticeNeverMovesRows()
+{
+    Fixture f;
+    Prepare(f);
+    const float y0 = CommentCellOfVisibleRow(3).y;
+    CHECK(f.panel.Notice().empty());
+
+    f.backend.canWrite = false;
+    f.backend.refusal = "short refusal";
+    OpenRow(f, 1);
+    CHECK(f.panel.Notice() == "short refusal");
+    f.h.Settle();
+    CHECK(CommentCellOfVisibleRow(3).y == y0);
+
+    f.backend.refusal.clear();
+    for (int i = 0; i < 80; ++i) f.backend.refusal += "the emulator refused the poke ";
+    OpenRow(f, 1);
+    CHECK(f.panel.Notice().size() > 1500);
+    f.h.Settle();
+    CHECK(CommentCellOfVisibleRow(3).y == y0);
+
+    // Expire it: the notice ages by the frame's delta time.
+    ImGui::GetIO().DeltaTime = 30.0f;
+    f.h.Frame(Away(), false);
+    ImGui::GetIO().DeltaTime = 1.0f / 60.0f;
+    f.h.Settle();
+    CHECK(f.panel.Notice().empty());
+    CHECK(CommentCellOfVisibleRow(3).y == y0);
+}
+
 // Replacing a delayed branch with a non-delayed instruction is the panel's note to make.
 void TestReplacingDelayedBranchWarns()
 {
@@ -773,6 +867,9 @@ int main()
     TestNopWritesOneCall();
     TestContextFromRowAndWarningsAfterWrite();
     TestReplacingDelayedBranchWarns();
+    TestWriteIntoPrefetchedWindowWarns();
+    TestPrefetchWarningReachesTheLog();
+    TestNoticeNeverMovesRows();
     TestInvalidTextWritesNothing();
     TestRefusedWritesShowTheBackendsReason();
     TestEscapeAndFocusLossCancel();

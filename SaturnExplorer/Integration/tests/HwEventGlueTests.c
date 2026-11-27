@@ -152,6 +152,8 @@ static void TestCap(void)
     }
     CHECK_EQ(exc, 5);
     CHECK_EQ(vdp1, 9);
+    for (i = n; i < gN; ++i)   /* the row says whose events were dropped: the slave's, and no CPU for a device */
+        CHECK_EQ(gRec[i].cpu, gRec[i].source == 0 ? 1 : SE_HWEV_CPU_NONE);
     /* the cap is per source: a flooded source does not stop another */
     Reset(SE_HWEV_EN_VDP1 | SE_HWEV_EN_CPU_EXC);
     for (i = 0; i < SE_HWEV_FRAME_CAP * 3u; ++i) SeMednafenHwEvent(SE_HWEV_K_VDP1_DRAW_START, -1, 0, 0, 0, 0, 0);
@@ -275,6 +277,45 @@ static void TestDmac(void)
     CHECK_EQ(gN, 1);
 }
 
+/* V1 phase 9: the slave takes thousands of interrupts a frame; the master's one exception must not be
+ * dropped because the slave filled a cap the two CPUs shared. */
+static void TestCapPerCpu(void)
+{
+    unsigned int i, n, nm = 0, ns = 0;
+    Reset(SE_HWEV_EN_CPU_EXC | SE_HWEV_EN_SH2_DMAC);
+    for (i = 0; i < 13500u; ++i) SeMednafenHwEvent(SE_HWEV_K_SH2_EXCEPTION, 1, 0x200, 0x43, 0, 6, 0);
+    SeMednafenHwEvent(SE_HWEV_K_SH2_EXCEPTION, 0, 0x100, 0x40, 0, 0, 0);
+    CHECK_EQ(gN, SE_HWEV_FRAME_CAP + 1u);
+    CHECK_EQ(gRec[SE_HWEV_FRAME_CAP].cpu, 0);          /* the master's exception got through */
+    CHECK_EQ(gRec[SE_HWEV_FRAME_CAP].arg[0], 0x40);
+    /* the master has a full budget of its own, too */
+    for (i = 0; i < SE_HWEV_FRAME_CAP + 3u; ++i) SeMednafenHwEvent(SE_HWEV_K_SH2_EXCEPTION, 0, 0x100, 0x40, 0, 0, 0);
+    n = gN;
+    SeMdfnHwEvEndFrame();
+    CHECK_EQ(gN, n + 2u);
+    for (i = n; i < gN; ++i)
+    {
+        CHECK_EQ(gRec[i].kind, SE_HWEV_K_SUPPRESSED);
+        CHECK_EQ(gRec[i].source, 0);
+        if (gRec[i].cpu == 0) nm = gRec[i].arg[0];
+        if (gRec[i].cpu == 1) ns = gRec[i].arg[0];
+    }
+    CHECK_EQ(nm, 4);                                    /* 1 + 67 produced, 64 let through */
+    CHECK_EQ(ns, 13500u - SE_HWEV_FRAME_CAP);
+    /* a no-CPU source has its own budget as well, and the DMAC is per CPU like the exceptions */
+    Reset(SE_HWEV_EN_SH2_DMAC);
+    SeMednafenDmacRecalc(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    SeMednafenDmacRecalc(1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    for (i = 0; i < SE_HWEV_FRAME_CAP; ++i)
+    {
+        SeMednafenDmacRecalc(1, 1, 1, 1, 1, 1, 0, 0, 0, 0);
+        SeMednafenDmacRecalc(1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+    gN = 0;
+    SeMednafenDmacRecalc(0, 1, 1, 1, 1, 1, 0, 0, 0, 0);
+    CHECK_EQ(gN, 1);                                    /* the master's DMAC start is not starved by the slave's */
+}
+
 static void TestResets(void)
 {
     unsigned int i;
@@ -332,6 +373,7 @@ int main(void)
     TestMaskZero();
     TestMapping();
     TestCap();
+    TestCapPerCpu();
     TestDmac();
     TestResets();
     if (gFailures)

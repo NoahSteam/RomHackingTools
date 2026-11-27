@@ -51,7 +51,8 @@ extern "C" {
  *   15 VDP1_FB_ERASE     none              FB                EWDR            EWLR          EWRR
  *   16 VDP2_VBLANK       none              1 IN / 0 OUT
  *   17 VDP2_DISPLAY      none              1 on / 0 off      TVMD value
- *   255 SUPPRESSED       none              count suppressed  per-frame cap
+ *   255 SUPPRESSED       cpu whose events  count suppressed  per-frame cap
+ *                        were dropped (or none)
  */
 #define SE_HWEV_K_SH2_EXCEPTION   1u
 #define SE_HWEV_K_SCU_INT_ACCEPT  2u
@@ -91,8 +92,10 @@ extern "C" {
 /* Emulator-side ring: 8192 records x 32 bytes = 256 KiB, overwrite-oldest. */
 #define SE_HWEV_RING 8192u
 
-/* Default per-source, per-frame record cap applied by the glue before the ring (compile-time in v1).
- * Excess is counted and surfaced as one SE_HWEV_K_SUPPRESSED record per source at frame end. */
+/* Default per-source, per-CPU, per-frame record cap applied by the glue before the ring (compile-time in v1).
+ * Master, slave and "no CPU" each have their own budget (a busy slave must not starve the master). Excess is
+ * counted and surfaced as one SE_HWEV_K_SUPPRESSED record per (source, cpu) at frame end; its 'cpu' field says
+ * whose events were dropped. */
 #define SE_HWEV_FRAME_CAP 64u
 
 /* Wire order, no padding. The wire is little-endian and the exporter serializes field by field,

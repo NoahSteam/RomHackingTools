@@ -56,6 +56,7 @@
                              // Safe in every build (no threads/sockets); the pad-mask
                              // decode below and ControllerPanel both need it unconditionally.
 #include "Sh2Address.h"       // CanonicalAddress: a breakpoint matches a halt at any mirror
+#include "LayoutAdoption.h"
 #ifdef SE_ENABLE_LIVE
 #include "LiveDriver.h"      // native builds only (threads/sockets)
 #include "LiveCapture.h"
@@ -5847,12 +5848,9 @@ void App::AdoptNewPanels(ImGuiID dockId)
                                      assembly && assembly->DockId ? assembly->DockId : central->ID);
     }
 #endif
-    // Memory Compare joins the Memory tab's dock node, where the default layout puts it.
-    if (ImGui::FindWindowSettingsByID(ImHashStr("Memory Compare")) == nullptr)
-    {
-        const ImGuiWindowSettings* memory = ImGui::FindWindowSettingsByID(ImHashStr("Memory"));
-        ImGui::DockBuilderDockWindow("Memory Compare", memory && memory->DockId ? memory->DockId : central->ID);
-    }
+    // Memory Compare joins the Memory tab's dock node and Structs joins Watch's, where the default layout
+    // puts them (LayoutAdoption.h).
+    AdoptPanelsBeside(central->ID);
 }
 
 void App::DrawLayerPanels(IPlatform& platform)
