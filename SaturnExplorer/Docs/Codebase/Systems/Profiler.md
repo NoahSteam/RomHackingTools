@@ -557,8 +557,8 @@ History strips' marker at the record with exactly that identity.
   `timelineId`. If the END record has no identity nothing is clamped (no boundary is invented). Frame
   number gaps on one timeline are not a boundary (lost records are reported by `LostIn`). The
   denominators ("k of n frames", "on in k of n") are over the clamped count; `WindowShares` and
-  `FunctionWindow` carry `timelineCut`, and the fixed status line says "Window cut at a timeline
-  change: k of n frames" (after the scrub note, separated by "; ") when the rule, not the ring, made
+  `FunctionWindow` carry `timelineCut`, and the fixed status line says "Averaging k of n frames
+  (the rest are from before a rewind or state load)" (after the scrub note, separated by "; ") when the rule, not the ring, made
   the window shorter than asked.
 - **No record** (profiler off then, evicted, lost on the wire, other timeline, older emulator): a
   fixed status line and every per-frame tab body say "No profiler data for frame N (...)" and show no
