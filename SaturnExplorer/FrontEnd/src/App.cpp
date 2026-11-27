@@ -2426,19 +2426,7 @@ void App::DrawTransportBar()
     if (IconButton("##tp_next", Ico::Next, "Next frame",
                    !(mbScrubbing && mScrubIndex < n - 1) && !LiveHas(SE_LIVE_CAP_FRAME_GATE)))
     {
-        if (mbScrubbing && mScrubIndex < n - 1)
-        {
-            ++mScrubIndex;
-            VoidEditTarget();
-        }
-        else
-        {
-            ScrubBarLeave(mbScrubbing, mScrubIndex);
-            VoidEditTarget();
-            se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
-            mbPaused = true;
-            mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
-        }
+        StepFrameForward(ctl);
     }
     ImGui::EndDisabled();
     if (CompareRowVisible()) DrawCompareRow();
@@ -2455,6 +2443,30 @@ bool App::EmulatorStampsStates() const
     return se_live_server_version(&mDataSource) >= SE_LIVE_STATE_EPOCH_MINVER;
 #else
     return false;
+#endif
+}
+
+// One frame forward, shared by the transport's Next button and the Step Frame command (F10, the
+// Session menu, the "step" command): through the recorded entries while scrubbed, and at the newest
+// one (or when not scrubbing) the emulator itself steps. The command used to step the emulator and
+// leave the scrub view up, so the old recorded frame stayed on screen after a step.
+void App::StepFrameForward(se_context* ctl)
+{
+#ifdef SE_ENABLE_LIVE
+    const int n = static_cast<int>(mRecorder.Count());
+    if (mbScrubbing && mScrubIndex < n - 1)
+    {
+        ++mScrubIndex;
+        VoidEditTarget();
+        return;
+    }
+    ScrubBarLeave(mbScrubbing, mScrubIndex);
+    VoidEditTarget();
+    se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
+    mbPaused = true;
+    mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
+#else
+    (void)ctl;
 #endif
 }
 
@@ -9093,9 +9105,13 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         else { se_frame_pause(mContext); mbPaused = true; }
         break;
     case TopBarCommandType::StepFrame:
+#ifdef SE_ENABLE_LIVE
+        StepFrameForward(mLiveCtx ? mLiveCtx : mContext);   // the real emulator, not the scrub view
+#else
         se_frame_step(mContext, 1);
         mbPaused = true;
         mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
+#endif
         break;
     case TopBarCommandType::DumpMemory:
         // Queued, not run: see the dispatch point in BuildUI. Running it here would dump the

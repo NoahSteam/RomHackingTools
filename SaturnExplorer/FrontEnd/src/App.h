@@ -352,6 +352,7 @@ private:
     bool EmulatorStampsStates() const;   // protocol v22+: Play From Here is only safe against these
     int  PlayFromHereTarget() const;
     std::string PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHere) const;
+    void StepFrameForward(se_context* ctl);        // Next button and Step Frame: recorded entries, then the emulator
     void PlayFromScrubbedFrame(se_context* ctl);   // restore the scrubbed frame, drop what followed
     void DrawPlaceholder(const char* title, const char* note);
 
