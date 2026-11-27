@@ -739,6 +739,25 @@ void TestScrubbedMissingRecord()
     CHECK(Drawn("older than the last 16 kept"));
 }
 
+// After Clear while scrubbed the history is empty, and the scrubbed frame is still one with no record:
+// every per-frame tab says so instead of "waiting for a frame" (seen on the real emulator).
+void TestScrubbedAfterClear()
+{
+    Rig rig;
+    rig.model.Clear();
+    Scrub(rig, 2, 105);
+    ImGuiHarness harness([&] { rig.Draw(); });
+    harness.Settle();
+    CHECK(Drawn("No profiler data for frame 105"));
+    CHECK(Drawn("No Profiling Data") && !Drawn("Waiting for the emulator"));
+    ClickAt(harness, Where("Buses"));
+    harness.Settle();
+    CHECK(Drawn("No Profiling Data") && !Drawn("Waiting for the emulator"));
+    ClickAt(harness, Where("Functions"));
+    harness.Settle();
+    CHECK(Drawn("No Profiling Data"));
+}
+
 void TestScrubbedRecordWithoutIdentity()
 {
     Rig rig;
@@ -904,6 +923,7 @@ int main()
     TestScrubbedAnchorsFigures();
     TestScrubbedNewestHasNoNote();
     TestScrubbedMissingRecord();
+    TestScrubbedAfterClear();
     TestScrubbedRecordWithoutIdentity();
     TestScrubNoteDoesNotMoveRows();
     TestScrubbedStripHoverUnchanged();

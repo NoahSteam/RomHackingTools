@@ -375,14 +375,26 @@ bool ProfilerPanel::Draw(const ProfilerModel& model, const MemoryPoolTracker& po
     {
         if (ImGui::BeginTabItem("Frame"))
         {
-            if (model.Empty() || !host.hasCounters) EmptyState(host, model.Empty());
-            if (!model.Empty()) { if (mViewMissing) WrappedText("%s", mMissingText.c_str()); else DrawFrameTab(model); }
+            // A scrubbed frame with no record says so even when the whole history is empty (after
+            // Clear): "waiting for a frame" would be wrong for a frame that is already in the past.
+            if (mViewMissing) WrappedText("%s", mMissingText.c_str());
+            else
+            {
+                if (model.Empty() || !host.hasCounters) EmptyState(host, model.Empty());
+                if (!model.Empty()) DrawFrameTab(model);
+            }
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Buses"))
         {
-            if (model.Empty() || !host.hasCounters) EmptyState(host, model.Empty());
-            if (!model.Empty()) { if (mViewMissing) WrappedText("%s", mMissingText.c_str()); else DrawBusTab(model); }
+            // A scrubbed frame with no record says so even when the whole history is empty (after
+            // Clear): "waiting for a frame" would be wrong for a frame that is already in the past.
+            if (mViewMissing) WrappedText("%s", mMissingText.c_str());
+            else
+            {
+                if (model.Empty() || !host.hasCounters) EmptyState(host, model.Empty());
+                if (!model.Empty()) DrawBusTab(model);
+            }
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Memory"))
