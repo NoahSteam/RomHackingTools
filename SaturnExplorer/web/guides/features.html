@@ -289,7 +289,7 @@
         <div class="col">
           <div class="zone" style="--c: var(--c-debug)">
             <p class="z-cat">Debugger</p>
-            <div class="z-list">SH-2 Assembly · Watch · Breakpoints · Call Stack</div>
+            <div class="z-list">SH-2 Assembly · Watch · Structs · Breakpoints · Call Stack</div>
           </div>
           <div class="zone" style="--c: var(--c-audio)">
             <p class="z-cat">Audio</p>
@@ -437,7 +437,7 @@
       <div class="card" style="--c: var(--c-debug)">
         <span class="tag">Disassembly</span>
         <h3>SH-2 Assembly</h3>
-        <p>Live disassembly of the master and slave SH-2, following the PC. Gutter breakpoints, run-to-cursor, <span class="lit">step into / over / out</span>, your own labels and comments, add-operand-to-watch, and create-tracepoint.</p>
+        <p>Live disassembly of the master and slave SH-2, following the PC. Gutter breakpoints, run-to-cursor, <span class="lit">step into / over / out</span>, your own labels and comments, add-operand-to-watch, and create-tracepoint. Press <span class="lit">F2</span> or double-click an instruction to <span class="lit">edit it in place</span>: type one SH-2 instruction (branch targets may be function names), see the new bytes and any warning as you type, and Enter writes it. It never creates a literal-pool entry; a pool word is changed with Edit Literal Value.</p>
       </div>
       <div class="card" style="--c: var(--c-debug)">
         <span class="tag">Halt on…</span>
@@ -448,6 +448,11 @@
         <span class="tag">Track values</span>
         <h3>Watch</h3>
         <p>Track addresses and expressions, refreshed continuously with change tinting. Typed as U8…S32, RGB555 (with a swatch), or Pointer. Break on change straight from a row.</p>
+      </div>
+      <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">Read structures</span>
+        <h3>Structs</h3>
+        <p>Describe a game structure in C-like text (<span class="mono">struct Actor { s16 x; s16 y; u32 flags; }; view player = Actor[1] @ 0x060A1000;</span>) and see its fields live, with nested structs, arrays and pointers you can follow. Arrays of structs can be shown as a table. Double-click a value to edit it. <span class="lit">View as Struct…</span> on a Watch row starts a view at that address. Saved to <span class="mono">saturn_structs.txt</span>. No bitfields or unions.</p>
       </div>
       <div class="card" style="--c: var(--c-debug)">
         <span class="tag">Non-halting logging</span>
@@ -468,6 +473,11 @@
         <span class="tag">Who touched this?</span>
         <h3>Access Log</h3>
         <p>"Find what accesses this address": a non-halting watchpoint records every instruction that reads or writes it, with hit counts and each accessor's call stack.</p>
+      </div>
+      <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">What the hardware did</span>
+        <h3>Hardware events</h3>
+        <p>Click the <span class="mono">CPU</span>, <span class="mono">DMA</span>, <span class="mono">VDP</span>, <span class="mono">CD</span> or <span class="mono">SMPC</span> chip in the Log to capture interrupts and exceptions, SCU and on-chip DMA, VDP1 draws and VBlank, and CD and SMPC commands from the live emulator. Right-click a chip to pick sources. Capture is off until you ask, and a busy frame is summarised as "+N more".</p>
       </div>
       <div class="card" style="--c: var(--c-debug)">
         <span class="tag">Event feed</span>

@@ -189,6 +189,12 @@
                                         * Like REW it is per connection: a server drops it when the
                                         * client leaves, so a game nobody is profiling runs at speed. */
 #define SE_LIVE_PROF_FUNCTIONS 0x1u
+#define SE_LIVE_VERB_HWEVENTS "HWE\n" /* hardware event log (SE_LIVE_CAP_HW_EVENTS; layout and compatibility
+                                        * in "Hardware event section" below): arg = SE_HWEV_EN_* mask
+                                        * (SeHwEvents.h), 0 = stop. No payload. Per connection, like PRF:
+                                        * the server ORs the masks of all connections and drops a
+                                        * connection's bits when it leaves. The FIRST HWE on a connection
+                                        * also opts that connection into the trailing section. */
 #define SE_LIVE_VERB_LEN     4
 #define SE_LIVE_REQUEST_LEN  8    /* verb(4) + arg(4, little-endian) */
 
@@ -369,6 +375,8 @@
 #define SE_LIVE_MINVER_EMUSAVE   25u    /* ESV (no payload, but an older server would read it as a GET) */
 #define SE_LIVE_MINVER_PROFILE   26u    /* PRF, and the v26 perf block */
 #define SE_LIVE_MINVER_PERF27    27u    /* the v27 perf section and record layout */
+#define SE_LIVE_MINVER_HWEVENTS  27u    /* HWE: no version bump, so this is a second guard only; the real gate
+                                         * is SE_LIVE_CAP_HW_EVENTS (a v27 server without it treats HWE as GET) */
 
 #define SE_LIVE_MAX_BKPT_DESCS   1024u              /* BKP: descriptors in one install */
 #define SE_LIVE_MAX_TRACE_DESCS  256u               /* TRACE: descriptors in one install */
@@ -456,6 +464,41 @@
 #define SE_LIVE_PERF_FIXED_LEN   80u     /* v27 record bytes outside the counter and function arrays */
 #define SE_LIVE_PERF_FIXED_LEN_V26 20u
 #define SE_LIVE_PERF_MAX_LEN     (SE_LIVE_PERF_FIXED_LEN + SE_LIVE_PERF_MAX_COUNTERS * 8u + SE_LIVE_PERF_FN_MAX * SE_LIVE_PERF_FN_LEN)
+
+/* ---- Hardware event section (opt-in, no version bump: protocol stays v27) ----
+ *
+ * Presence is per connection and sticky. From the reply to a connection's first HWE verb onward,
+ * every reply on that connection ends with this section, after the perf section. A connection that
+ * never sends HWE gets byte-identical v27 replies. Record layout: SeHwEvents.h (SeHwEvent, 32 bytes).
+ *
+ *   u32 count          records that follow (<= SE_LIVE_HWEV_MAX_PER_REPLY)
+ *   u32 recordLen      32 today. A client reads recordLen bytes per record and ignores what it does
+ *                      not know; < SE_LIVE_HWEV_REC_LEN or > 256 means a broken stream.
+ *   u64 firstSeq       sequence of the first record (records are consecutive); with count 0, the
+ *                      next sequence owed
+ *   u64 newestSeq
+ *   u64 lost           records the ring dropped for THIS connection immediately before firstSeq
+ *   u32 appliedMask    the mask the emulate thread is running with (a UI shows "pending" until it
+ *                      matches what was requested)
+ *   u32 supportedMask  SE_HWEV_EN_* bits this build has hooks for. 0 on a connection the server had no
+ *                      request slot for: its HWE is accepted but can never take effect (a UI shows the
+ *                      chips as unavailable rather than pending)
+ *   then count records (header = SE_LIVE_HWEV_HDR_LEN bytes)
+ * Record body per SeHwEvent field order, little-endian: kind, source, cpu, flags (u8 each), frame,
+ * ts, pc, arg[0..3] (u32 each). The server stamps 'frame' itself. Records deferred by the per-reply
+ * cap are not lost.
+ *
+ * Compatibility:
+ *   Old v27 client + new server   never sends HWE, never sees the section: unaffected.
+ *   New client + old v27 server   SE_LIVE_CAP_HW_EVENTS is clear, so the client MUST NOT send HWE:
+ *                                 an old server answers it as GET with no section and the client
+ *                                 would block waiting for one. The gate is in the driver's single
+ *                                 send point, not only the UI.
+ *   New client + new server       the section flows after the first HWE.
+ * The wire limits below are the single definition; SeHwEvents.h deliberately carries none. */
+#define SE_LIVE_HWEV_REC_LEN        32u
+#define SE_LIVE_HWEV_HDR_LEN        40u
+#define SE_LIVE_HWEV_MAX_PER_REPLY  512u   /* 16 KiB of records */
 
 /* Memory-edit blob (v16), carried inside an LST payload and applied by the emulator right
  * after the savestate restore. Layout:
@@ -581,6 +624,10 @@
                                       * registers its hooks and declares counters (SeExportPrepare /
                                       * SeExportSetPerfCapable) before listeners are admitted
                                       * (SeExportStart). */
+#define SE_LIVE_CAP_HW_EVENTS  1024u /* HWE works and the hardware event section is produced (see "Hardware
+                                      * event section"). Set from the first reply when the emulator
+                                      * registered its enable hook (SeExportSetHwEventHook); a build
+                                      * without hooks leaves it clear and the verb is never sent. */
 #define SE_LIVE_MINVER_CAPS     24u  /* servers older than this report only SE_LIVE_CAP_VDP_POKE */
 #define SE_LIVE_MINVER_POKEINFO 23u  /* servers older than this send no poke counters or caps */
 #define SE_LIVE_SH2_REGS_LEN    92u        /* one CPU: 23 u32 (R[16],SR,GBR,VBR,MACH,MACL,PR,PC) */

@@ -19,6 +19,7 @@
 
 #include <stddef.h>
 #include "SeLiveProtocol.h"
+#include "SeHwEvents.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -76,6 +77,30 @@ typedef struct SeExportPerfCursor { unsigned long long sent; int started; } SeEx
 size_t SeExportBuildPerfSection(SeExportPerfCursor* cursor, unsigned char* out);
 
 int SeExportFrameIdentity(unsigned int* timelineId, unsigned long long* frameNo);
+
+/* ---- Hardware event log (opt-in HWE verb; layout in SeLiveProtocol.h "Hardware event section") ----
+ *
+ * SeExportSetHwEventHook: register the routine that applies the union of the connections' enable
+ * masks (SE_HWEV_EN_*) in the emulator, plus the bits this build has hooks for. Call before
+ * SeExportStart, like SeExportSetProfilerHook; registering is what advertises
+ * SE_LIVE_CAP_HW_EVENTS. 'set' runs on the emulate thread at a frame boundary or gate.
+ *
+ * SeExportQueueHwEvent: emulate thread. Appends to the event ring; 'frame' is overwritten here.
+ * A no-op when no client is connected.
+ *
+ * SeExportHwEventMask: the mask the emulate thread is running with (for tests).
+ *
+ * SeExportBuildHwSection: the server's own builder of one reply's section for a connection,
+ * exposed so a test can drive it without a socket (as SeExportBuildPerfSection). Zero-initialize
+ * the cursor per connection. 'out' must hold SE_EXPORT_HW_SECTION_MAX bytes; returns bytes written. */
+void SeExportSetHwEventHook(void (*set)(unsigned int mask), unsigned int supportedMask);
+void SeExportQueueHwEvent(const SeHwEvent* ev);
+unsigned int SeExportHwEventMask(void);
+/* noSlot: the connection's request cannot be recorded (all connection slots taken); its section then reports
+ * supportedMask 0, which a client reads as "unavailable". */
+typedef struct SeExportHwCursor { unsigned long long sent; int started; int noSlot; } SeExportHwCursor;
+#define SE_EXPORT_HW_SECTION_MAX (SE_LIVE_HWEV_HDR_LEN + SE_LIVE_HWEV_MAX_PER_REPLY * SE_LIVE_HWEV_REC_LEN)
+size_t SeExportBuildHwSection(SeExportHwCursor* cursor, unsigned char* out);
 
 /* The emulator replaced its machine state by itself (a native savestate load, not one the server
  * asked for): the next frame belongs to a new timeline. Call from the emulator's post-load path, on

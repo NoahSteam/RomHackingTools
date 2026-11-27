@@ -508,9 +508,9 @@ set(SE_IMGUI_CORE
 
 if(BUILD_TESTING)
     add_executable(SaturnExplorerThemeTests
-        FrontEnd/tests/ThemeTests.cpp FrontEnd/src/Theme.cpp FrontEnd/src/LogPanel.cpp
+        FrontEnd/tests/ThemeTests.cpp FrontEnd/src/Theme.cpp FrontEnd/src/LogPanel.cpp FrontEnd/src/HwEventFormat.cpp
         FrontEnd/src/Settings.cpp FrontEnd/src/FileWrite.cpp ${SE_IMGUI_CORE})
-    target_include_directories(SaturnExplorerThemeTests PRIVATE FrontEnd/src ${SE_IMGUI_DIR})
+    target_include_directories(SaturnExplorerThemeTests PRIVATE FrontEnd/src Integration/Common ${SE_IMGUI_DIR})
     add_test(NAME SaturnExplorerThemeTests COMMAND SaturnExplorerThemeTests)
 
     add_executable(SaturnExplorerVdp2Tests
@@ -605,6 +605,33 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerMemorySearchTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerMemorySearchTests COMMAND SaturnExplorerMemorySearchTests)
+
+    # Struct views' model: layout, the text format, Emit/Parse identity and field decode/encode.
+    # Pure logic over byte buffers (no ImGui, no emulator); WriteDestText.h only needs the
+    # IMemoryBackend interface header.
+    add_executable(SaturnExplorerStructDefsTests
+        FrontEnd/tests/StructDefsTests.cpp
+        FrontEnd/src/Debug/StructDefs.cpp
+    )
+    target_include_directories(SaturnExplorerStructDefsTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerStructDefsTests COMMAND SaturnExplorerStructDefsTests)
+
+    # Inline SH-2 assembler: pure text -> opcode, checked exhaustively against Sh2Disasm (linked here as
+    # the oracle). No ImGui, no emulator.
+    add_executable(SaturnExplorerSh2AsmTests
+        FrontEnd/tests/Sh2AsmTests.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp
+        FrontEnd/src/Debug/Sh2Disasm.cpp
+    )
+    target_include_directories(SaturnExplorerSh2AsmTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerSh2AsmTests COMMAND SaturnExplorerSh2AsmTests)
+
+    # The assembler's symbol lookup (function names + sub_XXXXXX): header only, pure.
+    add_executable(SaturnExplorerFunctionSymbolTests FrontEnd/tests/FunctionSymbolTests.cpp)
+    target_include_directories(SaturnExplorerFunctionSymbolTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerFunctionSymbolTests COMMAND SaturnExplorerFunctionSymbolTests)
 
     # Frame Memory Compare's snapshot + diff engine: pure logic over byte vectors, no ImGui.
     add_executable(SaturnExplorerMemoryCompareTests
@@ -848,12 +875,25 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerLogPanelTests
         FrontEnd/tests/LogPanelTests.cpp
         FrontEnd/src/LogPanel.cpp
+        FrontEnd/src/HwEventFormat.cpp
+        FrontEnd/src/Settings.cpp
+        FrontEnd/src/FileWrite.cpp   # Settings::Save stages through WriteFileAtomically
         ${SE_IMGUI_CORE}
     )
     target_include_directories(SaturnExplorerLogPanelTests
-        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR})
+        PRIVATE FrontEnd/src FrontEnd/tests Integration/Common ${SE_IMGUI_DIR})
     add_test(NAME SaturnExplorerLogPanelTests COMMAND SaturnExplorerLogPanelTests)
     set_tests_properties(SaturnExplorerLogPanelTests PROPERTIES TIMEOUT 120)
+
+    # Hardware event text: one golden message per kind, the name tables, the fallback for a kind
+    # this build does not know. Pure (no ImGui, no driver).
+    add_executable(SaturnExplorerHwEventFormatTests
+        FrontEnd/tests/HwEventFormatTests.cpp
+        FrontEnd/src/HwEventFormat.cpp
+    )
+    target_include_directories(SaturnExplorerHwEventFormatTests
+        PRIVATE FrontEnd/src Integration/Common)
+    add_test(NAME SaturnExplorerHwEventFormatTests COMMAND SaturnExplorerHwEventFormatTests)
 
     # Profiler: the model's arithmetic (frame shares, bus totals, history window, hot functions,
     # memory-pool occupancy) with no emulator and no UI, then the panel drawn headlessly.
@@ -902,6 +942,46 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerHexEditorPanelTests
              COMMAND SaturnExplorerHexEditorPanelTests)
+
+    # The Watch panel's row menu ("View as Struct..." hand-off to the Structs panel).
+    add_executable(SaturnExplorerWatchPanelTests
+        FrontEnd/tests/WatchPanelTests.cpp
+        FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/Debug/WatchList.cpp
+        FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/FileWrite.cpp
+        FrontEnd/src/Theme.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerWatchPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerWatchPanelTests COMMAND SaturnExplorerWatchPanelTests)
+
+    # The Structs panel -- the real panel under the app's theme and font against a mock backend:
+    # clicks reaching edit boxes, the write path, pointer follow, clipped array reads, persistence.
+    add_executable(SaturnExplorerStructPanelTests
+        FrontEnd/tests/StructPanelTests.cpp
+        FrontEnd/src/StructPanel.cpp
+        FrontEnd/src/Debug/StructDefs.cpp
+        FrontEnd/src/Debug/WatchList.cpp
+        FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/FileWrite.cpp
+        FrontEnd/src/Theme.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerStructPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerStructPanelTests COMMAND SaturnExplorerStructPanelTests)
+    set_tests_properties(SaturnExplorerStructPanelTests PROPERTIES TIMEOUT 120)
+
+    # A layout saved before a window existed: the new window docks beside its neighbour instead of floating.
+    add_executable(SaturnExplorerLayoutAdoptionTests
+        FrontEnd/tests/LayoutAdoptionTests.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerLayoutAdoptionTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerLayoutAdoptionTests COMMAND SaturnExplorerLayoutAdoptionTests)
 
     # The SH-2 Pseudocode panel (PLAN.md Step 3) -- the real panel, the real engine and runner, and
     # the real Memory panel typing into a mock backend: navigation, CPU retention, the install rule,
@@ -995,6 +1075,7 @@ if(BUILD_TESTING)
                 FrontEnd/src/Sh2Address.cpp
                 FrontEnd/src/Debug/CallStack.cpp
                 FrontEnd/src/Debug/MemoryBackend.cpp
+                FrontEnd/src/Debug/Sh2Asm.cpp
                 FrontEnd/src/Debug/Sh2Disasm.cpp
                 FrontEnd/src/Decompiler/MemorySnapshot.cpp
                 FrontEnd/src/Decompiler/BiosImageFile.cpp
@@ -1139,6 +1220,7 @@ if(BUILD_TESTING)
         FrontEnd/src/FileWrite.cpp   # AssemblyPanel::SaveComments stages through WriteFileAtomically
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp   # in-place assembly editing
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
@@ -1156,6 +1238,8 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerMemoryBackendTests
         FrontEnd/tests/MemoryBackendTests.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp       # the assembled-write test assembles through the real assembler
+        FrontEnd/src/Debug/Sh2Disasm.cpp
     )
     target_include_directories(SaturnExplorerMemoryBackendTests PRIVATE
         FrontEnd/src Core/tests ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -1568,6 +1652,25 @@ if(BUILD_TESTING)
     target_link_libraries(SaturnExplorerProfilerLifecycleTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerProfilerLifecycleTests COMMAND SaturnExplorerProfilerLifecycleTests)
 
+    # The hardware event log's glue: the enable mask, the kind -> source mapping, the per-source frame cap and
+    # its SUPPRESSED record, the DMAC edge shadow and the resets, with the sink replaced by a capture.
+    add_executable(SaturnExplorerHwEventGlueTests
+        Integration/tests/HwEventGlueTests.c
+        Integration/Common/se_export.c
+    )
+    target_include_directories(SaturnExplorerHwEventGlueTests
+        PRIVATE Integration/Common Integration/Mednafen)
+    target_link_libraries(SaturnExplorerHwEventGlueTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerHwEventGlueTests COMMAND SaturnExplorerHwEventGlueTests)
+
+    # The hardware event record is one 32-byte layout in C and C++ (SeHwEvents.h).
+    add_executable(SaturnExplorerHwEventsHeaderTests
+        Integration/tests/HwEventsHeaderTests.c
+        Integration/tests/HwEventsHeaderCxx.cpp
+    )
+    target_include_directories(SaturnExplorerHwEventsHeaderTests PRIVATE Integration/Common)
+    add_test(NAME SaturnExplorerHwEventsHeaderTests COMMAND SaturnExplorerHwEventsHeaderTests)
+
     # F7: the per-frame function table's Other, per CPU and by cause (not admitted / evicted), with the
     # real glue table and end-of-frame code and the publication replaced by a capture.
     add_executable(SaturnExplorerProfilerOtherTests
@@ -1882,6 +1985,25 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerLiveProfilerRequestTests COMMAND SaturnExplorerLiveProfilerRequestTests)
 
+        # Hardware event log transport (HWE verb, trailing section, enable mask): real exporter and
+        # driver in lockstep on a socket and port of their own, plus the driver against a scripted server.
+        add_executable(SaturnExplorerLiveHwEventTests
+            FrontEnd/tests/LiveHwEventTests.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerLiveHwEventTests PRIVATE
+            SE_EXPORT_TEST_HOOKS=1
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_hw_event_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6957)
+        target_include_directories(SaturnExplorerLiveHwEventTests PRIVATE
+            Drivers/Live/src
+            FrontEnd/tests
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveHwEventTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveHwEventTests COMMAND SaturnExplorerLiveHwEventTests)
+        set_tests_properties(SaturnExplorerLiveHwEventTests PROPERTIES TIMEOUT 300 RESOURCE_LOCK live_tap_socket)
+
         # V3 harness: se-bench-client against the real exporter and driver (own socket and port 6953), in
         # process and through the executable. Measures nothing about the emulator; see PROCEDURE.md.
         add_executable(SaturnExplorerV3BenchClientTests
@@ -2144,6 +2266,7 @@ if(WIN32)
         FrontEnd/src/TopBar.cpp
         FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/StructPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/Sh2Dump.cpp
@@ -2152,13 +2275,16 @@ if(WIN32)
         FrontEnd/src/MemoryComparePanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
+        FrontEnd/src/HwEventFormat.cpp
         FrontEnd/src/LayerPanels.cpp
         FrontEnd/src/LayerExport.cpp
         FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
         ${SE_DESKTOP_SHARED_SRC}
         FrontEnd/src/Debug/WatchList.cpp
+        FrontEnd/src/Debug/StructDefs.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/StepHaltMachine.cpp
@@ -2239,6 +2365,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/TopBar.cpp
         FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/StructPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/Sh2Dump.cpp
@@ -2247,12 +2374,15 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/MemoryComparePanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
+        FrontEnd/src/HwEventFormat.cpp
         FrontEnd/src/LayerPanels.cpp
         FrontEnd/src/LayerExport.cpp
         FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Debug/WatchList.cpp
+        FrontEnd/src/Debug/StructDefs.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
+        FrontEnd/src/Debug/Sh2Asm.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/StepHaltMachine.cpp
@@ -2358,6 +2488,7 @@ else()
             FrontEnd/src/TopBar.cpp
             FrontEnd/src/NativeMenu.cpp
             FrontEnd/src/WatchPanel.cpp
+            FrontEnd/src/StructPanel.cpp
             FrontEnd/src/AssemblyPanel.cpp
             FrontEnd/src/Sh2Operands.cpp
             FrontEnd/src/Sh2Dump.cpp
@@ -2366,13 +2497,16 @@ else()
             FrontEnd/src/MemoryComparePanel.cpp
             FrontEnd/src/ControllerPanel.cpp
             FrontEnd/src/LogPanel.cpp
+            FrontEnd/src/HwEventFormat.cpp
             FrontEnd/src/LayerPanels.cpp
             FrontEnd/src/LayerExport.cpp
             FrontEnd/src/FileWrite.cpp
             FrontEnd/src/BinaryWriter.cpp
             ${SE_DESKTOP_SHARED_SRC}
             FrontEnd/src/Debug/WatchList.cpp
+            FrontEnd/src/Debug/StructDefs.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp
+            FrontEnd/src/Debug/Sh2Asm.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp
             FrontEnd/src/Debug/BreakpointManager.cpp
             FrontEnd/src/Debug/StepHaltMachine.cpp

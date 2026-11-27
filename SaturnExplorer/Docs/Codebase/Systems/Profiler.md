@@ -795,4 +795,5 @@ repeatability threshold because of its first repetition; details in the procedur
 ## Related documentation
 
 [Knowledge-base index](../README.md), [State sources](StateSources.md),
+[Hardware events](HardwareEvents.md) (the other opt-in per-frame stream, same slot and boundary mechanism),
 [Debugger](Debugger.md), [Mednafen integration](../../../Integration/Mednafen/README.md).

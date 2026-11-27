@@ -1111,6 +1111,141 @@ void SeExportSetPerfCapable(int capable)
     SeAtStore(&sPerfCapable, capable ? 1 : 0);
 }
 
+/* ---- Hardware event log ----
+ *
+ * A second ring modelled on the perf one: 64-bit sequence from 1, overwrite-oldest, and a cursor
+ * per connection that reports exactly what fell out of the ring behind it. The producer is the
+ * emulate thread and never waits for a reader.
+ *
+ * The enable mask follows the profiler request (F1): each connection's value lives in its slot,
+ * the union is recomputed under SE_LOCK on every join, change or leave, and ONLY the emulate
+ * thread applies it, at a frame boundary (SeApplyPendingInstalls), by calling the glue's hook. A
+ * departed client's bits go with its slot, so events cannot be left on. */
+static void (*sSetHwEvents)(unsigned int mask);   /* registered before the listeners start */
+static unsigned int sHwSupported;                 /* SE_HWEV_EN_* bits the build has hooks for */
+static unsigned int sHwSlotMask[SE_PROF_SLOTS];   /* guarded by SE_LOCK; valid where sProfSlotUsed */
+static volatile int sHwWanted;      /* OR of every connection's mask (written under SE_LOCK) */
+static volatile int sHwPending;     /* sHwWanted changed and has not been applied */
+static volatile int sHwApplied;     /* what the emulator is running with (emulate thread writes) */
+static SeHwEvent sHwRing[SE_HWEV_RING];           /* guarded by SE_LOCK */
+static unsigned long long sHwSeq;                 /* records produced; slot of record k is k % SE_HWEV_RING */
+
+void SeExportSetHwEventHook(void (*set)(unsigned int mask), unsigned int supportedMask)
+{
+    sSetHwEvents = set;
+    sHwSupported = set ? (supportedMask & 0xFFu) : 0u;
+}
+
+/* Caller holds SE_LOCK. */
+static void SeHwRecomputeLocked(void)
+{
+    int i, want = 0;
+    for (i = 0; i < SE_PROF_SLOTS; ++i)
+        if (sProfSlotUsed[i]) want |= (int)sHwSlotMask[i];
+    if (want != SeAtLoad(&sHwWanted))
+    {
+        SeAtStore(&sHwWanted, want);
+        SeAtStore(&sHwPending, 1);
+    }
+}
+
+static void SeHwSetRequest(int slot, unsigned int mask)
+{
+    if (slot < 0 || slot >= SE_PROF_SLOTS) return;
+    SE_LOCK();
+    if (sProfSlotUsed[slot])
+    {
+        sHwSlotMask[slot] = mask & sHwSupported;
+        SeHwRecomputeLocked();
+    }
+    SE_UNLOCK();
+}
+
+/* Emulate thread, at a frame boundary or the paused frame gate. */
+static void SeApplyHwEventMask(void)
+{
+    /* Cleared before the read: an HWE that lands in between sets it again, so the last wins. */
+    SeAtStore(&sHwPending, 0);
+    {
+        const int want = sSetHwEvents ? SeAtLoad(&sHwWanted) : 0;
+        if (want != SeAtLoad(&sHwApplied))
+        {
+            SeAtStore(&sHwApplied, want);
+            if (sSetHwEvents) sSetHwEvents((unsigned int)want);
+        }
+    }
+}
+
+/* Emulate thread. 'frame' is stamped here exactly as the trace event path stamps its own. */
+void SeExportQueueHwEvent(const SeHwEvent* ev)
+{
+    if (!ev) return;
+    /* Nobody to deliver it to, or nobody asked: a client that has just left or switched a source
+     * off still has events in flight until the next boundary applies it. */
+    if (!SeExportHasClient() || SeAtLoad(&sHwWanted) == 0) return;
+    SE_LOCK();
+    ++sHwSeq;
+    sHwRing[sHwSeq % SE_HWEV_RING] = *ev;
+    sHwRing[sHwSeq % SE_HWEV_RING].frame = (unsigned int)(sFrameNo & 0xFFFFFFFFu);
+    SE_UNLOCK();
+}
+
+unsigned int SeExportHwEventMask(void)
+{
+    return (unsigned int)SeAtLoad(&sHwApplied);
+}
+
+static void SeWr32(unsigned char* p, unsigned int v);
+static void SeWr64(unsigned char* p, unsigned long long v);
+
+/* One reply's hardware event section for the connection whose position is 'c' (layout in
+ * SeLiveProtocol.h) and advance the cursor. 'out' holds SE_EXPORT_HW_SECTION_MAX bytes. */
+size_t SeExportBuildHwSection(SeExportHwCursor* c, unsigned char* out)
+{
+    unsigned char* rec = out + SE_LIVE_HWEV_HDR_LEN;
+    unsigned long long newest, lost = 0, first, k;
+    unsigned int cnt = 0;
+    SE_LOCK();
+    newest = sHwSeq;
+    /* A connection that opts in owes nothing before that moment: no backlog, and that is not a
+     * loss. Decided on the first reply whether or not it carries anything. */
+    if (!c->started)
+    {
+        c->started = 1;
+        c->sent = newest;
+    }
+    if (newest - c->sent > SE_HWEV_RING)
+    {
+        lost = newest - SE_HWEV_RING - c->sent;
+        c->sent = newest - SE_HWEV_RING;
+    }
+    first = c->sent + 1;
+    for (k = first; cnt < SE_LIVE_HWEV_MAX_PER_REPLY && k <= newest; ++k, ++cnt)
+    {
+        const SeHwEvent* e = &sHwRing[k % SE_HWEV_RING];
+        rec[0] = e->kind; rec[1] = e->source; rec[2] = e->cpu; rec[3] = e->flags;
+        SeWr32(rec + 4, e->frame);
+        SeWr32(rec + 8, e->ts);
+        SeWr32(rec + 12, e->pc);
+        SeWr32(rec + 16, e->arg[0]); SeWr32(rec + 20, e->arg[1]);
+        SeWr32(rec + 24, e->arg[2]); SeWr32(rec + 28, e->arg[3]);
+        rec += SE_LIVE_HWEV_REC_LEN;
+    }
+    c->sent = first - 1 + cnt;   /* the records beyond the cap stay owed, not lost */
+    SE_UNLOCK();
+    SeWr32(out, cnt);
+    SeWr32(out + 4, SE_LIVE_HWEV_REC_LEN);
+    SeWr64(out + 8, first);
+    SeWr64(out + 16, newest);
+    SeWr64(out + 24, lost);
+    SeWr32(out + 32, (unsigned int)SeAtLoad(&sHwApplied));
+    /* A connection without a slot can not have its request recorded (SeHwSetRequest ignores it), so nothing it
+     * asks for will ever be applied; saying "supported 0" is how the client learns that instead of waiting
+     * for an applied mask that cannot come. */
+    SeWr32(out + 36, c->noSlot ? 0u : sHwSupported);
+    return (size_t)(rec - out);
+}
+
 unsigned int SeExportProfilerFlags(void)
 {
     return (unsigned int)SeAtLoad(&sProfApplied);
@@ -1135,7 +1270,7 @@ static int SeProfAcquire(void)
     int i, got = -1;
     SE_LOCK();
     for (i = 0; i < SE_PROF_SLOTS; ++i)
-        if (!sProfSlotUsed[i]) { sProfSlotUsed[i] = 1; sProfSlotFlags[i] = 0; got = i; break; }
+        if (!sProfSlotUsed[i]) { sProfSlotUsed[i] = 1; sProfSlotFlags[i] = 0; sHwSlotMask[i] = 0; got = i; break; }
     SE_UNLOCK();
     return got;
 }
@@ -1160,7 +1295,9 @@ static void SeProfRelease(int slot)
     SE_LOCK();
     sProfSlotUsed[slot] = 0;
     sProfSlotFlags[slot] = 0;
+    sHwSlotMask[slot] = 0;   /* the event mask is per connection too: it leaves with it */
     SeProfRecomputeLocked();
+    SeHwRecomputeLocked();
     SE_UNLOCK();
 }
 
@@ -1422,6 +1559,9 @@ static void SeApplyPendingInstalls(void)
             }
         }
     }
+    /* The hardware event mask rides the same boundary: a source switched on mid-frame would log the
+     * rest of that frame only, and a later one would find the glue's per-frame counters half spent. */
+    if (sProfAtBoundary && SeAtLoad(&sHwPending)) SeApplyHwEventMask();
 }
 
 /* Common to every halt: the step that was in progress is over (a breakpoint on the OTHER CPU can
@@ -2127,6 +2267,23 @@ size_t SeExportBuildPerfSection(SeExportPerfCursor* c, unsigned char* out)
 }
 
 #if defined(SE_EXPORT_TEST_HOOKS)
+/* Test builds only: two listeners serve one client each, so the connection slots cannot be exhausted over
+ * sockets. fill=1 takes every free slot (a connection made now gets none); fill=0 gives back what was taken. */
+void SeExportTestFillProfSlots(int fill)
+{
+    static int taken[SE_PROF_SLOTS];
+    int i;
+    SE_LOCK();
+    for (i = 0; i < SE_PROF_SLOTS; ++i)
+    {
+        if (fill && !sProfSlotUsed[i]) { sProfSlotUsed[i] = 1; taken[i] = 1; }
+        else if (!fill && taken[i]) { sProfSlotUsed[i] = 0; sHwSlotMask[i] = 0; sProfSlotFlags[i] = 0; taken[i] = 0; }
+    }
+    SeProfRecomputeLocked();
+    SeHwRecomputeLocked();
+    SE_UNLOCK();
+}
+
 /* Test builds only: start the publication sequence part-way (a 64-bit sequence cannot be walked
  * across 2^32 one record at a time). The ring must be empty. */
 void SeExportTestSetPerfSeq(unsigned long long seq)
@@ -2469,7 +2626,16 @@ static int SeRecvPokeStream(SeConn cl, int sound, unsigned int count, unsigned i
 }
 
 static void SeServeClientLoop(SeConn cl, SeFrame* snap, int profSlot);
-static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut, int profSlot);
+/* One connection's hardware event stream: opted in from its first HWE onward (sticky), its position
+ * in the ring, and the buffer a reply's section is built into. */
+typedef struct SeConnHw
+{
+    int optedIn;
+    SeExportHwCursor cursor;
+    unsigned char* out;
+} SeConnHw;
+
+static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut, int profSlot, SeConnHw* hw);
 
 /* Count this client in for as long as it is attached. A wrapper around the serve loop, rather
  * than a bump at each of the three accept sites: the loop returns from a dozen places on any I/O
@@ -2502,14 +2668,22 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap, int profSlot)
      * threads. */
     SeExportPerfCursor perfSent;
     unsigned char* perfOut = (unsigned char*)malloc((size_t)SE_EXPORT_PERF_SECTION_MAX);
+    SeConnHw hw;
     if (!perfOut) return;
+    hw.optedIn = 0;
+    hw.cursor.sent = 0;
+    hw.cursor.started = 0;
+    hw.cursor.noSlot = (profSlot < 0);   /* every slot was taken when this connection arrived */
+    hw.out = (unsigned char*)malloc((size_t)SE_EXPORT_HW_SECTION_MAX);   /* 16 KiB: heap, like perfOut */
+    if (!hw.out) { free(perfOut); return; }
     perfSent.sent = 0;
     perfSent.started = 0;   /* "first reply" is its own state: 0 sent can also mean an empty ring */
-    SeServeClientRequests(cl, snap, &perfSent, perfOut, profSlot);
+    SeServeClientRequests(cl, snap, &perfSent, perfOut, profSlot, &hw);
+    free(hw.out);
     free(perfOut);
 }
 
-static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut, int profSlot)
+static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* perfSentP, unsigned char* perfOut, int profSlot, SeConnHw* hw)
 {
 #define perfSent (*perfSentP)
     /* This connection's snapshot cursor: the delivery number of the slot its last reply carried, the
@@ -2569,6 +2743,13 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* 
         else if (memcmp(req, SE_LIVE_VERB_PROFILE, SE_LIVE_VERB_LEN) == 0)
         {
             SeProfSetRequest(profSlot, arg);   /* applied by the emulate thread */
+        }
+        else if (memcmp(req, SE_LIVE_VERB_HWEVENTS, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Per connection, like PRF; applied by the emulate thread at a frame boundary. The first
+             * one also opts this connection into the trailing section for good, even with mask 0. */
+            SeHwSetRequest(profSlot, arg);
+            hw->optedIn = 1;
         }
         else if (memcmp(req, SE_LIVE_VERB_ISTEP, SE_LIVE_VERB_LEN) == 0)
         {
@@ -2801,6 +2982,8 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* 
              * does not wait for the first publication. */
             if (SeAtLoad(&sPerfCapable) || SeAtLoad(&sPerfWired)) caps |= SE_LIVE_CAP_PROFILER;
             if (sSetProfiler)        caps |= SE_LIVE_CAP_PROF_FUNCTIONS;
+            /* From the first reply too: the hook is registered before the listeners start. */
+            if (sSetHwEvents)        caps |= SE_LIVE_CAP_HW_EVENTS;
             SE_SLOCK();
             if (sStateCap && sLoadState) caps |= SE_LIVE_CAP_STATE_REWIND;   /* the worker sized a real state */
             SE_SUNLOCK();
@@ -3006,6 +3189,13 @@ static void SeServeClientRequests(SeConn cl, SeFrame* snap, SeExportPerfCursor* 
         {
             const size_t n = SeExportBuildPerfSection(&perfSent, perfOut);
             if (SeSend(cl, perfOut, n) != 0) return;
+        }
+        /* Hardware event section, after the perf one, only on a connection that asked for it: any
+         * other connection's reply is byte for byte what a v27 server sends. */
+        if (hw->optedIn)
+        {
+            const size_t n = SeExportBuildHwSection(&hw->cursor, hw->out);
+            if (SeSend(cl, hw->out, n) != 0) return;
         }
     }
 }
@@ -3257,7 +3447,15 @@ int SeExportPrepare(void)
     sRingWrite = 0; sDeliverySeq = 0; sRingEpoch = 0;
     SeAtStore(&sPaused, 0); SeCancelSteps(); sFrameNo = 0; SeAtStore(&sClients, 0); SeAtStore(&sRewindWanted, 1);
     SeAtStore(&sProfWanted, 0); SeAtStore(&sProfPending, 0); SeAtStore(&sProfApplied, 0);
-    { int i; for (i = 0; i < SE_PROF_SLOTS; ++i) { sProfSlotUsed[i] = 0; sProfSlotFlags[i] = 0; } }
+    { int i; for (i = 0; i < SE_PROF_SLOTS; ++i) { sProfSlotUsed[i] = 0; sProfSlotFlags[i] = 0; sHwSlotMask[i] = 0; } }
+    /* The emulator side keeps its own copy of the mask and does not know this reset happened: tell the hook
+     * about to be dropped that nothing is wanted, so the hooks in the emulator stop reporting. Prepare runs
+     * on the emulate thread (or before any emulation), like the boundary that normally applies the mask.
+     * A hook registered once per process must register again afterwards; the pointer is not kept (a restart
+     * forgets the previous run's hooks, see TestCapability). */
+    if (sSetHwEvents) sSetHwEvents(0);
+    sSetHwEvents = 0; sHwSupported = 0; sHwSeq = 0;
+    SeAtStore(&sHwWanted, 0); SeAtStore(&sHwPending, 0); SeAtStore(&sHwApplied, 0);
     /* Nothing of a previous run survives into this one: not its profiler records, its sequence, its
      * identity reservation, nor the capabilities it declared. */
     sSetProfiler = 0;

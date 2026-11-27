@@ -271,6 +271,39 @@ typedef struct se_live_perf_status
 } se_live_perf_status;
 int se_live_perf_status_get(const se_data_source* ds, se_live_perf_status* out);
 
+/* ---- Hardware event log (needs SE_LIVE_CAP_HW_EVENTS; record layout in SeHwEvents.h) ---- */
+
+/* One hardware event drained from the server, with its position in the server's sequence.
+ *   lost_before  records lost immediately before this one: the server's ring loss plus this
+ *                queue's evictions, so a panel can place the "N lost" row at the gap. */
+typedef struct se_live_hw_event
+{
+    uint64_t seq;
+    uint64_t lost_before;
+    uint32_t frame, ts, pc;
+    uint8_t  kind, source, cpu, flags;   /* SE_HWEV_K_*, bit index of SE_HWEV_EN_*, cpu, SE_HWEV_F_* */
+    uint32_t arg[4];
+} se_live_hw_event;
+
+/* Ask for the SE_HWEV_EN_* sources in 'mask'; 0 = none. Call every frame with the wanted value: it
+ * is sent only on change and restated on reconnect. Never sent to a server without
+ * SE_LIVE_CAP_HW_EVENTS, and a connection whose wanted mask never became non-zero never opts in. */
+void se_live_set_hw_events(const se_data_source* ds, uint32_t mask);
+
+/* Move up to 'max' queued events into 'out', oldest first; returns the count. */
+uint32_t se_live_drain_hw_events(const se_data_source* ds, se_live_hw_event* out, uint32_t max);
+
+/* Where the stream stands. applied_mask is what the emulate thread runs with (compare with the
+ * requested mask to show "pending"); supported_mask is what the build can produce. Returns 1 when
+ * the status is real, 0 when 'ds' is not a live source or the server has no hardware events
+ * (the struct is then zeroed). */
+typedef struct se_live_hw_status
+{
+    uint64_t newest_seq, server_lost, driver_evicted;
+    uint32_t applied_mask, supported_mask;
+} se_live_hw_status;
+int se_live_hw_status_get(const se_data_source* ds, se_live_hw_status* out);
+
 /* Set the profiler options: SE_LIVE_PROF_FUNCTIONS (1) asks the emulator to attribute SH-2 time
  * to functions, which makes it run its per-instruction loop -- several times slower -- for as
  * long as the flag is set, so pass 0 when the user is not looking. Needs SE_LIVE_CAP_PROF_FUNCTIONS;

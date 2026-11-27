@@ -1,4 +1,5 @@
 #include "App.h"
+#include "HwEventFormat.h"
 #include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 #include "ArgSplit.h"
 
@@ -46,6 +47,7 @@
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
 #include "Debug/Sh2RegInfo.h"     // SH-2 register names / meanings + the SR decode
 #include "Debug/InspectionRouting.h"  // pseudocode inspection: restore gate and request routing
+#include "Debug/FunctionSymbol.h"   // the assembler's name lookup
 #include "Sh2Operands.h"          // Sh2MayAccessRange: could the halting instruction touch a watchpoint
 #include "ScspMix.h"              // mix the frame's sounding voices into one preview
 #include "Debug/M68kDisasm.h"     // SCSP 68000 sound-CPU disassembly
@@ -54,6 +56,7 @@
                              // Safe in every build (no threads/sockets); the pad-mask
                              // decode below and ControllerPanel both need it unconditionally.
 #include "Sh2Address.h"       // CanonicalAddress: a breakpoint matches a halt at any mirror
+#include "LayoutAdoption.h"
 #ifdef SE_ENABLE_LIVE
 #include "LiveDriver.h"      // native builds only (threads/sockets)
 #include "LiveCapture.h"
@@ -324,9 +327,18 @@ void App::Initialize()
 #endif
     }
     mAssemblyPanel.SetSaveErrorHandler([this](const std::string& why) { mLog.Error(why); });   // begins with its subject (A9-51)
+    // Branch targets and absolute PC-relative operands in the assembler may be function names. Read at call time, so a
+    // rename made after this line is seen.
+    mAssemblyPanel.SetSymbolResolver([this](const std::string& name, uint32_t& addr, std::string& err)
+                                     { return ResolveFunctionSymbol(mFunctionNames.All(), name, addr, err); });
     LoadSettings();                // panel visibility, data dir, emulator paths
 
     mWatchPanel.LoadSession();     // restore the session's watch list, if any
+    {
+        // A file that is there and was not usable is said once here; the panel holds its text and refuses to overwrite it.
+        std::string err;
+        if (!mStructPanel.LoadSession(&err)) mLog.Error("Structs: " + err);
+    }
     {
         std::string err;
         if (!mAssemblyPanel.LoadComments(&err)) mLog.Error("Assembly comments: " + err);   // restore the session's assembly comments
@@ -425,6 +437,11 @@ void App::Shutdown()
         std::string err;
         if (!mWatchPanel.SaveSession(&err)) { mLog.Error(err); addLost(err); }   // A9-57
     }
+    {
+        // Only when there is something to lose: a file that failed to load stays as it is and is not a loss to announce at every exit.
+        std::string err;
+        if (mStructPanel.NeedsSave() && !mStructPanel.SaveSession(&err)) { mLog.Error(err); addLost(err); }
+    }
     if (!lost.empty())
         NoticeAtExit("These changes were not saved:" + lost + "\n\nThe files were left as they were, and the Log panel closes with the window, so the changes are lost. "
                      "At exit all the saves share 10 seconds of waiting for another instance.");
@@ -452,6 +469,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"references",      "References",         &Panels::references,      "Memory & Data"},
         {"selectedObject",  "Selected Object",    &Panels::selectedObject,  "Graphics"},
         {"watch",           "Watch",              &Panels::watch,           "Debugger"},
+        {"structs",         "Structs",            &Panels::structs,         "Debugger"},
         {"assembly",        "SH-2 Assembly",      &Panels::assembly,        "Debugger"},
 #if SE_ENABLE_DECOMPILER
         {"decompiler",      "SH-2 Pseudocode",    &Panels::decompiler,      "Debugger"},
@@ -496,6 +514,7 @@ void App::LoadSettings()
         if (!mSettings.Load(&err)) mLog.Error("Settings: " + err);
     }
     mTheme.Load(mSettings);
+    mLog.Load(mSettings);   // which hardware event sources are armed
     mTheme.ApplyPending();
     for (const PanelInfo& p : PanelList())
         mPanels.*(p.flag) = mSettings.GetBool("panels", p.key, mPanels.*(p.flag));
@@ -542,6 +561,7 @@ bool App::SaveSettings(bool wait)
         mSettings.SetBool("panels", p.key, mPanels.*(p.flag));
     mSettings.Set("data", "dir", mDataDir);
     mTheme.Store(mSettings);
+    mLog.Store(mSettings);
     mSettings.SetBool("ui", "tooltips", mShowTooltips);
     mSettings.SetBool("debug", "rewind", mRewindEnabled);
     mSettings.Set("diff", "exe", mDiffExe);
@@ -1617,6 +1637,7 @@ void App::BuildUI(IPlatform& platform)
         SyncBreakpointsToLive();
         SyncTracepointsToLive();   // push tracepoint set (v8)
         DrainTraceEvents();        // pull fired tracepoints into the Log
+        DrainHwEvents();           // request and pull hardware events (live only)
 #ifdef SE_ENABLE_LIVE
         sfe::StopReport report;
         report.stopped = se_live_get_stop(&mDataSource, &report.reason, &report.cpu, &report.pc);
@@ -2013,6 +2034,7 @@ void App::BuildUI(IPlatform& platform)
     // now.)
     if (mPanels.selectedObject)  DrawSelectedObject();
     if (mPanels.watch)           DrawWatch(platform);
+    if (mPanels.structs)         DrawStructs(platform);
     if (mPanels.assembly)        DrawAssembly();
 #if SE_ENABLE_DECOMPILER
     UpdateDecompiler(platform);   // every frame (results, budget); draws when the panel is shown
@@ -2107,6 +2129,7 @@ void App::BuildUI(IPlatform& platform)
     // Persist any preference the user changed this frame (panel visibility, data
     // dir). Dock-layout changes are saved separately by ImGui into imgui.ini.
     if (mController.ConsumeSettingsDirty()) mSettingsDirty = true;
+    if (mLog.ConsumeSettingsDirty()) mSettingsDirty = true;
     if (mSettingsDirty && std::chrono::steady_clock::now() >= mSettingsRetryAt) SaveSettings(false);   // no wait for the lock in a frame (A9-46)
 }
 
@@ -2192,6 +2215,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     // Bottom debugger strip. Watch / Controller / Log tab together on the left; the
     // SH-2 Assembly gets the right half.
     ImGui::DockBuilderDockWindow("Watch", bWatch);
+    ImGui::DockBuilderDockWindow("Structs", bWatch);       // beside Watch
     ImGui::DockBuilderDockWindow(kControllerPanel, bWatch);
     ImGui::DockBuilderDockWindow("Log", bWatch);
     ImGui::DockBuilderDockWindow("Tracepoints", bWatch);   // tabs with Watch/Log/Controller
@@ -3092,9 +3116,43 @@ void App::DrawLayersMenu()
 void App::DrawWatch(IPlatform& platform)
 {
     uint32_t hexJump = 0;
+    WatchPanel::ViewAsStructRequest viewAsStruct;
     mWatchPanel.Draw(mMemBackend, mExprResolver, platform, mBreakpoints,
-                     ImGui::GetIO().DeltaTime, &hexJump);
+                     ImGui::GetIO().DeltaTime, &hexJump, &viewAsStruct);
     if (hexJump != 0) mHexEditor.GoTo(hexJump);   // "View in Hex Editor"
+    if (viewAsStruct.pending)
+    {
+        mStructPanel.RequestViewAt(viewAsStruct.address, viewAsStruct.label);
+        mPanels.structs = true;   // it draws from the next frame and takes focus then
+    }
+}
+
+// Structs window — persisted struct views over memory. Same arguments as Watch: the memory backend, the
+// expression resolver, the platform's file dialogs and the breakpoint manager (for "Break on ...").
+void App::DrawStructs(IPlatform& platform)
+{
+    uint32_t hexJump = 0;
+    StructPanel::WatchRequest watchReq;
+    mStructPanel.Draw(mMemBackend, mExprResolver, platform, mBreakpoints,
+                      ImGui::GetIO().DeltaTime, &hexJump, &watchReq);
+    if (hexJump != 0) mHexEditor.GoTo(hexJump);   // "View in Memory", as Watch's
+    if (watchReq.pending) mWatchPanel.AddWatch(watchReq.name, watchReq.expression, watchReq.type);
+
+    // Autosave: the file is the user's only copy of their struct definitions, so a crash must not lose a session's
+    // work. At most every 5 s; a refusal (a file that failed to load, a lock, a full disk) is logged once per message
+    // and retried only at the same pace, and it clears when a save works again.
+    if (mStructPanel.NeedsSave() && std::chrono::steady_clock::now() >= mStructSaveAt)
+    {
+        std::string err;
+        if (mStructPanel.SaveSession(&err))
+            mStructSaveLogged.clear();
+        else if (err != mStructSaveLogged)
+        {
+            mStructSaveLogged = err;
+            mLog.Error(err);
+        }
+        mStructSaveAt = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    }
 }
 
 // SH-2 Assembly — live disassembly around the master/slave PC. Reads CPU state +
@@ -3107,6 +3165,13 @@ void App::DrawAssembly()
 #endif
     mAssemblyPanel.SetBreakpointStop(mStepHalt.HaltActive(), mStepHalt.HaltCpu(), mStepHalt.HaltPc());
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mActions, mWatchPanel, mbLiveSource, req);
+    // An in-place edit was written: the Log keeps the outcome (destination, old and new value, any warning) after the
+    // panel's own one-line notice has faded.
+    if (req.assembled)
+    {
+        if (req.asmNote.find("Warning:") != std::string::npos) mLog.Warn(req.asmNote);
+        else                                                   mLog.Info(req.asmNote);
+    }
 
     if (req.editTracepoint) OpenTracepointEditor(req.tpCpu, req.tpAddr);
 
@@ -3558,6 +3623,54 @@ void App::DrainTraceEvents()
         if (n < 16) break;   // drained
     }
 #endif
+}
+
+// Hardware events (SeHwEvents.h). The wanted mask is restated every frame -- the driver sends only a
+// change and re-sends it after a reconnect -- and is 0 unless the source is live AND the server has the
+// capability, so a session that never arms a chip never makes the emulator do any extra work.
+// Events are live-only: nothing is stored in the recorded frames, so scrubbing history shows none.
+void App::DrainHwEvents()
+{
+    HwChipStatus cs;
+#ifdef SE_ENABLE_LIVE
+    if (mbLiveSource)
+    {
+        cs.live = true;
+        cs.capable = se_live_server_version(&mDataSource) >= SE_LIVE_MINVER_CAPS &&
+                     (mLiveCaps & SE_LIVE_CAP_HW_EVENTS) != 0;
+        se_live_set_hw_events(&mDataSource, cs.capable ? mLog.HwRequestMask() : 0u);
+        if (cs.capable)
+        {
+            se_live_hw_status st;
+            if (se_live_hw_status_get(&mDataSource, &st))
+            {
+                cs.statusValid = true;
+                cs.applied = st.applied_mask;
+                cs.supported = st.supported_mask;
+            }
+            se_live_hw_event evs[256];
+            std::vector<LogEvent> batch;
+            for (;;)
+            {
+                const uint32_t n = se_live_drain_hw_events(&mDataSource, evs, 256);
+                batch.reserve(n * 2);
+                for (uint32_t i = 0; i < n; ++i)
+                {
+                    const se_live_hw_event& e = evs[i];
+                    if (e.lost_before) batch.push_back(FormatHwLost(e.lost_before, e.frame));
+                    SeHwEvent rec;
+                    rec.kind = e.kind; rec.source = e.source; rec.cpu = e.cpu; rec.flags = e.flags;
+                    rec.frame = e.frame; rec.ts = e.ts; rec.pc = e.pc;
+                    for (int k = 0; k < 4; ++k) rec.arg[k] = e.arg[k];
+                    batch.push_back(FormatHwEvent(rec));
+                }
+                mLog.PushBatch(batch);   // one timestamp per drained batch
+                if (n < 256) break;
+            }
+        }
+    }
+#endif
+    mLog.SetHwStatus(cs);
 }
 
 void App::OpenTracepointEditor(int cpu, uint32_t addr)
@@ -5735,12 +5848,9 @@ void App::AdoptNewPanels(ImGuiID dockId)
                                      assembly && assembly->DockId ? assembly->DockId : central->ID);
     }
 #endif
-    // Memory Compare joins the Memory tab's dock node, where the default layout puts it.
-    if (ImGui::FindWindowSettingsByID(ImHashStr("Memory Compare")) == nullptr)
-    {
-        const ImGuiWindowSettings* memory = ImGui::FindWindowSettingsByID(ImHashStr("Memory"));
-        ImGui::DockBuilderDockWindow("Memory Compare", memory && memory->DockId ? memory->DockId : central->ID);
-    }
+    // Memory Compare joins the Memory tab's dock node and Structs joins Watch's, where the default layout
+    // puts them (LayoutAdoption.h).
+    AdoptPanelsBeside(central->ID);
 }
 
 void App::DrawLayerPanels(IPlatform& platform)
@@ -8625,6 +8735,12 @@ void App::ResolveRestoreWait(uint32_t done, uint32_t failed)
     if (refused)
         mLog.Error("The emulator could not apply the state load; its state is unchanged.");
     mRestoreOutstanding = 0;
+    // Hardware events keep the frame they happened on, and a restore moves the frame counter, so the
+    // log would otherwise appear to run backwards. One row marks the discontinuity. Only a slot load
+    // is detectable here; a rewind seek does not pass through this wait, so it adds no row.
+    if (applied > 0 && mLog.HwRequestMask() != 0)
+        mLog.Info("State restored; hardware event frame numbers continue from " +
+                  std::to_string(static_cast<unsigned long long>(se_frame_number(mContext))));
     if (mRestoreTimedOut)
     {
         mRestoreTimedOut = false;

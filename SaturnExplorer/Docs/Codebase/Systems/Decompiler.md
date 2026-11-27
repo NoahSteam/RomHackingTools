@@ -237,6 +237,7 @@ flowchart TD
   `App::LoadSettings/SaveSettings` persists auto-refresh, volatile-range text and BIOS path
   under the `decompiler` settings section. Generated results, LRU and learned signatures
   are session state, not an on-disk analysis database.
+- Assembled edits (Assembly panel) go through the memory backend and move `se_derive_serial`, so the panel's refresh policy and the derive-keyed identities above see them like any hex edit; a running Pseudocode view keeps its capture until that policy fires.
 - Core `se_get_sh2_regs`, `se_frame_number`, `se_derive_serial`, frontend memory backends,
   live restore/capture tracking and recording context swaps determine the identity of
   what may be analyzed. Review [Debugger.md](Debugger.md),

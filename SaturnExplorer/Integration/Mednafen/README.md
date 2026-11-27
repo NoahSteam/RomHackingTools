@@ -826,6 +826,51 @@ these hooks, and the wire path is tested end to end with the real server and dri
 counter magnitudes have not been compared with a known workload. See
 `Docs/Codebase/Systems/Profiler.md`.
 
+## Hardware event log
+
+Design: `Docs/DebuggerFeaturesPlan.md` Part 1. The emulator reports what the hardware does (exceptions,
+interrupts, DMA, VDP1 draws, VBlank, CD and SMPC commands) as 32-byte records (`Common/SeHwEvents.h`) into the
+exporter's ring; the front end shows them in the Log. Everything is opt-in per connection (the `HWE` verb), so a
+client that never asks costs the emulator one load and one branch per hook site.
+
+**Zero cost when off.** Every hook is a new insert-only fence of the form
+`if(MDFN_UNLIKELY(SeSsHwEvMask & SE_HWEV_EN_x)) SeMednafenHwEvent(...)`. `SeSsHwEvMask` is one global in the glue,
+written only on the emulate thread (`SeMednafenSetHwEvents`, called by the exporter at a frame boundary or at the
+paused-frame gate). No site is in a per-instruction or per-bus-access path: they are on exception entry, DMA
+start/end, device commands and frame-level VDP code. Two run often, so their mask test comes first:
+`SCU_SetHBVB` (once per H phase) and `CheckDoMasterInt` (per interrupt check). Nothing needs the debugger loop, so
+the log works in a build without `--enable-debugger`, at full speed.
+
+**Per-frame cap.** The glue lets through at most `SE_HWEV_FRAME_CAP` (64) records per source and per CPU per frame
+(master, slave and no-CPU events each have their own budget), counts the rest, and at the end of the frame (in `SeMednafenEndFrameHook`, after the profiler's frame and before
+`SeExportApplyInstalls`) queues one `SE_HWEV_K_SUPPRESSED` record per overflowing (source, CPU): the record's `cpu` says whose events were
+dropped (`SE_HWEV_CPU_NONE` for a device source), arg0 = how many were dropped, arg1 = the cap. A state load clears the counters.
+
+| Source (bit) | File | Site | Event |
+|---|---|---|---|
+| CPU_EXC (0x01) | `sh7095_ops.inc` | after each `Exception(EXCEPTION_x, ...)`, behind the profiler's ownership fence (INT, NMI, CPUADDR, DMAADDR, ILLINSTR, ILLSLOT) and after the TRAPA one | `SH2_EXCEPTION`: saved PC (exact), vector, class, level (INT), handler PC. Same text serves `Step<>` and the slave's resumable copy |
+| SCU_INT (0x02) | `scu.inc` | `CheckDoMasterInt` after `IPending &= ~(1U << bpos)`; the IMS write (`case 0xA0`) | `SCU_INT_ACCEPT` (delivered, not raised: `SetInt` fires per HBlank line); `SCU_INT_MASK` (new, old) |
+| SCU_DMA (0x04) | `scu.inc` | `StartDMATransfer` after `d->ReadFunc = rftab[rb]` (once per indirect table entry); `SCU_DoDMAEnd`; the two illegal-address refusals | `SCU_DMA_START` (level, indirect, start factor, buses; src, dst, bytes), `SCU_DMA_END`, `SCU_DMA_ILLEGAL` (level \| side<<8 with side 0 = source refused, 1 = destination refused; src, dst) |
+| SH2_DMAC (0x08) | `sh7095.inc` | top of `DMA_RecalcRunning` | `DMAC_START` / `DMAC_END`: the glue keeps a per-CPU shadow of the run levels and reports the edges. The shadow is unknown after a state load, a CPU reset, or when the source is switched on; the first recalc then only seeds it. The start PC (read through `SsDbgSh2Regs`, which applies the RPC-4 / PC_ID rule) is approximate and flagged `SE_HWEV_F_PC_APPROX`; the end carries none |
+| VDP1 (0x10) | `vdp1.cpp` | `StartDrawing`; "Drawing finished"; "aborted by framebuffer swap"; "Displayed framebuffer changed"; "VB erase start" | `VDP1_DRAW_START` (draw FB, previous draw interrupted), `VDP1_DRAW_END` (last command VRAM byte address, reason 0 END bit / 1 aborted by a swap), `VDP1_FB_SWAP`, `VDP1_FB_ERASE` |
+| VDP2 (0x20) | `scu.inc`, `vdp2.cpp` | `SCU_SetHBVB` on a VBlank edge; the TVMD write, only when the display bit changes | `VDP2_VBLANK`, `VDP2_DISPLAY` |
+| CD (0x40) | `cdb.cpp` | after `CTR.Command = ...` (inside the command coroutine); the end of `BasicResults` and of `CDStatusResults` | `CD_COMMAND`, `CD_RESPONSE`. The periodic status and the disc-authentication result write `Results[]` directly and are not logged |
+| SMPC (0x80) | `smpc.cpp` | after `OREG[0x1F] = ExecutingCommand` (coroutine) | `SMPC_COMMAND`. INTBACK continuations are not logged |
+
+The supported mask the glue registers (`SE_MDFN_HWEV_SUPPORTED`) is `0xFF`: every source has at least one hook.
+Hooks inside the coroutine-style bodies (`cdb.cpp`, `smpc.cpp`, the VDP1 command loop) are single statements with
+no declaration, because a jump to a `case __COUNTER__:` label past an initialised local is ill-formed.
+
+Timestamps (`ts`) are the master SH-2 clock; a device event can be off by the scheduler's slack, so nothing
+should depend on an exact value. Device events carry no CPU and no PC.
+
+Checking it: `Integration/tests/HwEventGlueTests.c` (the glue: mask, mapping, cap, DMAC shadow, resets),
+`Integration/tests/check_apply_hooks.py` (every key once, behind a mask test), and with a checkout
+`check_component.py` (`component/hwev_harness.cpp` runs the real patched `vdp1.cpp` and the real SH-2 core, SCU
+and DMAC against the real glue; `--drop <key>` for every `SE_HWEV_*` key and `--mutate hwev-mask-ignored` /
+`hwev-wrong-kind` must each fail it) and `check_migration.py` (upgrade from earlier `apply.py` versions). The CD
+block, SMPC and VDP2-display hooks are covered by the placement/compile checks only; they need a whole machine to run.
+
 ## Saturn-only build (skip the other console cores)
 
 Mednafen builds **every** console core by default (PSX, SNES, MD, NES, PCE, PC-FX, …),

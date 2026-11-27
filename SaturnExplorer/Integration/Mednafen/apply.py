@@ -47,7 +47,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SHARED_DIR = os.path.normpath(os.path.join(HERE, "..", "Common"))
 # Copied verbatim from Common; the glue is copied from HERE with SE_MEDNAFEN_WIRED
 # prepended so no per-file build flag is needed.
-COMMON_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h", "SeStateCodec.h", "SePerfCounters.h"]
+COMMON_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h", "SeStateCodec.h", "SePerfCounters.h", "SeHwEvents.h"]
 GLUE_FILE = "se_mednafen_glue.c"
 
 BEGIN = "/* --- SE_EXPORT (Saturn Explorer live tap) --- */"
@@ -1602,12 +1602,18 @@ def process_anchored(src_dir, fname, title, edits, do_write, prepend=None):
 #   sound.cpp se_perf_t0                the v26 per-slice 68000 hooks (baseline taken after the setjmp,
 #                                       so a longjmp skipped the increments); v27 uses se_perf_ts0
 #   ss.cpp    SSH2_ON_CYCLES += end_ts  the all-or-nothing slave on-time in the end-of-frame fence
+#   scu.inc   SE_HWEV_HOOK_SCU_DMA_BADSRC / _BADDST  the SCU DMA refusal hooks before arg0 carried the side
 RETIRED_FENCES = [
     ("vdp1.cpp", "SE_PERF_VDP1_DRAW_CYCLES"),
     ("sound.cpp", "se_perf_t0"),
     # The end-of-frame fence of 3269140 and earlier counted the slave all-or-nothing after the rebase
     # (F2 replaces it with SeMednafenFrameClose before the rebase); same key, different text.
     ("ss.cpp", "SeSsPerfC[SE_PERF_SSH2_ON_CYCLES] += end_ts"),
+    # The two SCU DMA refusal hooks passed arg0 = level for both sides, so a refused destination was shown as
+    # the source. Same anchor, new arg0 (side in bit 8) and new keys, so upsert's "key present = done" cannot
+    # keep the old text.
+    ("scu.inc", "SE_HWEV_HOOK_SCU_DMA_BADSRC"),
+    ("scu.inc", "SE_HWEV_HOOK_SCU_DMA_BADDST"),
 ]
 
 
@@ -1685,6 +1691,218 @@ def process_profiler(src_dir, do_write):
     notes += process_anchored(src_dir, "ss.cpp", "profiler: cache mode", [
         (SS_CACHE_MODE_ANCHOR, SS_CACHE_MODE_HOOK, "SeSsCacheMode ="),
     ], do_write)
+    return notes
+
+
+# ---- Hardware event log (DebuggerFeaturesPlan.md, Part 1, D5). Every hook is a NEW insert-only fence under
+#      its own key (never an edit of a profiler fence, whose key upsert() would find and leave alone), of
+#      the form
+#          if(MDFN_UNLIKELY(SeSsHwEvMask & SE_HWEV_EN_x)) SeMednafenHwEvent(...)
+#      so a site costs one global load and a not-taken branch while the log is off. None of them sits in a
+#      per-instruction or per-bus-access path: they are on exception entry, DMA start/end, device commands
+#      and frame-level VDP paths (SCU_SetHBVB runs per H phase and CheckDoMasterInt per interrupt check, so
+#      the mask test is the first thing evaluated there). A hook that sits inside a coroutine-style body
+#      (cdb.cpp's command loop, smpc.cpp's command task, vdp1.cpp's draw loop) is a plain statement with no
+#      declaration: a jump to a `case __COUNTER__:` label past an initialised local is ill-formed.
+#      Key tokens are all distinct, none a substring of another, so a fence is found by its key alone. ----
+HWEV_DECL = (
+    "#include \"SeHwEvents.h\"\n"
+    "extern \"C\" unsigned int SeSsHwEvMask;   /* enable bits, written by the glue on the emulate thread */\n"
+    "extern \"C\" void SeMednafenHwEvent(unsigned kind, int cpu, unsigned pc, unsigned a0, unsigned a1, unsigned a2, unsigned a3);\n"
+)
+HWEV_DECL_SS = HWEV_DECL + (
+    "extern \"C\" void SeMednafenDmacRecalc(int cpu, unsigned runMask, unsigned ch0chcr, unsigned sar0, unsigned dar0, unsigned tcr0,\n"
+    "                                       unsigned ch1chcr, unsigned sar1, unsigned dar1, unsigned tcr1);\n"
+)
+HWEV_FWD_KEY = "SE_HWEV_FWD"
+
+
+def hwev_fwd(decl):
+    return "/* " + HWEV_FWD_KEY + " */\n" + decl
+
+
+def hwev_call(src, kind, cpu, pc, a, key, cond=None, indent=" "):
+    """One hook statement. `src` is the SE_HWEV_EN_ name, `a` the four arguments."""
+    test = "MDFN_UNLIKELY(SeSsHwEvMask & SE_HWEV_EN_%s)" % src
+    if cond:
+        test += " && " + cond
+    return ("%sif(%s) SeMednafenHwEvent(SE_HWEV_K_%s, %s, %s, %s);   /* %s */\n"
+            % (indent, test, kind, cpu, pc, ", ".join(a), key))
+
+
+def hwev_after_own(exception_re, name):
+    """The anchor for an exception hook: the Exception(...) statement, and the profiler's ownership fence right
+    behind it when that is there (check_component.f2_hook_checks pins that fence to the statement, so ours
+    goes after it, never between them)."""
+    return ("(" + exception_re + "(?:" + re.escape(BEGIN) + r"\n[^\n]*SE_OWN_EXC_" + name + r" \*/\n"
+            + re.escape(END) + r"\n)?)")
+
+
+# sh7095_ops.inc: right after each Exception(...) statement (the saved PC is exact: PC -= 4 precedes the
+# macro and the macro leaves PC alone), in Step<> and in the slave's resumable copy alike -- both name
+# opexec_new_PC / opexec_ipr / opexec_vecnum (the latter through the Resume_ members). TRAPA's line has no
+# `;` (the macro is a block), so it has its own anchor. TRAPA is a real call the shadow stack already
+# observes, but the event log wants every exception the core takes.
+HWEV_EXC = (
+    ("INT", "opexec_vecnum", "opexec_ipr", hwev_after_own(r'\bException\(EXCEPTION_INT, [^;\n]*;[ \t]*\n', 'INT')),
+    ("NMI", "VECNUM_NMI", "0", hwev_after_own(r'\bException\(EXCEPTION_NMI, [^;\n]*;[ \t]*\n', 'NMI')),
+    ("CPUADDR", "VECNUM_CPUADDR", "0", hwev_after_own(r'\bException\(EXCEPTION_CPUADDR, [^;\n]*;[ \t]*\n', 'CPUADDR')),
+    ("DMAADDR", "VECNUM_DMAADDR", "0", hwev_after_own(r'\bException\(EXCEPTION_DMAADDR, [^;\n]*;[ \t]*\n', 'DMAADDR')),
+    ("ILLINSTR", "VECNUM_ILLINSTR", "0", hwev_after_own(r'\bException\(EXCEPTION_ILLINSTR, [^;\n]*;[ \t]*\n', 'ILLINSTR')),
+    ("ILLSLOT", "VECNUM_ILLSLOT", "0", hwev_after_own(r'\bException\(EXCEPTION_ILLSLOT, [^;\n]*;[ \t]*\n', 'ILLSLOT')),
+    ("TRAP", "(uint8)instr", "0", r'(\bException\(EXCEPTION_TRAP, [^;\n]*\n)'),
+)
+
+
+def hwev_exception_edit(name, vec, level, anchor):
+    key = "SE_HWEV_HOOK_EXC_" + name
+    return (anchor,
+            hwev_call("CPU_EXC", "SH2_EXCEPTION", "(int)(this - CPU)", "PC",
+                      ["(unsigned)(%s)" % vec, "SE_HWEV_EXC_" + name, "(unsigned)(%s)" % level, "opexec_new_PC"],
+                      key, indent="\t "),
+            key)
+
+
+# sh7095.inc: the top of DMA_RecalcRunning, after its first statement. It runs after every CHCR / DMAOR
+# write and when a transfer finishes; the glue keeps a shadow of the run levels and turns them into edges.
+# DMACH[].SAR/DAR/TCR are only meaningful for a channel that runs (see the comment above the function),
+# and the glue reads them only for a channel that just started.
+HWEV_DMAC_ANCHOR = r'(NO_INLINE void SH7095::DMA_RecalcRunning\(void\)\s*\{\s*\n DMA_PenaltyKludgeAmount = 0;[ \t]*\n)'
+HWEV_DMAC_KEY = "SE_HWEV_HOOK_DMAC"
+HWEV_DMAC_HOOK = (
+    " if(MDFN_UNLIKELY(SeSsHwEvMask & SE_HWEV_EN_SH2_DMAC)) SeMednafenDmacRecalc((int)(this - CPU),\n"
+    "   (unsigned)((DMA_RunCond(0) ? 1 : 0) | (DMA_RunCond(1) ? 2 : 0)),\n"
+    "   DMACH[0].CHCR, DMACH[0].SAR, DMACH[0].DAR, DMACH[0].TCR,\n"
+    "   DMACH[1].CHCR, DMACH[1].SAR, DMACH[1].DAR, DMACH[1].TCR);   /* " + HWEV_DMAC_KEY + " */\n"
+)
+
+# scu.inc. Interrupts are reported where they are DELIVERED (CheckDoMasterInt), not where they are raised:
+# SetInt fires per HBlank line and would flood the log.
+NONE_ = "SE_HWEV_CPU_NONE"
+HWEV_SCU = (
+    # (anchor, hook, key)
+    (SCU_DMA_PERF_ANCHOR,
+     hwev_call("SCU_DMA", "SCU_DMA_START", NONE_, "0",
+               ["(unsigned)(d - DMALevel) | ((unsigned)d->Indirect << 8) | ((unsigned)d->SF << 16) | ((unsigned)rb << 24) | ((unsigned)wb << 28)",
+                "ra", "wa", "bc"], "SE_HWEV_HOOK_SCU_DMA_START"),
+     "SE_HWEV_HOOK_SCU_DMA_START"),
+    (r'(DMALevel\[level\]\.Active = false;[ \t]*\n)',
+     hwev_call("SCU_DMA", "SCU_DMA_END", NONE_, "0", ["level", "0", "0", "0"], "SE_HWEV_HOOK_SCU_DMA_END"),
+     "SE_HWEV_HOOK_SCU_DMA_END"),
+    (r'(SS_DBG\(SS_DBG_WARNING \| SS_DBG_SCU, "\[SCU\] Attempted DMA from illegal address 0x%08x\\n", ra\);[ \t]*\n)',
+     hwev_call("SCU_DMA", "SCU_DMA_ILLEGAL", NONE_, "0", ["(unsigned)(d - DMALevel)", "ra", "wa", "0"], "SE_HWEV_HOOK_SCU_DMA_SRC_REFUSED", indent="  "),
+     "SE_HWEV_HOOK_SCU_DMA_SRC_REFUSED"),
+    (r'(SS_DBG\(SS_DBG_WARNING \| SS_DBG_SCU, "\[SCU\] Attempted DMA to illegal address 0x%08x\\n", wa\);[ \t]*\n)',
+     hwev_call("SCU_DMA", "SCU_DMA_ILLEGAL", NONE_, "0", ["(unsigned)(d - DMALevel) | (1u << 8)", "ra", "wa", "0"], "SE_HWEV_HOOK_SCU_DMA_DST_REFUSED", indent="  "),
+     "SE_HWEV_HOOK_SCU_DMA_DST_REFUSED"),
+    (r'(IPending &= ~\(1U << bpos\);[ \t]*\n)',
+     hwev_call("SCU_INT", "SCU_INT_ACCEPT", NONE_, "0", ["bpos", "ILevel", "IVec", "IPending"], "SE_HWEV_HOOK_SCU_INT_ACCEPT", indent="   "),
+     "SE_HWEV_HOOK_SCU_INT_ACCEPT"),
+    # IMS write: IMask still holds the OLD value here (the SS_DBGTI only prints), so the new one is computed
+    # with the statement that follows.
+    (r'(SS_DBGTI\(SS_DBG_SCU_INT, "\[SCU\] Write to IMS: [^\n]*\n)',
+     hwev_call("SCU_INT", "SCU_INT_MASK", NONE_, "0", ["(unsigned)((IMask &~ mask) | (*DB & mask & 0xBFFF))", "(unsigned)IMask", "0", "0"],
+               "SE_HWEV_HOOK_SCU_INT_MASK", indent="\t"),
+     "SE_HWEV_HOOK_SCU_INT_MASK"),
+    # SCU_SetHBVB runs on every H phase: the mask test is first, the edge test only after it.
+    (r'(const bool VB_End\s*=\s*\(VB_FromVDP2 \^ new_VB_FromVDP2\) & VB_FromVDP2;[ \t]*\n)',
+     hwev_call("VDP2", "VDP2_VBLANK", NONE_, "0", ["new_VB_FromVDP2 ? 1u : 0u", "0", "0", "0"], "SE_HWEV_HOOK_VBLANK",
+               cond="(VB_FromVDP2 != new_VB_FromVDP2)"),
+     "SE_HWEV_HOOK_VBLANK"),
+)
+
+# cdb.cpp. The command hook sits in the command coroutine (plain statement); the response hooks sit at the
+# end of the two helpers every reply goes through (BasicResults, and CDStatusResults for the status
+# report). A few replies write Results[] directly (the periodic report, the disc-authentication result);
+# those are not logged.
+HWEV_CD = (
+    (r'(CTR\.Command = CTR\.CD\[0\] >> 8;[ \t]*\n)',
+     hwev_call("CD", "CD_COMMAND", NONE_, "0", ["CTR.CD[0]", "CTR.CD[1]", "CTR.CD[2]", "CTR.CD[3]"], "SE_HWEV_HOOK_CD_COMMAND", indent="    "),
+     "SE_HWEV_HOOK_CD_COMMAND"),
+    (r'(static void BasicResults\(uint32 res0, uint32 res1, uint32 res2, uint32 res3\)\s*\{[^{}]*?SWResetHIRQDeferred = 0;[ \t]*\n)',
+     hwev_call("CD", "CD_RESPONSE", NONE_, "0", ["Results[0]", "Results[1]", "Results[2]", "Results[3]"], "SE_HWEV_HOOK_CD_RESPONSE"),
+     "SE_HWEV_HOOK_CD_RESPONSE"),
+    (r'(static void CDStatusResults\(const bool rejected = false, const uint8 hb = 0\)\s*\{[^{}]*?SWResetHIRQDeferred = 0;[ \t]*\n)',
+     hwev_call("CD", "CD_RESPONSE", NONE_, "0", ["Results[0]", "Results[1]", "Results[2]", "Results[3]"], "SE_HWEV_HOOK_CD_STATUS_RESPONSE"),
+     "SE_HWEV_HOOK_CD_STATUS_RESPONSE"),
+)
+
+# smpc.cpp: a command starts executing (INTBACK continuations are not logged; commands >= 0x20 are not
+# commands). IREG0..3 and IREG4..6 are packed little-end first so the front end can unpack bytes.
+HWEV_SMPC = (
+    (r'(OREG\[0x1F\] = ExecutingCommand;[ \t]*\n)',
+     hwev_call("SMPC", "SMPC_COMMAND", NONE_, "0",
+               ["(unsigned)ExecutingCommand",
+                "(unsigned)IREG[0] | ((unsigned)IREG[1] << 8) | ((unsigned)IREG[2] << 16) | ((unsigned)IREG[3] << 24)",
+                "(unsigned)IREG[4] | ((unsigned)IREG[5] << 8) | ((unsigned)IREG[6] << 16)", "0"],
+               "SE_HWEV_HOOK_SMPC_COMMAND", indent="    "),
+     "SE_HWEV_HOOK_SMPC_COMMAND"),
+)
+
+# vdp1.cpp. CurCommandAddr counts 16-bit words; the log carries the VRAM byte address.
+HWEV_VDP1 = (
+    (VDP1_PERF_START_ANCHOR,
+     hwev_call("VDP1", "VDP1_DRAW_START", NONE_, "0", ["(unsigned)FBDrawWhich", "DrawingActive ? 1u : 0u", "0", "0"], "SE_HWEV_HOOK_VDP1_DRAW_START"),
+     "SE_HWEV_HOOK_VDP1_DRAW_START"),
+    (r'(SS_DBGTI\(SS_DBG_VDP1, "\[VDP1\] Drawing finished at 0x%05x", CurCommandAddr\);[ \t]*\n)',
+     hwev_call("VDP1", "VDP1_DRAW_END", NONE_, "0", ["(unsigned)CurCommandAddr << 1", "0", "0", "0"], "SE_HWEV_HOOK_VDP1_DRAW_END", indent="    "),
+     "SE_HWEV_HOOK_VDP1_DRAW_END"),
+    (VDP1_PERF_ABORT_ANCHOR,
+     hwev_call("VDP1", "VDP1_DRAW_END", NONE_, "0", ["(unsigned)CurCommandAddr << 1", "1", "0", "0"], "SE_HWEV_HOOK_VDP1_DRAW_ABORT", indent="     "),
+     "SE_HWEV_HOOK_VDP1_DRAW_ABORT"),
+    (r'(SS_DBGTI\(SS_DBG_VDP1, "\[VDP1\] Displayed framebuffer changed to %d\.", !FBDrawWhich\);[ \t]*\n)',
+     hwev_call("VDP1", "VDP1_FB_SWAP", NONE_, "0", ["(unsigned)!FBDrawWhich", "FBCR", "TVMR", "0"], "SE_HWEV_HOOK_VDP1_FB_SWAP", indent="    "),
+     "SE_HWEV_HOOK_VDP1_FB_SWAP"),
+    (r'(SS_DBGTI\(SS_DBG_VDP1, "\[VDP1\] VB erase start of framebuffer %d\.", !FBDrawWhich\);[ \t]*\n)',
+     hwev_call("VDP1", "VDP1_FB_ERASE", NONE_, "0", ["(unsigned)!FBDrawWhich", "EWDR", "EWLR", "EWRR"], "SE_HWEV_HOOK_VDP1_FB_ERASE", indent="    "),
+     "SE_HWEV_HOOK_VDP1_FB_ERASE"),
+)
+
+# vdp2.cpp: the TVMD write, before DisplayOn takes the new value (it still holds the old one, so the hook
+# fires only on a change).
+HWEV_VDP2 = (
+    (r'(\bUpdate\(SH7095_mem_timestamp\);[ \t]*\n[ \t]*//[ \t]*\n)(?=[ \t]*DisplayOn = \(V >> 15\) & 0x1;)',
+     hwev_call("VDP2", "VDP2_DISPLAY", NONE_, "0", ["(V >> 15) & 0x1", "V", "0", "0"], "SE_HWEV_HOOK_VDP2_DISPLAY",
+               cond="DisplayOn != (bool)((V >> 15) & 0x1)", indent="\t"),
+     "SE_HWEV_HOOK_VDP2_DISPLAY"),
+)
+
+# Every key this section writes, for the checks (check_apply_hooks / check_migration / check_component).
+HWEV_KEYS = (
+    [HWEV_FWD_KEY, HWEV_DMAC_KEY]
+    + ["SE_HWEV_HOOK_EXC_" + e[0] for e in HWEV_EXC]
+    + [k for _a, _h, k in HWEV_SCU + HWEV_CD + HWEV_SMPC + HWEV_VDP1 + HWEV_VDP2]
+)
+
+
+# key -> the file (under src/ss) that carries it; SE_HWEV_FWD is one per translation unit and is not in it.
+HWEV_KEY_FILE = dict(
+    [(HWEV_DMAC_KEY, "sh7095.inc")]
+    + [("SE_HWEV_HOOK_EXC_" + e[0], "sh7095_ops.inc") for e in HWEV_EXC]
+    + [(k, f) for tbl, f in ((HWEV_SCU, "scu.inc"), (HWEV_CD, "cdb.cpp"), (HWEV_SMPC, "smpc.cpp"),
+                             (HWEV_VDP1, "vdp1.cpp"), (HWEV_VDP2, "vdp2.cpp")) for _a, _h, k in tbl]
+)
+HWEV_FWD_FILES = ("ss.cpp", "cdb.cpp", "smpc.cpp", "vdp1.cpp", "vdp2.cpp")
+
+
+def process_hwevents(src_dir, do_write):
+    """The hardware event hooks (see above). A miss costs the events of that site; reported like any other."""
+    notes = []
+    notes += process_anchored(src_dir, "ss.cpp", "hardware events: declarations", [],
+                              do_write, prepend=(hwev_fwd(HWEV_DECL_SS), HWEV_FWD_KEY))
+    notes += process_anchored(src_dir, "sh7095_ops.inc", "hardware events: exceptions",
+                              [hwev_exception_edit(*e) for e in HWEV_EXC], do_write)
+    notes += process_anchored(src_dir, "sh7095.inc", "hardware events: on-chip DMAC",
+                              [(HWEV_DMAC_ANCHOR, HWEV_DMAC_HOOK, HWEV_DMAC_KEY)], do_write)
+    notes += process_anchored(src_dir, "scu.inc", "hardware events: SCU interrupts, DMA, VBlank", list(HWEV_SCU), do_write)
+    notes += process_anchored(src_dir, "cdb.cpp", "hardware events: CD block", list(HWEV_CD), do_write,
+                              prepend=(hwev_fwd(HWEV_DECL), HWEV_FWD_KEY))
+    notes += process_anchored(src_dir, "smpc.cpp", "hardware events: SMPC", list(HWEV_SMPC), do_write,
+                              prepend=(hwev_fwd(HWEV_DECL), HWEV_FWD_KEY))
+    notes += process_anchored(src_dir, "vdp1.cpp", "hardware events: VDP1", list(HWEV_VDP1), do_write,
+                              prepend=(hwev_fwd(HWEV_DECL), HWEV_FWD_KEY))
+    notes += process_anchored(src_dir, "vdp2.cpp", "hardware events: VDP2", list(HWEV_VDP2), do_write,
+                              prepend=(hwev_fwd(HWEV_DECL), HWEV_FWD_KEY))
     return notes
 
 
@@ -2062,6 +2280,7 @@ def main():
     notes += process_sound(src_dir, do_write)
     notes += process_cd(src_dir, do_write)
     notes += process_profiler(src_dir, do_write)
+    notes += process_hwevents(src_dir, do_write)
     notes += process_title(root, do_write)
     notes += process_input(root, do_write)
     notes += process_build(root, do_write)

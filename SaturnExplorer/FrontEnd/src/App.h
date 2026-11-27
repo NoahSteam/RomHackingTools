@@ -25,6 +25,7 @@
 #include "DataSearch.h"                 // game-data-directory byte search (DataSearchHit)
 #include "DataSearchRunner.h"           // its worker thread, queueing and result routing
 #include "WatchPanel.h"          // Watch Window (debugger; emulator-agnostic)
+#include "StructPanel.h"         // Structs (debugger; typed struct views over memory)
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
 #include "Sh2Dump.h"             // Data > Dump SH-2: the listing as text
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
@@ -161,6 +162,7 @@ private:
     void AdoptNewPanels(ImGuiID dockId);
     void DrawLayerPanels(IPlatform& platform);   // per-layer viewer tabs (VDP1 / NBG / RBG0)
     void DrawWatch(IPlatform& platform);   // debugger Watch Window
+    void DrawStructs(IPlatform& platform); // Structs window (beside Watch)
     void DrawAssembly();                    // SH-2 Assembly (live disassembly)
     void DrawHexEditor();                   // Hex Editor (memory view/edit)
     void DrawController(IPlatform& platform); // Saturn control pad -> live input
@@ -233,6 +235,7 @@ private:
     void Continue();
     void SyncTracepointsToLive();           // push the tracepoint set to the emulator (v8)
     void DrainTraceEvents();                // pull fired tracepoint events into the Log
+    void DrainHwEvents();                   // ask for and pull hardware events into the Log (live only)
     void DrawWorldView(IPlatform& platform);
     void DrawCommandList(IPlatform& platform);
     // Inline size/position editing in the Command List: draw an editable integer cell for one
@@ -403,6 +406,11 @@ private:
     bool                     mRestoreUnconfirmable = false; // a load went to an emulator that cannot confirm it
     SimpleExpressionResolver mExprResolver;
     WatchPanel               mWatchPanel;
+    StructPanel              mStructPanel;
+    // Structs autosave: a changed library is written at most this often, and a refused save is
+    // logged once per distinct message instead of every retry.
+    std::chrono::steady_clock::time_point mStructSaveAt;
+    std::string              mStructSaveLogged;
     BreakpointManager        mBreakpoints;
     // Cached per-BP guard validation error (id -> message), refreshed only when the
     // condition text is edited so the Breakpoints panel isn't re-parsing every frame.
@@ -828,7 +836,7 @@ private:
         bool vdp1Table = true, vdp2Table = true, colorRam = true;
         bool registers = true, commandList = true;
         bool textureViewer = true, paletteViewer = true, references = false;
-        bool selectedObject = true, watch = true, assembly = true, hexEditor = true;
+        bool selectedObject = true, watch = true, structs = true, assembly = true, hexEditor = true;
         bool controller = true;   // Saturn control pad (drives a live game)
         bool log = true;          // structured event log (tracepoints + system events)
         bool actions = true;      // Tracepoints / execution-actions management table

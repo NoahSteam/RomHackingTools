@@ -177,6 +177,7 @@ m.load(vp.BASE, ppayload)
 m.PC = pa.syms["start"]
 PF = params["PHASE_FRAMES"]
 frames = []
+irq_entry = []               # (handler pc, pushed PC, pushed SR) after each delivered VBlank-IN
 total_frames = PF * vp.N_PHASES + 2 * PF
 for f in range(total_frames):
     try:
@@ -186,6 +187,7 @@ for f in range(total_frames):
         print("\n1 check(s) failed")
         sys.exit(1)
     frames.append((m.log, m.events, m.rd(vp.STATE, 4, log=False)))
+    irq_entry.append((m.PC, m.rd(m.R[15], 4, log=False), m.rd(m.R[15] + 4, 4, log=False)))
 # frames[f] holds what the guest did between wake f-1 and sleep f. Phase p is entered during the
 # wake that is number PF*p (counting from 1), so frame index PF*p belongs to the phase's first frame.
 
@@ -273,6 +275,72 @@ for p, prog in ((11, [0x4E72, 0x2700]), (12, [0x60FE])):
     check(words == [0, 0x0800, 0, 0x0100], "phase %d: 68000 vectors %s" % (p, words))
     pw = [(mm.mem.get(0x05A00100 + 2 * i, 0) << 8) | mm.mem.get(0x05A00100 + 2 * i + 1, 0) for i in range(len(prog))]
     check(pw == prog, "phase %d: 68000 program %s" % (p, [hex(x) for x in pw]))
+
+# ------------------------------------------------------------------ hardware events (EXPECTED_EVENTS.md)
+# What the fake machine can show about the hardware event log: the guest's own side of each derivation (which
+# registers it writes, with what, how often). What the emulator then emits is NOT checked here.
+#
+# SH-2 interrupt: every VBlank-IN is taken through vector 0x40 whose entry is `vbin`, every other vector entry is
+# `bad_irq`, and the CPU was asleep at `main_loop` (the `sleep`), so the pushed PC is the instruction after it.
+vtab = pa.syms["vtab"]
+vecs = [int.from_bytes(bytes(m.mem.get((vtab & 0x07FFFFFF) + 4 * v + i, 0) for i in range(4)), "big") for v in range(0x42)]
+check(vecs[0x40] == pa.syms["vbin"], "vector 0x40 does not point at vbin")
+check(all(x == pa.syms["bad_irq"] for i, x in enumerate(vecs) if i != 0x40), "a vector other than 0x40 is not bad_irq")
+check(all(h == pa.syms["vbin"] and pc == pa.syms["main_loop"] + 2 for h, pc, sr in irq_entry),
+      "an interrupt entry is not (handler vbin, saved PC main_loop+2)")
+ims_counts = [sum(1 for (p27, size, rw, ea) in fr[0] if rw == "w" and p27 == 0x05FE00A0 and size == 4) for fr in frames]
+check(all(c == 1 for c in ims_counts), "not exactly one 32-bit SCU IMS write per frame (the SCU_INT_MASK event count)")
+# the value written is the one in the literal pool of the handler: the sim keeps the last write in memory
+check(int.from_bytes(bytes(m.mem.get(0x05FE00A0 + i, 0) for i in range(4)), "big") == 0xFFFFFFFE, "IMS value is not 0xFFFFFFFE")
+# SCU_INT_MASK arguments: scu.inc case 0xA0, IMask = (IMask & ~mask) | (value & mask & 0xBFFF) with IMask = 0xBFFF after
+# every master vector fetch and mask 0xFFFFFFFF for a 32-bit write.
+check(((0xBFFF & ~0xFFFFFFFF) | (0xFFFFFFFE & 0xFFFFFFFF & 0xBFFF)) == 0xBFFE, "IMS arithmetic")
+# Only registers the hooks do not need: SMPC writes are COMREG and SF only (so IREG0..6 are never written by the
+# guest and the SMPC event's IREG arguments are whatever the BIOS left); no CD block register is written (no CD
+# command or response); no on-chip DMAC register (0xFFFFFF80..BF), no SCSP register block (0x25B00000..), is written.
+allw = [(p27, size) for fr in frames for (p27, size, rw, ea) in fr[0] if rw == "w"]
+check({p for p, s_ in allw if 0x00100000 <= p < 0x00100080} == {0x0010001F, 0x00100063}, "SMPC writes are not exactly COMREG and SF")
+check(not [p for p, s_ in allw if 0x05800000 <= p < 0x05900000], "the guest writes a CD block register")
+check(not [p for p, s_ in allw if p >= 0x07FFFE00], "the guest writes an on-chip register (DMAC)")
+check(not [p for p, s_ in allw if 0x05B00000 <= p < 0x05C00000], "the guest writes a SCSP register")
+# VDP1 / VDP2 registers written once, in the first frame: FBCR = 0 (automatic swap each frame, so FB_SWAP every
+# frame in every phase), TVMR = 0 (no V-blank erase: no FB_ERASE), TVMD written twice at start-up only (the two
+# VDP2_DISPLAY candidates), PTMR per phase as checked above.
+first = frames[0][1]
+check([e[3] for e in first if e[0] == "reg" and e[1] == 0x05D00002] == [0], "FBCR is not written 0 exactly once at start")
+check([e[3] for e in first if e[0] == "reg" and e[1] == 0x05D00000] == [0], "TVMR is not written 0 exactly once at start")
+check([e[3] for e in first if e[0] == "reg" and e[1] == 0x05F80000] == [0x0100, 0x8100], "TVMD is not written 0x0100 then 0x8100 at start")
+for rg in (0x05D00000, 0x05D00002, 0x05F80000):
+    check(not [1 for fr in frames[1:] for e in fr[1] if e[0] == "reg" and e[1] == rg], "register %08X written after start-up" % rg)
+# VDP1 table walk: draw end address = 32 * n bytes (CurCommandAddr advances 0x10 words per command, DRAW_END reports << 1).
+for p, n in ((4, params["VDP1_ONE_CMDS"]), (5, params["VDP1_MANY_CMDS"]), (8, params["DMA_DRAW_CMDS"])):
+    mm = sh2sim.Machine()
+    mm.load(vp.BASE, ppayload)
+    mm.PC = pa.syms["start"]
+    for _ in range(PF * p + 2):
+        mm.run_frame()
+    word = 0
+    fetched = 0
+    while True:
+        w = (mm.mem.get(0x05C00000 + 2 * word, 0) << 8) | mm.mem.get(0x05C00000 + 2 * word + 1, 0)
+        fetched += 1
+        if w & 0x8000:
+            break
+        check(((w >> 12) & 3) == 0, "phase %d: table entry with a jump" % p)
+        word += 0x10
+    check(word * 2 == 32 * n and fetched == n + 1, "phase %d: VDP1_DRAW_END address %#x, fetched %d" % (p, word * 2, fetched))
+# SCU DMA start event, derived from the registers the guest programs (scu.inc AddressToBus / StartDMATransfer):
+def bus_of(a):
+    a &= 0x07FFFFFF
+    return 0 if 0x02000000 <= a <= 0x058FFFFF else 1 if 0x05A00000 <= a <= 0x05FBFFFF else 2 if a >= 0x06000000 else -1
+for p in (6, 7, 8):
+    ev = events_of(p)
+    ra, wa = last_reg(ev, 0x05FE0000) & 0x07FFFFFF, last_reg(ev, 0x05FE0004) & 0x07FFFFFF
+    md = last_reg(ev, 0x05FE0014)
+    arg0 = 0 | (((md >> 24) & 1) << 8) | ((md & 7) << 16) | (bus_of(ra) << 24) | (bus_of(wa) << 28)
+    check(arg0 == 0x12010000 and ra == 0x06020000 and wa == 0x05C20000, "phase %d: SCU_DMA_START would carry %08X %08X %08X" % (p, arg0, ra, wa))
+    check(last_reg(ev, 0x05FE0010) & 1 == 0, "phase %d: D0EN has the immediate-start bit set" % p)
+print("hardware event derivation: vector 0x40 -> vbin, saved PC main_loop+2, 1 IMS write per frame, SMPC/CD/DMAC/SCSP untouched, DMA arg0 0x12010000")
 
 # ------------------------------------------------------------------ bus buckets
 DEV = ["BIOS", "SMPC", "BACKUP", "WRAM_L", "CS0_OTHER", "ABUS_CS0", "ABUS_CS1", "ABUS_CD", "SCSP", "VDP1", "VDP2", "SCU", "WRAM_H"]
