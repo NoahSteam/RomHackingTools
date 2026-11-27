@@ -21,8 +21,10 @@ and read the rows of a 16-frame window centred in the phase. Two reading rules:
 
 * The `frame` shown for an event is the committed frame number, one behind the frame the emulator is
   executing (the Profiler's frame number). Compare counts per window, not frame numbers.
-* The per-source cap (64 per frame) is never reached by this guest: a `SUPPRESSED` row in any phase is a
-  finding.
+* The per-source cap (64 per frame) is counted **per CPU** (master, slave, no CPU each have their own budget).
+  The master and the devices never reach it in this guest, so a `SUPPRESSED` row for the master or for a
+  device in any phase is a finding. The one expected exception is phase 9, where the slave overflows its own
+  budget (below).
 
 ## Events in every phase (steady frames)
 
@@ -40,7 +42,7 @@ and read the rows of a 16-frame window centred in the phase. Two reading rules:
 | SH2_DMAC `DMAC_START` / `DMAC_END` | **0** on the master | exact **[pinned]** (the guest writes no on-chip register) | the guest never touches the SH-2 DMAC |
 | SCU_DMA `SCU_DMA_ILLEGAL` | **0** | exact | both DMA addresses are legal |
 | CD `CD_COMMAND`, `CD_RESPONSE` | **0** | exact **[pinned]** (no CD block register is ever written) | a response is produced only inside a command; the guest sends none |
-| `SUPPRESSED`, lost-events row | **0** | exact | about 10 records per source per frame at most |
+| `SUPPRESSED`, lost-events row | **0** in every phase except phase 9, where exactly one `SUPPRESSED` row with cpu 1 (source CPU_EXC) per steady frame is expected | exact | about 10 records per source per frame at most for the master and the devices; the slave's phase 9 flood is the exception (above) |
 
 Order inside one frame, where the code fixes it: `VDP2_VBLANK` IN, then `SCU_INT_ACCEPT`, then
 `SH2_EXCEPTION`, then `SCU_INT_MASK` (the handler runs after the exception); `VDP2_VBLANK` OUT before any
@@ -60,7 +62,7 @@ Order inside one frame, where the code fixes it: `VDP2_VBLANK` IN, then `SCU_INT
 | 6 | DMA_BIG | `SCU_DMA_START` **1**: arg0 **0x12010000** (level 0, direct, start factor 1 = VBlank-OUT, read bus C, write bus B), arg1 **0x06020000**, arg2 **0x05C20000**, arg3 **16384**; `SCU_DMA_END` **1** (arg0 0) | exact **[pinned]** (arg0 packing recomputed from the programmed registers); the end follows its start in the same frame unless the frame boundary falls between (sum exact) |
 | 7 | DMA_SMALL | as phase 6 with arg3 **4096** | exact **[pinned]** |
 | 8 | DMA_DRAW | the phase 6 DMA events (16384) and a 400-command draw: `VDP1_DRAW_START` 1; `VDP1_DRAW_END` 1 with arg0 **0x3200**, arg1 0 if the draw completes, otherwise one with arg1 **1** (aborted by the next swap) and arg0 <= 0x3200 | range: the DMA halts VDP1 while it writes VDP1 VRAM, so the draw may be cut (`EXPECTED.md`: overruns 0 or 1); one end per start either way |
-| 9 | SSH_ON | `SMPC_COMMAND` 0x02 (SSHON) in the first frame. Events with cpu 1 and any DMAC, CD or SMPC event from the slave: **not asserted** | the slave runs BIOS code the guest does not control |
+| 9 | SSH_ON | `SMPC_COMMAND` 0x02 (SSHON) in the first frame. **Master**: the common set unchanged, i.e. its one vector-0x40 exception **every frame** (the slave's flood has its own cap budget and cannot drop it). **Slave**: `SH2_EXCEPTION` cpu 1, vector **0x43**, class INT, level **6**, the first 64 of the frame, then one `SUPPRESSED` row (source CPU_EXC, cpu 1, arg1 64) saying how many more were dropped (about 13,500 interrupts per frame in total). Any DMAC, CD or SMPC event from the slave: **not asserted** | Observed on the real patched Mednafen: the slave's only interrupt input is the IRL auto-vector, and `scu.inc` (around line 394) drives `CPU[1].SetIRL(((VB \| HB) << 1) \| (VB << 2))` so IRL 6 is held through the whole VBlank; `sh7095.inc` `GetPendingInt` takes vector `(IRL >> 1) + 64` = 0x43, and the slave takes it again as soon as its handler returns. Before the cap was per CPU this flood filled the shared CPU_EXC budget and dropped the master's exception in 212 of 214 frames. The Log names vector 0x43 on the slave "VBlank-IN (IRL 6 auto-vector)" (not the master's SCU "Timer 0") |
 | 10 | SSH_OFF | `SMPC_COMMAND` 0x03 in the first frame; from the next frame no event with cpu 1 | exact for steady frames: the slave is held off |
 | 11 | M68K_STOP | `SMPC_COMMAND` 0x07 then 0x06 (SNDOFF, SNDON) in the first frame | exact order **[pinned]**; the guest writes the 68000 vectors and program into sound RAM between them **[pinned]** |
 | 12 | M68K_BUSY | as phase 11 | as phase 11 |
@@ -79,7 +81,7 @@ still produce an event, and the entry work runs.
 * **The BIOS boot path**: every SMPC, CD block, VDP2 display and SH-2 event before the guest's first frame,
   including the guest's own start-up `VDP2_DISPLAY` events (0x0100 changes the display bit only if the BIOS
   left it on; 0x8100 turns it on). A capture armed after launch misses them anyway.
-* **The slave in phase 9** and what it does to the SCU or SMPC.
+* **The slave in phase 9** beyond the vector 0x43 level 6 flood described above, and what it does to the SCU or SMPC.
 * **SMPC IREG arguments** (the BIOS's leftovers) and the exact frame of an SMPC event.
 * **The exact `IPending`** in `SCU_INT_ACCEPT`, the order of events between sources, and `ts`.
 * The CD hooks beyond "no event": nothing in the guest issues a CD command, so neither hook is exercised. V1

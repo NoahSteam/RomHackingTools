@@ -46,6 +46,9 @@ const char* HwScuBusName(unsigned bus);
 // SH-2 vector number: the fixed vectors (power-on .. user break), TRAPA 32..63, the SCU's 0x40..0x4D
 // and 0x50..0x5F. nullptr for the rest (the on-chip peripherals' vectors are programmable).
 std::string HwSh2VectorName(unsigned vector);
+// Name of an INT-class vector as taken by 'cpu' (0 master, 1 slave): SCU names for the master only; the slave's
+// 0x43 / 0x41 are its IRL auto-vectors. Empty when there is no fixed meaning ("on-chip/other").
+std::string HwSh2InterruptVectorName(unsigned vector, unsigned cpu);
 // CD block command byte; nullptr when unknown. cdb.cpp's names.
 const char* HwCdCommandName(unsigned command);
 // CD block status code (low nibble of the status byte); nullptr when unknown.

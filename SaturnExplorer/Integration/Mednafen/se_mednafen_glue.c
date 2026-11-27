@@ -1030,8 +1030,13 @@ static unsigned int sHwEvTestTs, sHwEvTestPc;
 #define SE_MDFN_HWEV_PC(cpu)  (sHwEvTestPc)
 #endif
 
-/* Records produced per source this frame, counting those the cap dropped. */
-static unsigned int sHwEvCount[8];
+/* Records produced per (source, cpu) this frame, counting those the cap dropped. The cap is per CPU
+ * because the two SH-2s are not equally busy: in V1 phase 9 the slave takes ~13,500 interrupts a frame
+ * (its IRL 6 is held through VBlank) and a cap shared with the master dropped the master's one
+ * exception in nearly every frame. Index 0 master, 1 slave, 2 no CPU (device events). */
+static unsigned int sHwEvCount[8][3];
+#define SE_MDFN_HWEV_CPUSLOT(cpu) ((cpu) == 0 ? 0u : (cpu) == 1 ? 1u : 2u)
+static void SeMdfnHwEvZeroCounts(void) { memset(sHwEvCount, 0, sizeof sHwEvCount); }
 /* Each SH-2's on-chip DMAC run conditions (bit n = channel n runs) as of its last recalc, or -1 when
  * unknown (a state load or a reset replaced the machine; the log was off while the DMAC changed). */
 static int sDmacRun[2] = { -1, -1 };
@@ -1089,7 +1094,7 @@ void SeMednafenHwEvent(unsigned int kind, int cpu, unsigned int pc,
     if (src > 7u || !(SeSsHwEvMask & (1u << src))) return;
     /* The per-source frame cap: an interrupt-heavy game would otherwise fill the ring with one line of
      * the log. The excess is counted and reported once, at the frame's end. */
-    if (sHwEvCount[src]++ >= SE_HWEV_FRAME_CAP) return;
+    if (sHwEvCount[src][SE_MDFN_HWEV_CPUSLOT(cpu)]++ >= SE_HWEV_FRAME_CAP) return;
     SeMdfnHwEvEmit(kind, src, cpu, SeMdfnHwEvFlags(kind), pc, a0, a1, a2, a3);
 }
 
@@ -1113,13 +1118,13 @@ void SeMednafenDmacRecalc(int cpu, unsigned int runMask,
         const unsigned int chcr = ch ? chcr1 : chcr0, sar = ch ? sar1 : sar0, dar = ch ? dar1 : dar0, tcr = ch ? tcr1 : tcr0;
         if ((runMask & bit) && !((unsigned int)was & bit))
         {
-            if (sHwEvCount[3]++ < SE_HWEV_FRAME_CAP)
+            if (sHwEvCount[3][c]++ < SE_HWEV_FRAME_CAP)
                 SeMdfnHwEvEmit(SE_HWEV_K_DMAC_START, 3, c, SeMdfnHwEvFlags(SE_HWEV_K_DMAC_START), SE_MDFN_HWEV_PC(c),
                                ch | ((chcr & 0xFFFFu) << 8), sar, dar, tcr);
         }
         else if (!(runMask & bit) && ((unsigned int)was & bit))
         {
-            if (sHwEvCount[3]++ < SE_HWEV_FRAME_CAP)
+            if (sHwEvCount[3][c]++ < SE_HWEV_FRAME_CAP)
                 SeMdfnHwEvEmit(SE_HWEV_K_DMAC_END, 3, c, SeMdfnHwEvFlags(SE_HWEV_K_DMAC_END), 0, ch, 0, 0, 0);
         }
     }
@@ -1130,11 +1135,10 @@ void SeMednafenDmacRecalc(int cpu, unsigned int runMask,
 void SeMednafenSetHwEvents(unsigned int mask)
 {
     const unsigned int turnedOn = mask & ~SeSsHwEvMask;
-    unsigned int i;
     mask &= SE_MDFN_HWEV_SUPPORTED;
     SeSsHwEvMask = mask;
     if (turnedOn & SE_HWEV_EN_SH2_DMAC) sDmacRun[0] = sDmacRun[1] = -1;
-    for (i = 0; i < 8u; ++i) sHwEvCount[i] = 0;
+    SeMdfnHwEvZeroCounts();
 }
 
 /* Registers the enable hook with the exporter. SeExportPrepare tells the hook the mask is 0 and forgets it, so
@@ -1150,21 +1154,26 @@ void SeMednafenRegisterHwEvents(void)
  * many it dropped, then the counters restart. */
 void SeMdfnHwEvEndFrame(void)
 {
-    unsigned int src;
+    unsigned int src, slot;
     for (src = 0; src < 8u; ++src)
     {
-        if (sHwEvCount[src] > SE_HWEV_FRAME_CAP && (SeSsHwEvMask & (1u << src)))
-            SeMdfnHwEvEmit(SE_HWEV_K_SUPPRESSED, src, SE_HWEV_CPU_NONE, 0, 0, sHwEvCount[src] - SE_HWEV_FRAME_CAP, SE_HWEV_FRAME_CAP, 0, 0);
-        sHwEvCount[src] = 0;
+        for (slot = 0; slot < 3u; ++slot)
+        {
+            /* The record's cpu names whose events were dropped (slot 2 = no CPU); SeHwEvent.cpu is the
+             * only place it fits, the 32-byte record has no spare field. */
+            if (sHwEvCount[src][slot] > SE_HWEV_FRAME_CAP && (SeSsHwEvMask & (1u << src)))
+                SeMdfnHwEvEmit(SE_HWEV_K_SUPPRESSED, src, slot < 2u ? (int)slot : (int)SE_HWEV_CPU_NONE, 0, 0,
+                               sHwEvCount[src][slot] - SE_HWEV_FRAME_CAP, SE_HWEV_FRAME_CAP, 0, 0);
+            sHwEvCount[src][slot] = 0;
+        }
     }
 }
 
 /* A state load replaced what the hooks were tracking. */
 static void SeMdfnHwEvForget(void)
 {
-    unsigned int i;
     sDmacRun[0] = sDmacRun[1] = -1;
-    for (i = 0; i < 8u; ++i) sHwEvCount[i] = 0;
+    SeMdfnHwEvZeroCounts();
 }
 
 /* SH7095::Reset ran on a powered CPU ('ts' its timestamp): by the watchdog, or inside SetActive. The

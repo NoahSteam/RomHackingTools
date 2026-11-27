@@ -184,6 +184,10 @@ struct Fixture
         CHECK(r != nullptr);
         if (!r) return;
         const ImVec2 p = Mid(r->valueMin, r->valueMax);
+        // Let the previous double-click's window lapse (ImGui's 0.30 s): a further click on the same spot in
+        // quick succession is click number three, not a double-click. (A notice used to shift the rows between
+        // two double-clicks, which moved the spot and hid this.)
+        for (int i = 0; i < 25; ++i) h.Frame(ImVec2(1275, 715), false);
         h.Hover(p);
         h.Click(p);
         h.Click(p);
@@ -388,6 +392,50 @@ void RowHeightUnchangedWhileEditing()
     bool same = before.size() == during.size();
     for (size_t i = 0; same && i < before.size(); ++i) same = before[i] == during[i];
     CHECK(same);
+}
+
+// A status line that appears, wraps and expires must not move the rows: a click, F2 or a right-click aimed at
+// a row would land on its neighbour. The line's height is reserved whether or not it has text.
+void NoticeNeverMovesRows()
+{
+    Fixture f(ItemView(2));
+    f.Frames(8);
+    const std::string key = "v1[1].pos.y";
+    CHECK(f.Row(key) != nullptr);
+    const float before = f.Row(key) ? f.Row(key)->rowY : -1.0f;
+    const float firstBefore = f.panel.Rows().empty() ? -1.0f : f.panel.Rows().front().rowY;
+
+    // A short notice.
+    f.backend.canWrite = false;
+    f.backend.refusal = "short refusal";
+    f.DoubleClickValue(key);
+    CHECK(f.panel.Notice() == "short refusal");
+    f.Frames(3);
+    CHECK(f.Row(key) && f.Row(key)->rowY == before);
+
+    // A very long one: it used to wrap onto several lines.
+    f.backend.refusal.clear();
+    for (int i = 0; i < 60; ++i) f.backend.refusal += "the source refused the write ";
+    f.DoubleClickValue(key);
+    CHECK(f.panel.Notice().size() > 1000);
+    f.Frames(3);
+    CHECK(f.Row(key) && f.Row(key)->rowY == before);
+    CHECK(!f.panel.Rows().empty() && f.panel.Rows().front().rowY == firstBefore);
+
+    // Expired.
+    f.dt = 30.0f;
+    f.h.Frame(ImVec2(1275, 715), false);
+    f.dt = 0.0f;
+    f.Frames(3);
+    CHECK(f.panel.Notice().empty());
+    CHECK(f.Row(key) && f.Row(key)->rowY == before);
+
+    // The edit hint shares the same line.
+    f.backend.canWrite = true;
+    f.DoubleClickValue(key);
+    CHECK(f.panel.IsEditing());
+    f.Frames(3);
+    CHECK(f.Row(key) && f.Row(key)->rowY == before);
 }
 
 // ---------------------------------------------------------------- pointers
@@ -793,6 +841,7 @@ int main()
     SourceChangeDropsTheEdit();
     EscapeCancels();
     RowHeightUnchangedWhileEditing();
+    NoticeNeverMovesRows();
     PointerFollowNullCycleAndDepth();
     HugeArrayReadsOnlyVisibleRows();
     FallsBackToPerFieldReads();

@@ -303,7 +303,7 @@ void LogPanel::DrawChips()
             else
             {
                 ImGui::Text("%s: click to capture and show, click again to stop. Right-click to pick sources.", st.name);
-                ImGui::Text("Capturing costs a little emulator time, and events are capped at %u per source per frame; the rest is summarised as \"+N more\".",
+                ImGui::Text("Capturing costs a little emulator time, and events are capped at %u per source and CPU per frame; the rest is summarised as \"+N more\".",
                             static_cast<unsigned>(SE_HWEV_FRAME_CAP));
                 if (unavailable) ImGui::TextUnformatted("Unavailable: the emulator cannot capture this here (no free connection slot, or not in this build).");
                 if (pending) ImGui::TextUnformatted("Pending: the emulator applies the change at the next frame boundary.");

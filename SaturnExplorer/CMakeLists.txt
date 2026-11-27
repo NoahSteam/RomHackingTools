@@ -974,6 +974,15 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerStructPanelTests COMMAND SaturnExplorerStructPanelTests)
     set_tests_properties(SaturnExplorerStructPanelTests PROPERTIES TIMEOUT 120)
 
+    # A layout saved before a window existed: the new window docks beside its neighbour instead of floating.
+    add_executable(SaturnExplorerLayoutAdoptionTests
+        FrontEnd/tests/LayoutAdoptionTests.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerLayoutAdoptionTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerLayoutAdoptionTests COMMAND SaturnExplorerLayoutAdoptionTests)
+
     # The SH-2 Pseudocode panel (PLAN.md Step 3) -- the real panel, the real engine and runner, and
     # the real Memory panel typing into a mock backend: navigation, CPU retention, the install rule,
     # stale retention and the A1 refresh policy.

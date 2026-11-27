@@ -55,6 +55,8 @@ The Structs window shows `view label = Type[count] @ expression;` entries from `
 
 `App::DrawStructs` passes the panel Watch's arguments (backend, resolver, platform, breakpoints, frame time) plus two out-params. A hex-jump address is revealed in the Hex Editor as Watch's is. An "Add to Watch" request on a scalar leaf goes to `WatchPanel::AddWatch`. Watch's row menu "View as Struct..." fills `WatchPanel::ViewAsStructRequest` (address and name); App forwards it to `StructPanel::RequestViewAt` and shows the window. With no struct defined yet the Definitions editor opens and the view is created when text that defines one is applied.
 
+Layout: a saved `imgui.ini` that predates the window opens it floating, so `App::AdoptNewPanels` docks Structs into Watch's node (`AdoptPanelsBeside` in [LayoutAdoption.h](../../../FrontEnd/src/LayoutAdoption.h), shared with Memory Compare; `LayoutAdoptionTests`). Profiler, Tracepoints and the other later debugger windows are not in that table. The toolbar's status line (load error, "Editing ...", notice) is one reserved line.
+
 Persistence: `LoadSession` runs at startup and `SaveSession` at shutdown, like Watch. Unlike Watch, App also saves while running: `DrawStructs` calls `SaveSession` at most every 5 seconds while `NeedsSave()` is true. A refused save (a lock, a full disk, or a file that failed to load) is logged once per distinct message, not every retry. A file that failed to load is held as text and never overwritten until definitions that parse are applied. A view whose struct was deleted is kept as a `//!broken view` comment line so it survives a restart.
 
 ### Editing an instruction in place
@@ -64,10 +66,12 @@ The Assembly row menu (Assemble..., F2, double-click on the Instr or Bytes cell)
 `App::Initialize` gives the panel a symbol resolver (`ResolveFunctionSymbol` over `FunctionNames::All()` plus the default `sub_XXXXXX` spelling; a name held by several addresses is refused with the addresses listed). `App::DrawAssembly` copies `Request::asmNote` into the Log when `Request::assembled` is set.
 
 Constraints:
+- The notice line under the Assembly header is a fixed, always-reserved single line (`FixedStatusLine` in `PanelWidgets.h`: ellipsis, full text in a tooltip) so a notice appearing or expiring never moves the rows; the Structs panel's load-error, editing and notice texts share one such line.
 - One instruction per edit. The assembler never allocates or moves a literal pool: `mov.l #imm32,rN` is refused with a message pointing at Edit Literal Value or the `@(addr)` form.
 - Delay-slot problems are warnings, not errors, because the same row can also be reached directly.
 - The "also loaded by N other instructions" count for a literal is a heuristic decode of the instructions that could reach the slot.
 - Editing a running CPU does not pause it. The poke lands at the emulator's next frame gate. Whether the emulated instruction cache can keep running the old opcode after a poke was not investigated.
+- **Stale prefetch while halted.** A halted SH-2 has already fetched the instructions ahead of its PC, and a poke does not reach them: patching the instruction at PC+2 ran the OLD opcode once on a real Mednafen, while patches further away ran correctly. The emulator is not changed; `AssemblyPanel::CommitEdit` appends a warning to the notice and to `Request::asmNote` (so to the Log) when a successful instruction write overlaps the fetched window of the CPU it is halted on. The window comes from how the panel knows the PC: the halted PC is the decode stage (`PC_ID`; `GSREG_RPC`, the next fetch address, is 4 bytes ahead of it), the stage behind it holds PC+2, so `[PC, PC+4)` is always fetched. With the instruction cache emulated, `FetchIF` reads a longword at a time and keeps the other half in `IBuffer`, so when PC+2 is longword aligned (`PC & 2`) the half at PC+4 is already buffered too: `[PC, PC+6)`. Only the PC+2 case was seen on a real emulator; the rest is read from `sh7095.inc`. Literal edits are not affected (data is read when the load executes), nor is a CPU that is running or the one not halted.
 - An edit is cancelled when `SourceId` or the CPU selection changes.
 
 The pseudocode panel adds fixed-address shortcuts through `App::UpdateDecompiler` into the same
@@ -112,7 +116,7 @@ Watches, assembly comments and function names have explicit load/save methods ca
 From `SaturnExplorer/`, configure/build as described in [BUILD.md](../../BUILD.md), then select relevant registered tests:
 
 ```sh
-ctest --test-dir build --output-on-failure -R 'StepHaltMachine|BreakpointManager|ExecutionActions|ConditionEval|ExpressionResolver|CallStack|FunctionNames|AssemblyPanel|Sh2Asm|FunctionSymbol|StructDefs|StructPanel|WatchPanel|Sh2Decode|Sh2OperandHover|Sh2RegInfo|PanelInteraction'
+ctest --test-dir build --output-on-failure -R 'StepHaltMachine|BreakpointManager|ExecutionActions|ConditionEval|ExpressionResolver|CallStack|FunctionNames|AssemblyPanel|Sh2Asm|FunctionSymbol|StructDefs|StructPanel|LayoutAdoption|WatchPanel|Sh2Decode|Sh2OperandHover|Sh2RegInfo|PanelInteraction'
 ```
 
 The corresponding `FrontEnd/tests/*Tests.cpp` files isolate models or use headless ImGui. Important examples: [StepHaltMachineTests.cpp](../../../FrontEnd/tests/StepHaltMachineTests.cpp) exercises halt identity/races; [BreakpointManagerTests.cpp](../../../FrontEnd/tests/BreakpointManagerTests.cpp) exercises guards and shared breakpoint identity; [CallStackHeuristicTests.cpp](../../../FrontEnd/tests/CallStackHeuristicTests.cpp) exercises reconstruction and Step Out; [PanelInteractionTests.cpp](../../../FrontEnd/tests/PanelInteractionTests.cpp) exercises input routing. Live exporter stop races also have [LiveHaltRaceTests.cpp](../../../FrontEnd/tests/LiveHaltRaceTests.cpp). Availability of targets depends on build options in [CMakeLists.txt](../../../CMakeLists.txt).

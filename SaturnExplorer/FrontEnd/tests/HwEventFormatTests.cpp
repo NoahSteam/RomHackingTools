@@ -55,6 +55,21 @@ void Messages()
               "SSH2 interrupt on-chip/other (vec 0x6E, level 6) -> handler 06000100");
     CheckText("int external", Msg(Ev(1, 0x53, SE_HWEV_EXC_INT, 4, 0x06000200, 0)),
               "MSH2 interrupt SCU external 3 (vec 0x53, level 4) -> handler 06000200");
+    // The slave has no SCU vectors: vector 0x43 is its IRL 6 auto-vector (VBlank-IN line) and 0x41 the
+    // IRL 2 one (HBlank-IN), not the master's "Timer 0" / "VBlank-OUT".
+    CheckText("slave irl6", Msg(Ev(1, 0x43, SE_HWEV_EXC_INT, 6, 0x06000100, 1)),
+              "SSH2 interrupt VBlank-IN (IRL 6 auto-vector) (vec 0x43, level 6) -> handler 06000100");
+    CheckText("slave irl2", Msg(Ev(1, 0x41, SE_HWEV_EXC_INT, 2, 0x06000100, 1)),
+              "SSH2 interrupt HBlank-IN (IRL 2 auto-vector) (vec 0x41, level 2) -> handler 06000100");
+    CheckText("slave other", Msg(Ev(1, 0x40, SE_HWEV_EXC_INT, 1, 0x06000100, 1)),
+              "SSH2 interrupt on-chip/other (vec 0x40, level 1) -> handler 06000100");
+    CheckText("master 0x43 stays SCU", Msg(Ev(1, 0x43, SE_HWEV_EXC_INT, 6, 0x06000100, 0)),
+              "MSH2 interrupt SCU Timer 0 (vec 0x43, level 6) -> handler 06000100");
+    CHECK(DetailHas(Ev(1, 0x43, SE_HWEV_EXC_INT, 6, 0, 1), "Vector", "VBlank-IN (IRL 6 auto-vector)"));
+    CHECK(!DetailHas(Ev(1, 0x43, SE_HWEV_EXC_INT, 6, 0, 1), "Vector", "Timer 0"));
+    CHECK(DetailHas(Ev(1, 0x41, SE_HWEV_EXC_INT, 2, 0, 1), "Vector", "HBlank-IN (IRL 2 auto-vector)"));
+    CHECK(!DetailHas(Ev(1, 0x41, SE_HWEV_EXC_INT, 2, 0, 1), "Vector", "VBlank-OUT"));
+    CHECK(DetailHas(Ev(1, 0x50, SE_HWEV_EXC_INT, 2, 0, 1), "Vector", "on-chip/other"));
     CheckText("nmi", Msg(Ev(1, 11, SE_HWEV_EXC_NMI, 0, 0x06000300, 0)), "MSH2 NMI (vec 0x0B) -> handler 06000300");
     CheckText("cpu addr", Msg(Ev(1, 9, SE_HWEV_EXC_CPUADDR, 0, 0x06000400, 1)),
               "SSH2 CPU address error (vec 0x09) -> handler 06000400");
@@ -137,6 +152,13 @@ void Messages()
     // 255 SUPPRESSED
     CheckText("suppressed", Msg(Ev(255, 137, 64, 0, 0, SE_HWEV_CPU_NONE, 0, 0, 4)),
               "... +137 more VDP1 events this frame (cap 64)");
+    // The cap is per CPU: a row for one CPU's events names it.
+    CheckText("suppressed slave", Msg(Ev(255, 13436, 64, 0, 0, 1, 0, 0, 0)),
+              "... +13436 more SSH2 CPU exception events this frame (cap 64)");
+    CheckText("suppressed master", Msg(Ev(255, 3, 64, 0, 0, 0, 0, 0, 0)),
+              "... +3 more MSH2 CPU exception events this frame (cap 64)");
+    CHECK(DetailHas(Ev(255, 13436, 64, 0, 0, 1, 0, 0, 0), "CPU", "Slave"));
+    CHECK(!DetailHas(Ev(255, 137, 64, 0, 0, SE_HWEV_CPU_NONE, 0, 0, 4), "CPU", "SH-2"));
     CheckText("suppressed source unknown", Msg(Ev(255, 1, 64, 0, 0, SE_HWEV_CPU_NONE, 0, 0, 200)),
               "... +1 more hardware events this frame (cap 64)");
     // Unknown kind: a newer emulator must still render.
