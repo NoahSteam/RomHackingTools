@@ -6,6 +6,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 using namespace sfe;
 
@@ -87,6 +88,70 @@ void TestReplaceAndMerge()
     FrameEditStore w;
     w.Record(FrameKey{ 1, 5 }, false, 0x05C7FFFFu, cross, 2);
     Check(w.Find(FrameKey{ 1, 5 })->Pokes().size() == 2, "and one write over the boundary is split at it");
+}
+
+// Runs stay sorted and disjoint across a block boundary, so the last write of a byte is the one that
+// replays. (Found in review: a run touching the boundary from below was treated as mergeable and then
+// not merged, so the new run went in FRONT of it; rewriting the lower byte then left the old value in a
+// stale duplicate that was applied last.)
+bool SortedDisjoint(const FrameEdits& e)
+{
+    const std::vector<StagedPoke>& r = e.Pokes();
+    for (size_t i = 1; i < r.size(); ++i)
+    {
+        if (r[i - 1].isSound != r[i].isSound) { if (r[i - 1].isSound) return false; continue; }
+        if (uint64_t(r[i - 1].addr) + r[i - 1].bytes.size() > r[i].addr) return false;
+    }
+    return true;
+}
+
+// What a replay in list order leaves at 'addr' (-1: untouched).
+int Replayed(const FrameEdits& e, uint32_t addr)
+{
+    int v = -1;
+    for (const StagedPoke& p : e.Pokes())
+        if (!p.isSound && addr >= p.addr && addr - p.addr < p.bytes.size()) v = p.bytes[addr - p.addr];
+    return v;
+}
+
+void TestBlockBoundaryOrder()
+{
+    const uint32_t lo = 0x05C7FFFFu, hi = 0x05C80000u;
+    const FrameKey k{ 1, 5 };
+    {   // lower byte, upper byte, lower byte again
+        FrameEditStore s;
+        Put(s, 1, 5, lo, 0x11);
+        Put(s, 1, 5, hi, 0x22);
+        Put(s, 1, 5, lo, 0x33);
+        const FrameEdits* e = s.Find(k);
+        Check(e && e->Pokes().size() == 2 && SortedDisjoint(*e), "boundary: two runs, sorted, no duplicate (lo, hi, lo)");
+        Check(e && e->Pokes()[0].addr == lo && e->Pokes()[1].addr == hi, "boundary: the lower run comes first");
+        Check(e && Replayed(*e, lo) == 0x33 && Replayed(*e, hi) == 0x22, "boundary: the last write of each byte replays");
+        Check(e && e->ByteCount() == 2, "boundary: two distinct bytes are counted, not three");
+    }
+    {   // upper first, then lower, then both rewritten
+        FrameEditStore s;
+        Put(s, 1, 5, hi, 0x22);
+        Put(s, 1, 5, lo, 0x11);
+        Put(s, 1, 5, hi, 0x44);
+        Put(s, 1, 5, lo, 0x55);
+        const FrameEdits* e = s.Find(k);
+        Check(e && e->Pokes().size() == 2 && SortedDisjoint(*e), "boundary: two runs, sorted (hi, lo, hi, lo)");
+        Check(e && Replayed(*e, lo) == 0x55 && Replayed(*e, hi) == 0x44, "boundary: rewriting both sides keeps the latest of each");
+    }
+    {   // a run ending at the boundary, extended from below and rewritten across it
+        FrameEditStore s;
+        const uint8_t three[3] = { 1, 2, 3 };
+        s.Record(k, false, lo - 2, three, 3);          // ..FFFD, ..FFFE, ..FFFF
+        Put(s, 1, 5, hi, 0x09);
+        const uint8_t cross[4] = { 0xA, 0xB, 0xC, 0xD };   // ..FFFE, ..FFFF | hi, hi+1
+        s.Record(k, false, lo - 1, cross, 4);
+        const FrameEdits* e = s.Find(k);
+        Check(e && e->Pokes().size() == 2 && SortedDisjoint(*e), "boundary: a write across it updates both runs in place");
+        Check(e && Replayed(*e, lo - 2) == 1 && Replayed(*e, lo - 1) == 0xA && Replayed(*e, lo) == 0xB &&
+                  Replayed(*e, hi) == 0xC && Replayed(*e, hi + 1) == 0xD,
+              "boundary: every byte holds its last write");
+    }
 }
 
 void TestTruncation()
@@ -192,6 +257,7 @@ int main()
 {
     TestPerFrame();
     TestReplaceAndMerge();
+    TestBlockBoundaryOrder();
     TestTruncation();
     TestEviction();
     TestTimelineReuse();

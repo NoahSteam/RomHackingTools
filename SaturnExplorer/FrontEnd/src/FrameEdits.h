@@ -102,9 +102,14 @@ public:
 private:
     static bool Before(const StagedPoke& r, bool isSound, uint64_t addr)
     {
-        // r ends strictly before 'addr' (a touching run is not "before": it merges).
+        // r ends strictly before 'addr'. A run that merely touches 'addr' is not "before" (it merges),
+        // unless it lies in the preceding block: that one is never merged, so it must be stepped over
+        // here, or the new run would be inserted in front of it and the list would stop being sorted --
+        // after which a rewrite of the earlier byte left a stale duplicate that replayed last.
         if (r.isSound != isSound) return !r.isSound && isSound;
-        return uint64_t(r.addr) + r.bytes.size() < addr;
+        const uint64_t end = uint64_t(r.addr) + r.bytes.size();
+        if (end < addr) return true;
+        return end == addr && !SameBlock(r.addr, static_cast<uint32_t>(addr));
     }
 
     void AddWithinBlock(bool isSound, uint32_t addr, const uint8_t* bytes, size_t len)
