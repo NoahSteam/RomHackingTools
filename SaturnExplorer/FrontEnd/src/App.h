@@ -244,6 +244,9 @@ private:
     // The decision as the panels draw it: taken once per UI frame (it rebuilds a call stack).
     const StepOutDecision& StepOutOffer();
     int             mStepOutOfferFrame = -1;
+    int             mStepOutOfferCpu = 0;       // the halt the cached decision was taken for
+    uint32_t        mStepOutOfferPc = 0;
+    bool            mStepOutOfferHalted = false;
     StepOutDecision mStepOutOffer;
     int  SteppedCpu() const;
     // Install the transient step breakpoint at 'addr' and resume — the shared "run to a

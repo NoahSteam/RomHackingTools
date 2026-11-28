@@ -5814,11 +5814,20 @@ App::StepOutDecision App::DecideStepOut()
 
 const App::StepOutDecision& App::StepOutOffer()
 {
+    // Deciding polls the emulator's recorded call stack and reads stack memory, which is too much to do
+    // every UI frame for two buttons' enabled state. The answer only changes when the halt does, so it
+    // is redone at once for a new halt (CPU or PC) and otherwise a few times a second. StepOut itself
+    // always decides afresh.
     const int frame = ImGui::GetFrameCount();
-    if (frame != mStepOutOfferFrame)
+    const bool sameHalt = mStepOutOfferFrame >= 0 && mStepOutOfferCpu == mStepHalt.HaltCpu() &&
+                          mStepOutOfferPc == mStepHalt.HaltPc() && mStepOutOfferHalted == mStepHalt.HaltActive();
+    if (!sameHalt || frame - mStepOutOfferFrame >= 15)
     {
         mStepOutOffer = DecideStepOut();
         mStepOutOfferFrame = frame;
+        mStepOutOfferCpu = mStepHalt.HaltCpu();
+        mStepOutOfferPc = mStepHalt.HaltPc();
+        mStepOutOfferHalted = mStepHalt.HaltActive();
     }
     return mStepOutOffer;
 }
