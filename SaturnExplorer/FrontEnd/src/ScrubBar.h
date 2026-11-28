@@ -41,11 +41,13 @@ inline void ScrubBarLeave(bool& scrubbing, int& selected)
     selected = -1;
 }
 
-// "#<frame>   <position> / <count>" for the entry at 'index' whose frame number is 'frame'.
-inline std::string ScrubBarLabel(uint64_t frame, int index, int count)
+// "#<frame>   <position> / <count>" for the entry at 'index' whose frame number is 'frame'; with
+// "   edited" after it when that frame holds memory edits, so the slider says so without a second line.
+inline std::string ScrubBarLabel(uint64_t frame, int index, int count, bool edited = false)
 {
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "#%llu   %d / %d", static_cast<unsigned long long>(frame), index + 1, count);
+    char buf[80];
+    std::snprintf(buf, sizeof(buf), "#%llu   %d / %d%s", static_cast<unsigned long long>(frame), index + 1, count,
+                  edited ? "   edited" : "");
     return buf;
 }
 

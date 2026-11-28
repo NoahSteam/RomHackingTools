@@ -1,5 +1,6 @@
 #include "FrameRecorder.h"
 
+#include <algorithm>
 #include <set>
 
 #include <cstring>
@@ -258,6 +259,7 @@ void FrameRecorder::Clear()
     mBytes = 0;
     mLastCaptured = 0;
     mSelFrameNumber = 0;
+    mSelTimeline = 0;
     mBlocksReceived = mBlocksInvalid = mBlocksNoFrame = mNewestBlock = 0;
 }
 
@@ -307,6 +309,42 @@ size_t FrameRecorder::FindFrame(uint64_t frameNo) const
     return lo < mFrames.size() && mFrames[lo].frameNumber == frameNo ? lo : mFrames.size();
 }
 
+bool FrameRecorder::HasFrame(uint64_t frameNo, uint32_t timeline) const
+{
+    std::lock_guard<std::mutex> lk(mRingMtx);
+    const size_t i = FindFrame(frameNo);
+    return i < mFrames.size() && mFrames[i].timelineId == timeline;
+}
+
+void FrameRecorder::OverlaySelected(const FrameEdits& edits)
+{
+    // Bus windows as the edit sink reports them (see CbEditVram / CbMain); sound RAM is by offset.
+    struct Window { uint32_t base; std::vector<uint8_t>* bytes; };
+    const Window windows[] = {
+        { 0x00200000u, &mScratch.wramLow  }, { 0x06000000u, &mScratch.wramHigh },
+        { 0x05C00000u, &mScratch.vdp1     }, { 0x05C80000u, &mScratch.vdp1Fb   },
+        { 0x05E00000u, &mScratch.vdp2     }, { 0x05F00000u, &mScratch.cram     },
+    };
+    for (const StagedPoke& p : edits.Pokes())
+    {
+        if (p.isSound)
+        {
+            if (p.addr < mScratch.soundRam.size())
+                std::memcpy(mScratch.soundRam.data() + p.addr, p.bytes.data(),
+                            (std::min)(p.bytes.size(), mScratch.soundRam.size() - p.addr));
+            continue;
+        }
+        for (const Window& w : windows)
+        {
+            const size_t size = w.bytes->size();
+            if (p.addr < w.base || p.addr - w.base >= size) continue;
+            const size_t off = p.addr - w.base;
+            std::memcpy(w.bytes->data() + off, p.bytes.data(), (std::min)(p.bytes.size(), size - off));
+            break;
+        }
+    }
+}
+
 int FrameRecorder::IndexOfFrame(uint64_t frameNo) const
 {
     std::lock_guard<std::mutex> lk(mRingMtx);
@@ -319,6 +357,7 @@ bool FrameRecorder::SelectImpl(const uint64_t* wantFrame, size_t i, size_t* outI
     // Cleared first, so any refusal below reports "nothing selected" (a failed decode leaves the
     // scratch half-decoded).
     mSelFrameNumber = 0;
+    mSelTimeline = 0;
     if (!out)
     {
         return false;
@@ -337,6 +376,7 @@ bool FrameRecorder::SelectImpl(const uint64_t* wantFrame, size_t i, size_t* outI
             return false;
         }
         mSelFrameNumber = f.frameNumber;
+        mSelTimeline = f.timelineId;
         mSelVdp1Regs = f.vdp1Regs;
         mSelVdp2Regs = f.vdp2Regs;
         mSelSh2[0] = f.sh2[0]; mSelSh2[1] = f.sh2[1];
@@ -385,16 +425,14 @@ bool FrameRecorder::SelectImpl(const uint64_t* wantFrame, size_t i, size_t* outI
 size_t FrameRecorder::CbEditMain(void* u, uint32_t address, const void* src, size_t size)
 {
     FrameRecorder* r = static_cast<FrameRecorder*>(u);
-    if (r->mEditCb && src && size)
-        r->mEditCb(r->mEditUser, 0, address, static_cast<const uint8_t*>(src), size);
-    return size;
+    if (!r->mEditCb || !src || !size) return 0;
+    return r->mEditCb(r->mEditUser, 0, address, static_cast<const uint8_t*>(src), size);
 }
 size_t FrameRecorder::CbEditSound(void* u, uint32_t offset, const void* src, size_t size)
 {
     FrameRecorder* r = static_cast<FrameRecorder*>(u);
-    if (r->mEditCb && src && size)
-        r->mEditCb(r->mEditUser, 1, offset, static_cast<const uint8_t*>(src), size);
-    return size;
+    if (!r->mEditCb || !src || !size) return 0;
+    return r->mEditCb(r->mEditUser, 1, offset, static_cast<const uint8_t*>(src), size);
 }
 
 // VDP memory rides the work-RAM edit type: the emulator applies a replayed edit with its bus
@@ -421,12 +459,11 @@ size_t FrameRecorder::CbEditVram(void* u, se_vram_kind kind, uint32_t offset, co
     // dropped unless the server has a VDP writer. Refuse it now, like a live edit, instead of
     // showing a colour that Play From Here will not reproduce.
     if (!r->mVdpBusEdits && (kind == SE_VRAM_KIND_CRAM || kind == SE_VRAM_KIND_VDP1_FB)) return 0;
-    if (r->mEditCb && src && size)
-        r->mEditCb(r->mEditUser, 0, base + offset, static_cast<const uint8_t*>(src), size);
-    return size;
+    if (!r->mEditCb || !src || !size) return 0;
+    return r->mEditCb(r->mEditUser, 0, base + offset, static_cast<const uint8_t*>(src), size);
 }
 
-void FrameRecorder::SetEditSink(void* user, void (*cb)(void*, int, uint32_t, const uint8_t*, size_t))
+void FrameRecorder::SetEditSink(void* user, size_t (*cb)(void*, int, uint32_t, const uint8_t*, size_t))
 {
     mEditUser = user;
     mEditCb = cb;

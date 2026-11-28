@@ -56,6 +56,12 @@ error.
    *Proves the keyframes and epoch accounting survive a second rewind.*
 8. **Plain Play is not Play From Here.** Pause, scrub back, press **Play**. Expect the game to carry
    on from the *present* (frame number does not drop back to N). *Proves the two buttons differ.*
+8a. **Edits stay with their frame.** Pause, scrub to frame A, edit a byte in Memory (the panel says
+   "This frame has 1 edited byte, staged for Play From Here." and the scrub bar reads "... edited" with an
+   orange tick on A). Scrub to B: B shows its own value and no note. Scrub back to A: the edit is shown
+   again. Edit B too. Press **Play**, pause, scrub back: both frames still show their edits. Press
+   **Play From Here** on A: only A's edit reaches the game; B (after A) is discarded with its edit, and
+   any frame before A keeps its edit, shown but not applied.
 9. **Rewind off.** Turn Rewind off in Settings: the button disappears and nothing is recorded.
    *Proves the setting gates it.*
 

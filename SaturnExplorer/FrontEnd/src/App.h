@@ -32,7 +32,8 @@
 #include "CompareMarkers.h"      // Frame Memory Compare: the two timeline markers
 #include "ScrubBar.h"            // what the scrub slider's handle and label show
 #include "DebuggerControl.h"     // which context a command acts on while scrubbed
-#include "ScrubState.h"          // frame-identity rules for the scrub view and staged edits
+#include "FrameEdits.h"          // per-frame memory edits made on recorded frames
+#include "ScrubState.h"          // frame-identity rules for the scrub view
 #include "CaptureRepeatTracker.h" // which live captures showed nothing new (A1-7)
 #include "MemoryComparePanel.h"  // Frame Memory Compare: the diff window
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)
@@ -349,6 +350,7 @@ private:
     void PumpCompareExport(IPlatform& platform);
     void CancelCompareExport();
     bool CompareRowVisible() const;
+    void DrawEditedFrameMarks(const ImVec2& sliderMin, const ImVec2& sliderMax, int frameCount);
     void DrawCompareMarkers(const ImVec2& sliderMin, const ImVec2& sliderMax, int frameCount);
     void DrawCompareRow();
     void CompareRowMetrics(char (&text)[2][64], float (&width)[3]) const;   // the row's labels and item widths
@@ -712,20 +714,24 @@ private:
     uint32_t         mLiveCaps = 0;               // the server's SE_LIVE_CAP_* word, refreshed every frame
     uint32_t         mLiveCapsLogged = ~0u;       // the word the missing-features note was last written for
     bool             mVdpPokeSupported = false;   // the server applies CRAM / frame-buffer pokes (v23 VDP writer)
-    bool             mScrubEdited = false;     // the scrub context shows edits that are no longer staged
-    StagedEdits      mStaged;                  // edits made against the scrubbed frame, tagged with its frame number
-    void DiscardPendingEdits();                // abandoned frame / ended session: nothing to replay
+    bool             mScrubEdited = false;     // the scrub context shows edits that are no longer stored
+    uint32_t         mScrubShownTimeline = 0;  // the timeline of mScrubShownFrame (with it, the frame's FrameKey)
+    // Edits made on recorded frames, one set per frame, kept until their frame leaves the recording
+    // (FrameEdits.h). Never discarded by Play, Pause, stepping or scrubbing.
+    FrameEditStore   mEdits;
+    FrameKey         ShownFrameKey() const { return FrameKey{ mScrubShownTimeline, mScrubShownFrame }; }
+    void ClearAllEdits();                      // the recording was cleared: every frame's edits go
+    void ReconcileFrameEdits();                // drop the edits of frames the ring no longer holds
     int              mCallStackViewKey = -1;   // scrubbed frame the call stack was built for (-1 live)
     // Record an edit made against the scrubbed frame (routed from the recorder's write sink).
-    void RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
-    // Build the SE_LIVE_EDIT_* blob from mStaged (for the LST rewind payload).
+    size_t RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
     // Estimated recorder capacity at the current history length, in MB (per-frame average x
     // the configured frame budget). Shown as the "available" half of the footprint readout.
     double RecorderCapacityMB() const;
     // Recorder callback thunks (static; 'user' is this App).
     static void OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
                              uint32_t fullLen, uint32_t epoch, const uint8_t* payload, uint32_t len);
-    static void OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
+    static size_t OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
 
     // --- Patch feature: locate memory edits in game files, then apply them back ---
     // The Hex editor's "Find in game files" records where a memory selection lives on disc

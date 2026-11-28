@@ -5,15 +5,11 @@
 // published. Everything that has to stay with a frame (the view, a navigation's target, edits staged
 // against it) is therefore keyed by frame number:
 //   * PlanScrub decides what the next refresh shows.
-//   * StagedEdits owns the edits staged on a scrubbed frame and the one frame they belong to.
+//   * Edits made on a scrubbed frame are per-frame too: see FrameEdits.h (FrameEditStore).
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
-#include <utility>
-#include <vector>
-
-#include "SeLiveProtocol.h"
 
 namespace sfe
 {
@@ -42,9 +38,10 @@ struct ScrubPlan
 // ring falls back to whatever the index now names.
 //
 // The context on screen may hold edits made to it. Keeping it (no reload) keeps them, so navigating
-// to the frame already shown is a Keep, not a reload that would show the recorded bytes while the
-// edits were still staged. 'forceReload' says the displayed edits were discarded (staged edits
-// dropped without rebuilding the context): the frame is then rebuilt from the recording.
+// to the frame already shown is a Keep. A rebuild lays the frame's stored edits back over the
+// recording (FrameRecorder::OverlaySelected), so a reload shows them too. 'forceReload' says the
+// displayed edits were dropped from the store (their frame left the recording, or it was cleared)
+// while the context still shows them: the frame is then rebuilt without them.
 template <class Ring>
 ScrubPlan PlanScrub(const Ring& ring, bool haveContext, int index, int shownIndex, uint64_t shownFrame,
                     uint64_t targetFrame, bool forceReload)
@@ -83,83 +80,6 @@ ScrubPlan PlanScrub(const Ring& ring, bool haveContext, int index, int shownInde
     plan.kind = ScrubPlan::SelectIndex;
     plan.index = index < 0 ? 0 : index >= n ? n - 1 : index;
     return plan;
-}
-
-struct StagedPoke
-{
-    bool                 isSound = false;
-    uint32_t             addr = 0;
-    std::vector<uint8_t> bytes;
-};
-
-// The edits made against a scrubbed frame, replayed on top of the restored state by Play From Here.
-// A batch carries ONE frame tag that covers every poke in it, so an edit made on another frame cannot
-// join it: the earlier batch is dropped, never retagged, or Play From Here would replay frame 11's
-// edit onto frame 12.
-class StagedEdits
-{
-public:
-    bool Empty() const { return mPokes.empty(); }
-    const std::vector<StagedPoke>& Pokes() const { return mPokes; }
-    bool BelongsTo(uint64_t frame) const { return !mPokes.empty() && mFrame == frame; }
-
-    // Stage 'len' bytes at 'addr' on 'frame'. The hex editor writes one byte at a time, so a write
-    // that continues the last poke extends it. A batch staged on another frame is dropped first.
-    void Record(uint64_t frame, bool isSound, uint32_t addr, const uint8_t* bytes, size_t len)
-    {
-        if (mFrame != frame) Clear();
-        mFrame = frame;
-        for (size_t i = 0; i < len; ++i)
-        {
-            const uint32_t a = addr + static_cast<uint32_t>(i);
-            if (!mPokes.empty())
-            {
-                StagedPoke& last = mPokes.back();
-                if (last.isSound == isSound && a == last.addr + last.bytes.size())
-                {
-                    last.bytes.push_back(bytes[i]);
-                    continue;
-                }
-            }
-            StagedPoke p;
-            p.isSound = isSound;
-            p.addr = a;
-            p.bytes.push_back(bytes[i]);
-            mPokes.push_back(std::move(p));
-        }
-    }
-
-    void Clear()
-    {
-        mPokes.clear();
-        mFrame = 0;
-    }
-
-private:
-    std::vector<StagedPoke> mPokes;
-    uint64_t                mFrame = 0;
-};
-
-// The LST edit blob (SE_LIVE_EDIT_* layout) Play From Here sends: u32 count, then per poke
-// type(1) + pad(3) + addr(4) + len(4) + bytes, all little-endian. The emulator replays them in
-// this order on top of the restored state.
-inline std::vector<uint8_t> EncodeEditBlob(const StagedEdits& staged)
-{
-    std::vector<uint8_t> blob;
-    auto put32 = [&](uint32_t v) {
-        for (int i = 0; i < 4; ++i) blob.push_back(static_cast<uint8_t>(v >> (8 * i)));
-    };
-    put32(static_cast<uint32_t>(staged.Pokes().size()));
-    for (const StagedPoke& p : staged.Pokes())
-    {
-        blob.push_back(p.isSound ? static_cast<uint8_t>(SE_LIVE_EDIT_TYPE_SOUND)
-                                 : static_cast<uint8_t>(SE_LIVE_EDIT_TYPE_WRAM));
-        blob.push_back(0); blob.push_back(0); blob.push_back(0);
-        put32(p.addr);
-        put32(static_cast<uint32_t>(p.bytes.size()));
-        blob.insert(blob.end(), p.bytes.begin(), p.bytes.end());
-    }
-    return blob;
 }
 
 }  // namespace sfe

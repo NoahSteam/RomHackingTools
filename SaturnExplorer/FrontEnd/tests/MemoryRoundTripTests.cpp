@@ -34,6 +34,7 @@
 #include "LiveDriver.h"
 #include "SavestateDriver.h"
 #include "FrameRecorder.h"
+#include "FrameEdits.h"
 #include "ScrubState.h"
 #include "se_export.h"
 #include "SeLiveProtocol.h"
@@ -585,10 +586,12 @@ int main()
         {
             sfe::FrameRecorder rec;
             rec.Configure(4);
-            sfe::StagedEdits staged;
-            struct Sink { sfe::StagedEdits* s; } sink{ &staged };
-            rec.SetEditSink(&sink, [](void* u, int isSound, uint32_t addr, const uint8_t* b, size_t n) {
-                static_cast<Sink*>(u)->s->Record(1, isSound != 0, addr, b, n);
+            sfe::FrameEditStore staged;
+            const sfe::FrameKey stagedKey{ 0, 1 };   // edits are kept per frame; this is the only one
+            struct Sink { sfe::FrameEditStore* s; sfe::FrameKey key; } sink{ &staged, stagedKey };
+            rec.SetEditSink(&sink, [](void* u, int isSound, uint32_t addr, const uint8_t* b, size_t n) -> size_t {
+                Sink* s = static_cast<Sink*>(u);
+                return s->s->Record(s->key, isSound != 0, addr, b, n);
             });
             se_begin_frame(ctx);
             const std::vector<uint8_t> restoreTo(SsDbgSaveState(nullptr, 0));
@@ -623,17 +626,17 @@ int main()
                 // An offset past its region is refused, not staged into the next window.
                 {
                     const uint8_t v = 0x11;
-                    const size_t before = staged.Pokes().size();
+                    const size_t before = staged.Find(stagedKey) ? staged.Find(stagedKey)->Pokes().size() : 0;
                     Check(rds.write_vram(rds.user, SE_VRAM_KIND_VDP1_VRAM, 0x200000u, &v, 1) == 0 &&
                           rds.write_vram(rds.user, SE_VRAM_KIND_CRAM, 0xFFFu, &v, 2) == 0 &&
-                          staged.Pokes().size() == before,
+                          (staged.Find(stagedKey) ? staged.Find(stagedKey)->Pokes().size() : 0) == before,
                           m + ": a recorded-frame edit past its region is refused");
                 }
                 se_destroy(rctx);
                 // Move the emulator on, then Play From Here: restore the recorded state + the edits.
                 for (uint16& w : WorkRAMH) w ^= 0xFFFF;
                 const int loadsBefore = gLoads.load();
-                const std::vector<uint8_t> blob = sfe::EncodeEditBlob(staged);
+                const std::vector<uint8_t> blob = sfe::EncodeEditBlob(*staged.Find(stagedKey));
                 unsigned tlBefore = 0; unsigned long long frBefore = 0;
                 SeExportFrameIdentity(&tlBefore, &frBefore);
                 Check(se_load_state(ctx, 1, state.data(), state.size(), blob.data(), blob.size()) == SE_OK,

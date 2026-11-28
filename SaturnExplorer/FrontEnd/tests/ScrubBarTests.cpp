@@ -60,6 +60,9 @@ int main()
         Check(m.Shown() == m.N() - 1, "after Play + record, paused bar rests on the newest entry");
         Check(m.ShownFrame() == 1100, "...and its label names the newest frame");
         Check(m.Label() == "#1100   1000 / 1000", "label text at capacity");
+        Check(ScrubBarLabel(1100, 999, 1000, true) == "#1100   1000 / 1000   edited" &&
+                  ScrubBarLabel(1100, 999, 1000, false) == m.Label(),
+              "a frame holding edits says so on the label, and only then");
     }
     // Play From Here: the ring is truncated, then regrows; the label must follow the newest entry.
     {

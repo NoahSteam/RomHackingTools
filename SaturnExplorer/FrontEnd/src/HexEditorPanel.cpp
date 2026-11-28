@@ -12,6 +12,7 @@
 
 #include "Debug/BytePatternSearch.h"
 #include "Debug/ShiftJis.h"
+#include "PanelWidgets.h"   // FixedStatusLine
 #include "SaturnRegions.h"
 
 namespace sfe
@@ -279,6 +280,21 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         ImGui::TextDisabled("(no source loaded)");
         ImGui::End();
         return;
+    }
+
+    // On a recorded frame: what this frame has staged. A reserved line (FixedStatusLine) for as long as a
+    // recorded frame is up, so the first edit does not push the grid down; per frame, because each frame
+    // keeps its own edits and another frame's are not shown here.
+    {
+        const IMemoryBackend::FrameEditSummary fe = backend.RecordedFrameEdits();
+        if (fe.recorded)
+        {
+            char note[96] = "";
+            if (fe.bytes)
+                std::snprintf(note, sizeof(note), "This frame has %zu edited byte%s, staged for Play From Here.",
+                              fe.bytes, fe.bytes == 1 ? "" : "s");
+            FixedStatusLine(note, ImGui::GetColorU32(ui::Color(ImVec4(0.92f, 0.35f, 0.30f, 1.0f), ImVec4(0.647f, 0.114f, 0.141f, 1.0f))));
+        }
     }
 
     // --- Region tabs (first is "All"). ---

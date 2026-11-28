@@ -1179,14 +1179,21 @@ if(BUILD_TESTING)
         endif()
     endif()
 
-    # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame staged
-    # edits belong to. Pure logic against a ring that evicts like FrameRecorder's.
+    # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame edits
+    # belong to (per frame: see FrameEditsTests). Pure logic against a ring that evicts like FrameRecorder's.
     add_executable(SaturnExplorerScrubStateTests
         FrontEnd/tests/ScrubStateTests.cpp
     )
     target_include_directories(SaturnExplorerScrubStateTests PRIVATE FrontEnd/src
         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
     add_test(NAME SaturnExplorerScrubStateTests COMMAND SaturnExplorerScrubStateTests)
+
+    # Per-frame memory edits on recorded frames: kept with their frame, dropped only when it leaves the
+    # recording, never inherited by a frame number a rewind reuses.
+    add_executable(SaturnExplorerFrameEditsTests FrontEnd/tests/FrameEditsTests.cpp)
+    target_include_directories(SaturnExplorerFrameEditsTests PRIVATE FrontEnd/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    add_test(NAME SaturnExplorerFrameEditsTests COMMAND SaturnExplorerFrameEditsTests)
 
     # What the scrub slider's label and handle show across Play / Play From Here / eviction.
     add_executable(SaturnExplorerScrubBarTests FrontEnd/tests/ScrubBarTests.cpp)

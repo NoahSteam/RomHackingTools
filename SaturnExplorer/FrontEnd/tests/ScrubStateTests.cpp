@@ -212,46 +212,8 @@ void TestForceReload()
     Check(p.kind == ScrubPlan::SelectIndex, "if the frame has left the ring it falls back to the index");
 }
 
-void TestStagedEdits()
-{
-    const uint8_t a[] = { 1, 2, 3 };
-    StagedEdits e;
-    Check(e.Empty() && !e.BelongsTo(11), "starts empty");
-    e.Record(11, false, 0x06000000u, a, 1);
-    e.Record(11, false, 0x06000001u, a + 1, 1);   // continues the run
-    e.Record(11, false, 0x06000010u, a + 2, 1);   // a new run
-    e.Record(11, true, 0x00000011u, a, 1);        // sound RAM is its own run
-    Check(e.Pokes().size() == 3 && e.Pokes()[0].bytes.size() == 2, "contiguous writes extend a poke");
-    Check(e.BelongsTo(11) && !e.BelongsTo(12), "the batch belongs to the frame it was staged on");
-}
-
-void TestStagedEditsDoNotCrossFrames()
-{
-    // Edit frame 11 (index 1 of {10,11,12}); eviction moves frame 12 to index 1; navigate to 12.
-    // A reload clears the batch (App does that when the shown frame is rebuilt)...
-    const uint8_t b[] = { 0xAA };
-    StagedEdits e;
-    e.Record(11, false, 0x06000000u, b, 1);
-    e.Clear();
-    Check(e.Empty() && !e.BelongsTo(11) && !e.BelongsTo(12), "a reload drops the other frame's edit");
-    e.Record(12, false, 0x06000100u, b, 1);
-    Check(e.Pokes().size() == 1 && e.Pokes()[0].addr == 0x06000100u && e.BelongsTo(12),
-          "so a later edit tags only itself as frame 12");
-
-    // ...and even if it did not run first, recording on another frame must not retag the batch.
-    StagedEdits late;
-    late.Record(11, false, 0x06000000u, b, 1);
-    late.Record(12, false, 0x06000100u, b, 1);
-    Check(late.Pokes().size() == 1 && late.Pokes()[0].addr == 0x06000100u && late.BelongsTo(12) && !late.BelongsTo(11),
-          "an edit on another frame drops the old batch instead of joining it under the new tag");
-
-    StagedEdits same;
-    same.Record(11, false, 0x06000000u, b, 1);
-    same.Record(11, false, 0x06000010u, b, 1);
-    Check(same.Pokes().size() == 2 && same.BelongsTo(11), "more edits on the same frame join its batch");
-    same.Clear();
-    Check(same.Empty() && !same.BelongsTo(11), "Clear empties the batch and its tag");
-}
+// The staged-edit rules (once tested here as one batch, cleared on a move) are per-frame now: see
+// FrameEditsTests.cpp.
 }  // namespace
 
 int main()
@@ -263,8 +225,6 @@ int main()
     TestUserSeekWins();
     TestSameFrameNavigationKeepsTheEditedContext();
     TestForceReload();
-    TestStagedEdits();
-    TestStagedEditsDoNotCrossFrames();
     if (gFail == 0) std::printf("ScrubStateTests: all passed\n");
     return gFail == 0 ? 0 : 1;
 }

@@ -20,6 +20,7 @@
 
 #include "saturnexplorer/SaturnExplorer.h"
 
+#include "FrameEdits.h"
 #include "FrameLz.h"
 
 namespace sfe
@@ -129,6 +130,18 @@ public:
     // refused or nothing is selected. Use this, not FrameNumber(index), to name the frame in the
     // scratch: the ring evicts from the front, so an index goes stale. UI thread only.
     uint64_t SelectedFrameNumber() const { return mSelFrameNumber; }
+    // The timeline stamped on that same frame (0 = unknown). With the number it is the frame's key.
+    uint32_t SelectedFrameTimeline() const { return mSelTimeline; }
+
+    // True when the ring holds the frame numbered 'frameNo' that was captured on 'timeline'. One
+    // lookup under the lock: how App reconciles per-frame edits with what the ring still holds.
+    bool HasFrame(uint64_t frameNo, uint32_t timeline) const;
+
+    // Lay one frame's edits over the frame the last Select()/SelectFrame() decompressed, so the data
+    // source built next reads the recorded bytes WITH that frame's edits. Done on the scratch rather
+    // than by writing through the scrub context: no write sink fires (nothing is staged twice) and
+    // the core derives its image once. Bytes outside what the frame holds are skipped.
+    void OverlaySelected(const FrameEdits& edits);
 
     // --- Savestate rewind (v16) ---
     // Take a received savestate block, matched to its frame by number. A block is refused if its
@@ -177,8 +190,10 @@ public:
     // Defaults to true: a recorder with no live server behind it has nothing to disagree with.
     void SetVdpBusEditsAccepted(bool accepted) { mVdpBusEdits = accepted; }
 
-    void SetEditSink(void* user, void (*cb)(void* user, int isSound, uint32_t addr,
-                                            const uint8_t* bytes, size_t len));
+    // The sink returns how many bytes it took (all of them, or 0 to refuse): a refused edit is not
+    // shown on the frame, which is what keeps the view equal to what Play From Here would replay.
+    void SetEditSink(void* user, size_t (*cb)(void* user, int isSound, uint32_t addr,
+                                              const uint8_t* bytes, size_t len));
 
     void Clear();
 
@@ -230,7 +245,7 @@ private:
     // Edit sink (App) for writes made against a scrubbed frame (SetEditSink). UI-thread only.
     bool  mVdpBusEdits = true;   // see SetVdpBusEditsAccepted
     void* mEditUser = nullptr;
-    void (*mEditCb)(void*, int, uint32_t, const uint8_t*, size_t) = nullptr;
+    size_t (*mEditCb)(void*, int, uint32_t, const uint8_t*, size_t) = nullptr;
     static size_t CbEditMain(void* u, uint32_t address, const void* src, size_t size);
     static size_t CbEditSound(void* u, uint32_t offset, const void* src, size_t size);
     static size_t CbEditVram(void* u, se_vram_kind kind, uint32_t offset, const void* src, size_t size);
@@ -263,6 +278,7 @@ private:
     bool SelectImpl(const uint64_t* wantFrame, size_t i, size_t* outIndex, se_data_source* out);
     size_t FindFrame(uint64_t frameNo) const;   // mRingMtx held; mFrames.size() when absent
     uint64_t              mSelFrameNumber = 0;
+    uint32_t              mSelTimeline = 0;
     std::vector<uint16_t> mSelVdp1Regs, mSelVdp2Regs;
     se_sh2_regs           mSelSh2[2] = {};
     bool                  mSelHasSh2[2] = { false, false };

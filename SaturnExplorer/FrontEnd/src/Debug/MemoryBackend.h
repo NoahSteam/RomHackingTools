@@ -74,6 +74,15 @@ public:
         Staged      // kept on a scrubbed frame for Play From Here to replay; the emulator is untouched
     };
     virtual WriteDest WriteDestination(uint32_t address) const { (void)address; return WriteDest::ViewOnly; }
+
+    // The edits held on the recorded frame on screen (a scrubbed frame keeps its own, for Play From
+    // Here). 'recorded' is false for a live or loaded source, which has none to report.
+    struct FrameEditSummary
+    {
+        bool   recorded = false;
+        size_t bytes = 0;   // distinct bytes edited on this frame
+    };
+    virtual FrameEditSummary RecordedFrameEdits() const { return FrameEditSummary(); }
 };
 
 // Backend over an se_context. Holds a pointer-to-pointer so it always follows the
@@ -121,6 +130,9 @@ public:
     size_t WriteMemory(uint32_t address, const uint8_t* bytes, size_t size) override;
     std::string WriteRefusal(uint32_t address) const override;
     WriteDest WriteDestination(uint32_t address) const override;
+    FrameEditSummary RecordedFrameEdits() const override { return mFrameEdits; }
+    // Said by the owner each frame: whether a recorded frame is on screen and what it has edited.
+    void SetRecordedFrameEdits(bool recorded, size_t bytes) { mFrameEdits.recorded = recorded; mFrameEdits.bytes = bytes; }
 
     // Force the backend read-only regardless of the context (e.g. while scrubbing a recorded
     // frame on a server that can't rewind, so edits that would go nowhere are disabled). 'why' is
@@ -164,6 +176,7 @@ private:
     bool         mRegistersReadOnly = false;
     bool         mVdpWindowsWritable = true;
     WriteDest    mEditSink = WriteDest::ViewOnly;
+    FrameEditSummary mFrameEdits;
     uint64_t     mGeneration = 0;
 };
 

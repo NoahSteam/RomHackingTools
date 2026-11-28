@@ -308,8 +308,8 @@ void App::Initialize()
 
 #ifdef SE_ENABLE_LIVE
     mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
-    // Route edits made against a scrubbed frame into mStaged, so a rewind (Play from
-    // here) can replay them atop the restored savestate. Set before the first scrub Select,
+    // Route edits made against a scrubbed frame into mEdits (per frame), so a rewind (Play from
+    // here) can replay that frame's edits atop the restored savestate. Set before the first scrub Select,
     // whose data source latches SE_CAP_MEM_WRITE from this sink being present.
     mRecorder.SetEditSink(this, &App::OnScrubEdit);
 #endif
@@ -719,7 +719,7 @@ void App::CloseData(bool cancelAutoConnect)
     mScrubTargetFrame = 0;
     mRecorder.Clear();
     mStateSlots.Reset();         // its cached savestate is the previous game's
-    DiscardPendingEdits();
+    ClearAllEdits();
     // The next source gets its own driver with its own counter starting at zero, so this
     // must start over too or its first attach would look like a replacement.
     mLiveConnGeneration = 0;
@@ -1906,6 +1906,7 @@ void App::BuildUI(IPlatform& platform)
     se_context* view = mContext;
 #ifdef SE_ENABLE_LIVE
     mLiveCtx = mContext;
+    ReconcileFrameEdits();   // before the refresh: a frame that aged out must not be rebuilt with its edits
     if (mbScrubbing && RefreshScrubContext())
     {
         view = mScrubContext;
@@ -1965,6 +1966,11 @@ void App::BuildUI(IPlatform& platform)
     mMemBackend.SetRegistersReadOnly(mbLiveSource || mbScrubbing);
     // A scrubbed frame's edits go to the replay list (Play From Here), not to the emulator; a
     // loaded dump or savestate takes them into its own copy and nothing else.
+    {
+        // The Memory panel's per-frame note: the frame on screen, and how many bytes it has edited.
+        const FrameEdits* shown = mbScrubbing ? mEdits.Find(ShownFrameKey()) : nullptr;
+        mMemBackend.SetRecordedFrameEdits(mbScrubbing, shown ? shown->ByteCount() : 0);
+    }
     mMemBackend.SetEditSink(mbScrubbing     ? IMemoryBackend::WriteDest::Staged
                             : mbLiveSource ? IMemoryBackend::WriteDest::Emulator
                                            : IMemoryBackend::WriteDest::ViewOnly);
@@ -2391,7 +2397,10 @@ void App::DrawTransportBar()
     {
         // Only a scrub in progress has a selection; otherwise the bar rests on the newest entry.
         int idx = ScrubBarIndex(mbScrubbing, mScrubIndex, n);
-        const std::string ov = ScrubBarLabel(mRecorder.FrameNumber(static_cast<size_t>(idx)), idx, n);
+        // The label says when the frame the bar names holds edits (they stay with it, across moves).
+        const FrameKey barKey{ mRecorder.FrameTimeline(static_cast<size_t>(idx)),
+                               mRecorder.FrameNumber(static_cast<size_t>(idx)) };
+        const std::string ov = ScrubBarLabel(barKey.frame, idx, n, mEdits.Has(barKey));
         if (ImGui::SliderInt("##tp_scrub", &idx, 0, n - 1, ov.c_str()))
         {
             mbScrubbing = true;
@@ -2409,6 +2418,7 @@ void App::DrawTransportBar()
             if (ImGui::MenuItem("Clear Compare Markers", nullptr, false, mCompare.Any())) ClearCompare();
             ImGui::EndPopup();
         }
+        DrawEditedFrameMarks(sliderMin, sliderMax, n);
         DrawCompareMarkers(sliderMin, sliderMax, n);
     }
     else
@@ -2448,7 +2458,8 @@ se_context* App::ControlContext() const
 void App::LeaveScrubForRun()
 {
 #ifdef SE_ENABLE_LIVE
-    DiscardPendingEdits();   // the frame they were staged on is being left behind
+    // Edits stay with the recorded frames they were made on: leaving the scrub neither applies nor
+    // discards them (Play carries on from the live game; Play From Here is what applies a frame's).
     ScrubBarLeave(mbScrubbing, mScrubIndex);
     VoidEditTarget();
 #endif
@@ -2481,10 +2492,7 @@ void App::StepFrameForward(se_context* ctl)
         VoidEditTarget();
         return;
     }
-    // Not LeaveScrubForRun: that discards staged edits, and an edit belongs to the frame it was made
-    // on (it is not dropped because the emulator steps on). The staged-edit rules are being reworked.
-    ScrubBarLeave(mbScrubbing, mScrubIndex);
-    VoidEditTarget();
+    LeaveScrubForRun();   // the one place a scrub ends
     se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
     mbPaused = true;
     mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
@@ -2583,10 +2591,11 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
         return;
     }
 
-    // Staged edits replay only onto the frame they were made against. Ordinary Play, another
-    // scrub or a new session leaves them behind, and they must not ride onto this target.
-    if (!mStaged.BelongsTo(frameNo)) DiscardPendingEdits();
-    const std::vector<uint8_t> edits = sfe::EncodeEditBlob(mStaged);
+    // Only THIS frame's edits replay onto it. Edits on earlier frames stay attached to those frames
+    // (still shown there) and are not applied; later frames' edits go with the frames discarded below.
+    const FrameKey targetKey{ mRecorder.FrameTimeline(index), frameNo };
+    const FrameEdits* stored = mEdits.Find(targetKey);
+    const std::vector<uint8_t> edits = sfe::EncodeEditBlob(stored ? *stored : FrameEdits());
     // Sampled before the request goes out: the emulator can finish it before the call returns.
     const RestoreBaseline before = SampleRestoreBaseline();
     if (se_load_state(ctl, frameNo, state.data(), state.size(),
@@ -2603,7 +2612,7 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
 #if SE_ENABLE_DECOMPILER
     ++mScrubTimeline;                  // ...so a cached result for one of those numbers is not theirs
 #endif
-    DiscardPendingEdits();
+    mEdits.DropAfter(frameNo);         // ...and so are those frames' edits; this frame's stay with it
     ScrubBarLeave(mbScrubbing, mScrubIndex);   // the ring was truncated: the old index names nothing real
     mbPaused = false;
     VoidEditTarget();
@@ -2674,9 +2683,9 @@ bool App::MarkCompareFrame(CompareMarkers::Slot slot)
     {
         if (mScrubShownIndex < 0) return fail("That recorded frame could not be loaded.");
         // Pending edits change what the context serves without being part of the recorded frame.
-        if (mStaged.BelongsTo(mScrubShownFrame))
-            return fail("This frame has unapplied edits. A comparison is of recorded memory: scrub to "
-                        "another frame or press Play first.");
+        if (mEdits.Has(ShownFrameKey()))
+            return fail("This frame has edits, and a comparison is of recorded memory. Mark a frame "
+                        "without edits.");
     }
     // The frame the context holds: the recorder's frame when scrubbing (not an index, which the ring's
     // eviction makes stale), else the frame this capture came from rather than the newest.
@@ -2750,6 +2759,25 @@ bool App::ScrubToFrame(uint64_t frameNo)
     return false;
 #endif
 }
+
+// A short tick on the bottom edge of the scrub bar at every recorded frame that holds edits, so they can
+// be found without visiting each one. Below the slider where the Compare carets sit above it, and an
+// orange apart from their A/B colours; a frame no longer in the ring has no tick (its edits are gone).
+#ifdef SE_ENABLE_LIVE
+void App::DrawEditedFrameMarks(const ImVec2& sliderMin, const ImVec2& sliderMax, int frameCount)
+{
+    if (!mEdits.Any()) return;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 col = ImGui::GetColorU32(ui::Color(ImVec4(0.95f, 0.60f, 0.20f, 1.0f), ImVec4(0.75f, 0.38f, 0.0f, 1.0f)));
+    for (const FrameKey& k : mEdits.Frames())
+    {
+        const int idx = mRecorder.IndexOfFrame(k.frame);
+        if (idx < 0) continue;
+        const float x = SliderGrabCenterX(sliderMin.x, sliderMax.x, ImGui::GetStyle().GrabMinSize, frameCount, idx);
+        dl->AddRectFilled(ImVec2(x - 1.5f, sliderMax.y - 5.0f), ImVec2(x + 1.5f, sliderMax.y - 1.0f), col);
+    }
+}
+#endif
 
 // A caret above the scrub bar at each marked frame: filled and on its frame while the frame is on
 // the timeline, hollow and pinned to the left edge once it has left (the snapshot is kept).
@@ -3054,13 +3082,16 @@ bool App::RefreshScrubContext()
         // to the last good index would take that shortcut and skip the Select that reloads it.
         mScrubShownIndex = -1;
         mScrubShownFrame = 0;
-        DiscardPendingEdits();
+        mScrubShownTimeline = 0;
         return false;
     }
-    // The context was rebuilt from the recording, so what was edited on screen is gone and its staged
-    // edits must go with it, or Play From Here would replay edits that are no longer displayed. (A
-    // frame kept as it is, edits included, never gets here: PlanScrub says Keep.)
-    mStaged.Clear();
+    // The context is being rebuilt from the recording: lay this frame's own edits (and only its own)
+    // back over it, so it shows them however the user got here. A frame with none shows the recording.
+    // The edits stay in the store whatever happens to the context. (A frame kept as it is never gets
+    // here: PlanScrub says Keep.)
+    const FrameKey builtKey{ mRecorder.SelectedFrameTimeline(), mRecorder.SelectedFrameNumber() };
+    const FrameEdits* builtEdits = mEdits.Find(builtKey);
+    if (builtEdits) mRecorder.OverlaySelected(*builtEdits);
     mScrubEdited = false;
     if (!mScrubContext)
     {
@@ -3077,10 +3108,11 @@ bool App::RefreshScrubContext()
 #if SE_ENABLE_DECOMPILER
     // The frame as recorded: what the decompiler's view of it is keyed as, until it is edited.
     mScrubBaseSerial = mScrubSeenSerial = se_derive_serial(mScrubContext);
-    mScrubViewSerial = 0;
+    mScrubViewSerial = builtEdits ? ++mScrubEditCounter : 0;   // an edited frame is not "as recorded"
 #endif
     mScrubShownIndex = mScrubIndex;
-    mScrubShownFrame = mRecorder.SelectedFrameNumber();
+    mScrubShownFrame = builtKey.frame;
+    mScrubShownTimeline = builtKey.timeline;
     mMemBackend.NoteSourceChanged();   // same context, different frame: in-flight edits are void
     return true;
 #else
@@ -3107,19 +3139,44 @@ void App::OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
 }
 
 // Recorder's scrub write-sink: an edit was made against the scrubbed frame.
-void App::OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
+size_t App::OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
 {
-    static_cast<App*>(user)->RecordPendingEdit(isSound, addr, bytes, len);
+    return static_cast<App*>(user)->RecordPendingEdit(isSound, addr, bytes, len);
 }
 
-void App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
+size_t App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
 {
     // Tag with the frame the written-to context actually displays, not where the slider points:
     // a transport action earlier in this same frame may already have moved mScrubIndex while the
     // panels still draw (and commit to) the old frame. Tagged with the new frame, that edit
     // would pass the "belongs to this frame" test and replay onto the wrong rewind target.
-    // A batch staged on another frame is dropped rather than retagged (StagedEdits::Record).
-    mStaged.Record(mScrubShownFrame, isSound != 0, addr, bytes, len);
+    // Each frame has its own set, so an edit here can never join, replace or clear another frame's.
+    // 0 (refused: the store is full) keeps the edit off the screen too, so the view never shows
+    // what Play From Here would not replay.
+    const size_t taken = mEdits.Record(ShownFrameKey(), isSound != 0, addr, bytes, len);
+    if (taken == 0)
+        mLog.Warn("Edits on recorded frames are at their size limit; this edit was not kept.");
+    return taken;
+}
+
+// Edits live exactly as long as their frame is in the recording. Eviction happens on the recorder's
+// worker thread, so a callback from it would race this thread's store; instead the store is checked
+// against the ring here, once per UI frame, which also backstops any path that discards frames
+// without saying so. A frame is matched by number AND timeline, so a number the ring reuses after a
+// rewind is a different frame and finds none of the old one's edits.
+void App::ReconcileFrameEdits()
+{
+    if (!mEdits.Any()) return;
+    const bool shownHad = mEdits.Has(ShownFrameKey());
+    mEdits.Retain([this](const FrameKey& k) { return mRecorder.HasFrame(k.frame, k.timeline); });
+    // The context may still show edits the store no longer holds: rebuild it from the recording.
+    if (shownHad && !mEdits.Has(ShownFrameKey())) mScrubEdited = true;
+}
+
+void App::ClearAllEdits()
+{
+    if (mEdits.Has(ShownFrameKey())) mScrubEdited = true;
+    mEdits.Clear();
 }
 
 double App::RecorderCapacityMB() const
@@ -8679,22 +8736,15 @@ void App::AdoptNewEmulatorInstance()
 #endif
 }
 
-// The emulator has jumped to a state we did not record our way to, so everything we held
-// about "where we are" describes a timeline that no longer exists: recorded frames, the
-// savestate keyframe the next delta would be diffed against, and edits staged against a
-// scrubbed frame. The scrub-rewind path deliberately does NOT use this -- it restores a
-// frame that IS in the ring, so it truncates the future instead of dropping the past.
-void App::DiscardPendingEdits()
-{
-    // The context may still show those edits; it is rebuilt from the recording before it is shown again.
-    if (!mStaged.Empty()) mScrubEdited = true;
-    mStaged.Clear();
-}
-
 // The ring is emptied: markers keep their snapshots but can no longer be found by frame number.
+// The emulator has jumped to a state we did not record our way to (DropRecordedHistory below): the
+// recorded frames, the keyframe the next delta would diff against and every frame's edits describe a
+// timeline that no longer exists. The scrub-rewind path does NOT use it -- it restores a frame that IS
+// in the ring, so it truncates the future (and that future's edits) instead of dropping the past.
 void App::ClearRecordedFrames()
 {
     mRecorder.Clear();
+    ClearAllEdits();   // the recording is cleared: its frames' edits go with it
 #if SE_ENABLE_DECOMPILER
     ++mScrubTimeline;   // frame numbers may be reused by whatever is recorded next
 #endif
@@ -8705,7 +8755,9 @@ void App::DropRecordedHistory()
 {
     ClearRecordedFrames();
     mStateSlots.Reset();
-    DiscardPendingEdits();
+    mScrubShownIndex = -1;   // the frame on screen is gone; frame numbers may come back as different frames
+    mScrubShownFrame = 0;
+    mScrubShownTimeline = 0;
     mCallStackDirty = true;   // the registers it was built from are about to be replaced
     mbScrubbing = false;
     mScrubIndex = -1;
