@@ -251,6 +251,7 @@ void DecompilerPanel::RequestExport(int cpu, uint32_t addr)
     ShowFunctionContaining(cpu, addr);
     mWantExport = true;
     mExportSettled = false;
+    mExportRevision = mResultRevision;
 }
 
 bool DecompilerPanel::TakeExportOutcome(ExportOutcome& out)
@@ -278,7 +279,11 @@ void DecompilerPanel::SettleExport(bool visible)
     if (!mViewId.valid) return EndExport(false, "no memory is open to decompile");
     if (!mResolved) return;   // the next Update resolves and asks
     if (!mEntryOk) return EndExport(false, mEntryError.empty() ? std::string("no function was found there") : mEntryError);
-    if (mShownValid && !ShownStale())
+    // This export's answer: the function wanted, either current, or installed since the request. A running emulator moves
+    // on every frame, so an answer that arrived a frame ago is already "stale" against the view; it is still what was asked
+    // for, decompiled from the snapshot it names. (Another navigation or a session end has ended the export by now.)
+    const bool wanted = mShownValid && mShown.requestedEntry == mEntry;
+    if (wanted && (!ShownStale() || mResultRevision != mExportRevision))
     {
         if (mShown.status == DecompileStatus::Ok) return EndExport(true, std::string());
         return EndExport(false, "it could not be decompiled" + (mShown.error.empty() ? std::string() : ": " + mShown.error));

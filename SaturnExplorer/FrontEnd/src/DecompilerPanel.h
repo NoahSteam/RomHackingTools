@@ -555,6 +555,7 @@ private:
     // RequestExport: waiting for its function (mWantExport), then settled once (mExportSettled) until taken.
     bool mWantExport = false;
     bool mExportSettled = false;
+    uint64_t mExportRevision = 0;    // mResultRevision at the request: an answer installed since is this export's
     ExportOutcome mExportOutcome;
     void SettleExport(bool visible);
     void EndExport(bool ok, std::string error);

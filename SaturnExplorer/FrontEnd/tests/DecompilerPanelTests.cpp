@@ -859,6 +859,39 @@ void TestFunctionExportRequest()
     CHECK(f.WaitShown());
 }
 
+// A running emulator advances every UI frame, so the answer is "stale" against the view the frame after it installs. The
+// export still completes with it: it is the function asked for, from the snapshot it names.
+void TestFunctionExportWhileRunning()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    CHECK(f.WaitShown("+ 1"));
+    DecompilerPanel::ExportOutcome o;
+    auto settled = [&] {
+        return f.PumpUntil([&] {
+            ++f.frame;
+            ++f.fixedSerial;
+            return f.panel.TakeExportOutcome(o);
+        });
+    };
+    for (const uint32_t entry : { dts::kFixture1Caller, dts::kFixture1Callee })
+    {
+        f.panel.RequestExport(0, entry);
+        CHECK(settled());
+        CHECK(o.ok && o.error.empty());
+        CHECK(f.panel.Shown() && f.panel.Shown()->entry == entry);
+        CHECK(f.panel.ShownSnapshot() != nullptr && f.panel.ShownSnapshot()->key == f.Shown().key);
+    }
+    // Still cancelled by another navigation while it waits.
+    f.gate.Close();
+    f.panel.RequestExport(0, dts::kFixture1Caller);
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Callee);
+    CHECK(f.panel.TakeExportOutcome(o));
+    CHECK(!o.ok && Has(o.error, "another function"));
+    f.gate.Open();
+}
+
 // A7-5: a long function: the line is brought into view even though the clipper would not have drawn it.
 void TestShowInstructionScrolls()
 {
@@ -3210,6 +3243,7 @@ int main(int argc, char** argv)
         RUN(TestLineHoverAndNoAddress());
         RUN(TestAssemblyBackToLine());
         RUN(TestFunctionExportRequest());
+        RUN(TestFunctionExportWhileRunning());
         RUN(TestShowInstructionScrolls());
         RUN(TestOriginTextHaltWordAndFolded());
         RUN(TestLineForInstructionOrder());
