@@ -836,7 +836,11 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                 ImGui::SameLine(); ImGui::Text("| U32: %08X", u32);
             }
         }
-        if (mModifiedFlash > 0.0f)
+        // "Kept on recorded frame" is only true while the frame still holds an edit: after a Revert, or a
+        // write that put the recorded value back, nothing is kept and the note would be wrong.
+        const bool staleKept = mModifiedDest == IMemoryBackend::WriteDest::Staged &&
+                               backend.RecordedFrameEdits().recorded && backend.RecordedFrameEdits().bytes == 0;
+        if (mModifiedFlash > 0.0f && !staleKept)
         {
             ImGui::SameLine();
             // "Queued" is as far as the panel can know for a live source: the emulator applies the poke

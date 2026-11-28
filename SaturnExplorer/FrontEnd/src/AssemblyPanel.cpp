@@ -699,8 +699,11 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         ImGui::BeginDisabled(!mStepOutOk);
         if (ImGui::Button("Step Out"))   req.stepOut = true;
         ImGui::EndDisabled();
-        ImGui::SetItemTooltip("%s", mStepOutOk ? "Run to the current frame's return address"
-                                               : (mStepOutWhy && *mStepOutWhy ? mStepOutWhy : "Step Out is not available here"));
+        if (mStepOutOk && mStepOutReturn)
+            ImGui::SetItemTooltip("Run to the current frame's return address (%08X)", mStepOutReturn);
+        else
+            ImGui::SetItemTooltip("%s", mStepOutOk ? "Run to the current frame's return address"
+                                                   : (mStepOutWhy && *mStepOutWhy ? mStepOutWhy : "Step Out is not available here"));
         ImGui::EndDisabled();
         if (!viewingHalted)
         {

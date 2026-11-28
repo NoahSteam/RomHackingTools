@@ -3219,6 +3219,7 @@ bool App::RevertShownFrameEdits()
     if (!mbScrubbing || !mEdits.Drop(ShownFrameKey())) return false;
     mScrubEdited = true;
     mCallStackDirty = true;   // a stack scanned from the edited memory is not the recorded frame's
+    mAssemblyPanel.ClearNotice();   // its "Wrote ... Kept on recorded frame" is no longer true
     return true;
 }
 
@@ -3337,7 +3338,7 @@ void App::DrawAssembly()
     if (mStepHalt.HaltActive())
     {
         const StepOutDecision& out = StepOutOffer();   // the same decision as the Call Stack strip's
-        mAssemblyPanel.SetStepOutOffer(out.Ok(), out.Ok() ? nullptr : out.Why());
+        mAssemblyPanel.SetStepOutOffer(out.Ok(), out.Ok() ? nullptr : out.Why(), out.Ok() ? out.target.returnAddress : 0u);
     }
     mAssemblyPanel.SetRecordedFrame(sfe::RecordedFrameShown(ScrubViewUp() && Scrubbing(), ScrubShownFrame()));
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mActions, mWatchPanel, mbLiveSource, req);

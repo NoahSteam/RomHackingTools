@@ -478,10 +478,15 @@ void NoticeNamesTheRecordedFrame()
     f.Type("12", true);
     f.Key(ImGuiKey_Enter);
     CHECK(f.backend.ram[0] == 0x12);
+    f.backend.editedBytes = 1;         // as App reports it on the next frame: the edit is held
+    f.h.Frame(ImVec2(1270, 710), false);
     CHECK(Says("Kept on recorded frame #42"));
     f.backend.frame = 43;              // scrubbed on: the notice still names the frame the edit went to
     f.h.Frame(ImVec2(1270, 710), false);
     CHECK(Says("Kept on recorded frame #42") && !Says("#43"));
+    f.backend.editedBytes = 0;         // reverted, or the recorded value written back: nothing is kept,
+    f.h.Frame(ImVec2(1270, 710), false);   // so the note must not go on saying it is
+    CHECK(!Says("Kept on recorded frame"));
     }
     // The other destination keeps its words (one harness at a time).
     Fixture g;
