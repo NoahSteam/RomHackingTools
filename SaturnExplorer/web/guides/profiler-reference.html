@@ -146,6 +146,7 @@ summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     <summary>On this page</summary>
     <nav class="toc" aria-label="On this page"><ul>
       <li data-section="quick"><a href="#quick">Quick start</a></li>
+      <li data-section="averages"><a href="#averages">Understanding averages</a></li>
       <li data-section="open"><a href="#open">Open the profiler</a></li>
       <li data-section="top"><a href="#top">Top bar</a></li>
       <li data-section="frame"><a href="#frame">Frame tab</a><ul class="subsections"><li><a href="#workloads">Additional examples</a></li><li><a href="#lost">Lost records</a></li></ul></li>
@@ -178,6 +179,13 @@ summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   <p class="caveat"><strong>Unavailable does not mean zero.</strong> The value was not measured. A label such as <span class="ui">(3 of 4 frames)</span> means the average uses only those three frames.</p>
 </section>
 
+<section id="averages">
+  <h2>Understanding averages</h2>
+  <p><span class="ui">Average over</span> combines measurements from several frames into a steadier reading. With <span class="ui">1 s</span> selected, it averages roughly 60 frames: if the processor was <span class="num">80%</span> busy for half and <span class="num">20%</span> busy for half, it shows <span class="num">50%</span>.</p>
+  <p>Choose <span class="ui">Last frame</span> to inspect individual spikes. Longer intervals show sustained activity but smooth out brief spikes.</p>
+  <p>When reviewing earlier frames, the averaging interval ends at the selected frame. Averaging applies to <strong>Frame, Buses and Functions</strong>; <strong>Memory</strong> shows sampled contents.</p>
+</section>
+
 <section id="open">
   <h2>Open the profiler</h2>
   <p>Open <span class="ui">Windows → Debugger → Profiler</span>. The panel docks beside Watch by default. Drag it out to use a separate window.</p>
@@ -192,7 +200,7 @@ summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     <figcaption>The top bar, with each part numbered as in the list below.</figcaption>
   </figure>
   <ol class="callouts">
-    <li><b>Average over.</b> Sets the averaging interval for measurements on the Frame, Buses and Functions tabs: <span class="ui">Last frame</span>, <span class="ui">0.5 s</span> (30 frames), <span class="ui">1 s</span> (60), <span class="ui">5 s</span> (300) or <span class="ui">10 s</span> (600). Short intervals reveal spikes; longer intervals smooth fluctuations. History strips show individual frames, up to 600 at a time.</li>
+    <li><b>Average over.</b> Sets the averaging interval for measurements on the Frame, Buses and Functions tabs: <span class="ui">Last frame</span>, <span class="ui">0.5 s</span> (30 frames), <span class="ui">1 s</span> (60), <span class="ui">5 s</span> (300) or <span class="ui">10 s</span> (600). Short intervals reveal spikes; longer intervals smooth fluctuations. History strips show individual frames, up to 600 at a time. See <a href="#averages">Understanding averages</a> for an example.</li>
     <li><b>Clear.</b> Clears recorded profiler frames and the Memory tab’s previous sample. Use it before the part of the game you want to measure.</li>
     <li><b>N frames recorded.</b> How many frames the panel holds, up to 3,600. A longer span averages only the frames that exist.</li>
     <li><b>Status line.</b> Empty while live. When you scrub back it names the frame shown, or says why there is no data (see <a href="#scrub">Review earlier frames</a>). Long text ends in "..."; hover for the rest.</li>
