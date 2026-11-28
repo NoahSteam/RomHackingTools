@@ -18,6 +18,7 @@
 #include "Debug/MemoryBackend.h"
 #include "Debug/BreakpointManager.h"
 #include "Debug/ExecutionActions.h"
+#include "Debug/FunctionExport.h"
 #include "Debug/Sh2Asm.h"
 #include "Debug/Sh2Disasm.h"
 
@@ -55,6 +56,8 @@ public:
         uint32_t decompileAddr = 0;
         bool     showPseudocode = false;  // show the line of the instruction at pseudoAddr in SH-2 Pseudocode (A7-5)
         uint32_t pseudoAddr = 0;
+        FunctionExportKind exportKind = FunctionExportKind::None;  // save the function containing exportAddr to a file
+        uint32_t exportAddr = 0;
         // An in-place edit was written this frame (instruction or literal). 'asmAddr' is where the
         // bytes went, 'asmSize' how many (2 for an instruction, 2 or 4 for a literal), asmOld/asmNew
         // the big-endian values. 'asmNote' is the one-line outcome the panel also shows, ready for
@@ -69,7 +72,8 @@ public:
     void Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
               ExecutionActions& actions, WatchPanel& watch, bool live, Request& req);
 
-    // Offer "Decompile Here" and "Show in Pseudocode" in the row menu: only builds with the decompiler have the panel they open.
+    // Offer "Goto Decompiled Function", "Goto Decompiled Line" and the two function exports in the row menu: only builds with
+    // the decompiler have the panel they open, and the exports take the function's extent from the decompiler.
     void SetOfferDecompile(bool offer) { mOfferDecompile = offer; }
 
     // Resolves a symbol typed into the assembler (branch targets, PC-relative operands). Unset: symbols

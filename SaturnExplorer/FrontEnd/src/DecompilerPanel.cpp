@@ -14,6 +14,7 @@
 
 #include "Debug/MemoryBackend.h"
 #include "Debug/CapturedValueInspection.h"
+#include "Debug/FunctionExport.h"
 #include "PanelWidgets.h"
 #include "Sh2Address.h"
 
@@ -213,6 +214,8 @@ void DecompilerPanel::SetTarget(const Target& target)
 {
     mTarget = target;
     mWantInsn = false;   // (ShowInstruction asks for it again after) any other navigation drops a request for an instruction
+    // ...and an export's (RequestExport asks again after): the answer that comes is for another function.
+    if (mWantExport) EndExport(false, "SH-2 Pseudocode was sent to another function before the answer came");
     // Another question: a refusal belonged to the one before it, and so did a Stop. The refused text goes from the box with the
     // refusal: when the new target is the function already shown nothing installs, so nothing else would reset it (A8-20).
     if (mEntryRefused) mSyncEntryBox = true;
@@ -241,6 +244,61 @@ void DecompilerPanel::ShowInstruction(int cpu, uint32_t addr)
     mWantInsn = true;
     mWantInsnAddr = addr;
     mInsnNote.clear();
+}
+
+void DecompilerPanel::RequestExport(int cpu, uint32_t addr)
+{
+    ShowFunctionContaining(cpu, addr);
+    mWantExport = true;
+    mExportSettled = false;
+}
+
+bool DecompilerPanel::TakeExportOutcome(ExportOutcome& out)
+{
+    if (!mExportSettled) return false;
+    mExportSettled = false;
+    out = std::move(mExportOutcome);
+    return true;
+}
+
+void DecompilerPanel::EndExport(bool ok, std::string error)
+{
+    mWantExport = false;
+    mExportSettled = true;
+    mExportOutcome.ok = ok;
+    mExportOutcome.error = std::move(error);
+}
+
+// Called by Update before this frame's capture, so it judges the state the last Update left: the question resolved, asked, and
+// answered (a cache hit installs at once). A hidden panel asks nothing, so closing it ends the wait rather than stranding it.
+void DecompilerPanel::SettleExport(bool visible)
+{
+    if (!mWantExport) return;
+    if (!visible) return EndExport(false, "SH-2 Pseudocode was closed before the answer came");
+    if (!mViewId.valid) return EndExport(false, "no memory is open to decompile");
+    if (!mResolved) return;   // the next Update resolves and asks
+    if (!mEntryOk) return EndExport(false, mEntryError.empty() ? std::string("no function was found there") : mEntryError);
+    if (mShownValid && !ShownStale())
+    {
+        if (mShown.status == DecompileStatus::Ok) return EndExport(true, std::string());
+        return EndExport(false, "it could not be decompiled" + (mShown.error.empty() ? std::string() : ": " + mShown.error));
+    }
+    // Nothing current on screen: wait only while an answer is on its way. RequestExport's ask-again means the request outstanding
+    // after a resolve is this one's.
+    if (mPending.active && !mPending.cancelled) return;
+    if (mRunnerDisabled) return EndExport(false, "the decompiler is off for this session");
+    if (mStopped || mPending.active) return EndExport(false, "the decompile was stopped");
+    EndExport(false, "nothing was asked of the decompiler; press Refresh in SH-2 Pseudocode and export again");
+}
+
+std::string DecompilerPanel::FunctionText() const
+{
+    return mShownValid ? CopyMarks() + mShown.Text() : std::string();
+}
+
+const decomp::MemorySnapshot* DecompilerPanel::ShownSnapshot() const
+{
+    return mShownValid && mSnap && mSnap->key == mShown.key ? mSnap.get() : nullptr;
 }
 
 // A7-5. Once the function that holds the instruction is the one shown (not stale), its line is selected and scrolled to. Called by DrawLines
@@ -311,6 +369,7 @@ void DecompilerPanel::SetCpu(int cpu)
 
 void DecompilerPanel::ResetSession()
 {
+    if (mWantExport) EndExport(false, "the session ended before the decompiler answered");
     mInspectionMenu.valid = false;
     mPending = Outstanding();
     mAsked = Question();
@@ -741,12 +800,7 @@ bool DecompilerPanel::EnterAsksTarget() const
 std::string DecompilerPanel::CopyMarks() const
 {
     if (!mShownValid || mShown.status != DecompileStatus::Ok) return std::string();
-    auto comment = [](std::string text) {
-        for (char& c : text)
-            if (c == '\n' || c == '\r') c = ' ';
-        for (size_t at; (at = text.find("*/")) != std::string::npos;) text.replace(at, 2, "* /");   // a comment cannot hold its own end
-        return "/* " + text + " */\n";
-    };
+    const auto comment = CCommentLine;
     std::string out;
     if (ShownStale())
         out += comment(std::string(EmulatorMovedOn() ? Fmt("[stale: frame %llu] ", static_cast<unsigned long long>(mShown.key.frameNumber))
@@ -1093,6 +1147,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     mNamesGeneration = inputs.namesGeneration;
     mCallSitesRevision = inputs.callSitesRevision;
     UpdateFunctionSet(inputs);
+    SettleExport(visible);
     const bool active = visible && mViewId.valid;
     if (active)
     {
@@ -1920,7 +1975,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGuiListClipper clipper;
     clipper.Begin(static_cast<int>(mShown.lines.size()));
-    // The line a "Show in Pseudocode" selected is scrolled to: it must be submitted, clipped or not.
+    // The line a "Goto Decompiled Line" selected is scrolled to: it must be submitted, clipped or not.
     if (mScrollToLine >= 0 && mScrollToLine < static_cast<int>(mShown.lines.size())) clipper.IncludeItemByIndex(mScrollToLine);
     else mScrollToLine = -1;
     while (clipper.Step())
@@ -2072,7 +2127,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                 }
                 ImGui::Separator();
                 if (item("Copy Line", true)) ImGui::SetClipboardText((CopyMarks() + ln.text).c_str());
-                if (item("Copy Function", true)) ImGui::SetClipboardText((CopyMarks() + mShown.Text()).c_str());
+                if (item("Copy Function", true)) ImGui::SetClipboardText(FunctionText().c_str());
                 ImGui::EndPopup();
             }
 

@@ -591,6 +591,20 @@ private:
     DecompilerView BuildDecompilerView();
     void UpdateDecompiler(IPlatform& platform);
     bool LoadBiosImage(const std::string& path);
+    // SH-2 Assembly's "Export SH-2 Function" / "Export Decompiled Code": the function containing an
+    // address is asked of SH-2 Pseudocode (DecompilerPanel::RequestExport; the decompiler knows which
+    // instructions are the function's), and the file is written when the panel settles it. One export
+    // waits at a time; a new one replaces it. Failures go to the operation banner and the Log.
+    struct PendingFunctionExport
+    {
+        FunctionExportKind kind = FunctionExportKind::None;
+        int cpu = 0;
+        uint32_t addr = 0;
+    };
+    PendingFunctionExport    mPendingExport;
+    void BeginFunctionExport(FunctionExportKind kind, int cpu, uint32_t addr);
+    void PumpFunctionExport(IPlatform& platform, const DecompilerView& view);
+    void FailFunctionExport(FunctionExportKind kind, uint32_t addr, const std::string& why);
     // A recorded frame's identity for the decompiler's cache: stable while the recording it came
     // from is unchanged (mScrubTimeline moves when it is cleared or truncated by Play From Here),
     // and a fresh value for every edit made to the frame on screen, so two different edits never

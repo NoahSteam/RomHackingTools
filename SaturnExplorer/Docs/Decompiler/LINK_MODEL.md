@@ -301,7 +301,7 @@ Checks, all on the pure functions the panel calls:
 6. **Coverage**, as today: every ledger access and every call of the final p-code is linked from some line;
    a statement with no link says so.
 7. **Panel round trip**, headless through `DecompilerPanelTests`' harness on the fixtures and the pinned modules: a
-   click, **Show in Pseudocode** back, repeated until the cycle closes, visits each line once and shows the texts of
+   click, **Goto Decompiled Line** back, repeated until the cycle closes, visits each line once and shows the texts of
    checks 3 and 5. The pure checks 1 to 6 run on every generated function; only this one draws, so the Windows Debug
    job is not loaded per instruction.
 

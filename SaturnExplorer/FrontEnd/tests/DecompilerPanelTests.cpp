@@ -777,7 +777,7 @@ void TestGuideQuotesTheTooltip()
 }
 #endif
 
-// A7-5: the way back from SH-2 Assembly. "Show in Pseudocode" selects and scrolls to the line the instruction became; both instructions of
+// A7-5: the way back from SH-2 Assembly. "Goto Decompiled Line" selects and scrolls to the line the instruction became; both instructions of
 // `0 < param_1` (the compare and the branch) lead to its line, an instruction folded into another's line says so, one the function does not hold
 // says that, and Follow PC at a stop selects the line the PC is at.
 void TestAssemblyBackToLine()
@@ -820,6 +820,43 @@ void TestAssemblyBackToLine()
     f.Idle(6);
     CHECK(Has(f.panel.EntryError(), "literal pool"));
     CHECK(!f.panel.WantsInstruction());
+}
+
+// SH-2 Assembly's two exports: the panel settles the request once, ok with the function's current answer and the snapshot it came
+// from, or failed with a reason when none will come -- no function there, the panel closed, or another navigation first.
+void TestFunctionExportRequest()
+{
+    Fixture f;
+    CHECK(f.WaitShown("+ 1"));
+    DecompilerPanel::ExportOutcome o;
+    auto settled = [&] { return f.PumpUntil([&] { return f.panel.TakeExportOutcome(o); }); };
+
+    f.panel.RequestExport(0, dts::kFixture1Callee + 2);
+    CHECK(settled());
+    CHECK(o.ok && o.error.empty());
+    CHECK(f.panel.Shown() && f.panel.Shown()->entry == dts::kFixture1Callee);
+    CHECK(f.panel.ShownSnapshot() != nullptr && f.panel.ShownSnapshot()->key == f.Shown().key);
+    CHECK(Has(f.panel.FunctionText(), f.Shown().Text().c_str()));
+    CHECK(!f.panel.TakeExportOutcome(o));   // handed over once
+
+    f.panel.RequestExport(0, dts::kFixture1Literal);
+    CHECK(settled());
+    CHECK(!o.ok && o.error == f.panel.EntryError() && Has(o.error, "literal pool"));   // the panel's own reason, once
+
+    f.gate.Close();
+    f.panel.RequestExport(0, dts::kFixture1Caller);
+    f.Idle(2);
+    f.visible = false;
+    CHECK(settled());
+    CHECK(!o.ok && Has(o.error, "closed"));
+    f.visible = true;
+
+    f.panel.RequestExport(0, dts::kFixture1Callee);   // (cached by now: retargeted before a frame could install it)
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+    CHECK(f.panel.TakeExportOutcome(o));
+    CHECK(!o.ok && Has(o.error, "another function"));
+    f.gate.Open();
+    CHECK(f.WaitShown());
 }
 
 // A7-5: a long function: the line is brought into view even though the clipper would not have drawn it.
@@ -3172,6 +3209,7 @@ int main(int argc, char** argv)
 #endif
         RUN(TestLineHoverAndNoAddress());
         RUN(TestAssemblyBackToLine());
+        RUN(TestFunctionExportRequest());
         RUN(TestShowInstructionScrolls());
         RUN(TestOriginTextHaltWordAndFolded());
         RUN(TestLineForInstructionOrder());

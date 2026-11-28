@@ -26,6 +26,7 @@
 
 #include "Platform/IPlatform.h"
 #include "Debug/BreakpointEdit.h"   // Breakpoints panel Edit popup text parsing
+#include "Debug/FunctionExport.h"   // SH-2 Assembly's Export SH-2 Function / Export Decompiled Code text
 #include "PanelWidgets.h"     // shared row/cell widget helpers (row Selectable flags)
 #include "SaturnRegions.h"
 #include "Theme.h"
@@ -3378,6 +3379,7 @@ void App::DrawAssembly()
         mDecompilerPanel.ShowInstruction(mAssemblyPanel.Cpu(), req.pseudoAddr);
         mPanels.decompiler = true;
     }
+    if (req.exportKind != FunctionExportKind::None) BeginFunctionExport(req.exportKind, mAssemblyPanel.Cpu(), req.exportAddr);
 #endif
 }
 
@@ -3463,6 +3465,7 @@ void App::UpdateDecompiler(IPlatform& platform)
     };
     in.callSitesRevision = mCallStackRevision;
     mDecompilerPanel.Update(view, *mDecompilerRunner, in, mPanels.decompiler);
+    PumpFunctionExport(platform, view);
     if (!mPanels.decompiler) return;
 
     DecompilerPanel::Request req;
@@ -3516,6 +3519,69 @@ void App::UpdateDecompiler(IPlatform& platform)
         mBiosPath.clear();
         mSettingsDirty = true;
     }
+}
+
+void App::FailFunctionExport(FunctionExportKind kind, uint32_t addr, const std::string& why)
+{
+    char b[64];
+    std::snprintf(b, sizeof b, "%s (function containing %08X): ", FunctionExportLabel(kind), addr);
+    mOperationStatus = b + why;
+    mOperationError = true;
+    mLog.Error(mOperationStatus);
+}
+
+void App::BeginFunctionExport(FunctionExportKind kind, int cpu, uint32_t addr)
+{
+    if (!mDecompilerRunner)
+    {
+        FailFunctionExport(kind, addr, "the decompiler is not available" + (mDecompilerUnavailable.empty() ? std::string() : ": " + mDecompilerUnavailable));
+        return;
+    }
+    mPendingExport.kind = kind;
+    mPendingExport.cpu = cpu;
+    mPendingExport.addr = addr;
+    mDecompilerPanel.RequestExport(cpu, addr);
+    mPanels.decompiler = true;
+    char b[96];
+    std::snprintf(b, sizeof b, "Exporting the function containing %08X: waiting for the decompiler...", addr);
+    mOperationStatus = b;
+    mOperationError = false;
+}
+
+void App::PumpFunctionExport(IPlatform& platform, const DecompilerView& view)
+{
+    DecompilerPanel::ExportOutcome outcome;
+    if (!mDecompilerPanel.TakeExportOutcome(outcome)) return;
+    const PendingFunctionExport job = mPendingExport;
+    mPendingExport = PendingFunctionExport();
+    if (job.kind == FunctionExportKind::None) return;
+    if (!outcome.ok) return FailFunctionExport(job.kind, job.addr, outcome.error);
+
+    const decomp::DecompileResult& shown = *mDecompilerPanel.Shown();   // settled ok: the function's current answer
+    FunctionExportInfo info;
+    info.name = shown.name;
+    info.entry = shown.entry;
+    info.cpu = job.cpu;
+    info.source = view.sourceLabel ? view.sourceLabel : "";
+    info.frame = shown.key.frameNumber;
+    std::string text, why;
+    if (job.kind == FunctionExportKind::Pseudocode)
+        text = FormatDecompiledExport(info, mDecompilerPanel.FunctionText());
+    else
+    {
+        // The bytes come from the snapshot the decompiler ran on, so the listing is the code its flow ranges describe, at the
+        // frame the header names -- not the live memory, which may have moved on since.
+        const decomp::MemorySnapshot* snap = mDecompilerPanel.ShownSnapshot();
+        const ExportMemoryReader read = [snap](uint32_t a, uint32_t n, std::vector<uint8_t>& out, std::string& err) {
+            out.resize(n);
+            return snap->Read(a, out.data(), n, &err);
+        };
+        if (!snap) why = "the memory it was decompiled from is no longer held";
+        if (!snap || !FormatSh2FunctionListing(info, shown.flowBlockRanges, read, &mAssemblyPanel.UserComments(), text, why))
+            return FailFunctionExport(job.kind, job.addr, why);
+    }
+    const std::string file = FunctionExportFileName(info, job.kind);
+    ReportSave(platform.SaveFile(file.c_str(), text.data(), text.size()), file);
 }
 
 // Read and hash a BIOS image once, here; the panel's per-frame key uses the stored hash (A1).
