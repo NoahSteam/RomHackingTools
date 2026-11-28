@@ -3465,7 +3465,7 @@ void App::UpdateDecompiler(IPlatform& platform)
     };
     in.callSitesRevision = mCallStackRevision;
     mDecompilerPanel.Update(view, *mDecompilerRunner, in, mPanels.decompiler);
-    PumpFunctionExport(platform, view);
+    PumpFunctionExport(platform);
     if (!mPanels.decompiler) return;
 
     DecompilerPanel::Request req;
@@ -3548,7 +3548,7 @@ void App::BeginFunctionExport(FunctionExportKind kind, int cpu, uint32_t addr)
     mOperationError = false;
 }
 
-void App::PumpFunctionExport(IPlatform& platform, const DecompilerView& view)
+void App::PumpFunctionExport(IPlatform& platform)
 {
     DecompilerPanel::ExportOutcome outcome;
     if (!mDecompilerPanel.TakeExportOutcome(outcome)) return;
@@ -3557,21 +3557,22 @@ void App::PumpFunctionExport(IPlatform& platform, const DecompilerView& view)
     if (job.kind == FunctionExportKind::None) return;
     if (!outcome.ok) return FailFunctionExport(job.kind, job.addr, outcome.error);
 
-    const decomp::DecompileResult& shown = *mDecompilerPanel.Shown();   // settled ok: the function's current answer
+    // The outcome owns what it settled on: the panel may have captured or navigated since.
+    const decomp::DecompileResult& shown = outcome.result;
     FunctionExportInfo info;
     info.name = shown.name;
     info.entry = shown.entry;
     info.cpu = job.cpu;
-    info.source = view.sourceLabel ? view.sourceLabel : "";
+    info.source = outcome.source;
     info.frame = shown.key.frameNumber;
     std::string text, why;
     if (job.kind == FunctionExportKind::Pseudocode)
-        text = FormatDecompiledExport(info, mDecompilerPanel.FunctionText());
+        text = FormatDecompiledExport(info, outcome.text);
     else
     {
         // The bytes come from the snapshot the decompiler ran on, so the listing is the code its flow ranges describe, at the
         // frame the header names -- not the live memory, which may have moved on since.
-        const decomp::MemorySnapshot* snap = mDecompilerPanel.ShownSnapshot();
+        const decomp::MemorySnapshot* snap = outcome.snapshot.get();
         const ExportMemoryReader read = [snap](uint32_t a, uint32_t n, std::vector<uint8_t>& out, std::string& err) {
             out.resize(n);
             return snap->Read(a, out.data(), n, &err);

@@ -252,6 +252,8 @@ void DecompilerPanel::RequestExport(int cpu, uint32_t addr)
     mWantExport = true;
     mExportSettled = false;
     mExportRevision = mResultRevision;
+    mExportSourceKnown = mViewId.valid;
+    mExportSource = mViewId.sourceId;
 }
 
 bool DecompilerPanel::TakeExportOutcome(ExportOutcome& out)
@@ -266,8 +268,14 @@ void DecompilerPanel::EndExport(bool ok, std::string error)
 {
     mWantExport = false;
     mExportSettled = true;
+    mExportOutcome = ExportOutcome();
     mExportOutcome.ok = ok;
     mExportOutcome.error = std::move(error);
+    if (!ok) return;
+    mExportOutcome.result = mShown;
+    if (mSnap && mSnap->key == mShown.key) mExportOutcome.snapshot = mSnap;
+    mExportOutcome.text = FunctionText();
+    mExportOutcome.source = mInspectionSource;
 }
 
 // Called by Update before this frame's capture, so it judges the state the last Update left: the question resolved, asked, and
@@ -277,12 +285,21 @@ void DecompilerPanel::SettleExport(bool visible)
     if (!mWantExport) return;
     if (!visible) return EndExport(false, "SH-2 Pseudocode was closed before the answer came");
     if (!mViewId.valid) return EndExport(false, "no memory is open to decompile");
+    // Another source on screen (a recorded frame entered or left, another file, a state under a new identity) is not the
+    // memory the export was asked of. Frames advancing within one source are.
+    if (!mExportSourceKnown)
+    {
+        mExportSourceKnown = true;
+        mExportSource = mViewId.sourceId;
+    }
+    if (mViewId.sourceId != mExportSource)
+        return EndExport(false, "the memory on screen changed to another source before the answer came");
     if (!mResolved) return;   // the next Update resolves and asks
     if (!mEntryOk) return EndExport(false, mEntryError.empty() ? std::string("no function was found there") : mEntryError);
     // This export's answer: the function wanted, either current, or installed since the request. A running emulator moves
     // on every frame, so an answer that arrived a frame ago is already "stale" against the view; it is still what was asked
     // for, decompiled from the snapshot it names. (Another navigation or a session end has ended the export by now.)
-    const bool wanted = mShownValid && mShown.requestedEntry == mEntry;
+    const bool wanted = mShownValid && mShown.requestedEntry == mEntry && mShownSnapId.sourceId == mViewId.sourceId;
     if (wanted && (!ShownStale() || mResultRevision != mExportRevision))
     {
         if (mShown.status == DecompileStatus::Ok) return EndExport(true, std::string());

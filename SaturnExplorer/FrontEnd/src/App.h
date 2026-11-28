@@ -603,7 +603,7 @@ private:
     };
     PendingFunctionExport    mPendingExport;
     void BeginFunctionExport(FunctionExportKind kind, int cpu, uint32_t addr);
-    void PumpFunctionExport(IPlatform& platform, const DecompilerView& view);
+    void PumpFunctionExport(IPlatform& platform);
     void FailFunctionExport(FunctionExportKind kind, uint32_t addr, const std::string& why);
     // A recorded frame's identity for the decompiler's cache: stable while the recording it came
     // from is unchanged (mScrubTimeline moves when it is cleared or truncated by Play From Here),

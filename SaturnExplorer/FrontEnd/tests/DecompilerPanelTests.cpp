@@ -882,6 +882,9 @@ void TestFunctionExportWhileRunning()
         CHECK(o.ok && o.error.empty());
         CHECK(f.panel.Shown() && f.panel.Shown()->entry == entry);
         CHECK(f.panel.ShownSnapshot() != nullptr && f.panel.ShownSnapshot()->key == f.Shown().key);
+        // The outcome owns what it settled on.
+        CHECK(o.result.entry == entry && o.snapshot && o.snapshot->key == o.result.key);
+        CHECK(Has(o.text, o.result.Text().c_str()) && o.source == "test");
     }
     // Still cancelled by another navigation while it waits.
     f.gate.Close();
@@ -890,6 +893,40 @@ void TestFunctionExportWhileRunning()
     CHECK(f.panel.TakeExportOutcome(o));
     CHECK(!o.ok && Has(o.error, "another function"));
     f.gate.Open();
+    CHECK(f.WaitShown());
+}
+
+// The view moves to another source (here: live to a recorded frame) between the answer installing and the export settling.
+// The export is not settled ok against it: the old answer is not that source's memory, and the header would misname it.
+void TestFunctionExportSourceChange()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    CHECK(f.WaitShown("+ 1"));
+    DecompilerPanel::ExportOutcome o;
+    const uint64_t revision = f.panel.ResultRevision();
+    f.panel.RequestExport(0, dts::kFixture1Caller);
+    // Pump until the answer installs; the Update that installs it has already run SettleExport, so nothing is settled yet.
+    CHECK(f.PumpUntil([&] { return f.panel.ResultRevision() != revision; }));
+    CHECK(!f.panel.TakeExportOutcome(o));
+    f.gate.Close();
+    f.kind = DecompViewKind::Scrub;
+    f.sourceId = 999;
+    f.frame = 123;
+    f.Idle();
+    CHECK(f.panel.TakeExportOutcome(o));
+    CHECK(!o.ok && Has(o.error, "another source"));
+    // ...and while it is still waiting for its answer.
+    f.panel.RequestExport(0, dts::kFixture1Callee);
+    f.Idle();
+    f.sourceId = 7;
+    f.kind = DecompViewKind::LiveRunning;
+    f.Idle();
+    CHECK(f.panel.TakeExportOutcome(o));
+    CHECK(!o.ok && Has(o.error, "another source"));
+    f.gate.Open();
+    CHECK(f.WaitShown());
 }
 
 // A7-5: a long function: the line is brought into view even though the clipper would not have drawn it.
@@ -3244,6 +3281,7 @@ int main(int argc, char** argv)
         RUN(TestAssemblyBackToLine());
         RUN(TestFunctionExportRequest());
         RUN(TestFunctionExportWhileRunning());
+        RUN(TestFunctionExportSourceChange());
         RUN(TestShowInstructionScrolls());
         RUN(TestOriginTextHaltWordAndFolded());
         RUN(TestLineForInstructionOrder());

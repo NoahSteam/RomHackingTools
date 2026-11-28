@@ -180,8 +180,14 @@ public:
     // hands the outcome over, once. A new request replaces one still waiting.
     struct ExportOutcome
     {
-        bool ok = false;      // Shown() is the function's current answer, decompiled from ShownSnapshot()
+        bool ok = false;
         std::string error;    // why not: the entry error ("No function found containing ..."), "the decompile was stopped", ...
+        // When ok, the export's own copy of what it settled on, so nothing the panel does afterwards (a capture in the same
+        // Update, a navigation, another source) can change what is saved or what the header says about it.
+        decomp::DecompileResult result;                          // the function's answer
+        std::shared_ptr<const decomp::MemorySnapshot> snapshot;  // the memory it was decompiled from; null if no longer held
+        std::string text;                                        // what Copy Function copies for it
+        std::string source;                                      // the view's label for that memory ("live, paused", ...)
     };
     void RequestExport(int cpu, uint32_t addr);
     bool TakeExportOutcome(ExportOutcome& out);
@@ -556,6 +562,8 @@ private:
     bool mWantExport = false;
     bool mExportSettled = false;
     uint64_t mExportRevision = 0;    // mResultRevision at the request: an answer installed since is this export's
+    bool mExportSourceKnown = false; // the source on screen when the export was asked: another one ends it
+    uint64_t mExportSource = 0;
     ExportOutcome mExportOutcome;
     void SettleExport(bool visible);
     void EndExport(bool ok, std::string error);
