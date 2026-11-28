@@ -14,10 +14,17 @@
 // it replaced. The drop operations below are what normally prevent that; the key is the second line
 // of defence, so a store that missed a drop still cannot hand one timeline's edits to another's frame.
 //
+// An edit is a DIFFERENCE from the recording, never a copy of it: a byte written back to the value the
+// frame recorded is not an edit and is removed from the frame's set (and a frame left with none is no
+// longer edited). To know the recorded value after the frame's own edits have been laid over the
+// scratch it was decompressed into, each edited byte keeps its ORIGINAL beside its value, taken when
+// the byte was first edited -- at that moment the frame still shows the recorded byte. That is one
+// extra byte per edited byte, instead of a second copy of the frame or a second decompress per write.
+//
 // Memory: a frame's edits are a set of disjoint byte runs, so writing the same bytes twice replaces
-// rather than accumulates, and the cost is the DISTINCT bytes edited (plus a small per-run overhead).
-// The whole store is capped (kMaxBytes); an edit that would pass the cap is refused, whole, and the
-// caller says so. The number of frames is bounded by the ring, because the App reconciles the store
+// rather than accumulates, and the cost is the DISTINCT bytes edited, twice (value + original), plus a
+// small per-run overhead. The whole store is capped (kMaxBytes); an edit that would pass the cap is
+// refused, whole, and the caller says so. The number of frames is bounded by the ring, because the App reconciles the store
 // against the recorder every UI frame (App::ReconcileFrameEdits) and a frame that left it loses its
 // edits.
 #pragma once
@@ -25,6 +32,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <map>
 #include <utility>
 #include <vector>
@@ -57,6 +65,9 @@ struct StagedPoke
     bool                 isSound = false;
     uint32_t             addr = 0;
     std::vector<uint8_t> bytes;
+    // What the recording holds at each of these bytes (same length as 'bytes'; no byte of a run equals
+    // its original). Never sent to the emulator: it is what lets a write-back be recognised.
+    std::vector<uint8_t> originals;
 };
 
 // What one frame's edits are: disjoint runs, sorted by (isSound, addr). Where two writes touch the
@@ -66,21 +77,26 @@ class FrameEdits
 public:
     bool Empty() const { return mRuns.empty(); }
     const std::vector<StagedPoke>& Pokes() const { return mRuns; }
-    // Distinct bytes edited, and the same plus a fixed per-run cost (what the store's cap counts).
+    // Distinct bytes edited, and what the store's cap counts: each such byte twice (its value and its
+    // original) plus a fixed cost per run.
     size_t ByteCount() const
     {
         size_t n = 0;
         for (const StagedPoke& p : mRuns) n += p.bytes.size();
         return n;
     }
-    size_t Footprint() const { return ByteCount() + mRuns.size() * kRunOverhead; }
+    size_t Footprint() const { return 2 * ByteCount() + mRuns.size() * kRunOverhead; }
 
-    // Lay 'len' bytes at 'addr' over the edits. Runs that overlap or touch merge into one, except
-    // across a 512 KiB boundary: VDP1 VRAM is followed directly by the frame buffer on the bus, and
-    // the frame buffer is not applied by every server, so a run must never straddle the two.
-    void Add(bool isSound, uint32_t addr, const uint8_t* bytes, size_t len)
+    // Lay 'len' bytes at 'addr' over the edits. 'originals' are the bytes the frame showed there just
+    // BEFORE this write (the caller reads them from the frame on screen); for a byte that is already
+    // edited the original stored when it was first edited stands instead. A byte whose new value equals
+    // its original is not an edit: it is removed (a write-back), and a run it was in splits around it.
+    // Runs that overlap or touch merge into one, except across a 512 KiB boundary: VDP1 VRAM is
+    // followed directly by the frame buffer on the bus, and the frame buffer is not applied by every
+    // server, so a run must never straddle the two.
+    void Add(bool isSound, uint32_t addr, const uint8_t* bytes, const uint8_t* originals, size_t len)
     {
-        if (!bytes || len == 0) return;
+        if (!bytes || !originals || len == 0) return;
         // A write is clipped at the end of the address space rather than wrapping onto address 0.
         const uint64_t room = (uint64_t(1) << 32) - addr;
         if (len > room) len = static_cast<size_t>(room);
@@ -89,9 +105,10 @@ public:
         {
             const uint64_t blockEnd = (uint64_t(addr) | (kBlock - 1)) + 1;
             const size_t   part = static_cast<size_t>((std::min)(static_cast<uint64_t>(len), blockEnd - addr));
-            AddWithinBlock(isSound, addr, bytes, part);
+            AddWithinBlock(isSound, addr, bytes, originals, part);
             addr = static_cast<uint32_t>(uint64_t(addr) + part);
             bytes += part;
+            originals += part;
             len -= part;
         }
     }
@@ -112,7 +129,7 @@ private:
         return end == addr && !SameBlock(r.addr, static_cast<uint32_t>(addr));
     }
 
-    void AddWithinBlock(bool isSound, uint32_t addr, const uint8_t* bytes, size_t len)
+    void AddWithinBlock(bool isSound, uint32_t addr, const uint8_t* bytes, const uint8_t* originals, size_t len)
     {
         const uint64_t lo = addr, hi = uint64_t(addr) + len;
         size_t first = 0;
@@ -126,16 +143,46 @@ private:
             mergedHi = (std::max)(mergedHi, uint64_t(mRuns[last].addr) + mRuns[last].bytes.size());
             ++last;
         }
-        StagedPoke merged;
-        merged.isSound = isSound;
-        merged.addr = static_cast<uint32_t>(mergedLo);
-        merged.bytes.assign(static_cast<size_t>(mergedHi - mergedLo), 0);
+        // The merged span has no gaps (every run in it overlaps or touches the next, or the new write
+        // bridges it), so lay the existing edits and the new bytes over one flat buffer, then cut it
+        // back into runs wherever a byte is no longer an edit.
+        const size_t span = static_cast<size_t>(mergedHi - mergedLo);
+        std::vector<uint8_t> value(span, 0), orig(span, 0), edited(span, 0);
         for (size_t i = first; i < last; ++i)
-            std::copy(mRuns[i].bytes.begin(), mRuns[i].bytes.end(),
-                      merged.bytes.begin() + static_cast<std::ptrdiff_t>(mRuns[i].addr - mergedLo));
-        std::copy(bytes, bytes + len, merged.bytes.begin() + static_cast<std::ptrdiff_t>(lo - mergedLo));
+        {
+            const StagedPoke& r = mRuns[i];
+            const size_t at = static_cast<size_t>(r.addr - mergedLo);
+            std::copy(r.bytes.begin(), r.bytes.end(), value.begin() + static_cast<std::ptrdiff_t>(at));
+            std::copy(r.originals.begin(), r.originals.end(), orig.begin() + static_cast<std::ptrdiff_t>(at));
+            std::fill(edited.begin() + static_cast<std::ptrdiff_t>(at),
+                      edited.begin() + static_cast<std::ptrdiff_t>(at + r.bytes.size()), uint8_t(1));
+        }
+        for (size_t i = 0; i < len; ++i)
+        {
+            const size_t at = static_cast<size_t>(lo - mergedLo) + i;
+            const uint8_t was = edited[at] ? orig[at] : originals[i];   // the RECORDED byte, whoever's edit it was
+            if (bytes[i] == was) { edited[at] = 0; continue; }
+            edited[at] = 1;
+            value[at] = bytes[i];
+            orig[at] = was;
+        }
+        std::vector<StagedPoke> cut;
+        for (size_t at = 0; at < span;)
+        {
+            if (!edited[at]) { ++at; continue; }
+            size_t end = at;
+            while (end < span && edited[end]) ++end;
+            StagedPoke run;
+            run.isSound = isSound;
+            run.addr = static_cast<uint32_t>(mergedLo + at);
+            run.bytes.assign(value.begin() + static_cast<std::ptrdiff_t>(at), value.begin() + static_cast<std::ptrdiff_t>(end));
+            run.originals.assign(orig.begin() + static_cast<std::ptrdiff_t>(at), orig.begin() + static_cast<std::ptrdiff_t>(end));
+            cut.push_back(std::move(run));
+            at = end;
+        }
         mRuns.erase(mRuns.begin() + static_cast<std::ptrdiff_t>(first), mRuns.begin() + static_cast<std::ptrdiff_t>(last));
-        mRuns.insert(mRuns.begin() + static_cast<std::ptrdiff_t>(first), std::move(merged));
+        mRuns.insert(mRuns.begin() + static_cast<std::ptrdiff_t>(first),
+                     std::make_move_iterator(cut.begin()), std::make_move_iterator(cut.end()));
     }
     static bool SameBlock(uint32_t a, uint32_t b) { return (a / kBlock) == (b / kBlock); }
 
@@ -146,7 +193,8 @@ private:
 class FrameEditStore
 {
 public:
-    // Distinct bytes (plus run overhead) the whole store may hold. Whole work RAM is 2 MiB, so this is
+    // Footprint the whole store may hold: every edited byte counts twice (value and original), plus run
+    // overhead, so this is about 8 MiB of distinct edited bytes. Whole work RAM is 2 MiB, so that is
     // room for several frames each rewritten end to end; a hand-typed session is orders below it.
     static constexpr size_t kMaxBytes = 16u * 1024u * 1024u;
 
@@ -170,39 +218,65 @@ public:
         return out;
     }
 
-    // Add (or replace, byte for byte) an edit on 'key'. Returns the bytes taken: 'len', or 0 when it
-    // was refused -- no such frame (0), nothing to write, or the store would pass kMaxBytes. Never
-    // partial, so the view is never shown an edit the replay does not have.
-    size_t Record(const FrameKey& key, bool isSound, uint32_t addr, const uint8_t* bytes, size_t len)
+    // Add (or replace, byte for byte) an edit on 'key'; 'originals' are what the frame showed at these
+    // bytes before the write (see FrameEdits::Add). Returns the bytes taken: 'len', or 0 when it was
+    // refused -- no such frame (0), nothing to write, or the store would pass kMaxBytes. Never partial,
+    // so the view is never shown an edit the replay does not have. Writing the recorded values back is
+    // taken (the view shows them) but keeps nothing: a frame is edited only while it differs.
+    size_t Record(const FrameKey& key, bool isSound, uint32_t addr, const uint8_t* bytes, size_t len,
+                  const uint8_t* originals)
     {
-        if (key.frame == 0 || !bytes || len == 0) return 0;
+        if (key.frame == 0 || !bytes || !originals || len == 0) return 0;
         auto it = mFrames.find(key);
         const size_t before = it == mFrames.end() ? 0 : it->second.Footprint();
-        // Growth is at most the bytes plus one new run per block touched; only when that could pass
-        // the cap is the merge tried on a copy first.
+        // Growth is at most twice the bytes (value + original), a run per block touched, and a run for
+        // every byte that splits a run in two (at most half the bytes written); only when that could
+        // pass the cap is the merge tried on a copy first.
         const size_t blocks = len / FrameEdits::kBlock + 2;
-        const bool mayExceed = mFootprint + len + blocks * FrameEdits::kRunOverhead > kMaxBytes;
+        const bool mayExceed = mFootprint + 2 * len + (len / 2 + blocks) * FrameEdits::kRunOverhead > kMaxBytes;
         if (!mayExceed)
         {
             FrameEdits& e = it == mFrames.end() ? mFrames[key] : it->second;
-            e.Add(isSound, addr, bytes, len);
+            e.Add(isSound, addr, bytes, originals, len);
             mFootprint = mFootprint - before + e.Footprint();
+            if (e.Empty()) mFrames.erase(key);   // the last edited byte went: the frame is no longer edited
             return len;
         }
         FrameEdits trial = it == mFrames.end() ? FrameEdits() : it->second;
-        trial.Add(isSound, addr, bytes, len);
+        trial.Add(isSound, addr, bytes, originals, len);
         const size_t after = trial.Footprint();
         if (mFootprint - before + after > kMaxBytes) return 0;
-        mFrames[key] = std::move(trial);
         mFootprint = mFootprint - before + after;
+        if (trial.Empty()) mFrames.erase(key);
+        else mFrames[key] = std::move(trial);
         return len;
+    }
+
+    // The user threw this frame's edits away. True when it had any.
+    bool Drop(const FrameKey& key)
+    {
+        const auto it = mFrames.find(key);
+        if (it == mFrames.end()) return false;
+        mFootprint -= it->second.Footprint();
+        mFrames.erase(it);
+        return true;
+    }
+
+    // How many frames' edits DropAfter(frame) would discard: asked before the drop so the user can be
+    // told, and answered by the very rule DropAfter uses.
+    size_t CountAfter(uint64_t frame) const
+    {
+        size_t n = 0;
+        for (const auto& kv : mFrames)
+            if (IsAfter(kv.first, frame)) ++n;
+        return n;
     }
 
     // Play From Here on frame 'frame' discards every recorded frame after it: those frames' edits go.
     // Matches by number alone, whatever the timeline: it is the cut in the ring that decides.
     size_t DropAfter(uint64_t frame)
     {
-        return DropIf([&](const FrameKey& k) { return k.frame > frame; });
+        return DropIf([&](const FrameKey& k) { return IsAfter(k, frame); });
     }
     // The ring aged out every frame before 'oldest' (its current front): their edits go.
     size_t DropBefore(uint64_t oldest)
@@ -223,6 +297,10 @@ public:
     }
 
 private:
+    // The one rule for "a frame Play From Here on 'frame' discards": by number alone, whatever the
+    // timeline (the cut in the ring decides, not the timeline).
+    static bool IsAfter(const FrameKey& k, uint64_t frame) { return k.frame > frame; }
+
     template <class Pred>
     size_t DropIf(Pred drop)
     {

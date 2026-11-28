@@ -506,7 +506,8 @@ void TestWriteDestText()
 {
     using D = IMemoryBackend::WriteDest;
     CheckStr(WriteDestText(D::Emulator), "Queued for emulator", "dest emulator");
-    CheckStr(WriteDestText(D::Staged), "Staged for Play From Here", "dest staged");
+    CheckStr(WriteDestText(D::Staged, 1234), "Kept on recorded frame #1234", "dest staged names the frame");
+    CheckStr(WriteDestText(D::Staged), "Kept on this recorded frame", "dest staged without a number");
     CheckStr(WriteDestText(D::ViewOnly), "Modified (this view only)", "dest view only");
 }
 

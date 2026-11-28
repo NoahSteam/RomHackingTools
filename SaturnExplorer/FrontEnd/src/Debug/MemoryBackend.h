@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -79,10 +80,14 @@ public:
     // Here). 'recorded' is false for a live or loaded source, which has none to report.
     struct FrameEditSummary
     {
-        bool   recorded = false;
-        size_t bytes = 0;   // distinct bytes edited on this frame
+        bool     recorded = false;
+        size_t   bytes = 0;   // distinct bytes edited on this frame
+        uint64_t frame = 0;   // the number of the frame on screen (0 = not known), for naming it to the user
     };
     virtual FrameEditSummary RecordedFrameEdits() const { return FrameEditSummary(); }
+    // Throw away the edits kept on the recorded frame on screen, so it shows its recorded bytes again.
+    // True when it had any. A panel asks through here rather than reaching into the application.
+    virtual bool RevertRecordedFrameEdits() { return false; }
 };
 
 // Backend over an se_context. Holds a pointer-to-pointer so it always follows the
@@ -131,8 +136,16 @@ public:
     std::string WriteRefusal(uint32_t address) const override;
     WriteDest WriteDestination(uint32_t address) const override;
     FrameEditSummary RecordedFrameEdits() const override { return mFrameEdits; }
-    // Said by the owner each frame: whether a recorded frame is on screen and what it has edited.
-    void SetRecordedFrameEdits(bool recorded, size_t bytes) { mFrameEdits.recorded = recorded; mFrameEdits.bytes = bytes; }
+    // Said by the owner each frame: whether a recorded frame is on screen, its number, and what it has edited.
+    void SetRecordedFrameEdits(bool recorded, size_t bytes, uint64_t frame = 0)
+    {
+        mFrameEdits.recorded = recorded;
+        mFrameEdits.bytes = bytes;
+        mFrameEdits.frame = recorded ? frame : 0;
+    }
+    // What RevertRecordedFrameEdits does: the owner holds the edits, so the owner discards them.
+    void SetRevertRecordedFrameEdits(std::function<bool()> revert) { mRevert = std::move(revert); }
+    bool RevertRecordedFrameEdits() override { return mRevert ? mRevert() : false; }
 
     // Force the backend read-only regardless of the context (e.g. while scrubbing a recorded
     // frame on a server that can't rewind, so edits that would go nowhere are disabled). 'why' is
@@ -155,7 +168,7 @@ public:
     void SetVdpWindowsWritable(bool writable) { mVdpWindowsWritable = writable; }
 
     // Where the source's write sink takes an accepted edit: a live emulator, a scrubbed frame's
-    // replay list (staged for Play From Here), or nowhere past the snapshot. Said by the owner,
+    // replay list (kept on the recorded frame for Play From Here), or nowhere past the snapshot. Said by the owner,
     // not inferred from the sink: a savestate has a work-RAM sink too, and it only edits its own
     // in-memory copy. Defaults to ViewOnly, so a source nobody vouched for never claims more.
     void SetEditSink(WriteDest dest) { mEditSink = dest; }
@@ -177,6 +190,7 @@ private:
     bool         mVdpWindowsWritable = true;
     WriteDest    mEditSink = WriteDest::ViewOnly;
     FrameEditSummary mFrameEdits;
+    std::function<bool()> mRevert;
     uint64_t     mGeneration = 0;
 };
 

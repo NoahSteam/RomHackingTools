@@ -102,9 +102,11 @@ private:
     bool    mSelecting = false;
     int64_t mEditAddr = -1;            // address being typed over (-1 = none)
     char    mEditBuf[3] = {};
+    int     mEditSeed = -1;            // the byte the edit box was opened on (-1 = typed-digit entry): committing it unchanged writes nothing
     bool    mEditFocus = false;
     bool    mEditFlow = false;         // typed-digit entry: mEditBuf[0] is the pending first digit
     float   mModifiedFlash = 0.0f;
+    uint64_t mModifiedFrame = 0;   // the recorded frame that last edit was kept on (0 = none / not recorded)
     IMemoryBackend::WriteDest mModifiedDest = IMemoryBackend::WriteDest::ViewOnly;   // where the last accepted edit went
     std::string mWriteError;           // why the last edit was refused; empty when it was not
     float   mWriteErrorAge = 0.0f;     // seconds left to show it

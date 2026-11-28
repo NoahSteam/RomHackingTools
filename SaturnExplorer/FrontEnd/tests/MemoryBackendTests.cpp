@@ -307,6 +307,16 @@ int main()
         b.SetEditSink(IMemoryBackend::WriteDest::Staged);
         Check(b.WriteDestination(kVdp1) == IMemoryBackend::WriteDest::Staged,
               "on a scrubbed frame the sink is the replay list: staged, not sent");
+        // The recorded frame on screen is named, and a revert request goes to whoever holds the edits.
+        Check(!b.RecordedFrameEdits().recorded && b.RecordedFrameEdits().frame == 0 && !b.RevertRecordedFrameEdits(),
+              "a source with no recorded frame has nothing to name or revert");
+        b.SetRecordedFrameEdits(true, 3, 42);
+        Check(b.RecordedFrameEdits().frame == 42 && b.RecordedFrameEdits().bytes == 3, "the shown frame's number and edited bytes are reported");
+        int reverted = 0;
+        b.SetRevertRecordedFrameEdits([&] { ++reverted; return true; });
+        Check(b.RevertRecordedFrameEdits() && reverted == 1, "Revert is routed to the owner");
+        b.SetRecordedFrameEdits(false, 0, 42);
+        Check(b.RecordedFrameEdits().frame == 0, "a frame number is only reported while a recorded frame is up");
         b.SetEditSink(IMemoryBackend::WriteDest::ViewOnly);
         b.SetReadOnly(true, "state load in flight");
         Check(b.WriteRefusal(kVdp1) == "state load in flight", "a forced read-only carries the reason it was given");

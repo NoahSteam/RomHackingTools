@@ -57,11 +57,23 @@ error.
 8. **Plain Play is not Play From Here.** Pause, scrub back, press **Play**. Expect the game to carry
    on from the *present* (frame number does not drop back to N). *Proves the two buttons differ.*
 8a. **Edits stay with their frame.** Pause, scrub to frame A, edit a byte in Memory (the panel says
-   "This frame has 1 edited byte, staged for Play From Here." and the scrub bar reads "... edited" with an
+   "This frame has 1 edited byte. Play From Here applies it." with a Revert button at its right, the notice
+   under the grid says "Kept on recorded frame #A", and the scrub bar reads "... edited" with an
    orange tick on A). Scrub to B: B shows its own value and no note. Scrub back to A: the edit is shown
    again. Edit B too. Press **Play**, pause, scrub back: both frames still show their edits. Press
    **Play From Here** on A: only A's edit reaches the game; B (after A) is discarded with its edit, and
    any frame before A keeps its edit, shown but not applied.
+8b. **Telling the user what is thrown away.** With edits on A and on a later frame B, hover **Play From Here**
+   while A is selected: the tooltip adds "Applies this frame's 1 edited byte." and "Edits on 1 later frame are
+   discarded with them." (neither line appears when no edits are involved).
+8c. **Undoing an edit.** On an edited frame, press **Revert** in the Memory panel (or right-click the scrub bar,
+   "Revert This Frame's Edits"): the frame shows its recorded bytes at once, the "edited" label and the orange
+   tick go, and the Memory and Assembly panels show the recorded bytes. Edit a byte, then type its *recorded*
+   value back: the frame is no longer edited. Double-click a byte and press Enter without changing it: nothing
+   is edited (on a live, unscrubbed frame: nothing is sent either).
+8d. **Step Out agrees.** Halted inside a function with a recorded call (a tracepoint armed), scrub back: the Call
+   Stack strip's Step Out and the SH-2 Assembly header's Step Out are both enabled, and both disabled when the
+   live halt has no recorded call frame. Neither depends on which frame is shown.
 9. **Rewind off.** Turn Rewind off in Settings: the button disappears and nothing is recorded.
    *Proves the setting gates it.*
 

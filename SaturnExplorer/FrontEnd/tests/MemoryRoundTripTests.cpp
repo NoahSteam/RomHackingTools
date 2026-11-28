@@ -588,10 +588,20 @@ int main()
             rec.Configure(4);
             sfe::FrameEditStore staged;
             const sfe::FrameKey stagedKey{ 0, 1 };   // edits are kept per frame; this is the only one
-            struct Sink { sfe::FrameEditStore* s; sfe::FrameKey key; } sink{ &staged, stagedKey };
+            struct Sink { sfe::FrameEditStore* s; sfe::FrameKey key; se_context* shown; } sink{ &staged, stagedKey, nullptr };
             rec.SetEditSink(&sink, [](void* u, int isSound, uint32_t addr, const uint8_t* b, size_t n) -> size_t {
                 Sink* s = static_cast<Sink*>(u);
-                return s->s->Record(s->key, isSound != 0, addr, b, n);
+                // What the frame shows before the write is what the store keeps as the original.
+                std::vector<uint8_t> was(n, 0);
+                for (const Region& reg : kRegions)
+                {
+                    if (isSound ? reg.kind != SE_VRAM_KIND_SOUND_RAM
+                                : (reg.kind == SE_VRAM_KIND_SOUND_RAM || addr < reg.bus || addr - reg.bus >= reg.size))
+                        continue;
+                    if (s->shown) se_read_vram(s->shown, reg.kind, isSound ? addr : addr - reg.bus, was.data(), n);
+                    break;
+                }
+                return s->s->Record(s->key, isSound != 0, addr, b, n, was.data());
             });
             se_begin_frame(ctx);
             const std::vector<uint8_t> restoreTo(SsDbgSaveState(nullptr, 0));
@@ -603,6 +613,7 @@ int main()
             Check(rec.Count() == 1 && rec.Select(0, &rds), m + ": the frame is recorded");
             se_context* rctx = se_create(&rds, &cfg);
             Check(rctx && se_begin_frame(rctx) == SE_OK, m + ": and opens");
+            sink.shown = rctx;
             if (rctx)
             {
                 for (const Region& reg : kRegions)

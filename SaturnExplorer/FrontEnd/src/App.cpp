@@ -1969,7 +1969,8 @@ void App::BuildUI(IPlatform& platform)
     {
         // The Memory panel's per-frame note: the frame on screen, and how many bytes it has edited.
         const FrameEdits* shown = mbScrubbing ? mEdits.Find(ShownFrameKey()) : nullptr;
-        mMemBackend.SetRecordedFrameEdits(mbScrubbing, shown ? shown->ByteCount() : 0);
+        mMemBackend.SetRecordedFrameEdits(mbScrubbing, shown ? shown->ByteCount() : 0, mScrubShownFrame);
+        mMemBackend.SetRevertRecordedFrameEdits([this] { return RevertShownFrameEdits(); });
     }
     mMemBackend.SetEditSink(mbScrubbing     ? IMemoryBackend::WriteDest::Staged
                             : mbLiveSource ? IMemoryBackend::WriteDest::Emulator
@@ -2411,6 +2412,11 @@ void App::DrawTransportBar()
         const ImVec2 sliderMin = ImGui::GetItemRectMin(), sliderMax = ImGui::GetItemRectMax();
         if (ImGui::BeginPopupContextItem("##tp_scrub_ctx"))
         {
+            // The frame on screen, which is the one a Memory-panel Revert acts on too.
+            if (ImGui::MenuItem("Revert This Frame's Edits", nullptr, false,
+                                mbScrubbing && mEdits.Has(ShownFrameKey())))
+                RevertShownFrameEdits();
+            ImGui::Separator();
             if (ImGui::MenuItem("Set as Compare Frame A")) MarkCompareFrame(CompareMarkers::A);
             if (ImGui::MenuItem("Set as Compare Frame B")) MarkCompareFrame(CompareMarkers::B);
             ImGui::Separator();
@@ -2514,7 +2520,21 @@ std::string App::PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHe
                       "The %d recorded frame(s) after it are discarded.",
                       static_cast<unsigned long long>(mRecorder.FrameNumber(static_cast<size_t>(target))),
                       n - 1 - target);
-        return buf;
+        std::string tip = buf;
+        // Only when edits are involved: what this frame sends, and (the one thing here that throws edits
+        // away) the later frames' edits that go with their frames. Counted by the store's own rule.
+        const uint64_t frameNo = mRecorder.FrameNumber(static_cast<size_t>(target));
+        const FrameEdits* own = mEdits.Find(FrameKey{ mRecorder.FrameTimeline(static_cast<size_t>(target)), frameNo });
+        if (own)
+        {
+            const size_t bytes = own->ByteCount();
+            tip += "\nApplies this frame's " + std::to_string(bytes) + " edited byte" + (bytes == 1 ? "" : "s") + ".";
+        }
+        const size_t later = mEdits.CountAfter(frameNo);
+        if (later)
+            tip += "\nEdits on " + std::to_string(later) + " later frame" + (later == 1 ? "" : "s") +
+                   " are discarded with them.";
+        return tip;
     }
     if (!EmulatorStampsStates())
         return "Play From Here (unavailable)\nThis emulator build is too old to tell the frames of a "
@@ -3153,10 +3173,53 @@ size_t App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, 
     // Each frame has its own set, so an edit here can never join, replace or clear another frame's.
     // 0 (refused: the store is full) keeps the edit off the screen too, so the view never shows
     // what Play From Here would not replay.
-    const size_t taken = mEdits.Record(ShownFrameKey(), isSound != 0, addr, bytes, len);
+    //
+    // What the frame shows at these bytes right now is what the recording holds, except where the frame
+    // already has an edit (which remembers its own original): the sink runs before the context takes
+    // the write, so the scrub context still holds the old bytes. That is how a write of the recorded
+    // value is recognised as no edit at all (FrameEdits::Add). Read from the context, not the
+    // recorder's scratch: the scratch has this frame's edits laid over it.
+    std::vector<uint8_t> shown(len);
+    size_t got = 0;
+    if (mScrubContext)
+    {
+        if (isSound)
+            got = se_read_vram(mScrubContext, SE_VRAM_KIND_SOUND_RAM, addr, shown.data(), len);
+        else
+        {
+            ContextBackend reader(&mScrubContext);
+            for (size_t off = 0; off < len;)
+            {
+                const uint32_t n = static_cast<uint32_t>((std::min)(len - off, size_t(0x10000)));
+                const MemoryReadResult r = reader.ReadOne(addr + static_cast<uint32_t>(off), n);
+                if (!r.success || r.bytes.size() != n) break;
+                std::copy(r.bytes.begin(), r.bytes.end(), shown.begin() + static_cast<std::ptrdiff_t>(off));
+                off += n;
+                got = off;
+            }
+        }
+    }
+    if (got != len)
+    {
+        // Cannot happen for a range the context accepted; refused rather than kept with a guessed original.
+        mLog.Warn("Could not read the recorded bytes this edit replaces; it was not kept.");
+        return 0;
+    }
+    const size_t taken = mEdits.Record(ShownFrameKey(), isSound != 0, addr, bytes, len, shown.data());
     if (taken == 0)
         mLog.Warn("Edits on recorded frames are at their size limit; this edit was not kept.");
     return taken;
+}
+
+// The user discarded this frame's edits (Memory panel's Revert, the scrub bar's menu). The context still
+// shows them, so it is rebuilt from the recording, exactly as when the frame's edits are dropped by
+// eviction; the rebuild also moves the source id, which every open view reads as "my data changed".
+bool App::RevertShownFrameEdits()
+{
+    if (!mbScrubbing || !mEdits.Drop(ShownFrameKey())) return false;
+    mScrubEdited = true;
+    mCallStackDirty = true;   // a stack scanned from the edited memory is not the recorded frame's
+    return true;
 }
 
 // Edits live exactly as long as their frame is in the recording. Eviction happens on the recorder's
@@ -3271,6 +3334,11 @@ void App::DrawAssembly()
     mAssemblyPanel.SetOfferDecompile(true);
 #endif
     mAssemblyPanel.SetBreakpointStop(mStepHalt.HaltActive(), mStepHalt.HaltCpu(), mStepHalt.HaltPc());
+    if (mStepHalt.HaltActive())
+    {
+        const StepOutDecision& out = StepOutOffer();   // the same decision as the Call Stack strip's
+        mAssemblyPanel.SetStepOutOffer(out.Ok(), out.Ok() ? nullptr : out.Why());
+    }
     mAssemblyPanel.SetRecordedFrame(sfe::RecordedFrameShown(ScrubViewUp() && Scrubbing(), ScrubShownFrame()));
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mActions, mWatchPanel, mbLiveSource, req);
     // An in-place edit was written: the Log keeps the outcome (destination, old and new value, any warning) after the
@@ -5144,15 +5212,15 @@ void App::DrawCallStack(IPlatform& platform)
         ImGui::EndDisabled();
         ImGui::SameLine();
         // Enabled only when the recorded call frame says where this function returns to. (The tooltip
-        // names that address; PR is not it once the function has called anything.)
-        const StepOutTarget outTarget = (haveR && viewingHalted)
-            ? ChooseStepOutTarget(mCallStack.Frames(mCallStackCpu), r) : StepOutTarget{};
-        ImGui::BeginDisabled(!canStep || !haveR || !viewingHalted || !outTarget.ok);
+        // names that address; PR is not it once the function has called anything.) Judged on the LIVE
+        // halt, as StepOut and the Assembly header do, so a scrubbed frame does not change the answer.
+        const StepOutDecision& out = StepOutOffer();
+        ImGui::BeginDisabled(!canStep || !viewingHalted || !out.Ok());
         if (ImGui::Button("Step Out")) { StepOut(mCallStackCpu); }
-        if (outTarget.ok)
-            ImGui::SetItemTooltip("Run to the current frame's return address (%08X)", outTarget.returnAddress);
+        if (out.Ok())
+            ImGui::SetItemTooltip("Run to the current frame's return address (%08X)", out.target.returnAddress);
         else
-            ImGui::SetItemTooltip("%s", viewingHalted ? outTarget.why : "Stepping applies to the CPU that halted");
+            ImGui::SetItemTooltip("%s", viewingHalted ? out.Why() : "Stepping applies to the CPU that halted");
         ImGui::EndDisabled();
         ImGui::EndChild();
         ImGui::PopStyleColor();
@@ -5704,28 +5772,55 @@ void App::StepOut(int cpu)
 {
     (void)cpu;   // the halted CPU, always: see SteppedCpu
     if (mStepHalt.StepInFlight()) return;   // a step is already in flight
-    if (!LiveHas(SE_LIVE_CAP_EXEC_BP))
+    const StepOutDecision d = DecideStepOut();   // fresh, not the panels' copy from earlier this frame
+    if (!d.canHalt)
     {
         mLog.Warn("Step Out: this emulator build cannot halt at breakpoints (Mednafen built with --disable-debugger).");
         return;
     }
+    if (!d.haveRegs) { return; }
+    if (!d.target.ok)
+    {
+        mLog.Warn(std::string("Step Out: cannot tell where this function returns to \xe2\x80\x94 ") +
+                  d.target.why + ". Use Step Over, or Run to Here at the return address.");
+        return;
+    }
+    RunToTransient(d.target.returnAddress, SteppedCpu());
+}
+
+// What StepOut will do, worked out from the live halt. PR is not the frame's return address once the
+// function has made a call of its own, so the target comes from the recorded call frame
+// (ChooseStepOutTarget says why that is the only answer it trusts). Built fresh: the Call Stack panel's
+// copy follows whichever CPU and frame it shows.
+App::StepOutDecision App::DecideStepOut()
+{
+    StepOutDecision d;
+    d.canHalt = LiveHas(SE_LIVE_CAP_EXEC_BP);
+    if (!d.canHalt) return d;
     const int stepped = SteppedCpu();
     ScopedContextSwap liveRead(&mContext, ControlContext());   // the halt's registers, stack and shadow stack
     se_sh2_regs r{};
-    if (!mbHasData || se_get_sh2_regs(mContext, stepped, &r) != SE_OK) { return; }
-    // PR is not the frame's return address once the function has made a call of its own, so the
-    // target comes from the recorded call frame (ChooseStepOutTarget says why that is the only
-    // answer it trusts). Built fresh: the Call Stack panel's copy follows a different CPU.
+    if (!mbHasData || se_get_sh2_regs(mContext, stepped, &r) != SE_OK)
+    {
+        d.target.why = "The halted CPU's registers are not available";
+        return d;
+    }
+    d.haveRegs = true;
     CallStack stack;
     BuildCallStack(stepped, r, stack);
-    const StepOutTarget target = ChooseStepOutTarget(stack.Frames(stepped), r);
-    if (!target.ok)
+    d.target = ChooseStepOutTarget(stack.Frames(stepped), r);
+    return d;
+}
+
+const App::StepOutDecision& App::StepOutOffer()
+{
+    const int frame = ImGui::GetFrameCount();
+    if (frame != mStepOutOfferFrame)
     {
-        mLog.Warn(std::string("Step Out: cannot tell where this function returns to \xe2\x80\x94 ") +
-                  target.why + ". Use Step Over, or Run to Here at the return address.");
-        return;
+        mStepOutOffer = DecideStepOut();
+        mStepOutOfferFrame = frame;
     }
-    RunToTransient(target.returnAddress, stepped);
+    return mStepOutOffer;
 }
 
 void App::DrawVdpOutput(IPlatform& platform)

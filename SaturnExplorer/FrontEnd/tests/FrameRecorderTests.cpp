@@ -69,6 +69,22 @@ bool CaptureFrame(FrameRecorder& r, se_context* ctx, uint64_t frameNo, uint32_t 
 // App::RefreshScrubContext and App::ReconcileFrameEdits: the point of the tests that use it is the
 // invariant they share -- the frame on screen shows its own edits, and only its own, wherever the user
 // came from.
+// What the scrub context shows at a bus address (or sound-RAM offset): the "original" a write replaces.
+void ReadShown(se_context* ctx, bool isSound, uint32_t addr, uint8_t* out, size_t n)
+{
+    struct W { se_vram_kind kind; uint32_t bus; uint32_t size; };
+    static const W kWindows[] = {
+        { SE_VRAM_KIND_VDP1_VRAM, 0x05C00000u, 0x80000u },  { SE_VRAM_KIND_VDP1_FB,   0x05C80000u, 0x40000u },
+        { SE_VRAM_KIND_VDP2_VRAM, 0x05E00000u, 0x80000u },  { SE_VRAM_KIND_CRAM,      0x05F00000u, 0x1000u },
+        { SE_VRAM_KIND_WRAM_LOW,  0x00200000u, 0x100000u }, { SE_VRAM_KIND_WRAM_HIGH, 0x06000000u, 0x100000u },
+    };
+    std::fill(out, out + n, uint8_t(0));
+    if (!ctx) return;
+    if (isSound) { se_read_vram(ctx, SE_VRAM_KIND_SOUND_RAM, addr, out, n); return; }
+    for (const W& w : kWindows)
+        if (addr >= w.bus && addr - w.bus < w.size) { se_read_vram(ctx, w.kind, addr - w.bus, out, n); return; }
+}
+
 struct ScrubSim
 {
     FrameRecorder& rec;
@@ -85,7 +101,9 @@ struct ScrubSim
         rec.SetEditSink(this, [](void* u, int isSound, uint32_t addr, const uint8_t* b, size_t n) -> size_t
         {
             ScrubSim* self = static_cast<ScrubSim*>(u);
-            return self->store.Record(self->Key(), isSound != 0, addr, b, n);
+            std::vector<uint8_t> was(n);
+            ReadShown(self->ctx, isSound != 0, addr, was.data(), n);   // before the context takes the write
+            return self->store.Record(self->Key(), isSound != 0, addr, b, n, was.data());
         });
     }
     ~ScrubSim() { if (ctx) se_destroy(ctx); }
@@ -718,6 +736,30 @@ int main()
         Check(sim.Refresh() && sim.Displayed(kOff) == orig, "the next refresh rebuilds it from the recording");
         sim.target = 12;
         Check(sim.Refresh(), "navigation to the shown frame still works afterwards");
+
+        // Writing the RECORDED value back removes the edit, and a no-change write is no edit. The frame
+        // is rebuilt from the recording with its edit laid over the scratch first (as App does), because
+        // that is where a recorder-scratch-based original would have been wrong.
+        sim.store.Clear();
+        sim.edited = true;
+        sim.Refresh();
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &kEdit, 1) == 1 && sim.store.Has(sim.Key()),
+              "write-back: an edit is made on frame 12");
+        sim.index = 1; sim.Refresh();
+        sim.index = 2; sim.Refresh();   // away and back: the edit is now overlaid on the scratch
+        Check(sim.Displayed(kOff) == kEdit && sim.Shown() && sim.Shown()->ByteCount() == 1, "write-back: it shows again after leaving and returning");
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &orig, 1) == 1 && sim.Displayed(kOff) == orig &&
+                  !sim.store.Has(sim.Key()) && !sim.store.Any(),
+              "write-back: typing the recorded value back shows it and leaves the frame unedited");
+        // The scratch still carries the old overlay; an edit made now must still remember the RECORDED byte.
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &third, 1) == 1 && sim.Shown() &&
+                  sim.Shown()->Pokes()[0].originals[0] == orig,
+              "write-back: a later edit's original is the recorded byte, not the removed edit");
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &orig, 1) == 1 && !sim.store.Any(),
+              "write-back: and writing the recorded value back again unedits the frame again");
+        const uint8_t same = PatternByte(kOff + 1);
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff + 1, &same, 1) == 1 && !sim.store.Any(),
+              "no change: committing a byte's recorded value as it stands marks nothing edited");
         se_destroy(vctx);
     }
 
@@ -756,7 +798,8 @@ int main()
         Check(!sim.store.Has(FrameKey{ 7, 4 }) && !sim.store.Has(FrameKey{ 8, 4 }),
               "the number the new timeline reuses holds no edits");
         // Even if nobody had dropped it: the old key does not match the ring's frame 4 of timeline 8.
-        sim.store.Record(FrameKey{ 7, 4 }, false, 0x05C00000u, &kEdit, 1);
+        const uint8_t kWas = 0;
+        sim.store.Record(FrameKey{ 7, 4 }, false, 0x05C00000u, &kEdit, 1, &kWas);
         sim.Reconcile();
         Check(!sim.store.Has(FrameKey{ 7, 4 }), "a stale key for a reused number is reconciled away");
         se_destroy(vctx);

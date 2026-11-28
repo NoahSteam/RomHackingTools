@@ -914,6 +914,41 @@ void TestEditLiteralWordAndInvalid()
 }
 }  // namespace
 
+// Step Out in the header is offered exactly as the App decides (from the live halt), so it can agree with the Call
+// Stack strip: disabled and silent when the App says no, working when it says yes.
+void TestStepOutFollowsTheAppsDecision()
+{
+    Fixture f;
+    Prepare(f);
+    f.live = true;
+    f.panel.SetBreakpointStop(true, 0, kBase + 0x10);
+    ImGuiContext& g = *ImGui::GetCurrentContext();
+    // Found while enabled; later presses go to the same spot, so a disabled button is clicked, not missed.
+    ImVec2 at(-1.0f, -1.0f);
+    f.h.Settle();
+    const ImGuiID id = ImGui::FindWindowByName("SH-2 Assembly")->GetID("Step Out");
+    for (float y = 20.0f; y < 100.0f && at.x < 0.0f; y += 3.0f)
+        for (float x = 20.0f; x < 700.0f; x += 5.0f)
+        {
+            f.h.Hover(ImVec2(x, y));
+            if (g.HoveredId == id) { at = ImVec2(x, y); break; }
+        }
+    CHECK(at.x >= 0.0f);   // the default is "offered": a panel nobody told behaves as before
+    const auto press = [&]() -> bool
+    {
+        f.req = AssemblyPanel::Request();
+        f.h.Click(at);
+        return f.req.stepOut;
+    };
+    CHECK(press());
+    f.panel.SetStepOutOffer(false, "no recorded call frame");
+    f.h.Settle();
+    CHECK(!press());
+    f.panel.SetStepOutOffer(true, nullptr);
+    f.h.Settle();
+    CHECK(press());
+}
+
 int main()
 {
     TestDoubleClickOpensEditorWithSeed();
@@ -939,6 +974,7 @@ int main()
     TestBreakpointRevealReturnsFromBrowsing();
     TestBreakpointRevealAtUnchangedPc();
     TestWatchSessionSave();
+    TestStepOutFollowsTheAppsDecision();
     if (gFailures) { std::printf("FAILURES: %d\n", gFailures); return 1; }
     std::printf("all cases passed\n");
     return 0;

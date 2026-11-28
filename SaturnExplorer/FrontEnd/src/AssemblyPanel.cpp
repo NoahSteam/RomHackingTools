@@ -483,7 +483,7 @@ void AssemblyPanel::CommitEdit(IMemoryBackend& backend, Request& req)
                 }
             }
             result = "Wrote " + std::to_string(size) + " bytes at " + Hex8(addr) + " (" + what + "): " +
-                     WriteDestText(backend.WriteDestination(addr));
+                     WriteDestText(backend, addr);
             if (literal && sharers)
             {
                 result += "; the literal is " + SharersText(sharers, firstSharer);
@@ -695,8 +695,12 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         if (ImGui::Button("Step Over"))  req.stepOver = true;
         ImGui::SetItemTooltip("Over a call, run the subroutine to its return; else one instruction");
         ImGui::SameLine();
+        // Offered exactly as the Call Stack strip offers it (the App's one decision, from the live halt).
+        ImGui::BeginDisabled(!mStepOutOk);
         if (ImGui::Button("Step Out"))   req.stepOut = true;
-        ImGui::SetItemTooltip("Run to the current frame's return address");
+        ImGui::EndDisabled();
+        ImGui::SetItemTooltip("%s", mStepOutOk ? "Run to the current frame's return address"
+                                               : (mStepOutWhy && *mStepOutWhy ? mStepOutWhy : "Step Out is not available here"));
         ImGui::EndDisabled();
         if (!viewingHalted)
         {

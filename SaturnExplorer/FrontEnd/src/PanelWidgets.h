@@ -224,10 +224,14 @@ inline float ComboWidth(const char* const items[], int count)
 // down and pull them back up, so a click, F2 or a right-click aimed at a row landed one row off. The
 // space here never changes: the text is cut to the width with an ellipsis (never wrapped) and the
 // full text is in a tooltip while the pointer is over the line. 'color' 0 = the normal text colour.
-inline void FixedStatusLine(const std::string& text, ImU32 color = 0)
+// 'tooltip', when not empty, is shown instead of the full text (a line that says WHAT, with the WHY on
+// hover). 'reserveRight' keeps that much width at the right end free of text and of the hover area, for
+// a control the caller puts there with SameLine (the Memory panel's Revert); the height is unchanged.
+inline void FixedStatusLine(const std::string& text, ImU32 color = 0, const std::string& tooltip = std::string(),
+                            float reserveRight = 0.0f)
 {
     const float h = ImGui::GetTextLineHeight();
-    const float w = (std::max)(1.0f, ImGui::GetContentRegionAvail().x);
+    const float w = (std::max)(1.0f, ImGui::GetContentRegionAvail().x - reserveRight);
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     ImGui::Dummy(ImVec2(w, h));
     if (text.empty()) return;
@@ -258,7 +262,7 @@ inline void FixedStatusLine(const std::string& text, ImU32 color = 0)
     {
         ImGui::BeginTooltip();
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 40.0f);
-        ImGui::TextUnformatted(text.c_str());
+        ImGui::TextUnformatted((tooltip.empty() ? text : tooltip).c_str());
         ImGui::PopTextWrapPos();
         ImGui::EndTooltip();
     }

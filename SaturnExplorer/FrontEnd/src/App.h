@@ -227,6 +227,24 @@ private:
     void StepInto(int cpu);
     void StepOver(int cpu);
     void StepOut(int cpu);
+    // Whether Step Out can work, and where it would run to: ONE decision for the click and for every
+    // control that offers it, taken from the LIVE halt (its registers, stack and shadow stack) however
+    // the panels are scrubbed, because that is what StepOut acts on. A recorded frame's own call stack
+    // is a heuristic about another time and must not decide.
+    struct StepOutDecision
+    {
+        bool           haveRegs = false;   // the halted CPU's live registers could be read
+        bool           canHalt = true;     // the emulator build can stop at the transient breakpoint
+        StepOutTarget  target;             // target.ok: Step Out will run to target.returnAddress
+        bool Ok() const { return canHalt && haveRegs && target.ok; }
+        const char* Why() const
+        { return !canHalt ? "This emulator build cannot halt at breakpoints" : target.why; }
+    };
+    StepOutDecision DecideStepOut();
+    // The decision as the panels draw it: taken once per UI frame (it rebuilds a call stack).
+    const StepOutDecision& StepOutOffer();
+    int             mStepOutOfferFrame = -1;
+    StepOutDecision mStepOutOffer;
     int  SteppedCpu() const;
     // Install the transient step breakpoint at 'addr' and resume — the shared "run to a
     // computed address, then halt" used by StepOver/StepOut. The breakpoint itself is shared across
@@ -734,6 +752,7 @@ private:
     FrameEditStore   mEdits;
     FrameKey         ShownFrameKey() const { return FrameKey{ mScrubShownTimeline, mScrubShownFrame }; }
     void ClearAllEdits();                      // the recording was cleared: every frame's edits go
+    bool RevertShownFrameEdits();              // discard the shown recorded frame's edits (true if it had any)
     void ReconcileFrameEdits();                // drop the edits of frames the ring no longer holds
     int              mCallStackViewKey = -1;   // scrubbed frame the call stack was built for (-1 live)
     // Record an edit made against the scrubbed frame (routed from the recorder's write sink).
