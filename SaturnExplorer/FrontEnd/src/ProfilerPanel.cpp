@@ -63,6 +63,23 @@ void Swatch(ImU32 color, const char* label)
     ImGui::TextUnformatted(label);
 }
 
+// Keep memory help tied to the hovered item, with readable wrapping at any UI scale.
+void MemoryItemTooltip(const char* title, const char* description, const char* note = nullptr)
+{
+    if (!ImGui::BeginItemTooltip()) return;
+    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f);
+    ImGui::TextUnformatted(title);
+    ImGui::Separator();
+    ImGui::TextUnformatted(description);
+    if (note)
+    {
+        ImGui::Spacing();
+        ImGui::TextUnformatted(note);
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::EndTooltip();
+}
+
 std::string Percent(double fraction)
 {
     char buf[16];
@@ -701,22 +718,20 @@ void ProfilerPanel::DrawMemoryTab(const MemoryPoolTracker& pools, const Host& ho
         return;
     }
     Swatch(ColTrack(), "Uniform");
+    MemoryItemTooltip("Uniform",
+                      "Every byte in this block has the same value. The block may still be in use.");
     ImGui::SameLine(0.0f, 12.0f);
     Swatch(ColData(), "Non-uniform");
+    MemoryItemTooltip("Non-uniform",
+                      "This block contains more than one byte value. "
+                      "This does not indicate how much memory the game uses.");
     ImGui::SameLine(0.0f, 12.0f);
     Swatch(ColStall(), "Changed since sample");
-    ImGui::SetItemTooltip("Each cell is one block of the RAM, classified from its bytes alone.\n"
-                          "Uniform: the block is one byte value repeated (cleared, never used, or a table\n"
-                          "of identical entries) -- it says nothing about whether the game uses it.\n"
-                          "Non-uniform: the block holds more than one byte value.\n"
-                          "Changed since sample: its contents differ from the previous sample of the SAME\n"
-                          "capture; the colour fades while it stays put. Sampling starts over (nothing is\n"
-                          "reported changed) whenever the source, the emulator, the machine-state timeline\n"
-                          "OF THE CAPTURE ITSELF or the displayed frame goes backwards -- scrubbing back is a\n"
-                          "jump, not a change, and so is a state load.\n"
-                          "VDP1 VRAM is the copy taken when VDP1 last finished drawing (the draw-end latch);\n"
-                          "until the first draw-end after boot or a state load it is the live VRAM, so a\n"
-                          "change there means a draw finished, not that the game wrote at that instant.");
+    MemoryItemTooltip("Changed since sample",
+                      "Orange marks blocks whose contents changed since the previous sample. "
+                      "The highlight fades if no further changes occur.",
+                      "Change tracking resets when you switch sources, restart the emulator, "
+                      "load a state, rewind, or select another recorded frame.");
 
     const float cell = std::max(4.0f, std::floor(ImGui::GetTextLineHeight() * 0.42f));
     const float pitch = cell + 1.0f;
@@ -735,6 +750,11 @@ void ProfilerPanel::DrawMemoryTab(const MemoryPoolTracker& pools, const Host& ho
             continue;
         }
         ImGui::Text("%s", u.name.c_str());
+        if (u.base == 0x05C00000u)
+            MemoryItemTooltip("VDP1 VRAM",
+                              "Shows memory captured when VDP1 last finished drawing.",
+                              "Until the first completed draw after boot or a state load, "
+                              "it shows live VRAM.");
         ImGui::SameLine();
         WrappedDisabled("%s at %08X  -  %s non-uniform, %s changed since sample", Bytes(u.size).c_str(), u.base,
                             Percent(u.UsedFraction()).c_str(), Percent(u.ChangedFraction()).c_str());

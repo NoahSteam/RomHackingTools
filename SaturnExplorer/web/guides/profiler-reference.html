@@ -329,7 +329,7 @@ summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
         <li><b>Non-uniform</b>, blue: the block contains more than one byte value. This does not prove the game actively uses it.</li>
         <li><b>Changed since sample</b>, orange: the block's contents differ from the previous sample. It fades back to blue over the next samples if nothing changes again.</li>
       </ul>
-      Hover <span class="ui">Changed since sample</span> in the app for the full rules.</li>
+      Hover a legend label for its explanation. Hover the VDP1 VRAM heading for its capture timing.</li>
     <li><b>Heading line.</b> The area's name, size and start address, then the share of its blocks that are non-uniform and the share that changed since the last sample. The areas are High work RAM, Low work RAM, VDP1 VRAM, VDP2 VRAM, Colour RAM and Sound RAM.</li>
     <li><b>Cell grid.</b> Each cell is one block of the area, read left to right and top to bottom. An area is split into at most 1,024 blocks. Hover a cell to see its address range and state (<span class="ui">Uniform</span>, <span class="ui">Non-uniform</span>, <span class="ui">Changed recently</span> or <span class="ui">Changed since the last sample</span>). Click it to open that address in the Memory panel.</li>
     <li><b>VDP1 VRAM.</b> The copy taken when VDP1 last finished drawing, so a change here means a draw finished, not that the game wrote at that instant. Before the first draw after boot or a state load, it is the live memory.</li>
