@@ -205,11 +205,22 @@ and lists these classes as open until they are fixed.
    a narrowly applicable captured-register target hint. A click navigates to the first
    originating instruction; the context menu exposes additional contributing instructions,
    function navigation/corrections, rename and memory navigation through `Request` values
-   that App handles. The way back is `AssemblyPanel`'s **Show in Pseudocode** (`Request::showPseudocode`)
+   that App handles. The way back is `AssemblyPanel`'s **Goto Decompiled Line** (`Request::showPseudocode`)
    -> `DecompilerPanel::ShowInstruction`, which waits for the function to be shown and then
    selects and scrolls to the line `LineForInstruction`/`InstructionLineIndex` (Sh2Decompiler.h) names;
    an instruction no line names gets a nearby mapped line and a note that says only that (no claim it was folded). With Follow PC at a stop
    each installed result selects the PC's line.
+   **Export SH-2 Function** / **Export Decompiled Code** (`Request::exportKind`) go through the same
+   panel: `App::BeginFunctionExport` calls `DecompilerPanel::RequestExport` (a `ShowFunctionContaining`
+   that the panel then settles). Each `Update` first settles it (`SettleExport`, from the state the
+   last `Update` left): ok once the function's answer is shown, current and Ok; failed when no
+   function is found, the answer is not Ok, the decompile is Stopped, the runner is off, nothing was
+   asked, the panel is closed, another navigation replaces it (`SetTarget`) or the session ends.
+   `App::PumpFunctionExport` takes the outcome (`TakeExportOutcome`) and formats it with
+   `Debug/FunctionExport.h`. The listing comes from `flowBlockRanges`, with its bytes read from
+   `ShownSnapshot()`, the snapshot that answer was decompiled from, not live memory. The pseudocode
+   is `FunctionText()`, the same text Copy Function copies. The result is saved through
+   `IPlatform::SaveFile`, and a failure goes to the operation banner and the Log.
    `DrawStatus` lays the status row out as wrapping text (`StatusRow`: a piece
    that does not fit starts the next row) and wraps the amber and red sentences, so the stale
    badge and "decompiling…" are on screen at any panel width (the default dock is 537 px on a

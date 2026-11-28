@@ -734,6 +734,15 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerBreakpointManagerTests COMMAND SaturnExplorerBreakpointManagerTests)
 
+    add_executable(SaturnExplorerFunctionExportTests
+        FrontEnd/tests/FunctionExportTests.cpp
+        FrontEnd/src/Debug/FunctionExport.cpp
+        FrontEnd/src/Debug/Sh2Disasm.cpp
+    )
+    target_include_directories(SaturnExplorerFunctionExportTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerFunctionExportTests COMMAND SaturnExplorerFunctionExportTests)
+
     add_executable(SaturnExplorerFunctionNamesTests
         FrontEnd/tests/FunctionNamesTests.cpp
         FrontEnd/src/Debug/CallStack.cpp
@@ -990,6 +999,7 @@ if(BUILD_TESTING)
         add_executable(SaturnExplorerDecompilerPanelTests
             FrontEnd/tests/DecompilerPanelTests.cpp
             FrontEnd/src/DecompilerPanel.cpp
+            FrontEnd/src/Debug/FunctionExport.cpp
             FrontEnd/src/Debug/CapturedValueInspection.cpp
             FrontEnd/src/HexEditorPanel.cpp
             FrontEnd/src/Theme.cpp
@@ -1017,6 +1027,7 @@ if(BUILD_TESTING)
         add_executable(SaturnExplorerDecompilerModelTests
             FrontEnd/tests/DecompilerModelTests.cpp
             FrontEnd/src/DecompilerPanel.cpp
+            FrontEnd/src/Debug/FunctionExport.cpp
             FrontEnd/src/Debug/CapturedValueInspection.cpp
             FrontEnd/src/Theme.cpp
             ${SE_DECOMPILER_TEST_SOURCES}
@@ -1042,6 +1053,7 @@ if(BUILD_TESTING)
         add_executable(SaturnExplorerDecompilerTrustTests
             FrontEnd/tests/DecompilerTrustTests.cpp
             FrontEnd/src/DecompilerPanel.cpp
+            FrontEnd/src/Debug/FunctionExport.cpp
             FrontEnd/src/Debug/CapturedValueInspection.cpp
             FrontEnd/src/Theme.cpp
             ${SE_DECOMPILER_TEST_SOURCES}
@@ -1083,6 +1095,7 @@ if(BUILD_TESTING)
                 FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
                 FrontEnd/src/Decompiler/SpecBundle.cpp
                 FrontEnd/src/AssemblyPanel.cpp       # the notes file (LoadComments / SaveComments)
+                FrontEnd/src/Debug/FunctionExport.cpp
                 FrontEnd/src/Sh2Operands.cpp
                 FrontEnd/src/WatchPanel.cpp
                 FrontEnd/src/Debug/BreakpointManager.cpp
@@ -1234,6 +1247,7 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerAssemblyPanelTests
         FrontEnd/tests/AssemblyPanelTests.cpp
         FrontEnd/src/AssemblyPanel.cpp
+        FrontEnd/src/Debug/FunctionExport.cpp
         FrontEnd/src/FileWrite.cpp   # AssemblyPanel::SaveComments stages through WriteFileAtomically
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/WatchPanel.cpp
@@ -2083,6 +2097,7 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             add_executable(SaturnExplorerLiveDecompilerCaptureTests
                 FrontEnd/tests/LiveDecompilerCaptureTests.cpp
                 FrontEnd/src/DecompilerPanel.cpp
+                FrontEnd/src/Debug/FunctionExport.cpp
                 FrontEnd/src/Debug/CapturedValueInspection.cpp
                 FrontEnd/src/Theme.cpp
                 FrontEnd/src/Debug/MemoryBackend.cpp
@@ -2304,6 +2319,7 @@ if(WIN32)
         FrontEnd/src/Debug/Sh2Asm.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/Debug/FunctionExport.cpp
         FrontEnd/src/Debug/StepHaltMachine.cpp
         FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/src/Debug/FormatString.cpp
@@ -2402,6 +2418,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/Sh2Asm.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/Debug/FunctionExport.cpp
         FrontEnd/src/Debug/StepHaltMachine.cpp
         FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/src/Debug/FormatString.cpp
@@ -2526,6 +2543,7 @@ else()
             FrontEnd/src/Debug/Sh2Asm.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp
             FrontEnd/src/Debug/BreakpointManager.cpp
+            FrontEnd/src/Debug/FunctionExport.cpp
             FrontEnd/src/Debug/StepHaltMachine.cpp
             FrontEnd/src/Debug/ShiftJis.cpp
             FrontEnd/src/Debug/FormatString.cpp

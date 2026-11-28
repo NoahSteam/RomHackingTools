@@ -171,7 +171,7 @@ App wiring (all existing idioms): `mPanels.decompiler` + `PanelList()` row
 `AdoptNewPanels` dock it beside "SH-2 Assembly"; `BuildUI` updates it every frame (results, the
 budget) and draws it when shown, after the `ScopedContextSwap`;
 `Request.jumpAssembly` → `mAssemblyPanel.GoTo(cpu, addr); mPanels.assembly = true;`. The reverse
-direction is a "Decompile Here" item in the Assembly panel's row menu, a "Decompile" item in the
+direction is a "Goto Decompiled Function" item in the Assembly panel's row menu, a "Decompile" item in the
 Call Stack row menu and in the Registers panel's PC menu, all calling `ShowFunctionContaining`.
 The Rename Function modal is drawn at app level, so the panel's "Rename Function..." opens it
 whether or not the Call Stack is shown.

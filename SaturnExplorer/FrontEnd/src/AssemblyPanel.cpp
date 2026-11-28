@@ -1060,11 +1060,15 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                 { req.runTo = true; req.runToAddr = ln.addr; }
                 if (ImGui::MenuItem("Follow Branch", nullptr, false, ln.readable && ln.ins.HasBranchTarget))
                     Navigate(ln.ins.BranchTarget, true);
-                if (mOfferDecompile && ImGui::MenuItem("Decompile Here"))
+                if (mOfferDecompile && ImGui::MenuItem("Goto Decompiled Function"))
                 { req.decompile = true; req.decompileAddr = ln.addr; }
                 // The way back from a line (A7-5): the function containing this row is decompiled if it is not shown, and the line the row became is selected.
-                if (mOfferDecompile && ImGui::MenuItem("Show in Pseudocode", nullptr, false, ln.readable))
+                if (mOfferDecompile && ImGui::MenuItem("Goto Decompiled Line", nullptr, false, ln.readable))
                 { req.showPseudocode = true; req.pseudoAddr = ln.addr; }
+                // Both exports take the function containing this row from the decompiler, which knows which instructions are its.
+                for (const FunctionExportKind kind : { FunctionExportKind::Listing, FunctionExportKind::Pseudocode })
+                    if (mOfferDecompile && ImGui::MenuItem(FunctionExportLabel(kind), nullptr, false, ln.readable))
+                    { req.exportKind = kind; req.exportAddr = ln.addr; }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Add Operand to Watch", nullptr, false, hasMem))
                 {

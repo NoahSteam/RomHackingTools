@@ -777,7 +777,7 @@ void TestGuideQuotesTheTooltip()
 }
 #endif
 
-// A7-5: the way back from SH-2 Assembly. "Show in Pseudocode" selects and scrolls to the line the instruction became; both instructions of
+// A7-5: the way back from SH-2 Assembly. "Goto Decompiled Line" selects and scrolls to the line the instruction became; both instructions of
 // `0 < param_1` (the compare and the branch) lead to its line, an instruction folded into another's line says so, one the function does not hold
 // says that, and Follow PC at a stop selects the line the PC is at.
 void TestAssemblyBackToLine()
@@ -820,6 +820,113 @@ void TestAssemblyBackToLine()
     f.Idle(6);
     CHECK(Has(f.panel.EntryError(), "literal pool"));
     CHECK(!f.panel.WantsInstruction());
+}
+
+// SH-2 Assembly's two exports: the panel settles the request once, ok with the function's current answer and the snapshot it came
+// from, or failed with a reason when none will come -- no function there, the panel closed, or another navigation first.
+void TestFunctionExportRequest()
+{
+    Fixture f;
+    CHECK(f.WaitShown("+ 1"));
+    DecompilerPanel::ExportOutcome o;
+    auto settled = [&] { return f.PumpUntil([&] { return f.panel.TakeExportOutcome(o); }); };
+
+    f.panel.RequestExport(0, dts::kFixture1Callee + 2);
+    CHECK(settled());
+    CHECK(o.ok && o.error.empty());
+    CHECK(f.panel.Shown() && f.panel.Shown()->entry == dts::kFixture1Callee);
+    CHECK(f.panel.ShownSnapshot() != nullptr && f.panel.ShownSnapshot()->key == f.Shown().key);
+    CHECK(Has(f.panel.FunctionText(), f.Shown().Text().c_str()));
+    CHECK(!f.panel.TakeExportOutcome(o));   // handed over once
+
+    f.panel.RequestExport(0, dts::kFixture1Literal);
+    CHECK(settled());
+    CHECK(!o.ok && o.error == f.panel.EntryError() && Has(o.error, "literal pool"));   // the panel's own reason, once
+
+    f.gate.Close();
+    f.panel.RequestExport(0, dts::kFixture1Caller);
+    f.Idle(2);
+    f.visible = false;
+    CHECK(settled());
+    CHECK(!o.ok && Has(o.error, "closed"));
+    f.visible = true;
+
+    f.panel.RequestExport(0, dts::kFixture1Callee);   // (cached by now: retargeted before a frame could install it)
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+    CHECK(f.panel.TakeExportOutcome(o));
+    CHECK(!o.ok && Has(o.error, "another function"));
+    f.gate.Open();
+    CHECK(f.WaitShown());
+}
+
+// A running emulator advances every UI frame, so the answer is "stale" against the view the frame after it installs. The
+// export still completes with it: it is the function asked for, from the snapshot it names.
+void TestFunctionExportWhileRunning()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    CHECK(f.WaitShown("+ 1"));
+    DecompilerPanel::ExportOutcome o;
+    auto settled = [&] {
+        return f.PumpUntil([&] {
+            ++f.frame;
+            ++f.fixedSerial;
+            return f.panel.TakeExportOutcome(o);
+        });
+    };
+    for (const uint32_t entry : { dts::kFixture1Caller, dts::kFixture1Callee })
+    {
+        f.panel.RequestExport(0, entry);
+        CHECK(settled());
+        CHECK(o.ok && o.error.empty());
+        CHECK(f.panel.Shown() && f.panel.Shown()->entry == entry);
+        CHECK(f.panel.ShownSnapshot() != nullptr && f.panel.ShownSnapshot()->key == f.Shown().key);
+        // The outcome owns what it settled on.
+        CHECK(o.result.entry == entry && o.snapshot && o.snapshot->key == o.result.key);
+        CHECK(Has(o.text, o.result.Text().c_str()) && o.source == "test");
+    }
+    // Still cancelled by another navigation while it waits.
+    f.gate.Close();
+    f.panel.RequestExport(0, dts::kFixture1Caller);
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Callee);
+    CHECK(f.panel.TakeExportOutcome(o));
+    CHECK(!o.ok && Has(o.error, "another function"));
+    f.gate.Open();
+    CHECK(f.WaitShown());
+}
+
+// The view moves to another source (here: live to a recorded frame) between the answer installing and the export settling.
+// The export is not settled ok against it: the old answer is not that source's memory, and the header would misname it.
+void TestFunctionExportSourceChange()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    CHECK(f.WaitShown("+ 1"));
+    DecompilerPanel::ExportOutcome o;
+    const uint64_t revision = f.panel.ResultRevision();
+    f.panel.RequestExport(0, dts::kFixture1Caller);
+    // Pump until the answer installs; the Update that installs it has already run SettleExport, so nothing is settled yet.
+    CHECK(f.PumpUntil([&] { return f.panel.ResultRevision() != revision; }));
+    CHECK(!f.panel.TakeExportOutcome(o));
+    f.gate.Close();
+    f.kind = DecompViewKind::Scrub;
+    f.sourceId = 999;
+    f.frame = 123;
+    f.Idle();
+    CHECK(f.panel.TakeExportOutcome(o));
+    CHECK(!o.ok && Has(o.error, "another source"));
+    // ...and while it is still waiting for its answer.
+    f.panel.RequestExport(0, dts::kFixture1Callee);
+    f.Idle();
+    f.sourceId = 7;
+    f.kind = DecompViewKind::LiveRunning;
+    f.Idle();
+    CHECK(f.panel.TakeExportOutcome(o));
+    CHECK(!o.ok && Has(o.error, "another source"));
+    f.gate.Open();
+    CHECK(f.WaitShown());
 }
 
 // A7-5: a long function: the line is brought into view even though the clipper would not have drawn it.
@@ -3172,6 +3279,9 @@ int main(int argc, char** argv)
 #endif
         RUN(TestLineHoverAndNoAddress());
         RUN(TestAssemblyBackToLine());
+        RUN(TestFunctionExportRequest());
+        RUN(TestFunctionExportWhileRunning());
+        RUN(TestFunctionExportSourceChange());
         RUN(TestShowInstructionScrolls());
         RUN(TestOriginTextHaltWordAndFolded());
         RUN(TestLineForInstructionOrder());

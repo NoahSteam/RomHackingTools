@@ -167,12 +167,34 @@ public:
     // 'cpu'. Turns Follow PC off and brings the window forward.
     void ShowFunctionContaining(int cpu, uint32_t addr);
 
-    // "Show in Pseudocode" from SH-2 Assembly (A7-5): the function containing 'addr' on 'cpu', as ShowFunctionContaining, and then the line
+    // "Goto Decompiled Line" from SH-2 Assembly (A7-5): the function containing 'addr' on 'cpu', as ShowFunctionContaining, and then the line
     // that instruction became selected and scrolled into view. When the function is not the one shown the request waits for its answer;
     // any other navigation (a typed entry, Decompile from elsewhere) drops it. An instruction no line names (a move or an operation folded
     // into the expression that uses it) selects the line of the nearest one that has a line and says so; one outside the function says that.
     // A second request for the same instruction offers the next line that holds it.
     void ShowInstruction(int cpu, uint32_t addr);
+
+    // "Export SH-2 Function" / "Export Decompiled Code" from SH-2 Assembly: the function containing 'addr' on 'cpu', asked as
+    // ShowFunctionContaining asks it. Update settles the request once that function's answer is on screen and current, or once none
+    // will come: no function there, Stop, the runner off, the panel closed, another navigation, the session ended. TakeExportOutcome
+    // hands the outcome over, once. A new request replaces one still waiting.
+    struct ExportOutcome
+    {
+        bool ok = false;
+        std::string error;    // why not: the entry error ("No function found containing ..."), "the decompile was stopped", ...
+        // When ok, the export's own copy of what it settled on, so nothing the panel does afterwards (a capture in the same
+        // Update, a navigation, another source) can change what is saved or what the header says about it.
+        decomp::DecompileResult result;                          // the function's answer
+        std::shared_ptr<const decomp::MemorySnapshot> snapshot;  // the memory it was decompiled from; null if no longer held
+        std::string text;                                        // what Copy Function copies for it
+        std::string source;                                      // the view's label for that memory ("live, paused", ...)
+    };
+    void RequestExport(int cpu, uint32_t addr);
+    bool TakeExportOutcome(ExportOutcome& out);
+    // What Copy Function copies: the marks (CopyMarks) and the code shown.
+    std::string FunctionText() const;
+    // The snapshot the shown answer was decompiled from, while the panel still holds it; null otherwise.
+    const decomp::MemorySnapshot* ShownSnapshot() const;
 
     // The session ended (source closed or replaced, emulator reconnected). App has already bumped
     // the runner's epoch; this forgets what belonged to the old session. Shown output stays, stale.
@@ -270,7 +292,7 @@ public:
     bool ItemRect(const char* name, ImVec2& min, ImVec2& max) const;
     // The tooltip the last Draw showed over a line (LineOriginText), or "" when none was open.
     const std::string& LineTooltip() const { return mLineTooltip; }
-    // The line selected (-1 none), what the last "Show in Pseudocode" said when it could not select the instruction's own line, and whether a
+    // The line selected (-1 none), what the last "Goto Decompiled Line" said when it could not select the instruction's own line, and whether a
     // request for an instruction is still waiting for its function.
     int SelectedLine() const { return mSelectedLine; }
     const std::string& InstructionNote() const { return mInsnNote; }
@@ -527,7 +549,7 @@ private:
     Target mShownTarget;
     float mShownWidth = 0.0f;        // widest line, for the horizontal scroll range
     int mSelectedLine = -1;
-    // A7-5: "Show in Pseudocode". The instruction asked for (canonical once applied) waits here for its function to be shown; the line to bring into view
+    // A7-5: "Goto Decompiled Line". The instruction asked for (canonical once applied) waits here for its function to be shown; the line to bring into view
     // is scrolled to by the next Draw.
     bool mWantInsn = false;
     uint32_t mWantInsnAddr = 0;
@@ -536,6 +558,15 @@ private:
     uint32_t mLastInsn = 0;          // the instruction the last request selected a line for, and which of its lines (the next request offers the next)
     size_t mLastInsnIndex = 0;
     uint64_t mLastInsnRevision = ~0ull;
+    // RequestExport: waiting for its function (mWantExport), then settled once (mExportSettled) until taken.
+    bool mWantExport = false;
+    bool mExportSettled = false;
+    uint64_t mExportRevision = 0;    // mResultRevision at the request: an answer installed since is this export's
+    bool mExportSourceKnown = false; // the source on screen when the export was asked: another one ends it
+    uint64_t mExportSource = 0;
+    ExportOutcome mExportOutcome;
+    void SettleExport(bool visible);
+    void EndExport(bool ok, std::string error);
 
     std::list<CacheEntry> mCache;    // most recent first
 
