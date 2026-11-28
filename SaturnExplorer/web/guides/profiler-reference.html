@@ -148,7 +148,7 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
   <h2>Frame Tab</h2>
   <p>Shows where each frame's time goes, processor by processor. The screenshot shows the V1 test program running a DMA transfer during a VDP1 draw.</p>
   <figure class="shot">
-    <a class="full" href="img/profiler/frame-tab.png" title="Open full size"><img src="img/profiler/frame-tab.png" width="1228" height="444" alt="The Frame tab with eight numbered parts: frame length, colour legend, the two SH-2 bars, the value column, the VDP1, SCU DSP and 68000 bars, the VDP1 command count line, the Details lines and the History strips."></a>
+    <a class="full" href="img/profiler/frame-tab.png" title="Open full size"><img src="img/profiler/frame-tab.png" width="1228" height="454" alt="The Frame tab with eight numbered parts: frame length, colour legend, the two SH-2 bars, the value column, the VDP1, SCU DSP and 68000 bars, the VDP1 command count line, the Details lines and the History strips."></a>
     <figcaption>V1 phase "DMA during draw": the master SH-2 is mostly asleep with a short orange bus stall, and VDP1 works 1.4% of the frame.</figcaption>
   </figure>
   <ol class="callouts">
@@ -197,13 +197,13 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
     <figcaption>Hovering a bar segment names it and gives its exact share.</figcaption>
   </figure>
   <figure class="shot">
-    <a class="full" href="img/profiler/frame-history-hover.png" title="Open full size"><img src="img/profiler/frame-history-hover.png" width="1228" height="182" alt="The History strips with a vertical crosshair on the Slave SH-2 busy line where it has just stepped up to the top."></a>
-    <figcaption>Hovering a History strip draws a crosshair and a tooltip naming that frame and its value, here <code>Frame 15219 (timeline 1)</code> and <code>100%</code>. The timeline number changes when the machine state is replaced, for example by loading a state. An older emulator shows <code>Frame: not available (this emulator does not number its frames)</code>.</figcaption>
+    <a class="full" href="img/profiler/frame-history-hover.png" title="Open full size"><img src="img/profiler/frame-history-hover.png" width="1228" height="194" alt="The History strips with a vertical crosshair on the Slave SH-2 busy line where it has just stepped up to the top, and a tooltip reading Frame 10166 (timeline 1) and 100%."></a>
+    <figcaption>Hovering a History strip draws a crosshair and a tooltip naming that frame and its value, here <code>Frame 10166 (timeline 1)</code> and <code>100%</code>. The timeline number changes when the machine state is replaced, for example by loading a state. An older emulator shows <code>Frame: not available (this emulator does not number its frames)</code>.</figcaption>
   </figure>
 
   <h3 id="lost">Lost Records</h3>
   <figure class="shot">
-    <a class="full" href="img/profiler/frame-lost-records.png" title="Open full size"><img src="img/profiler/frame-lost-records.png" width="1228" height="274" alt="The Details line Lost records: 389 dropped by the emulator's ring, 0 evicted by the driver's queue (in this window: 166 and 0), and a box around a small break in all three History lines."></a>
+    <a class="full" href="img/profiler/frame-lost-records.png" title="Open full size"><img src="img/profiler/frame-lost-records.png" width="1228" height="264" alt="The Details line Lost records: 165 dropped by the emulator's ring, 0 evicted by the driver's queue (in this window: 165 and 0), and a box around a small break in all three History lines."></a>
     <figcaption>Captured after Saturn Explorer was frozen for three seconds while the game kept running.</figcaption>
   </figure>
   <ol class="callouts">
@@ -250,7 +250,7 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
   <h2>Memory Tab</h2>
   <p>A block map of the six fixed RAM areas, coloured by what they contain. It works on any source, including saved dumps and savestates. It samples a few times a second, only while this tab is showing.</p>
   <figure class="shot">
-    <a class="full" href="img/profiler/memory-tab.png" title="Open full size"><img src="img/profiler/memory-tab.png" width="1229" height="492" alt="The Memory tab: a legend, then for High work RAM, Low work RAM, VDP1 VRAM, VDP2 VRAM, Colour RAM and Sound RAM a heading line and a grid of small cells coloured dark, blue or orange."></a>
+    <a class="full" href="img/profiler/memory-tab.png" title="Open full size"><img src="img/profiler/memory-tab.png" width="1228" height="492" alt="The Memory tab: a legend, then for High work RAM, Low work RAM, VDP1 VRAM, VDP2 VRAM, Colour RAM and Sound RAM a heading line and a grid of small cells coloured dark, blue or orange."></a>
     <figcaption>V1 running: VDP1 VRAM is full of data, and a strip of sound RAM is being rewritten (orange).</figcaption>
   </figure>
   <ol class="callouts">
@@ -311,8 +311,8 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
     <figcaption>The tooltip on <span class="ui">Not observed (estimate)</span>.</figcaption>
   </figure>
   <figure class="shot">
-    <a class="full" href="img/profiler/frame-10s-attribution.png" title="Open full size"><img src="img/profiler/frame-10s-attribution.png" width="1228" height="337" alt="The Frame tab with Average over set to 10 s, and the Details line reading Function attribution: on in 479 of 600 frames."></a>
-    <figcaption>Back on the Frame tab, a 10 s span (1) after attribution was on for part of it: <span class="ui">on in 479 of 600 frames</span> (2). The Functions tab averages only over the frames that were attributed.</figcaption>
+    <a class="full" href="img/profiler/frame-10s-attribution.png" title="Open full size"><img src="img/profiler/frame-10s-attribution.png" width="1228" height="353" alt="The Frame tab with Average over set to 10 s, and the Details line reading Function attribution: on in 425 of 600 frames."></a>
+    <figcaption>Back on the Frame tab, a 10 s span (1) after attribution was on for part of it: <span class="ui">on in 425 of 600 frames</span> (2). The Functions tab averages only over the frames that were attributed.</figcaption>
   </figure>
 </section>
 
@@ -335,16 +335,16 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
     <li><b>Memory Tab.</b> Unchanged: it samples the memory of whichever frame is displayed.</li>
   </ul>
   <figure class="shot">
-    <a class="full" href="img/profiler/scrub-status-mark.png" title="Open full size"><img src="img/profiler/scrub-status-mark.png" width="1014" height="524" alt="The Frame tab scrubbed back: the status line reads Showing frame 4282 (scrubbed), newest is 4317, and a red vertical mark with a small triangle crosses all three History strips just after a busy plateau ends."></a>
-    <figcaption>V1 scrubbed to frame 4282, the third frame of its function phase, with <span class="ui">Average over</span> at <span class="ui">Last frame</span>. The status line names the frame (1) and the red mark shows where it sits in the History strips (2), just after the busy-loop phase ended.</figcaption>
+    <a class="full" href="img/profiler/scrub-status-mark.png" title="Open full size"><img src="img/profiler/scrub-status-mark.png" width="1228" height="542" alt="The Frame tab scrubbed back: the status line reads Showing frame 26123 (scrubbed), newest is 26381, and a red vertical mark with a small triangle crosses all three History strips just after a busy plateau ends."></a>
+    <figcaption>V1 scrubbed to frame 26123, the third frame of its function phase, with <span class="ui">Average over</span> at <span class="ui">Last frame</span>. The status line names the frame (1) and the red mark shows where it sits in the History strips (2), just after the busy-loop phase ended.</figcaption>
   </figure>
   <figure class="shot">
-    <a class="full" href="img/profiler/scrub-no-data.png" title="Open full size"><img src="img/profiler/scrub-no-data.png" width="730" height="184" alt="The Functions tab scrubbed to a frame with no record: the status line, in orange, reads No profiler data for frame 16812 (the Profiler was not capturing then, or the frame is older than the last 3600 kept), and the tab reads No Profiling Data."></a>
+    <a class="full" href="img/profiler/scrub-no-data.png" title="Open full size"><img src="img/profiler/scrub-no-data.png" width="730" height="184" alt="The Functions tab scrubbed to a frame with no record: the status line, in orange, reads No profiler data for frame 26202 (the Profiler was not capturing then, or the frame is older than the last 3600 kept), and the tab reads No Profiling Data."></a>
     <figcaption>Scrubbed to a frame from before <span class="ui">Clear</span>: the status line gives the frame and the reason (1), the tab says <code>No Profiling Data</code> (2), and no figures are drawn.</figcaption>
   </figure>
   <figure class="shot">
-    <a class="full" href="img/profiler/scrub-cut-span.png" title="Open full size"><img src="img/profiler/scrub-cut-span.png" width="1064" height="530" alt="The Frame tab scrubbed to frame 14211 with Average over at 10 s, 78 frames after a rewind. The status line reads Showing frame 14211 (scrubbed), newest is 14327; Averaging 78 of 600 frames (the rest are from before a rewind or state load). A faint vertical divider crosses the three History strips at the rewind, left of the red mark."></a>
-    <figcaption>V1 rewound with <span class="ui">Play From Here</span> to frame 14133, run on, then scrubbed to 14211 with <span class="ui">Average over</span> at <span class="ui">10 s</span>. The span stops at the rewind and the status line says so (1): 78 of 600 frames. The faint divider (2) marks the rewind in the strips; to its left are the frames recorded before it, whose slave SH-2 work is not counted in the figures above.</figcaption>
+    <a class="full" href="img/profiler/scrub-cut-span.png" title="Open full size"><img src="img/profiler/scrub-cut-span.png" width="1228" height="542" alt="The Frame tab scrubbed to frame 26202 with Average over at 10 s, 79 frames after a rewind. The status line reads Showing frame 26202 (scrubbed), newest is 26287; averaging 79 of 600 frames (the rest are from before a rewind or state load). A faint vertical divider crosses the three History strips at the rewind, left of the red mark."></a>
+    <figcaption>V1 rewound with <span class="ui">Play From Here</span> to frame 26123, run on, then scrubbed to 26202 with <span class="ui">Average over</span> at <span class="ui">10 s</span>. The span stops at the rewind and the status line says so (1): 79 of 600 frames. The faint divider (2) marks the rewind in the strips; to its left are the frames recorded before it, which the figures above leave out.</figcaption>
   </figure>
 </section>
 
@@ -379,11 +379,11 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
     <figcaption>Not connected.</figcaption>
   </figure>
   <figure class="shot narrow">
-    <a class="full" href="img/profiler/state-waiting.png" title="Open full size"><img src="img/profiler/state-waiting.png" width="418" height="92" alt="The Frame tab right after Clear while the emulator is paused, reading Waiting for the emulator to finish a frame."></a>
+    <a class="full" href="img/profiler/state-waiting.png" title="Open full size"><img src="img/profiler/state-waiting.png" width="418" height="114" alt="The Frame tab right after Clear while the emulator is paused, reading Waiting for the emulator to finish a frame."></a>
     <figcaption>Connected, history cleared, emulator paused.</figcaption>
   </figure>
   <figure class="shot narrow">
-    <a class="full" href="img/profiler/state-memory-no-data.png" title="Open full size"><img src="img/profiler/state-memory-no-data.png" width="418" height="92" alt="The Memory tab with nothing loaded, reading No data loaded."></a>
+    <a class="full" href="img/profiler/state-memory-no-data.png" title="Open full size"><img src="img/profiler/state-memory-no-data.png" width="418" height="114" alt="The Memory tab with nothing loaded, reading No data loaded."></a>
     <figcaption>Memory tab with no source.</figcaption>
   </figure>
   <figure class="shot narrow">
@@ -415,7 +415,7 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
     <dt>Attribution</dt><dd>Charging processor time to the function that is running. The Functions tab's checkbox switches it on.</dd>
     <dt>Record</dt><dd>One frame's measurements, sent from the emulator to Saturn Explorer.</dd>
   </dl>
-  <p class="note">Screenshots: Saturn Explorer and the patched Mednafen running the V1 validation program on Windows, dark theme. Most are from <code>master</code> at <code>f61913a</code>; the top bar, not-connected and scrubbing ones are from later builds.</p>
+  <p class="note">Screenshots: Saturn Explorer and the patched Mednafen running the V1 validation program on Windows, dark theme. All were taken on one build, <code>256ed89</code>.</p>
 </section>
 
 <footer><a href="index.html">← All guides</a> · <a href="profiler.html">How the profiler works</a> · Part of <a href="https://github.com/NoahSteam/RomHackingTools">Saturn Explorer</a>. Opened from Saturn Explorer with Help → Profiler Reference (web).</footer>
