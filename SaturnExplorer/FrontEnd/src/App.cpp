@@ -308,8 +308,8 @@ void App::Initialize()
 
 #ifdef SE_ENABLE_LIVE
     mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
-    // Route edits made against a scrubbed frame into mStaged, so a rewind (Play from
-    // here) can replay them atop the restored savestate. Set before the first scrub Select,
+    // Route edits made against a scrubbed frame into mEdits (per frame), so a rewind (Play from
+    // here) can replay that frame's edits atop the restored savestate. Set before the first scrub Select,
     // whose data source latches SE_CAP_MEM_WRITE from this sink being present.
     mRecorder.SetEditSink(this, &App::OnScrubEdit);
 #endif
@@ -719,7 +719,7 @@ void App::CloseData(bool cancelAutoConnect)
     mScrubTargetFrame = 0;
     mRecorder.Clear();
     mStateSlots.Reset();         // its cached savestate is the previous game's
-    DiscardPendingEdits();
+    ClearAllEdits();
     // The next source gets its own driver with its own counter starting at zero, so this
     // must start over too or its first attach would look like a replacement.
     mLiveConnGeneration = 0;
@@ -1906,13 +1906,14 @@ void App::BuildUI(IPlatform& platform)
     se_context* view = mContext;
 #ifdef SE_ENABLE_LIVE
     mLiveCtx = mContext;
+    ReconcileFrameEdits();   // before the refresh: a frame that aged out must not be rebuilt with its edits
     if (mbScrubbing && RefreshScrubContext())
     {
         view = mScrubContext;
     }
     else
     {
-        mbScrubbing = false;
+        ScrubBarLeave(mbScrubbing, mScrubIndex);
     }
     // Editing a scrubbed frame is durable only when the server can rewind (the edits replay on
     // Play). Without rewind, make the Memory panel read-only so no-op edits aren't offered.
@@ -1965,6 +1966,12 @@ void App::BuildUI(IPlatform& platform)
     mMemBackend.SetRegistersReadOnly(mbLiveSource || mbScrubbing);
     // A scrubbed frame's edits go to the replay list (Play From Here), not to the emulator; a
     // loaded dump or savestate takes them into its own copy and nothing else.
+    {
+        // The Memory panel's per-frame note: the frame on screen, and how many bytes it has edited.
+        const FrameEdits* shown = mbScrubbing ? mEdits.Find(ShownFrameKey()) : nullptr;
+        mMemBackend.SetRecordedFrameEdits(mbScrubbing, shown ? shown->ByteCount() : 0, mScrubShownFrame);
+        mMemBackend.SetRevertRecordedFrameEdits([this] { return RevertShownFrameEdits(); });
+    }
     mMemBackend.SetEditSink(mbScrubbing     ? IMemoryBackend::WriteDest::Staged
                             : mbLiveSource ? IMemoryBackend::WriteDest::Emulator
                                            : IMemoryBackend::WriteDest::ViewOnly);
@@ -2320,12 +2327,12 @@ void App::DrawTransportBar()
 {
 #ifdef SE_ENABLE_LIVE
     if (!mbLiveSource) { return; }
-    se_context* const ctl = mLiveCtx ? mLiveCtx : mContext;   // real emulator, not the scrub view
+    se_context* const ctl = ControlContext();   // real emulator, not the scrub view
     const bool canControl = mbHasData && se_supports_frame_control(ctl);
     const int n = static_cast<int>(mRecorder.Count());
 
     // Scrubbing only makes sense while paused with recorded frames.
-    if (!mbPaused || n == 0) { mbScrubbing = false; }
+    if (!mbPaused || n == 0) { ScrubBarLeave(mbScrubbing, mScrubIndex); }
 
     const ImGuiStyle& style = ImGui::GetStyle();
     ImGui::BeginDisabled(!canControl);
@@ -2334,9 +2341,9 @@ void App::DrawTransportBar()
     if (IconButton("##tp_prev", Ico::Prev, "Previous frame") && n > 0)
     {
         if (!mbPaused) { se_frame_pause(ctl); mbPaused = true; }
+        // Step from what the bar shows: a resting bar is on the newest entry, not on an old selection.
+        mScrubIndex = ScrubBarStepBackIndex(mbScrubbing, mScrubIndex, n);
         mbScrubbing = true;
-        if (mScrubIndex < 0 || mScrubIndex >= n) { mScrubIndex = n - 1; }
-        if (mScrubIndex > 0) { --mScrubIndex; }
         VoidEditTarget();
     }
     ImGui::SameLine();
@@ -2349,11 +2356,9 @@ void App::DrawTransportBar()
         if (IconButton("##tp_play", Ico::Play, "Play"))
         {
             se_frame_resume(ctl);
-            DiscardPendingEdits();   // the frame they were staged on is being left behind
-            mbScrubbing = false;
+            LeaveScrubForRun();
             mbPaused = false;
             mStepHalt.Resumed();
-            VoidEditTarget();
         }
     }
     else if (IconButton("##tp_pause", Ico::Pause,
@@ -2391,12 +2396,13 @@ void App::DrawTransportBar()
     ImGui::SetNextItemWidth(scrubW);
     if (mbPaused && n > 0)
     {
-        int idx = (mScrubIndex < 0 || mScrubIndex >= n) ? n - 1 : mScrubIndex;
-        char ov[64];
-        std::snprintf(ov, sizeof(ov), "#%llu   %d / %d",
-                      static_cast<unsigned long long>(mRecorder.FrameNumber((size_t)idx)),
-                      idx + 1, n);
-        if (ImGui::SliderInt("##tp_scrub", &idx, 0, n - 1, ov))
+        // Only a scrub in progress has a selection; otherwise the bar rests on the newest entry.
+        int idx = ScrubBarIndex(mbScrubbing, mScrubIndex, n);
+        // The label says when the frame the bar names holds edits (they stay with it, across moves).
+        const FrameKey barKey{ mRecorder.FrameTimeline(static_cast<size_t>(idx)),
+                               mRecorder.FrameNumber(static_cast<size_t>(idx)) };
+        const std::string ov = ScrubBarLabel(barKey.frame, idx, n, mEdits.Has(barKey));
+        if (ImGui::SliderInt("##tp_scrub", &idx, 0, n - 1, ov.c_str()))
         {
             mbScrubbing = true;
             mScrubIndex = idx;
@@ -2406,6 +2412,11 @@ void App::DrawTransportBar()
         const ImVec2 sliderMin = ImGui::GetItemRectMin(), sliderMax = ImGui::GetItemRectMax();
         if (ImGui::BeginPopupContextItem("##tp_scrub_ctx"))
         {
+            // The frame on screen, which is the one a Memory-panel Revert acts on too.
+            if (ImGui::MenuItem("Revert This Frame's Edits", nullptr, false,
+                                mbScrubbing && mEdits.Has(ShownFrameKey())))
+                RevertShownFrameEdits();
+            ImGui::Separator();
             if (ImGui::MenuItem("Set as Compare Frame A")) MarkCompareFrame(CompareMarkers::A);
             if (ImGui::MenuItem("Set as Compare Frame B")) MarkCompareFrame(CompareMarkers::B);
             ImGui::Separator();
@@ -2413,6 +2424,7 @@ void App::DrawTransportBar()
             if (ImGui::MenuItem("Clear Compare Markers", nullptr, false, mCompare.Any())) ClearCompare();
             ImGui::EndPopup();
         }
+        DrawEditedFrameMarks(sliderMin, sliderMax, n);
         DrawCompareMarkers(sliderMin, sliderMax, n);
     }
     else
@@ -2428,22 +2440,34 @@ void App::DrawTransportBar()
     if (IconButton("##tp_next", Ico::Next, "Next frame",
                    !(mbScrubbing && mScrubIndex < n - 1) && !LiveHas(SE_LIVE_CAP_FRAME_GATE)))
     {
-        if (mbScrubbing && mScrubIndex < n - 1)
-        {
-            ++mScrubIndex;
-            VoidEditTarget();
-        }
-        else
-        {
-            mbScrubbing = false;
-            VoidEditTarget();
-            se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
-            mbPaused = true;
-            mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
-        }
+        StepFrameForward(ctl);
     }
     ImGui::EndDisabled();
     if (CompareRowVisible()) DrawCompareRow();
+#endif
+}
+
+// The context every command acts on. While the scrub view is the displayed context mContext is that
+// read-only view, which no command reaches, so the live emulator (mLiveCtx, captured at the top of
+// BuildUI before the swap) is used; otherwise mContext already is the live one. Guarded by the view
+// being up because mLiveCtx is not cleared when a source closes.
+se_context* App::ControlContext() const
+{
+#ifdef SE_ENABLE_LIVE
+    if (ScrubViewUp() && mLiveCtx) return mLiveCtx;
+#endif
+    return mContext;
+}
+
+// What the transport's Play does on leaving the scrub view; every run / step command comes through here
+// (DebuggerControl.h says which), so how a scrub ends is decided in one place.
+void App::LeaveScrubForRun()
+{
+#ifdef SE_ENABLE_LIVE
+    // Edits stay with the recorded frames they were made on: leaving the scrub neither applies nor
+    // discards them (Play carries on from the live game; Play From Here is what applies a frame's).
+    ScrubBarLeave(mbScrubbing, mScrubIndex);
+    VoidEditTarget();
 #endif
 }
 
@@ -2460,6 +2484,29 @@ bool App::EmulatorStampsStates() const
 #endif
 }
 
+// One frame forward, shared by the transport's Next button and the Step Frame command (F10, the
+// Session menu, the "step" command): through the recorded entries while scrubbed, and at the newest
+// one (or when not scrubbing) the emulator itself steps. The command used to step the emulator and
+// leave the scrub view up, so the old recorded frame stayed on screen after a step.
+void App::StepFrameForward(se_context* ctl)
+{
+#ifdef SE_ENABLE_LIVE
+    const int n = static_cast<int>(mRecorder.Count());
+    if (mbScrubbing && mScrubIndex < n - 1)
+    {
+        ++mScrubIndex;
+        VoidEditTarget();
+        return;
+    }
+    LeaveScrubForRun();   // the one place a scrub ends
+    se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
+    mbPaused = true;
+    mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
+#else
+    (void)ctl;
+#endif
+}
+
 // What hovering Play From Here says: what it will do, or why it cannot and how to turn it on.
 std::string App::PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHere) const
 {
@@ -2473,7 +2520,21 @@ std::string App::PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHe
                       "The %d recorded frame(s) after it are discarded.",
                       static_cast<unsigned long long>(mRecorder.FrameNumber(static_cast<size_t>(target))),
                       n - 1 - target);
-        return buf;
+        std::string tip = buf;
+        // Only when edits are involved: what this frame sends, and (the one thing here that throws edits
+        // away) the later frames' edits that go with their frames. Counted by the store's own rule.
+        const uint64_t frameNo = mRecorder.FrameNumber(static_cast<size_t>(target));
+        const FrameEdits* own = mEdits.Find(FrameKey{ mRecorder.FrameTimeline(static_cast<size_t>(target)), frameNo });
+        if (own)
+        {
+            const size_t bytes = own->ByteCount();
+            tip += "\nApplies this frame's " + std::to_string(bytes) + " edited byte" + (bytes == 1 ? "" : "s") + ".";
+        }
+        const size_t later = mEdits.CountAfter(frameNo);
+        if (later)
+            tip += "\nEdits on " + std::to_string(later) + " later frame" + (later == 1 ? "" : "s") +
+                   " are discarded with them.";
+        return tip;
     }
     if (!EmulatorStampsStates())
         return "Play From Here (unavailable)\nThis emulator build is too old to tell the frames of a "
@@ -2550,10 +2611,11 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
         return;
     }
 
-    // Staged edits replay only onto the frame they were made against. Ordinary Play, another
-    // scrub or a new session leaves them behind, and they must not ride onto this target.
-    if (!mStaged.BelongsTo(frameNo)) DiscardPendingEdits();
-    const std::vector<uint8_t> edits = sfe::EncodeEditBlob(mStaged);
+    // Only THIS frame's edits replay onto it. Edits on earlier frames stay attached to those frames
+    // (still shown there) and are not applied; later frames' edits go with the frames discarded below.
+    const FrameKey targetKey{ mRecorder.FrameTimeline(index), frameNo };
+    const FrameEdits* stored = mEdits.Find(targetKey);
+    const std::vector<uint8_t> edits = sfe::EncodeEditBlob(stored ? *stored : FrameEdits());
     // Sampled before the request goes out: the emulator can finish it before the call returns.
     const RestoreBaseline before = SampleRestoreBaseline();
     if (se_load_state(ctl, frameNo, state.data(), state.size(),
@@ -2570,8 +2632,8 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
 #if SE_ENABLE_DECOMPILER
     ++mScrubTimeline;                  // ...so a cached result for one of those numbers is not theirs
 #endif
-    DiscardPendingEdits();
-    mbScrubbing = false;
+    mEdits.DropAfter(frameNo);         // ...and so are those frames' edits; this frame's stay with it
+    ScrubBarLeave(mbScrubbing, mScrubIndex);   // the ring was truncated: the old index names nothing real
     mbPaused = false;
     VoidEditTarget();
     BeginRestoreWait(before);   // the emulator applies it asynchronously
@@ -2641,9 +2703,9 @@ bool App::MarkCompareFrame(CompareMarkers::Slot slot)
     {
         if (mScrubShownIndex < 0) return fail("That recorded frame could not be loaded.");
         // Pending edits change what the context serves without being part of the recorded frame.
-        if (mStaged.BelongsTo(mScrubShownFrame))
-            return fail("This frame has unapplied edits. A comparison is of recorded memory: scrub to "
-                        "another frame or press Play first.");
+        if (mEdits.Has(ShownFrameKey()))
+            return fail("This frame has edits, and a comparison is of recorded memory. Mark a frame "
+                        "without edits.");
     }
     // The frame the context holds: the recorder's frame when scrubbing (not an index, which the ring's
     // eviction makes stale), else the frame this capture came from rather than the newest.
@@ -2706,7 +2768,7 @@ bool App::ScrubToFrame(uint64_t frameNo)
         mCompareStatus = "That frame has left the rewind history.";
         return false;
     }
-    se_context* const ctl = mLiveCtx ? mLiveCtx : mContext;
+    se_context* const ctl = ControlContext();
     if (!mbPaused) { se_frame_pause(ctl); mbPaused = true; }
     mbScrubbing = true;
     mScrubTargetFrame = frameNo;
@@ -2717,6 +2779,25 @@ bool App::ScrubToFrame(uint64_t frameNo)
     return false;
 #endif
 }
+
+// A short tick on the bottom edge of the scrub bar at every recorded frame that holds edits, so they can
+// be found without visiting each one. Below the slider where the Compare carets sit above it, and an
+// orange apart from their A/B colours; a frame no longer in the ring has no tick (its edits are gone).
+#ifdef SE_ENABLE_LIVE
+void App::DrawEditedFrameMarks(const ImVec2& sliderMin, const ImVec2& sliderMax, int frameCount)
+{
+    if (!mEdits.Any()) return;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 col = ImGui::GetColorU32(ui::Color(ImVec4(0.95f, 0.60f, 0.20f, 1.0f), ImVec4(0.75f, 0.38f, 0.0f, 1.0f)));
+    for (const FrameKey& k : mEdits.Frames())
+    {
+        const int idx = mRecorder.IndexOfFrame(k.frame);
+        if (idx < 0) continue;
+        const float x = SliderGrabCenterX(sliderMin.x, sliderMax.x, ImGui::GetStyle().GrabMinSize, frameCount, idx);
+        dl->AddRectFilled(ImVec2(x - 1.5f, sliderMax.y - 5.0f), ImVec2(x + 1.5f, sliderMax.y - 1.0f), col);
+    }
+}
+#endif
 
 // A caret above the scrub bar at each marked frame: filled and on its frame while the frame is on
 // the timeline, hollow and pinned to the left edge once it has left (the snapshot is kept).
@@ -3021,13 +3102,16 @@ bool App::RefreshScrubContext()
         // to the last good index would take that shortcut and skip the Select that reloads it.
         mScrubShownIndex = -1;
         mScrubShownFrame = 0;
-        DiscardPendingEdits();
+        mScrubShownTimeline = 0;
         return false;
     }
-    // The context was rebuilt from the recording, so what was edited on screen is gone and its staged
-    // edits must go with it, or Play From Here would replay edits that are no longer displayed. (A
-    // frame kept as it is, edits included, never gets here: PlanScrub says Keep.)
-    mStaged.Clear();
+    // The context is being rebuilt from the recording: lay this frame's own edits (and only its own)
+    // back over it, so it shows them however the user got here. A frame with none shows the recording.
+    // The edits stay in the store whatever happens to the context. (A frame kept as it is never gets
+    // here: PlanScrub says Keep.)
+    const FrameKey builtKey{ mRecorder.SelectedFrameTimeline(), mRecorder.SelectedFrameNumber() };
+    const FrameEdits* builtEdits = mEdits.Find(builtKey);
+    if (builtEdits) mRecorder.OverlaySelected(*builtEdits);
     mScrubEdited = false;
     if (!mScrubContext)
     {
@@ -3044,10 +3128,11 @@ bool App::RefreshScrubContext()
 #if SE_ENABLE_DECOMPILER
     // The frame as recorded: what the decompiler's view of it is keyed as, until it is edited.
     mScrubBaseSerial = mScrubSeenSerial = se_derive_serial(mScrubContext);
-    mScrubViewSerial = 0;
+    mScrubViewSerial = builtEdits ? ++mScrubEditCounter : 0;   // an edited frame is not "as recorded"
 #endif
     mScrubShownIndex = mScrubIndex;
-    mScrubShownFrame = mRecorder.SelectedFrameNumber();
+    mScrubShownFrame = builtKey.frame;
+    mScrubShownTimeline = builtKey.timeline;
     mMemBackend.NoteSourceChanged();   // same context, different frame: in-flight edits are void
     return true;
 #else
@@ -3074,19 +3159,88 @@ void App::OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
 }
 
 // Recorder's scrub write-sink: an edit was made against the scrubbed frame.
-void App::OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
+size_t App::OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
 {
-    static_cast<App*>(user)->RecordPendingEdit(isSound, addr, bytes, len);
+    return static_cast<App*>(user)->RecordPendingEdit(isSound, addr, bytes, len);
 }
 
-void App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
+size_t App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
 {
     // Tag with the frame the written-to context actually displays, not where the slider points:
     // a transport action earlier in this same frame may already have moved mScrubIndex while the
     // panels still draw (and commit to) the old frame. Tagged with the new frame, that edit
     // would pass the "belongs to this frame" test and replay onto the wrong rewind target.
-    // A batch staged on another frame is dropped rather than retagged (StagedEdits::Record).
-    mStaged.Record(mScrubShownFrame, isSound != 0, addr, bytes, len);
+    // Each frame has its own set, so an edit here can never join, replace or clear another frame's.
+    // 0 (refused: the store is full) keeps the edit off the screen too, so the view never shows
+    // what Play From Here would not replay.
+    //
+    // What the frame shows at these bytes right now is what the recording holds, except where the frame
+    // already has an edit (which remembers its own original): the sink runs before the context takes
+    // the write, so the scrub context still holds the old bytes. That is how a write of the recorded
+    // value is recognised as no edit at all (FrameEdits::Add). Read from the context, not the
+    // recorder's scratch: the scratch has this frame's edits laid over it.
+    std::vector<uint8_t> shown(len);
+    size_t got = 0;
+    if (mScrubContext)
+    {
+        if (isSound)
+            got = se_read_vram(mScrubContext, SE_VRAM_KIND_SOUND_RAM, addr, shown.data(), len);
+        else
+        {
+            ContextBackend reader(&mScrubContext);
+            for (size_t off = 0; off < len;)
+            {
+                const uint32_t n = static_cast<uint32_t>((std::min)(len - off, size_t(0x10000)));
+                const MemoryReadResult r = reader.ReadOne(addr + static_cast<uint32_t>(off), n);
+                if (!r.success || r.bytes.size() != n) break;
+                std::copy(r.bytes.begin(), r.bytes.end(), shown.begin() + static_cast<std::ptrdiff_t>(off));
+                off += n;
+                got = off;
+            }
+        }
+    }
+    if (got != len)
+    {
+        // Cannot happen for a range the context accepted; refused rather than kept with a guessed original.
+        mLog.Warn("Could not read the recorded bytes this edit replaces; it was not kept.");
+        return 0;
+    }
+    const size_t taken = mEdits.Record(ShownFrameKey(), isSound != 0, addr, bytes, len, shown.data());
+    if (taken == 0)
+        mLog.Warn("Edits on recorded frames are at their size limit; this edit was not kept.");
+    return taken;
+}
+
+// The user discarded this frame's edits (Memory panel's Revert, the scrub bar's menu). The context still
+// shows them, so it is rebuilt from the recording, exactly as when the frame's edits are dropped by
+// eviction; the rebuild also moves the source id, which every open view reads as "my data changed".
+bool App::RevertShownFrameEdits()
+{
+    if (!mbScrubbing || !mEdits.Drop(ShownFrameKey())) return false;
+    mScrubEdited = true;
+    mCallStackDirty = true;   // a stack scanned from the edited memory is not the recorded frame's
+    mAssemblyPanel.ClearNotice();   // its "Wrote ... Kept on recorded frame" is no longer true
+    return true;
+}
+
+// Edits live exactly as long as their frame is in the recording. Eviction happens on the recorder's
+// worker thread, so a callback from it would race this thread's store; instead the store is checked
+// against the ring here, once per UI frame, which also backstops any path that discards frames
+// without saying so. A frame is matched by number AND timeline, so a number the ring reuses after a
+// rewind is a different frame and finds none of the old one's edits.
+void App::ReconcileFrameEdits()
+{
+    if (!mEdits.Any()) return;
+    const bool shownHad = mEdits.Has(ShownFrameKey());
+    mEdits.Retain([this](const FrameKey& k) { return mRecorder.HasFrame(k.frame, k.timeline); });
+    // The context may still show edits the store no longer holds: rebuild it from the recording.
+    if (shownHad && !mEdits.Has(ShownFrameKey())) mScrubEdited = true;
+}
+
+void App::ClearAllEdits()
+{
+    if (mEdits.Has(ShownFrameKey())) mScrubEdited = true;
+    mEdits.Clear();
 }
 
 double App::RecorderCapacityMB() const
@@ -3181,6 +3335,12 @@ void App::DrawAssembly()
     mAssemblyPanel.SetOfferDecompile(true);
 #endif
     mAssemblyPanel.SetBreakpointStop(mStepHalt.HaltActive(), mStepHalt.HaltCpu(), mStepHalt.HaltPc());
+    if (mStepHalt.HaltActive())
+    {
+        const StepOutDecision& out = StepOutOffer();   // the same decision as the Call Stack strip's
+        mAssemblyPanel.SetStepOutOffer(out.Ok(), out.Ok() ? nullptr : out.Why(), out.Ok() ? out.target.returnAddress : 0u);
+    }
+    mAssemblyPanel.SetRecordedFrame(sfe::RecordedFrameShown(ScrubViewUp() && Scrubbing(), ScrubShownFrame()));
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mActions, mWatchPanel, mbLiveSource, req);
     // An in-place edit was written: the Log keeps the outcome (destination, old and new value, any warning) after the
     // panel's own one-line notice has faded.
@@ -3196,7 +3356,7 @@ void App::DrawAssembly()
     // Over and Step Out do: it is retired when the CPU arrives and the halt reads STEPPED. It used
     // to add a user breakpoint, which then stayed on the row and labelled the arrival a breakpoint
     // hit (macOS run, Step 4). No-op without frame control.
-    if (req.runTo && mbHasData && se_supports_frame_control(mContext))
+    if (req.runTo && mbHasData && se_supports_frame_control(ControlContext()))
         RunToTransient(req.runToAddr, mAssemblyPanel.Cpu());
     // Run control mirrored into the panel header, resolved against the panel's CPU.
     if (req.continueRun) Continue();
@@ -4423,7 +4583,7 @@ void App::DrawAccessLog()
         ImGui::Text("watching %08X (%s)", mAccessWatchAddr, kinds[mAccessKind]);
     }
 
-    if (!se_supports_frame_control(mContext))
+    if (!se_supports_frame_control(ControlContext()))
         ImGui::TextDisabled("Connect to a running emulator to capture accesses.");
     ImGui::Separator();
 
@@ -4577,7 +4737,7 @@ void App::UpdateProfiler()
     // which timeline they are (se_live_captured_identity); one that does not leaves the tracker to
     // wait out the server's snapshot ring after a change seen on the stream rather than guess.
     {
-        const bool scrubbed = mScrubContext && mContext == mScrubContext;
+        const bool scrubbed = ScrubViewUp();
         uint32_t streamTimeline = 0;
         uint64_t streamFrame = 0;
         mProfiler.LatestIdentity(&streamTimeline, &streamFrame);
@@ -4589,11 +4749,11 @@ void App::UpdateProfiler()
 #endif
         {
             src.sourceId = mMemBackend.SourceId();
-            src.instance = mLiveConnGeneration;
+            src.instance = LiveInstance();
             src.streamTimeline = streamTimeline;
         }
         // A live view has no displayed frame number of its own, only a scrub supplies one.
-        src.frame = scrubbed ? mScrubShownFrame : 0;
+        src.frame = scrubbed ? ScrubShownFrame() : 0;
         const bool mayAccept = mPoolTracker.BeginSample(src);
         if (mPoolTracker.Count() == 0) mPoolSampleCountdown = 0;   // re-primed: sample now, don't show an empty tab
         if (!mayAccept) return;   // waiting out a timeline change this capture cannot confirm
@@ -4646,6 +4806,7 @@ void App::DrawProfiler()
     };
     // Scrubbed back: the Profiler shows that frame's record, found by identity. The timeline comes
     // from the recorded frame (0 = unknown, which can never match).
+#ifdef SE_ENABLE_LIVE   // no recorder, so no scrubbed frame, without live support
     if (mScrubContext && mContext == mScrubContext && mScrubShownFrame != 0)
     {
         host.scrubbed = true;
@@ -4654,6 +4815,7 @@ void App::DrawProfiler()
         host.scrubTimeline = at >= 0 ? mRecorder.FrameTimeline(static_cast<size_t>(at)) : 0u;
         host.scrubIdentityKnown = host.scrubTimeline != 0;
     }
+#endif
     if (mProfilerPanel.Draw(mProfiler, mPoolTracker, host))
     {
         mProfiler.Clear();
@@ -5022,9 +5184,18 @@ void App::DrawCallStack(IPlatform& platform)
                                                 mHaltWatchArmed));
         ImGui::SameLine();
         ImGui::Text("%s SH-2", mCallStackCpu ? "Slave" : "Master");
-        if (haveR) { ImGui::SameLine(); ImGui::Text("\xc2\xb7 PC %08X", r.pc); }
+        // While a recorded frame is shown, the banner still describes the HALT: its reason and its live
+        // PC, as the Assembly header does, not the PC the recorded frame's registers hold.
+        const unsigned long long recorded = sfe::RecordedFrameShown(ScrubViewUp() && Scrubbing(), ScrubShownFrame());
+        if (haveR)
+        {
+            const bool haltedHere = mStepHalt.HaltActive() && mCallStackCpu == mStepHalt.HaltCpu();
+            ImGui::SameLine();
+            ImGui::Text("\xc2\xb7 PC %08X", sfe::HeaderPc(recorded != 0, haltedHere, mStepHalt.HaltPc(), r.pc));
+        }
+        if (recorded != 0) { ImGui::SameLine(); ImGui::Text("\xc2\xb7 viewing recorded frame #%llu", recorded); }
 
-        const bool canStep = mbHasData && se_supports_frame_control(mContext);
+        const bool canStep = mbHasData && se_supports_frame_control(ControlContext());
         if (ImGui::Button("Continue")) { Continue(); }
         ImGui::SameLine();
         // Step Into / Over need an instruction-level halt (a breakpoint or prior step) so
@@ -5042,15 +5213,15 @@ void App::DrawCallStack(IPlatform& platform)
         ImGui::EndDisabled();
         ImGui::SameLine();
         // Enabled only when the recorded call frame says where this function returns to. (The tooltip
-        // names that address; PR is not it once the function has called anything.)
-        const StepOutTarget outTarget = (haveR && viewingHalted)
-            ? ChooseStepOutTarget(mCallStack.Frames(mCallStackCpu), r) : StepOutTarget{};
-        ImGui::BeginDisabled(!canStep || !haveR || !viewingHalted || !outTarget.ok);
+        // names that address; PR is not it once the function has called anything.) Judged on the LIVE
+        // halt, as StepOut and the Assembly header do, so a scrubbed frame does not change the answer.
+        const StepOutDecision& out = StepOutOffer();
+        ImGui::BeginDisabled(!canStep || !viewingHalted || !out.Ok());
         if (ImGui::Button("Step Out")) { StepOut(mCallStackCpu); }
-        if (outTarget.ok)
-            ImGui::SetItemTooltip("Run to the current frame's return address (%08X)", outTarget.returnAddress);
+        if (out.Ok())
+            ImGui::SetItemTooltip("Run to the current frame's return address (%08X)", out.target.returnAddress);
         else
-            ImGui::SetItemTooltip("%s", viewingHalted ? outTarget.why : "Stepping applies to the CPU that halted");
+            ImGui::SetItemTooltip("%s", viewingHalted ? out.Why() : "Stepping applies to the CPU that halted");
         ImGui::EndDisabled();
         ImGui::EndChild();
         ImGui::PopStyleColor();
@@ -5502,12 +5673,11 @@ void App::SyncBreakpointsToLive()
 // strips, Run to Here, and the step helpers). No-op without live frame control.
 void App::Continue()
 {
-    if (mbHasData && se_supports_frame_control(mContext))
+    se_context* const ctl = ControlContext();   // the emulator, not the scrub view the panel may be showing
+    if (mbHasData && se_supports_frame_control(ctl))
     {
-        se_frame_resume(mContext);
-#ifdef SE_ENABLE_LIVE
-        DiscardPendingEdits();
-#endif
+        se_frame_resume(ctl);
+        LeaveScrubForRun();
         mbPaused = false;
         mStepHalt.Resumed();   // the halt left behind is re-reported for a frame or two: not a new stop
     }
@@ -5560,6 +5730,8 @@ void App::StepInto(int cpu)
 #ifdef SE_ENABLE_LIVE
     se_live_step_insn(&mDataSource, 1);
 #endif
+    if (sfe::PlanCommand(sfe::DebugCommand::StepInto, true, Scrubbing() || ScrubViewUp()).leaveScrub)
+        LeaveScrubForRun();   // moving the game on ends the scrub, as Play does
     mbPaused = false;
     mStepHalt.Resumed();
     mStepHalt.BeginStep();   // hold the halted UI until the re-halt lands
@@ -5580,6 +5752,9 @@ void App::StepOver(int cpu)
         return;
     }
     const int stepped = SteppedCpu();
+    // The instruction at the HALT, not at the recorded frame on screen: read the live emulator's
+    // registers and memory (the backend follows mContext).
+    ScopedContextSwap liveRead(&mContext, ControlContext());
     se_sh2_regs r{};
     if (!mbHasData || se_get_sh2_regs(mContext, stepped, &r) != SE_OK) { return; }
     bool isSubCall = false;
@@ -5598,27 +5773,64 @@ void App::StepOut(int cpu)
 {
     (void)cpu;   // the halted CPU, always: see SteppedCpu
     if (mStepHalt.StepInFlight()) return;   // a step is already in flight
-    if (!LiveHas(SE_LIVE_CAP_EXEC_BP))
+    const StepOutDecision d = DecideStepOut();   // fresh, not the panels' copy from earlier this frame
+    if (!d.canHalt)
     {
         mLog.Warn("Step Out: this emulator build cannot halt at breakpoints (Mednafen built with --disable-debugger).");
         return;
     }
-    const int stepped = SteppedCpu();
-    se_sh2_regs r{};
-    if (!mbHasData || se_get_sh2_regs(mContext, stepped, &r) != SE_OK) { return; }
-    // PR is not the frame's return address once the function has made a call of its own, so the
-    // target comes from the recorded call frame (ChooseStepOutTarget says why that is the only
-    // answer it trusts). Built fresh: the Call Stack panel's copy follows a different CPU.
-    CallStack stack;
-    BuildCallStack(stepped, r, stack);
-    const StepOutTarget target = ChooseStepOutTarget(stack.Frames(stepped), r);
-    if (!target.ok)
+    if (!d.haveRegs) { return; }
+    if (!d.target.ok)
     {
         mLog.Warn(std::string("Step Out: cannot tell where this function returns to \xe2\x80\x94 ") +
-                  target.why + ". Use Step Over, or Run to Here at the return address.");
+                  d.target.why + ". Use Step Over, or Run to Here at the return address.");
         return;
     }
-    RunToTransient(target.returnAddress, stepped);
+    RunToTransient(d.target.returnAddress, SteppedCpu());
+}
+
+// What StepOut will do, worked out from the live halt. PR is not the frame's return address once the
+// function has made a call of its own, so the target comes from the recorded call frame
+// (ChooseStepOutTarget says why that is the only answer it trusts). Built fresh: the Call Stack panel's
+// copy follows whichever CPU and frame it shows.
+App::StepOutDecision App::DecideStepOut()
+{
+    StepOutDecision d;
+    d.canHalt = LiveHas(SE_LIVE_CAP_EXEC_BP);
+    if (!d.canHalt) return d;
+    const int stepped = SteppedCpu();
+    ScopedContextSwap liveRead(&mContext, ControlContext());   // the halt's registers, stack and shadow stack
+    se_sh2_regs r{};
+    if (!mbHasData || se_get_sh2_regs(mContext, stepped, &r) != SE_OK)
+    {
+        d.target.why = "The halted CPU's registers are not available";
+        return d;
+    }
+    d.haveRegs = true;
+    CallStack stack;
+    BuildCallStack(stepped, r, stack);
+    d.target = ChooseStepOutTarget(stack.Frames(stepped), r);
+    return d;
+}
+
+const App::StepOutDecision& App::StepOutOffer()
+{
+    // Deciding polls the emulator's recorded call stack and reads stack memory, which is too much to do
+    // every UI frame for two buttons' enabled state. The answer only changes when the halt does, so it
+    // is redone at once for a new halt (CPU or PC) and otherwise a few times a second. StepOut itself
+    // always decides afresh.
+    const int frame = ImGui::GetFrameCount();
+    const bool sameHalt = mStepOutOfferFrame >= 0 && mStepOutOfferCpu == mStepHalt.HaltCpu() &&
+                          mStepOutOfferPc == mStepHalt.HaltPc() && mStepOutOfferHalted == mStepHalt.HaltActive();
+    if (!sameHalt || frame - mStepOutOfferFrame >= 15)
+    {
+        mStepOutOffer = DecideStepOut();
+        mStepOutOfferFrame = frame;
+        mStepOutOfferCpu = mStepHalt.HaltCpu();
+        mStepOutOfferPc = mStepHalt.HaltPc();
+        mStepOutOfferHalted = mStepHalt.HaltActive();
+    }
+    return mStepOutOffer;
 }
 
 void App::DrawVdpOutput(IPlatform& platform)
@@ -7808,12 +8020,12 @@ TopBarViewModel App::BuildTopBarViewModel() const
     vm.recording = mbRecording;
 #endif
     vm.paused = mbPaused;
-    vm.frameControl = mbHasData && mContext && se_supports_frame_control(mContext);
+    vm.frameControl = mbHasData && mContext && se_supports_frame_control(ControlContext());
 #ifdef SE_ENABLE_LIVE
     // Both halves must be there: a state has actually arrived, and the emulator can take one
     // back. A build without rewind support streams nothing, so this simply stays false.
     vm.canSaveState = mStateSlots.HaveState() &&
-                      se_supports_state_rewind(mLiveCtx ? mLiveCtx : mContext) != 0;
+                      se_supports_state_rewind(ControlContext()) != 0;
     vm.hasEmulatorStates = mEmuSlotCount > 0;
     // Pause, frame step and every load are applied at the emulator's frame gate, and a save-state
     // load needs its real savestate hooks: a build without them would take the request and do nothing.
@@ -7822,7 +8034,7 @@ TopBarViewModel App::BuildTopBarViewModel() const
                       LiveHas(SE_LIVE_CAP_STATE_REWIND);
     // Loading a slot sends the file's own state, so unlike Save it does not wait for one to be
     // streamed: right after a restart nothing has arrived yet, and the slots on disk still load.
-    vm.canLoadState = se_supports_state_rewind(mLiveCtx ? mLiveCtx : mContext) != 0 &&
+    vm.canLoadState = se_supports_state_rewind(ControlContext()) != 0 &&
                       LiveHas(SE_LIVE_CAP_FRAME_GATE) && LiveHas(SE_LIVE_CAP_STATE_REWIND);
     vm.hasEmulatorStates = vm.hasEmulatorStates && LiveHas(SE_LIVE_CAP_FRAME_GATE);
     // Explicit version check: LiveHas answers yes for a pre-v24 server, which has no ESV at all.
@@ -8538,7 +8750,7 @@ void App::DoLoadState(int slot)
         mLog.Error(mStateStatus);
         return;
     }
-    se_context* const ctl = mLiveCtx ? mLiveCtx : mContext;
+    se_context* const ctl = ControlContext();
     std::vector<uint8_t> image;
     uint64_t frame = 0;
     std::string error;
@@ -8631,22 +8843,15 @@ void App::AdoptNewEmulatorInstance()
 #endif
 }
 
-// The emulator has jumped to a state we did not record our way to, so everything we held
-// about "where we are" describes a timeline that no longer exists: recorded frames, the
-// savestate keyframe the next delta would be diffed against, and edits staged against a
-// scrubbed frame. The scrub-rewind path deliberately does NOT use this -- it restores a
-// frame that IS in the ring, so it truncates the future instead of dropping the past.
-void App::DiscardPendingEdits()
-{
-    // The context may still show those edits; it is rebuilt from the recording before it is shown again.
-    if (!mStaged.Empty()) mScrubEdited = true;
-    mStaged.Clear();
-}
-
 // The ring is emptied: markers keep their snapshots but can no longer be found by frame number.
+// The emulator has jumped to a state we did not record our way to (DropRecordedHistory below): the
+// recorded frames, the keyframe the next delta would diff against and every frame's edits describe a
+// timeline that no longer exists. The scrub-rewind path does NOT use it -- it restores a frame that IS
+// in the ring, so it truncates the future (and that future's edits) instead of dropping the past.
 void App::ClearRecordedFrames()
 {
     mRecorder.Clear();
+    ClearAllEdits();   // the recording is cleared: its frames' edits go with it
 #if SE_ENABLE_DECOMPILER
     ++mScrubTimeline;   // frame numbers may be reused by whatever is recorded next
 #endif
@@ -8657,7 +8862,9 @@ void App::DropRecordedHistory()
 {
     ClearRecordedFrames();
     mStateSlots.Reset();
-    DiscardPendingEdits();
+    mScrubShownIndex = -1;   // the frame on screen is gone; frame numbers may come back as different frames
+    mScrubShownFrame = 0;
+    mScrubShownTimeline = 0;
     mCallStackDirty = true;   // the registers it was built from are about to be replaced
     mbScrubbing = false;
     mScrubIndex = -1;
@@ -9085,19 +9292,21 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::TogglePause:
         if (mbPaused)
         {
-            se_frame_resume(mContext);
-#ifdef SE_ENABLE_LIVE
-            DiscardPendingEdits();
-#endif
+            se_frame_resume(ControlContext());
+            LeaveScrubForRun();
             mbPaused = false;
             mStepHalt.Resumed();
         }
-        else { se_frame_pause(mContext); mbPaused = true; }
+        else { se_frame_pause(ControlContext()); mbPaused = true; }
         break;
     case TopBarCommandType::StepFrame:
+#ifdef SE_ENABLE_LIVE
+        StepFrameForward(ControlContext());   // the real emulator, not the scrub view
+#else
         se_frame_step(mContext, 1);
         mbPaused = true;
         mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
+#endif
         break;
     case TopBarCommandType::DumpMemory:
         // Queued, not run: see the dispatch point in BuildUI. Running it here would dump the

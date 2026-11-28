@@ -69,7 +69,7 @@ See [Decompiler](Systems/Decompiler.md) for precise APIs and test families.
 
 The memory/debug panels use `ContextBackend` rather than reaching into emulator memory.
 Its writes go through core snapshot/write APIs; the live source queues supported remote writes,
-while historical edits route through the recorder's edit sink into staged edits. App reconciles
+while historical edits route through the recorder's edit sink into the per-frame edit store (`FrameEditStore`), each frame keeping its own. App reconciles
 acknowledgements/capabilities and blocks writes across unresolved restore/session transitions.
 An accepted local preview is not proof a remote write has completed. See
 [MemoryAndHistory](Systems/MemoryAndHistory.md) and [StateSources](Systems/StateSources.md).

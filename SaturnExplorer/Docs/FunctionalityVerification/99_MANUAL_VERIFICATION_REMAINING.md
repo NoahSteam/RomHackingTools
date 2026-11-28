@@ -101,7 +101,7 @@ emulator); the Mednafen-side writers by `SaturnExplorerMednafenVdpPoke` (stubs).
 - edit a byte and quit the emulator before resuming: the status bar reports the edit never reached it
   (if the connection dies with the edit already on the wire, it says the edit could not be confirmed
   instead -- the emulator may have applied it)
-- the readout after an edit says "Queued for emulator" on a live source, "Staged for Play From Here" on
+- the readout after an edit says "Queued for emulator" on a live source, "Kept on recorded frame #N" on
   a scrubbed frame, and "Modified (this view only)" on a loaded dump
 - type `ABCD` into a byte the source refuses: the caret stays on that byte and the reason is shown
   under the grid; nothing lands on the next byte

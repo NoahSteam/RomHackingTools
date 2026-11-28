@@ -1179,14 +1179,31 @@ if(BUILD_TESTING)
         endif()
     endif()
 
-    # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame staged
-    # edits belong to. Pure logic against a ring that evicts like FrameRecorder's.
+    # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame edits
+    # belong to (per frame: see FrameEditsTests). Pure logic against a ring that evicts like FrameRecorder's.
     add_executable(SaturnExplorerScrubStateTests
         FrontEnd/tests/ScrubStateTests.cpp
     )
     target_include_directories(SaturnExplorerScrubStateTests PRIVATE FrontEnd/src
         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
     add_test(NAME SaturnExplorerScrubStateTests COMMAND SaturnExplorerScrubStateTests)
+
+    # Per-frame memory edits on recorded frames: kept with their frame, dropped only when it leaves the
+    # recording, never inherited by a frame number a rewind reuses.
+    add_executable(SaturnExplorerFrameEditsTests FrontEnd/tests/FrameEditsTests.cpp)
+    target_include_directories(SaturnExplorerFrameEditsTests PRIVATE FrontEnd/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    add_test(NAME SaturnExplorerFrameEditsTests COMMAND SaturnExplorerFrameEditsTests)
+
+    # What the scrub slider's label and handle show across Play / Play From Here / eviction.
+    add_executable(SaturnExplorerScrubBarTests FrontEnd/tests/ScrubBarTests.cpp)
+    target_include_directories(SaturnExplorerScrubBarTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerScrubBarTests COMMAND SaturnExplorerScrubBarTests)
+
+    # Which context a debugger / transport command acts on while scrubbed, and whether it ends the scrub.
+    add_executable(SaturnExplorerDebuggerControlTests FrontEnd/tests/DebuggerControlTests.cpp)
+    target_include_directories(SaturnExplorerDebuggerControlTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerDebuggerControlTests COMMAND SaturnExplorerDebuggerControlTests)
 
     # The compare markers' session / timeline-epoch rules, exact frame lookup, and the slider
     # geometry they are drawn with (checked against ImGui's own SliderBehavior).
@@ -2781,4 +2798,20 @@ if(TARGET SaturnExplorerFrontEnd AND NOT EMSCRIPTEN)
                 VERBATIM)
         endif()
     endforeach()
+endif()
+
+# The viewer-only web build compiles the front end WITHOUT SE_ENABLE_LIVE, and nothing on the desktop
+# does: code that names a live-only member (the recorder, the scrub view) outside the guard built
+# everywhere CI looks and broke only there (the Profiler did, for two releases). This compiles App.cpp,
+# where every such member lives, once more with the definition removed and everything else the same,
+# so that mistake fails the ordinary build. It links nothing and ships nothing.
+if(TARGET SaturnExplorerFrontEnd AND NOT EMSCRIPTEN)
+    add_library(SaturnExplorerFrontEndNoLiveCheck OBJECT FrontEnd/src/App.cpp)
+    target_include_directories(SaturnExplorerFrontEndNoLiveCheck PRIVATE
+        $<TARGET_PROPERTY:SaturnExplorerFrontEnd,INCLUDE_DIRECTORIES>)
+    target_compile_definitions(SaturnExplorerFrontEndNoLiveCheck PRIVATE
+        $<FILTER:$<TARGET_PROPERTY:SaturnExplorerFrontEnd,COMPILE_DEFINITIONS>,EXCLUDE,^SE_ENABLE_LIVE$>)
+    target_compile_options(SaturnExplorerFrontEndNoLiveCheck PRIVATE
+        $<TARGET_PROPERTY:SaturnExplorerFrontEnd,COMPILE_OPTIONS>)
+    add_dependencies(SaturnExplorerFrontEnd SaturnExplorerFrontEndNoLiveCheck)
 endif()

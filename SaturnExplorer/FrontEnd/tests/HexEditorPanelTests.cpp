@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "imgui_internal.h"   // ImGuiTable column/row geometry
+#include "DrawnText.h"
 #include "ImGuiHarness.h"
 #include "HexEditorPanel.h"
 #include "Theme.h"
@@ -49,7 +50,17 @@ public:
     uint64_t SourceId() const override { return id; }
     bool CanWrite(uint32_t a) const override { return InRange(a, 1); }
     std::string WriteRefusal(uint32_t) const override { return "the source refused it"; }
-    WriteDest WriteDestination(uint32_t) const override { return WriteDest::Emulator; }
+    WriteDest WriteDestination(uint32_t) const override { return dest; }
+
+    // A recorded frame on screen, as App says it each frame (see ContextBackend::SetRecordedFrameEdits).
+    WriteDest dest = WriteDest::Emulator;
+    bool      recorded = false;
+    size_t    editedBytes = 0;
+    uint64_t  frame = 0;
+    int       reverts = 0;
+    int       writes = 0;
+    FrameEditSummary RecordedFrameEdits() const override { return FrameEditSummary{ recorded, editedBytes, frame }; }
+    bool RevertRecordedFrameEdits() override { ++reverts; const bool had = editedBytes != 0; editedBytes = 0; return had; }
 
     std::vector<MemoryReadResult> ReadMemoryBatch(const std::vector<MemoryReadRequest>& rs) override
     {
@@ -71,6 +82,7 @@ public:
     size_t WriteMemory(uint32_t a, const uint8_t* bytes, size_t n) override
     {
         if (!InRange(a, (uint32_t)n)) return 0;
+        ++writes;
         if (refuseOffset >= 0 && (int64_t)((a & 0x07FFFFFFu) - kBase) == refuseOffset) return 0;
         for (size_t i = 0; i < n; ++i) ram[(a & 0x07FFFFFFu) - kBase + i] = bytes[i];
         return n;
@@ -382,6 +394,132 @@ void CoveredCellsIgnoreClicks()
     f.h.Click(f.Cell(0, 5));
     CHECK(f.panel.SelectionStart() == (int64_t)kBase + 5);   // and it still works uncovered
 }
+
+// ---- Edits on a recorded frame: the status line, Revert, the notice, a no-change commit -------------------------
+
+std::string MemoryWindowText()
+{
+    std::string all;
+    for (const drawn::Run& r : drawn::WindowRuns("Memory")) all += drawn::Squash(r.text);
+    return all;
+}
+bool Says(const std::string& text) { return MemoryWindowText().find(drawn::Squash(text)) != std::string::npos; }
+
+// Where the Revert button is, found by hovering: an item's rectangle is not exposed, its id is.
+bool FindRevert(Fixture& f, ImVec2* at)
+{
+    ImGuiContext& g = *ImGui::GetCurrentContext();
+    const ImGuiID id = ImGui::FindWindowByName("Memory")->GetID("Revert##frameedits");
+    for (float y = 20.0f; y < 90.0f; y += 3.0f)
+        for (float x = 700.0f; x < 900.0f; x += 4.0f)
+        {
+            f.h.Hover(ImVec2(x, y));
+            if (g.HoveredId == id) { *at = ImVec2(x, y); return true; }
+        }
+    return false;
+}
+
+float GridTop() { return FindGrid()->OuterRect.Min.y; }
+
+void RecordedFrameLineAndRevert()
+{
+    Fixture f;
+    f.backend.recorded = true;
+    f.backend.frame = 42;
+    f.backend.dest = IMemoryBackend::WriteDest::Staged;
+    f.h.Settle();
+    const float topNone = GridTop();   // the line is reserved even with nothing edited
+    ImVec2 at;
+    CHECK(!Says("edited byte"));
+    CHECK(!FindRevert(f, &at));        // no edits: nothing to revert
+
+    f.backend.editedBytes = 1;
+    f.h.Settle();
+    CHECK(Says("This frame has 1 edited byte. Play From Here applies it."));
+    CHECK(GridTop() == topNone);       // the first edit does not move the grid
+    f.backend.editedBytes = 3;
+    f.h.Settle();
+    CHECK(Says("This frame has 3 edited bytes. Play From Here applies them."));
+    CHECK(GridTop() == topNone);
+
+    // The hover on the line says why, not what.
+    {
+        bool saw = false;
+        for (float y = 20.0f; y < 70.0f && !saw; y += 3.0f)
+        {
+            f.h.Hover(ImVec2(40.0f, y));
+            const std::string tip = drawn::Squash(drawn::TooltipText());
+            saw = tip.find(drawn::Squash("Edits stay on this frame however you scrub. Only Play From Here on this frame sends "
+                                         "them to the game. They are discarded when this frame leaves the recording.")) != std::string::npos;
+        }
+        CHECK(saw);
+    }
+
+    // The Revert control receives clicks and asks the BACKEND (the panel never reaches the application).
+    CHECK(FindRevert(f, &at));
+    f.h.Click(at);
+    CHECK(f.backend.reverts == 1);
+    f.h.Settle();
+    CHECK(f.backend.editedBytes == 0 && !Says("edited byte"));
+    CHECK(GridTop() == topNone);       // and taking the edits away does not move the grid either
+    CHECK(!FindRevert(f, &at));
+}
+
+void NoticeNamesTheRecordedFrame()
+{
+    {
+    Fixture f;
+    f.backend.recorded = true;
+    f.backend.frame = 42;
+    f.backend.dest = IMemoryBackend::WriteDest::Staged;
+    f.h.Settle();
+    f.h.Click(f.Cell(0, 0));
+    f.DoubleClick(f.Cell(0, 0));
+    f.Type("12", true);
+    f.Key(ImGuiKey_Enter);
+    CHECK(f.backend.ram[0] == 0x12);
+    f.backend.editedBytes = 1;         // as App reports it on the next frame: the edit is held
+    f.h.Frame(ImVec2(1270, 710), false);
+    CHECK(Says("Kept on recorded frame #42"));
+    f.backend.frame = 43;              // scrubbed on: the notice still names the frame the edit went to
+    f.h.Frame(ImVec2(1270, 710), false);
+    CHECK(Says("Kept on recorded frame #42") && !Says("#43"));
+    f.backend.editedBytes = 0;         // reverted, or the recorded value written back: nothing is kept,
+    f.h.Frame(ImVec2(1270, 710), false);   // so the note must not go on saying it is
+    CHECK(!Says("Kept on recorded frame"));
+    }
+    // The other destination keeps its words (one harness at a time).
+    Fixture g;
+    g.h.Click(g.Cell(0, 0));
+    g.DoubleClick(g.Cell(0, 0));
+    g.Type("34", true);
+    g.Key(ImGuiKey_Enter);
+    CHECK(Says("Queued for emulator"));
+}
+
+void CommittingAByteUnchangedWritesNothing()
+{
+    Fixture f;
+    f.h.Click(f.Cell(0, 2));
+    f.DoubleClick(f.Cell(0, 2));
+    CHECK(f.panel.IsEditing());
+    f.Key(ImGuiKey_Enter);             // nothing typed: the box still holds the byte it opened on
+    CHECK(!f.panel.IsEditing());
+    CHECK(f.backend.writes == 0);      // no poke to a live emulator...
+    CHECK(!Says("Queued for emulator"));   // ...and no notice claiming one
+
+    f.DoubleClick(f.Cell(0, 5));       // another byte: a double-click on the same one so soon would count as a third click
+    CHECK(f.panel.IsEditing());
+    f.Type("00", true);                // typing the same value out is the same no-change commit
+    f.Key(ImGuiKey_Enter);
+    CHECK(f.backend.writes == 0);
+
+    f.DoubleClick(f.Cell(0, 8));
+    CHECK(f.panel.IsEditing());
+    f.Type("01", true);
+    f.Key(ImGuiKey_Enter);             // a real change still writes
+    CHECK(f.backend.writes == 1 && f.backend.ram[8] == 0x01);
+}
 }  // namespace
 
 int main()
@@ -403,6 +541,9 @@ int main()
     RowsAreOneHeight(true);
     JumpLandsOnTheTargetRow();
     CoveredCellsIgnoreClicks();
+    RecordedFrameLineAndRevert();
+    NoticeNamesTheRecordedFrame();
+    CommittingAByteUnchangedWritesNothing();
     if (gFailures)
     {
         std::cerr << gFailures << " check(s) failed\n";

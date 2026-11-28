@@ -1,6 +1,6 @@
 # Debugger execution, assembly, watches, and call stacks
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20).
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); scrubbed-command rule rechecked against 935f13e (2026-11-27).
 Pseudocode navigation/Watch integration rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 Evidence status: behavior below is verified from source unless explicitly qualified. This is a navigation map; source remains authoritative.
 
@@ -32,10 +32,21 @@ The frontend coordinates instruction-level debugging of the two SH-2 CPUs, while
 2. `StepHaltMachine::Observe` interprets halt identity and in-flight steps. It reports whether this is a step arrival, an unwanted arrival by the other CPU, or an echo of an already declined halt.
 3. App applies policy: condition guards, logging watchpoints and mixed execution/watchpoint causes. A false execution condition cannot discard an independently plausible halting watchpoint. `WatchCausesAtHalt` reuses `Sh2MayAccessRange` and captured registers; unreadable instructions conservatively leave watchpoints as possible causes.
 4. A surfaced stop sets `mbPaused`, identifies the halted CPU, marks the call stack dirty and reveals the paused workspace. Ordinary breakpoint stops also reveal Assembly, Registers and Breakpoints. Completed steps avoid repeatedly stealing Assembly focus.
-5. `StepInto` sends `se_live_step_insn`, while `StepOver` decodes the current instruction: `bsr`/`bsrf`/`jsr` run to `PC + 4`, past the delay slot; other instructions use Step Into. `StepOut` builds a fresh call stack and uses `ChooseStepOutTarget`.
+5. `StepInto` sends `se_live_step_insn`, while `StepOver` decodes the current instruction: `bsr`/`bsrf`/`jsr` run to `PC + 4`, past the delay slot; other instructions use Step Into. `StepOut` builds a fresh call stack and uses `ChooseStepOutTarget`; that is `App::DecideStepOut`, taken from the LIVE halt (`ScopedContextSwap` to `ControlContext()`, `SteppedCpu()`), and it is the one decision behind the click, the Call Stack strip's Step Out and the SH-2 Assembly header's (`StepOutOffer`, once per UI frame; `AssemblyPanel::SetStepOutOffer`), so the two controls agree whether or not a recorded frame is shown.
 6. `RunToTransient` installs a temporary execution breakpoint **before** resuming. Its target CPU is recorded by `StepHaltMachine`; a different CPU reaching the shared PC breakpoint is resumed without completing the step. Arrival retires the temporary breakpoint and triggers synchronization.
 
 `StepHaltMachine` does not resume the emulator, evaluate expressions, log accesses or open panels. Those side effects remain in App. Reuse this separation when adding run-control behavior.
+
+### Commands while a recorded frame is shown
+
+While paused the user can scrub back; `App::mContext` is then the read-only scrub view and the real emulator is `mLiveCtx`. One rule, in [DebuggerControl.h](../../../FrontEnd/src/DebuggerControl.h) (`PlanCommand`, `ReadFromLive`, `HeaderPc`; `DebuggerControlTests`) and reached through `App::ControlContext()` / `App::LeaveScrubForRun()`:
+
+- Every command goes to the **live** emulator (`ControlContext()`: `mLiveCtx` while the scrub view is displayed, else `mContext`). A command sent to the scrub view reaches nobody; Continue from the Call Stack / Assembly strips used to do exactly that and silently did nothing.
+- Commands that **run or step** (Continue, Step Into/Over/Out, Run to Here, Step Frame, Play / the pause toggle's resume) also end the scrub as the transport's Play does: `App::LeaveScrubForRun()` is the one place that does it (`ScrubBarLeave` and `VoidEditTarget`; it does not touch edits, which stay with the recorded frames they were made on), so Play, Continue, Step Frame and Step Into share it. Step Over and Step Out read the PC, memory and call stack of the halt (a `ScopedContextSwap` to the live context), not of the recorded frame on screen.
+- Commands that only **configure** (breakpoints, tracepoints, watchpoints/access log, pokes, input) reach the live emulator (they already travel on `mDataSource`) and leave the scrub view up.
+- Reads that describe the **halt** (halt reason, halt PC from `StepHaltMachine`, "can step" via `ControlContext()`) are live; reads that describe the **displayed frame** (registers, memory, the call stack shown) stay on the scrub view. The Call Stack banner and the Assembly header both show the halt PC while halted; while a recorded frame is shown the banner appends "viewing recorded frame #N" and the Assembly panel's reserved notice line reads "Showing recorded frame #N" (plus "(PC above is the live halt)" when halted).
+
+Not scrubbed, nothing changes.
 
 ### Tracepoint to Log
 

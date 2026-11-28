@@ -30,7 +30,10 @@
 #include "Sh2Dump.h"             // Data > Dump SH-2: the listing as text
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
 #include "CompareMarkers.h"      // Frame Memory Compare: the two timeline markers
-#include "ScrubState.h"          // frame-identity rules for the scrub view and staged edits
+#include "ScrubBar.h"            // what the scrub slider's handle and label show
+#include "DebuggerControl.h"     // which context a command acts on while scrubbed
+#include "FrameEdits.h"          // per-frame memory edits made on recorded frames
+#include "ScrubState.h"          // frame-identity rules for the scrub view
 #include "CaptureRepeatTracker.h" // which live captures showed nothing new (A1-7)
 #include "MemoryComparePanel.h"  // Frame Memory Compare: the diff window
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)
@@ -224,6 +227,27 @@ private:
     void StepInto(int cpu);
     void StepOver(int cpu);
     void StepOut(int cpu);
+    // Whether Step Out can work, and where it would run to: ONE decision for the click and for every
+    // control that offers it, taken from the LIVE halt (its registers, stack and shadow stack) however
+    // the panels are scrubbed, because that is what StepOut acts on. A recorded frame's own call stack
+    // is a heuristic about another time and must not decide.
+    struct StepOutDecision
+    {
+        bool           haveRegs = false;   // the halted CPU's live registers could be read
+        bool           canHalt = true;     // the emulator build can stop at the transient breakpoint
+        StepOutTarget  target;             // target.ok: Step Out will run to target.returnAddress
+        bool Ok() const { return canHalt && haveRegs && target.ok; }
+        const char* Why() const
+        { return !canHalt ? "This emulator build cannot halt at breakpoints" : target.why; }
+    };
+    StepOutDecision DecideStepOut();
+    // The decision as the panels draw it: taken once per UI frame (it rebuilds a call stack).
+    const StepOutDecision& StepOutOffer();
+    int             mStepOutOfferFrame = -1;
+    int             mStepOutOfferCpu = 0;       // the halt the cached decision was taken for
+    uint32_t        mStepOutOfferPc = 0;
+    bool            mStepOutOfferHalted = false;
+    StepOutDecision mStepOutOffer;
     int  SteppedCpu() const;
     // Install the transient step breakpoint at 'addr' and resume — the shared "run to a
     // computed address, then halt" used by StepOver/StepOut. The breakpoint itself is shared across
@@ -233,6 +257,25 @@ private:
     // Resume the halted emulator (shared by the toolbar, both run-control strips, Run to
     // Here, and the step helpers). No-op without live frame control.
     void Continue();
+    // The context every debugger / transport command acts on: the live emulator while the scrub view
+    // is the displayed context, else mContext (which then IS the live one). One place, see DebuggerControl.h.
+    se_context* ControlContext() const;
+    // The scrub state as the panels may ask it in ANY build: a build without live support (the
+    // viewer-only web build) has no recorder and no scrub view, so these answer "no" there instead of
+    // naming members that do not exist.
+#ifdef SE_ENABLE_LIVE
+    bool        ScrubViewUp() const { return mScrubContext && mContext == mScrubContext; }
+    bool        Scrubbing() const { return mbScrubbing; }
+    uint64_t    ScrubShownFrame() const { return mScrubShownFrame; }
+    uint64_t    LiveInstance() const { return mLiveConnGeneration; }
+#else
+    bool        ScrubViewUp() const { return false; }
+    bool        Scrubbing() const { return false; }
+    uint64_t    ScrubShownFrame() const { return 0; }
+    uint64_t    LiveInstance() const { return 0; }
+#endif
+    // The ONE place a run / step command leaves the scrub view: exactly what the transport's Play does.
+    void        LeaveScrubForRun();
     void SyncTracepointsToLive();           // push the tracepoint set to the emulator (v8)
     void DrainTraceEvents();                // pull fired tracepoint events into the Log
     void DrainHwEvents();                   // ask for and pull hardware events into the Log (live only)
@@ -341,6 +384,7 @@ private:
     void PumpCompareExport(IPlatform& platform);
     void CancelCompareExport();
     bool CompareRowVisible() const;
+    void DrawEditedFrameMarks(const ImVec2& sliderMin, const ImVec2& sliderMax, int frameCount);
     void DrawCompareMarkers(const ImVec2& sliderMin, const ImVec2& sliderMax, int frameCount);
     void DrawCompareRow();
     void CompareRowMetrics(char (&text)[2][64], float (&width)[3]) const;   // the row's labels and item widths
@@ -351,6 +395,7 @@ private:
     bool EmulatorStampsStates() const;   // protocol v22+: Play From Here is only safe against these
     int  PlayFromHereTarget() const;
     std::string PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHere) const;
+    void StepFrameForward(se_context* ctl);        // Next button and Step Frame: recorded entries, then the emulator
     void PlayFromScrubbedFrame(se_context* ctl);   // restore the scrubbed frame, drop what followed
     void DrawPlaceholder(const char* title, const char* note);
 
@@ -703,20 +748,25 @@ private:
     uint32_t         mLiveCaps = 0;               // the server's SE_LIVE_CAP_* word, refreshed every frame
     uint32_t         mLiveCapsLogged = ~0u;       // the word the missing-features note was last written for
     bool             mVdpPokeSupported = false;   // the server applies CRAM / frame-buffer pokes (v23 VDP writer)
-    bool             mScrubEdited = false;     // the scrub context shows edits that are no longer staged
-    StagedEdits      mStaged;                  // edits made against the scrubbed frame, tagged with its frame number
-    void DiscardPendingEdits();                // abandoned frame / ended session: nothing to replay
+    bool             mScrubEdited = false;     // the scrub context shows edits that are no longer stored
+    uint32_t         mScrubShownTimeline = 0;  // the timeline of mScrubShownFrame (with it, the frame's FrameKey)
+    // Edits made on recorded frames, one set per frame, kept until their frame leaves the recording
+    // (FrameEdits.h). Never discarded by Play, Pause, stepping or scrubbing.
+    FrameEditStore   mEdits;
+    FrameKey         ShownFrameKey() const { return FrameKey{ mScrubShownTimeline, mScrubShownFrame }; }
+    void ClearAllEdits();                      // the recording was cleared: every frame's edits go
+    bool RevertShownFrameEdits();              // discard the shown recorded frame's edits (true if it had any)
+    void ReconcileFrameEdits();                // drop the edits of frames the ring no longer holds
     int              mCallStackViewKey = -1;   // scrubbed frame the call stack was built for (-1 live)
     // Record an edit made against the scrubbed frame (routed from the recorder's write sink).
-    void RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
-    // Build the SE_LIVE_EDIT_* blob from mStaged (for the LST rewind payload).
+    size_t RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
     // Estimated recorder capacity at the current history length, in MB (per-frame average x
     // the configured frame budget). Shown as the "available" half of the footprint readout.
     double RecorderCapacityMB() const;
     // Recorder callback thunks (static; 'user' is this App).
     static void OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
                              uint32_t fullLen, uint32_t epoch, const uint8_t* payload, uint32_t len);
-    static void OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
+    static size_t OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
 
     // --- Patch feature: locate memory edits in game files, then apply them back ---
     // The Hex editor's "Find in game files" records where a memory selection lives on disc

@@ -36,9 +36,9 @@ Available only while paused, like the scrub slider.
    - a source is loaded and `mMemBackend.Connected()`;
    - not mid-restore: `mRestoreOutstanding == 0` and `!mRestoreUnconfirmable`;
    - when scrubbing: `mScrubShownIndex >= 0`, i.e. the last `Select` was not refused, and the shown
-     frame has **no staged edits** (`!mStaged.BelongsTo(mScrubShownFrame)`). Staged edits change what
-     the context serves without being part of the recorded frame, so the capture is refused rather
-     than silently including them.
+     frame has **no edits** (`!mEdits.Has(ShownFrameKey())`). A frame's edits change what the context
+     serves without being part of the recorded frame, so the capture is refused rather than silently
+     including them. Only that frame is refused: other frames' edits do not matter.
 2. **Which frame:** the frame the *displayed context* holds, not where the slider points. A
    transport action earlier in the same UI frame can already have moved `mScrubIndex` while panels
    still draw the old frame; `RecordPendingEdit` documents the same hazard. The frame number is
@@ -110,15 +110,16 @@ The view stays on that frame afterwards. What is shown is a frame, not an index,
 the slider, instead of selecting by index again and sliding onto a neighbour as the ring evicts. Only an
 explicit seek (slider, step buttons, another navigation) or the frame leaving the ring changes it.
 
-Staged scrub edits are keyed the same way: `StagedEdits` carries one frame number for the whole batch,
-and `Record` on another frame drops the old batch instead of retagging it, so Play From Here can never replay frame 11's edit onto frame 12.
+Scrub edits are keyed by frame too, and by timeline: `FrameEditStore` (`FrameEdits.h`) holds one edit set per
+`FrameKey` = (timeline, frame number), so an edit on frame 12 neither joins nor clears frame 11's, and a
+frame number a rewind reuses on a new timeline finds none of the replaced frame's edits.
 
-The invariant the two share: the scrub context shows edits if and only if they are staged for replay.
-Navigating to the frame already on screen is therefore a no-op (`PlanScrub` says Keep), not a reload,
-so an edit made on it stays both displayed and staged. Any reload rebuilds the context from the
-recording, so it clears the staged batch with it; and staged edits discarded while the context still
-shows them (Play, an abandoned frame) set `mScrubEdited`, which makes the next refresh rebuild the frame
-rather than keep the edited context.
+The invariant: the context shows a frame's recorded bytes plus that frame's own edits. Navigating to the
+frame already on screen is a no-op (`PlanScrub` says Keep). Any rebuild lays the frame's stored edits back
+over the recording (`FrameRecorder::OverlaySelected`, applied to the scratch before `se_begin_frame`), so
+leaving and returning shows them again. Edits leave the store only with their frame (Play From Here
+truncation, ring eviction, recording cleared); when that happens to the frame still on screen,
+`mScrubEdited` makes the next refresh rebuild it without them.
 
 ## Opening the panel
 
@@ -139,8 +140,8 @@ The transport bar is part of `App` and is not unit-testable in isolation. Covera
   after eviction shifts indexes, 0 after a refused `Select`), `SelectFrame` / `IndexOfFrame` across
   eviction, and a scrub simulation of same-frame navigation and edit consistency
 - `ScrubStateTests.cpp`: `PlanScrub` (an unmoved view follows its frame, navigation persists, an evicted
-  target is refused, same-frame navigation keeps the edited context, forced reload) and `StagedEdits`
-  (one frame tag per batch, never crossing frames)
+  target is refused, same-frame navigation keeps the edited context, forced reload) ; the per-frame edit
+  rules live in `FrameEditsTests.cpp`
 - the transport bar and its context menu live in `App` and are checked by hand (an entry in
   `Docs/FunctionalityVerification/`): marking at the live head while paused, marking a scrubbed
   frame, marking refused with pending edits, emulator restart, and Play From Here

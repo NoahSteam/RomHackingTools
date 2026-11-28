@@ -96,6 +96,18 @@ public:
     // Called by the App each frame from the live stop state.
     void SetBreakpointStop(bool active, int cpu, uint32_t pc)
     { mBpStopActive = active; mBpStopCpu = cpu; mBpStopPc = pc; }
+    // Whether Step Out is offered in the header, and the reason when it is not. The App decides, from the
+    // live halt, so this header and the Call Stack strip cannot disagree. Defaults to offered.
+    // 'returnAddress' is named in the tooltip when 'ok', as the Call Stack strip's does.
+    void SetStepOutOffer(bool ok, const char* why, uint32_t returnAddress = 0)
+    { mStepOutOk = ok; mStepOutWhy = why; mStepOutReturn = returnAddress; }
+    // Drop the notice line's text: what it reported (an in-place write) has just been undone.
+    void ClearNotice() { mNotice.clear(); mNoticeLevel = 0; }
+
+    // The recorded frame number the panel is showing instead of the live state (0 = the live state).
+    // While set, the idle notice line says so: the PC beside the CPU selector may be the live halt's
+    // while the listing and registers are that frame's.
+    void SetRecordedFrame(unsigned long long frame) { mRecordedFrame = frame; }
 
     // Jump the view to 'addr' on 'cpu' (the Log panel's "Jump to Assembly").
     void GoTo(int cpu, uint32_t addr);
@@ -145,8 +157,12 @@ private:
 
     // Live breakpoint-hit state (set by SetBreakpointStop): tint the halted row red.
     bool     mBpStopActive = false;
+    bool     mStepOutOk = true;            // see SetStepOutOffer
+    const char* mStepOutWhy = nullptr;
+    uint32_t mStepOutReturn = 0;
     int      mBpStopCpu = 0;
     uint32_t mBpStopPc = 0;
+    unsigned long long mRecordedFrame = 0;
     bool     mAutoRefresh = true;      // re-read the code bytes every frame (live)
     // The address the view is framed on -- the PC while following, else the last navigation
     // target. It picks which captured region the list spans (see AsmCodeWindow.h); the list

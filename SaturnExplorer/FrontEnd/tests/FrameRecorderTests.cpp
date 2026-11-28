@@ -11,7 +11,8 @@
 #include "FrameRecorder.h"
 
 #include "FrameLz.h"
-#include "ScrubState.h"      // PlanScrub + StagedEdits, driven here against the real recorder
+#include "FrameEdits.h"      // the per-frame edit store, driven here against the real recorder
+#include "ScrubState.h"      // PlanScrub, likewise
 
 #include <algorithm>
 #include <chrono>
@@ -51,9 +52,9 @@ se_context* MakeContext()
 // Capture one frame and block until the worker publishes it — detected by the newest
 // resident frame number reaching 'frameNo' (robust to eviction, where Count() may not grow).
 // Capturing one-at-a-time keeps the bounded raw queue from dropping frames.
-bool CaptureFrame(FrameRecorder& r, se_context* ctx, uint64_t frameNo)
+bool CaptureFrame(FrameRecorder& r, se_context* ctx, uint64_t frameNo, uint32_t timeline = 0)
 {
-    r.Capture(ctx, frameNo);
+    r.Capture(ctx, frameNo, timeline);
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     for (;;)
     {
@@ -65,8 +66,25 @@ bool CaptureFrame(FrameRecorder& r, se_context* ctx, uint64_t frameNo)
 }
 
 // The scrub view as App drives it, against the real recorder and a real scrub context. Mirrors
-// App::RefreshScrubContext and App::DiscardPendingEdits: the point of the tests that use it is the
-// invariant they share -- the context shows edits if and only if they are staged for replay.
+// App::RefreshScrubContext and App::ReconcileFrameEdits: the point of the tests that use it is the
+// invariant they share -- the frame on screen shows its own edits, and only its own, wherever the user
+// came from.
+// What the scrub context shows at a bus address (or sound-RAM offset): the "original" a write replaces.
+void ReadShown(se_context* ctx, bool isSound, uint32_t addr, uint8_t* out, size_t n)
+{
+    struct W { se_vram_kind kind; uint32_t bus; uint32_t size; };
+    static const W kWindows[] = {
+        { SE_VRAM_KIND_VDP1_VRAM, 0x05C00000u, 0x80000u },  { SE_VRAM_KIND_VDP1_FB,   0x05C80000u, 0x40000u },
+        { SE_VRAM_KIND_VDP2_VRAM, 0x05E00000u, 0x80000u },  { SE_VRAM_KIND_CRAM,      0x05F00000u, 0x1000u },
+        { SE_VRAM_KIND_WRAM_LOW,  0x00200000u, 0x100000u }, { SE_VRAM_KIND_WRAM_HIGH, 0x06000000u, 0x100000u },
+    };
+    std::fill(out, out + n, uint8_t(0));
+    if (!ctx) return;
+    if (isSound) { se_read_vram(ctx, SE_VRAM_KIND_SOUND_RAM, addr, out, n); return; }
+    for (const W& w : kWindows)
+        if (addr >= w.bus && addr - w.bus < w.size) { se_read_vram(ctx, w.kind, addr - w.bus, out, n); return; }
+}
+
 struct ScrubSim
 {
     FrameRecorder& rec;
@@ -75,17 +93,22 @@ struct ScrubSim
     uint64_t       shownFrame = 0, target = 0;
     bool           edited = false;
     int            reloads = 0;
-    StagedEdits    staged;
+    uint32_t       shownTimeline = 0;
+    FrameEditStore store;
 
     explicit ScrubSim(FrameRecorder& r) : rec(r)
     {
-        rec.SetEditSink(this, [](void* u, int isSound, uint32_t addr, const uint8_t* b, size_t n)
+        rec.SetEditSink(this, [](void* u, int isSound, uint32_t addr, const uint8_t* b, size_t n) -> size_t
         {
             ScrubSim* self = static_cast<ScrubSim*>(u);
-            self->staged.Record(self->shownFrame, isSound != 0, addr, b, n);
+            std::vector<uint8_t> was(n);
+            ReadShown(self->ctx, isSound != 0, addr, was.data(), n);   // before the context takes the write
+            return self->store.Record(self->Key(), isSound != 0, addr, b, n, was.data());
         });
     }
     ~ScrubSim() { if (ctx) se_destroy(ctx); }
+    FrameKey Key() const { return FrameKey{ shownTimeline, shownFrame }; }
+    const FrameEdits* Shown() const { return store.Find(Key()); }
 
     bool Refresh()
     {
@@ -107,7 +130,8 @@ struct ScrubSim
             index = plan.index;
         }
         if (!selected && !rec.Select(static_cast<size_t>(index), &ds)) return false;
-        staged.Clear();
+        const FrameKey built{ rec.SelectedFrameTimeline(), rec.SelectedFrameNumber() };
+        if (const FrameEdits* e = store.Find(built)) rec.OverlaySelected(*e);
         edited = false;
         if (!ctx)
         {
@@ -118,15 +142,17 @@ struct ScrubSim
         }
         se_begin_frame(ctx);
         shownIndex = index;
-        shownFrame = rec.SelectedFrameNumber();
+        shownFrame = built.frame;
+        shownTimeline = built.timeline;
         ++reloads;
         return true;
     }
 
-    void Discard()   // App::DiscardPendingEdits
+    void Reconcile()   // App::ReconcileFrameEdits
     {
-        if (!staged.Empty()) edited = true;
-        staged.Clear();
+        const bool shownHad = store.Has(Key());
+        store.Retain([this](const FrameKey& k) { return rec.HasFrame(k.frame, k.timeline); });
+        if (shownHad && !store.Has(Key())) edited = true;
     }
 
     uint8_t Displayed(uint32_t offset) const
@@ -444,8 +470,8 @@ int main()
         se_begin_frame(vctx);
         FrameRecorder r5;
         r5.Configure(10);
-        r5.SetEditSink(nullptr, [](void*, int isSound, uint32_t addr, const uint8_t* b, size_t n)
-                       { sink.push_back({isSound, addr, std::vector<uint8_t>(b, b + n)}); });
+        r5.SetEditSink(nullptr, [](void*, int isSound, uint32_t addr, const uint8_t* b, size_t n) -> size_t
+                       { sink.push_back({isSound, addr, std::vector<uint8_t>(b, b + n)}); return n; });
         Check(CaptureFrame(r5, vctx, 1), "captured a frame to edit");
         se_data_source ds{};
         Check(r5.Select(0, &ds), "selected the frame to edit");
@@ -639,9 +665,9 @@ int main()
         se_destroy(vctx);
     }
 
-    // --- Navigating to the frame already shown must not split the display from the replay batch ---
-    // Reloading the shown frame rebuilds the context from the recording (the displayed edit vanishes)
-    // while the staged edit stayed and Play From Here would still replay it.
+    // --- Edits belong to the frame they were made on, however the user moves ---
+    // The display of a frame is its recording plus that frame's own edits, rebuilt from the store each
+    // time the frame is built: moving away neither drops them nor lets them show on another frame.
     {
         se_test::State st(kVdp1VramSize);
         for (size_t i = 0; i < st.vdp1.size(); ++i) st.vdp1[i] = PatternByte(i);
@@ -652,52 +678,130 @@ int main()
         for (uint64_t fn = 10; fn <= 12; ++fn) CaptureFrame(rEdit, vctx, fn);
         ScrubSim sim(rEdit);
         const uint32_t kOff = 5;
-        const uint8_t orig = PatternByte(kOff), kEdit = 0xFF;
-        auto consistent = [&](const char* when)
-        {
-            const bool shows = sim.Displayed(kOff) == kEdit;
-            char msg[160];
-            std::snprintf(msg, sizeof(msg), "%s: the display shows the edit iff it is staged for replay", when);
-            Check(shows == !sim.staged.Empty(), msg);
-        };
+        const uint8_t orig = PatternByte(kOff), kEdit = 0xFF, kEdit2 = 0x7E;
 
         sim.index = 2;
         Check(sim.Refresh() && sim.shownFrame == 12 && sim.Displayed(kOff) == orig, "showing frame 12, unedited");
         Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &kEdit, 1) == 1, "the edit is accepted");
-        Check(sim.Displayed(kOff) == kEdit && sim.staged.BelongsTo(12) && sim.staged.Pokes().size() == 1 &&
-                  sim.staged.Pokes()[0].addr == 0x05C00000u + kOff,
-              "frame 12 shows the edit and it is staged against frame 12");
-        consistent("after the edit");
+        Check(sim.Displayed(kOff) == kEdit && sim.store.Has(sim.Key()) && sim.Shown()->Pokes().size() == 1 &&
+                  sim.Shown()->Pokes()[0].addr == 0x05C00000u + kOff,
+              "frame 12 shows the edit and it is stored against frame 12");
 
         const int reloads = sim.reloads;
         sim.target = 12;   // Go to frame 12, which is already shown
         Check(sim.Refresh() && sim.reloads == reloads, "navigating to the shown frame does not reload it");
-        Check(sim.Displayed(kOff) == kEdit && sim.staged.BelongsTo(12), "so the edit stays displayed and staged");
-        consistent("after navigating to the shown frame");
+        Check(sim.Displayed(kOff) == kEdit, "so the edit stays displayed");
 
-        // Leaving the frame drops its edits with it, and coming back shows the recording.
-        sim.index = 0;
-        Check(sim.Refresh() && sim.shownFrame == 10 && sim.staged.Empty() && sim.Displayed(kOff) == orig,
-              "seeking to another frame drops the edit and shows that frame's recorded bytes");
+        // Frame 11 shows its own recording, not frame 12's edit.
+        sim.index = 1;
+        Check(sim.Refresh() && sim.shownFrame == 11 && sim.Displayed(kOff) == orig,
+              "another frame shows its recorded bytes, not frame 12's edit");
+        Check(sim.store.Has(FrameKey{ 0, 12 }), "and frame 12 keeps its edit while another frame is shown");
+        // ...and its own edit, independently.
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &kEdit2, 1) == 1 && sim.Displayed(kOff) == kEdit2,
+              "frame 11 takes an edit of its own");
+        Check(sim.store.FrameCount() == 2, "two frames hold edits at once");
+        // Back to 12 (and again to 10, which has none), by index and by a named navigation.
         sim.index = 2;
-        Check(sim.Refresh() && sim.shownFrame == 12 && sim.staged.Empty() && sim.Displayed(kOff) == orig,
-              "and coming back shows the recorded frame, with nothing staged");
-        consistent("after leaving and returning");
+        Check(sim.Refresh() && sim.shownFrame == 12 && sim.Displayed(kOff) == kEdit,
+              "returning to frame 12 shows its edit again (not frame 11's)");
+        sim.index = 0;
+        Check(sim.Refresh() && sim.shownFrame == 10 && sim.Displayed(kOff) == orig, "an unedited frame shows the recording");
+        sim.target = 11;
+        Check(sim.Refresh() && sim.shownFrame == 11 && sim.Displayed(kOff) == kEdit2,
+              "a navigation by frame number shows that frame's edit too");
 
-        // Staged edits discarded while the context still shows them (Play, an abandoned frame): the
-        // frame is rebuilt from the recording before it is shown again.
-        se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &kEdit, 1);
-        sim.Discard();
-        Check(sim.staged.Empty() && sim.Displayed(kOff) == kEdit, "the context still shows a discarded edit until it is rebuilt");
-        Check(sim.Refresh() && sim.Displayed(kOff) == orig && sim.staged.Empty(), "the next refresh rebuilds it from the recording");
-        consistent("after discarding the edit");
+        // An edit made on 12 does not disturb frame 11's, and replacing a byte replaces it.
+        sim.index = 2;
+        sim.Refresh();
+        const uint8_t third = 0x31;
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &third, 1) == 1 && sim.Shown()->Pokes().size() == 1,
+              "editing the same byte again replaces the edit rather than adding to it");
+        sim.index = 1;
+        sim.Refresh();
+        Check(sim.Displayed(kOff) == kEdit2, "frame 11's edit is untouched by edits on frame 12");
 
-        // The same with a navigation to the shown frame in between.
-        se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &kEdit, 1);
-        sim.Discard();
+        // The edits survive the context itself being thrown away (Play, Play From Here, a new context).
+        se_destroy(sim.ctx);
+        sim.ctx = nullptr;
+        sim.shownIndex = -1; sim.shownFrame = 0;
+        sim.index = 2;
+        Check(sim.Refresh() && sim.Displayed(kOff) == third, "a fresh context for frame 12 shows its edit");
+
+        // Dropping the shown frame's edits from the store (its frame left the recording) while the
+        // context still shows them: the next refresh rebuilds it without them.
+        sim.store.Clear();
+        sim.edited = true;
+        Check(sim.Displayed(kOff) == third, "the context still shows an edit the store dropped until it is rebuilt");
+        Check(sim.Refresh() && sim.Displayed(kOff) == orig, "the next refresh rebuilds it from the recording");
         sim.target = 12;
-        Check(sim.Refresh() && sim.Displayed(kOff) == orig && sim.staged.Empty(), "discarded edits are not kept by a same-frame navigation either");
-        consistent("after discard + same-frame navigation");
+        Check(sim.Refresh(), "navigation to the shown frame still works afterwards");
+
+        // Writing the RECORDED value back removes the edit, and a no-change write is no edit. The frame
+        // is rebuilt from the recording with its edit laid over the scratch first (as App does), because
+        // that is where a recorder-scratch-based original would have been wrong.
+        sim.store.Clear();
+        sim.edited = true;
+        sim.Refresh();
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &kEdit, 1) == 1 && sim.store.Has(sim.Key()),
+              "write-back: an edit is made on frame 12");
+        sim.index = 1; sim.Refresh();
+        sim.index = 2; sim.Refresh();   // away and back: the edit is now overlaid on the scratch
+        Check(sim.Displayed(kOff) == kEdit && sim.Shown() && sim.Shown()->ByteCount() == 1, "write-back: it shows again after leaving and returning");
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &orig, 1) == 1 && sim.Displayed(kOff) == orig &&
+                  !sim.store.Has(sim.Key()) && !sim.store.Any(),
+              "write-back: typing the recorded value back shows it and leaves the frame unedited");
+        // The scratch still carries the old overlay; an edit made now must still remember the RECORDED byte.
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &third, 1) == 1 && sim.Shown() &&
+                  sim.Shown()->Pokes()[0].originals[0] == orig,
+              "write-back: a later edit's original is the recorded byte, not the removed edit");
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff, &orig, 1) == 1 && !sim.store.Any(),
+              "write-back: and writing the recorded value back again unedits the frame again");
+        const uint8_t same = PatternByte(kOff + 1);
+        Check(se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, kOff + 1, &same, 1) == 1 && !sim.store.Any(),
+              "no change: committing a byte's recorded value as it stands marks nothing edited");
+        se_destroy(vctx);
+    }
+
+    // --- Eviction and truncation take a frame's edits with it; a reused number does not inherit them ---
+    {
+        se_test::State st(kVdp1VramSize);
+        for (size_t i = 0; i < st.vdp1.size(); ++i) st.vdp1[i] = PatternByte(i);
+        se_context* vctx = se_test::CreateContext(st);
+        se_begin_frame(vctx);
+        FrameRecorder rr;
+        rr.Configure(3);
+        for (uint64_t fn = 1; fn <= 3; ++fn) CaptureFrame(rr, vctx, fn, 7);   // timeline 7
+        ScrubSim sim(rr);
+        const uint8_t kEdit = 0xEE;
+        for (int idx = 0; idx < 3; ++idx)
+        {
+            sim.index = idx;
+            sim.Refresh();
+            se_write_vram(sim.ctx, SE_VRAM_KIND_VDP1_VRAM, 9, &kEdit, 1);
+        }
+        Check(sim.store.FrameCount() == 3 && sim.store.Has(FrameKey{ 7, 1 }), "three frames edited, keyed by timeline and number");
+        Check(!sim.store.Has(FrameKey{ 0, 1 }) && !sim.store.Has(FrameKey{ 8, 1 }), "another timeline's frame 1 has none");
+
+        CaptureFrame(rr, vctx, 4, 7);   // the ring (3) evicts frame 1
+        sim.Reconcile();
+        Check(!sim.store.Has(FrameKey{ 7, 1 }) && sim.store.Has(FrameKey{ 7, 2 }) && sim.store.FrameCount() == 2,
+              "an evicted frame's edits go and only its");
+
+        // A rewind to frame 3: 4 is discarded, then a new timeline replays 4 and 5.
+        rr.TruncateAfter(1);   // keeps frames 2, 3
+        sim.Reconcile();
+        sim.store.DropAfter(3);
+        CaptureFrame(rr, vctx, 4, 8);
+        CaptureFrame(rr, vctx, 5, 8);
+        sim.Reconcile();
+        Check(!sim.store.Has(FrameKey{ 7, 4 }) && !sim.store.Has(FrameKey{ 8, 4 }),
+              "the number the new timeline reuses holds no edits");
+        // Even if nobody had dropped it: the old key does not match the ring's frame 4 of timeline 8.
+        const uint8_t kWas = 0;
+        sim.store.Record(FrameKey{ 7, 4 }, false, 0x05C00000u, &kEdit, 1, &kWas);
+        sim.Reconcile();
+        Check(!sim.store.Has(FrameKey{ 7, 4 }), "a stale key for a reused number is reconciled away");
         se_destroy(vctx);
     }
 

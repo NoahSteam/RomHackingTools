@@ -12,6 +12,8 @@
 
 #include "Debug/BytePatternSearch.h"
 #include "Debug/ShiftJis.h"
+#include "PanelWidgets.h"   // FixedStatusLine
+#include "Debug/WriteDestText.h"
 #include "SaturnRegions.h"
 
 namespace sfe
@@ -217,6 +219,7 @@ void HexEditorPanel::FindSelectionInRam(IMemoryBackend& backend, int64_t lo, int
 void HexEditorPanel::CancelEdit()
 {
     mEditAddr = -1;
+    mEditSeed = -1;
     mEditFlow = false;
     mEditFocus = false;
     mEditBuf[0] = mEditBuf[1] = '\0';
@@ -281,6 +284,36 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         return;
     }
 
+    // On a recorded frame: what this frame has staged. A reserved line (FixedStatusLine) for as long as a
+    // recorded frame is up, so the first edit does not push the grid down; per frame, because each frame
+    // keeps its own edits and another frame's are not shown here.
+    {
+        const IMemoryBackend::FrameEditSummary fe = backend.RecordedFrameEdits();
+        if (fe.recorded)
+        {
+            char note[96] = "";
+            if (fe.bytes)
+                std::snprintf(note, sizeof(note), "This frame has %zu edited byte%s. Play From Here applies %s.",
+                              fe.bytes, fe.bytes == 1 ? "" : "s", fe.bytes == 1 ? "it" : "them");
+            // The line says what; the hover says what that means. "Revert" sits at its right end, on the
+            // same line (a small button is exactly a text line tall), so the line's height never changes
+            // and the text is cut short to leave it room.
+            const bool canRevert = fe.bytes != 0;
+            const float revertW = canRevert ? ImGui::CalcTextSize("Revert").x + ImGui::GetStyle().FramePadding.x * 2.0f : 0.0f;
+            FixedStatusLine(note, ImGui::GetColorU32(ui::Color(ImVec4(0.92f, 0.35f, 0.30f, 1.0f), ImVec4(0.647f, 0.114f, 0.141f, 1.0f))),
+                            fe.bytes ? "Edits stay on this frame however you scrub. Only Play From Here on this frame "
+                                       "sends them to the game. They are discarded when this frame leaves the recording."
+                                     : "",
+                            canRevert ? revertW + ImGui::GetStyle().ItemSpacing.x : 0.0f);
+            if (canRevert)
+            {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Revert##frameedits")) backend.RevertRecordedFrameEdits();
+                ImGui::SetItemTooltip("Discard this frame's edits and show its recorded bytes again.");
+            }
+        }
+    }
+
     // --- Region tabs (first is "All"). ---
     const std::vector<Region>& regs = Regions();
     if (ImGui::BeginTabBar("regions", ImGuiTabBarFlags_FittingPolicyScroll))
@@ -343,6 +376,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         mChangeAge[addr] = 1.0f;
         mModifiedFlash = 1.5f;
         mModifiedDest = backend.WriteDestination(addr);
+        mModifiedFrame = backend.RecordedFrameEdits().frame;   // named now: the notice outlives a scrub to another frame
         mWriteError.clear();
         return true;
     };
@@ -416,6 +450,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                 mEditAddr = (int64_t)addr; mEditFocus = true;
                 mEditFlow = false;   // seed the current value; AutoSelectAll replaces it
                 std::snprintf(mEditBuf, sizeof(mEditBuf), "%02X", v);
+                mEditSeed = v;
             }
             else if (ImGui::IsMouseClicked(0))
             {
@@ -604,9 +639,15 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                         {
                             unsigned val = 0;
                             bool wrote = true;   // nothing typed is not a refusal
-                            if (mEditBuf[0] && std::sscanf(mEditBuf, "%x", &val) == 1)
+                            // The box still holds the byte it was opened on: nothing was changed, so nothing
+                            // is written -- no poke to a live emulator (which would also claim "Queued for
+                            // emulator"), no edit on a recorded frame, no flash.
+                            const bool unchanged = mEditSeed >= 0 && mEditBuf[0] &&
+                                                   std::sscanf(mEditBuf, "%x", &val) == 1 && (int)(val & 0xFF) == mEditSeed;
+                            if (!unchanged && mEditBuf[0] && std::sscanf(mEditBuf, "%x", &val) == 1)
                                 wrote = writeByte(addr, val);
                             mEditAddr = -1;
+                            mEditSeed = -1;
                             // Enter moves to the next byte so you can keep going down the row; a
                             // click-away just stops. A refused byte keeps the caret.
                             const int64_t next = (int64_t)addr + 1;
@@ -795,18 +836,19 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                 ImGui::SameLine(); ImGui::Text("| U32: %08X", u32);
             }
         }
-        if (mModifiedFlash > 0.0f)
+        // "Kept on recorded frame" is only true while the frame still holds an edit: after a Revert, or a
+        // write that put the recorded value back, nothing is kept and the note would be wrong.
+        const bool staleKept = mModifiedDest == IMemoryBackend::WriteDest::Staged &&
+                               backend.RecordedFrameEdits().recorded && backend.RecordedFrameEdits().bytes == 0;
+        if (mModifiedFlash > 0.0f && !staleKept)
         {
             ImGui::SameLine();
             // "Queued" is as far as the panel can know for a live source: the emulator applies the poke
             // at its next frame gate and does not confirm it here. A scrubbed frame's edit is held for
             // Play From Here and no emulator has it yet; one the source never sees changes this view
             // only. Each says which.
-            using Dest = IMemoryBackend::WriteDest;
             ImGui::TextColored(ui::Color(ImVec4(0.92f, 0.35f, 0.30f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1.0f)),
-                               mModifiedDest == Dest::Emulator ? "Queued for emulator"
-                             : mModifiedDest == Dest::Staged   ? "Staged for Play From Here"
-                                                               : "Modified (this view only)");
+                               "%s", WriteDestText(mModifiedDest, mModifiedFrame).c_str());
         }
         if (!mWriteError.empty())
             ImGui::TextColored(ui::Color(ImVec4(0.95f, 0.45f, 0.35f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1.0f)), "Not written: %s", mWriteError.c_str());
