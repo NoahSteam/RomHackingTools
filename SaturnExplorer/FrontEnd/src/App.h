@@ -239,7 +239,20 @@ private:
     // The context every debugger / transport command acts on: the live emulator while the scrub view
     // is the displayed context, else mContext (which then IS the live one). One place, see DebuggerControl.h.
     se_context* ControlContext() const;
+    // The scrub state as the panels may ask it in ANY build: a build without live support (the
+    // viewer-only web build) has no recorder and no scrub view, so these answer "no" there instead of
+    // naming members that do not exist.
+#ifdef SE_ENABLE_LIVE
     bool        ScrubViewUp() const { return mScrubContext && mContext == mScrubContext; }
+    bool        Scrubbing() const { return mbScrubbing; }
+    uint64_t    ScrubShownFrame() const { return mScrubShownFrame; }
+    uint64_t    LiveInstance() const { return mLiveConnGeneration; }
+#else
+    bool        ScrubViewUp() const { return false; }
+    bool        Scrubbing() const { return false; }
+    uint64_t    ScrubShownFrame() const { return 0; }
+    uint64_t    LiveInstance() const { return 0; }
+#endif
     // The ONE place a run / step command leaves the scrub view: exactly what the transport's Play does.
     void        LeaveScrubForRun();
     void SyncTracepointsToLive();           // push the tracepoint set to the emulator (v8)

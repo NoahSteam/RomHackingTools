@@ -3271,7 +3271,7 @@ void App::DrawAssembly()
     mAssemblyPanel.SetOfferDecompile(true);
 #endif
     mAssemblyPanel.SetBreakpointStop(mStepHalt.HaltActive(), mStepHalt.HaltCpu(), mStepHalt.HaltPc());
-    mAssemblyPanel.SetRecordedFrame(sfe::RecordedFrameShown(ScrubViewUp() && mbScrubbing, mScrubShownFrame));
+    mAssemblyPanel.SetRecordedFrame(sfe::RecordedFrameShown(ScrubViewUp() && Scrubbing(), ScrubShownFrame()));
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mActions, mWatchPanel, mbLiveSource, req);
     // An in-place edit was written: the Log keeps the outcome (destination, old and new value, any warning) after the
     // panel's own one-line notice has faded.
@@ -4668,7 +4668,7 @@ void App::UpdateProfiler()
     // which timeline they are (se_live_captured_identity); one that does not leaves the tracker to
     // wait out the server's snapshot ring after a change seen on the stream rather than guess.
     {
-        const bool scrubbed = mScrubContext && mContext == mScrubContext;
+        const bool scrubbed = ScrubViewUp();
         uint32_t streamTimeline = 0;
         uint64_t streamFrame = 0;
         mProfiler.LatestIdentity(&streamTimeline, &streamFrame);
@@ -4680,11 +4680,11 @@ void App::UpdateProfiler()
 #endif
         {
             src.sourceId = mMemBackend.SourceId();
-            src.instance = mLiveConnGeneration;
+            src.instance = LiveInstance();
             src.streamTimeline = streamTimeline;
         }
         // A live view has no displayed frame number of its own, only a scrub supplies one.
-        src.frame = scrubbed ? mScrubShownFrame : 0;
+        src.frame = scrubbed ? ScrubShownFrame() : 0;
         const bool mayAccept = mPoolTracker.BeginSample(src);
         if (mPoolTracker.Count() == 0) mPoolSampleCountdown = 0;   // re-primed: sample now, don't show an empty tab
         if (!mayAccept) return;   // waiting out a timeline change this capture cannot confirm
@@ -4737,6 +4737,7 @@ void App::DrawProfiler()
     };
     // Scrubbed back: the Profiler shows that frame's record, found by identity. The timeline comes
     // from the recorded frame (0 = unknown, which can never match).
+#ifdef SE_ENABLE_LIVE   // no recorder, so no scrubbed frame, without live support
     if (mScrubContext && mContext == mScrubContext && mScrubShownFrame != 0)
     {
         host.scrubbed = true;
@@ -4745,6 +4746,7 @@ void App::DrawProfiler()
         host.scrubTimeline = at >= 0 ? mRecorder.FrameTimeline(static_cast<size_t>(at)) : 0u;
         host.scrubIdentityKnown = host.scrubTimeline != 0;
     }
+#endif
     if (mProfilerPanel.Draw(mProfiler, mPoolTracker, host))
     {
         mProfiler.Clear();
@@ -5115,7 +5117,7 @@ void App::DrawCallStack(IPlatform& platform)
         ImGui::Text("%s SH-2", mCallStackCpu ? "Slave" : "Master");
         // While a recorded frame is shown, the banner still describes the HALT: its reason and its live
         // PC, as the Assembly header does, not the PC the recorded frame's registers hold.
-        const unsigned long long recorded = sfe::RecordedFrameShown(ScrubViewUp() && mbScrubbing, mScrubShownFrame);
+        const unsigned long long recorded = sfe::RecordedFrameShown(ScrubViewUp() && Scrubbing(), ScrubShownFrame());
         if (haveR)
         {
             const bool haltedHere = mStepHalt.HaltActive() && mCallStackCpu == mStepHalt.HaltCpu();
@@ -5659,7 +5661,7 @@ void App::StepInto(int cpu)
 #ifdef SE_ENABLE_LIVE
     se_live_step_insn(&mDataSource, 1);
 #endif
-    if (sfe::PlanCommand(sfe::DebugCommand::StepInto, true, mbScrubbing || ScrubViewUp()).leaveScrub)
+    if (sfe::PlanCommand(sfe::DebugCommand::StepInto, true, Scrubbing() || ScrubViewUp()).leaveScrub)
         LeaveScrubForRun();   // moving the game on ends the scrub, as Play does
     mbPaused = false;
     mStepHalt.Resumed();
