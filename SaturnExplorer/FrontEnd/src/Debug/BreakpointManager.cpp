@@ -103,6 +103,49 @@ uint64_t BreakpointManager::AddMemory(uint32_t addr, uint32_t size, BpKind rw)
     return b.id;
 }
 
+EditResult BreakpointManager::Edit(uint64_t id, BpKind kind, uint32_t address, uint32_t size)
+{
+    Breakpoint* self = nullptr;
+    for (Breakpoint& b : mBps)
+        if (b.id == id) { self = &b; break; }
+    if (!self) return EditResult::NotFound;
+
+    const bool exec = kind == BpKind::Execution;
+    if (exec)
+    {
+        size = 2;
+        if (address & 1u) return EditResult::Invalid;
+    }
+    else
+    {
+        if (size == 0) return EditResult::Invalid;
+        if (static_cast<uint64_t>(address) + size > 0x100000000ull) return EditResult::Invalid;
+    }
+
+    for (const Breakpoint& o : mBps)
+    {
+        if (o.id == id) continue;
+        if (exec ? (o.kind == BpKind::Execution && o.address == address)
+                 : (o.kind == kind && o.address == address && o.size == size))
+            return EditResult::Duplicate;
+    }
+
+    const bool changed = self->kind != kind || self->address != address || self->size != size;
+    if (!changed) return EditResult::Ok;
+
+    if (self->kind != kind)
+    {
+        if (!exec) self->condition.clear();
+        else       self->logAccess = false;
+    }
+    self->kind = kind;
+    self->cpu = 0;   // execution is shared (see header); memory BPs have no per-CPU arm yet
+    self->address = address;
+    self->size = size;
+    ++mGeneration;
+    return EditResult::Ok;
+}
+
 void BreakpointManager::SetEnabled(uint64_t id, bool enabled)
 {
     for (Breakpoint& b : mBps)

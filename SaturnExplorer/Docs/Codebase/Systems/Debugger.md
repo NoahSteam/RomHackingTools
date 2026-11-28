@@ -54,6 +54,10 @@ Not scrubbed, nothing changes.
 
 `DrainTraceEvents` formats registers captured **at the hit**, but memory dereferences use the current frontend snapshot. This timing distinction is real and must survive any new display or export. For unconditional tracepoints on server v21+, repeat filtering happens in the emulator; guarded or older-server actions are counted by `AcceptHit`. Do not filter Every-N a second time. Enabled tracepoints are serialized first when the descriptor limit is exceeded; App warns about dropped descriptors.
 
+### Editing a breakpoint
+
+Right-clicking a row in the Breakpoints panel (`App::DrawBreakpoints`) offers **Edit...** and **Delete**. The row target is a `RowSelectable` in the first cell (so plain text cells respond and the checkbox, guard box and buttons stay clickable; it covers the row's first frame-height band). **Edit...** opens a modal with Type, Address (hex) and Byte Count (disabled for Execution); parsing lives in the ImGui-free [Debug/BreakpointEdit.h](../../../FrontEnd/src/Debug/BreakpointEdit.h) (`ParseBpAddress`, `ParseBpByteCount`; a leading zero in a count is decimal). `BreakpointManager::Edit` applies it in place, keeping id, enabled state and list position, and returns `EditResult` (`Ok`/`NotFound`/`Duplicate`/`Invalid`); a rejected edit changes nothing, a no-op edit does not bump `Generation()`. Changing to a memory kind clears `condition`; changing to Execution clears `logAccess`. Edit is disabled for a `logAccess` watchpoint, which belongs to the Find What Accesses panel. The popup closes itself if its breakpoint disappears.
+
 ### Watch and assembly navigation
 
 `WatchPanel::Draw` schedules a roughly 10 Hz `Refresh`. It resolves changed address text, batches enabled memory reads through `IMemoryBackend`, then calls `FormatWatchValue` for type interpretation and change highlighting. `SimpleExpressionResolver` accepts a base address plus at most one numeric `+`/`-` offset and rejects overflow/underflow. It is **not** the condition-expression parser.

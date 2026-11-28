@@ -25,6 +25,7 @@
 #include "imgui_internal.h"  // DockBuilder + BeginViewportSideBar for the default layout
 
 #include "Platform/IPlatform.h"
+#include "Debug/BreakpointEdit.h"   // Breakpoints panel Edit popup text parsing
 #include "PanelWidgets.h"     // shared row/cell widget helpers (row Selectable flags)
 #include "SaturnRegions.h"
 #include "Theme.h"
@@ -4148,6 +4149,24 @@ static const char* BpSizeName(uint32_t sz)
     return sz == 1 ? "Byte" : sz == 2 ? "Short" : sz == 4 ? "Long" : "Bytes";
 }
 
+namespace
+{
+// Edit popup state for the Breakpoints panel. One App owns one panel, and the popup is modal, so
+// a single instance is enough; it is reseeded every time "Edit..." opens it.
+struct BpEditState
+{
+    uint64_t id = 0;
+    int      kind = 0;          // index into kBpEditKinds
+    char     addr[16] = "";
+    char     size[16] = "";
+    std::string error;
+    bool     focusAddr = false;
+};
+BpEditState gBpEdit;
+const BpKind kBpEditKinds[] = { BpKind::Execution, BpKind::MemRead, BpKind::MemWrite, BpKind::MemReadWrite };
+const char*  kBpEditKindNames[] = { "Execution", "Read", "Write", "Read or Write" };
+}  // namespace
+
 // Visual Studio-style Breakpoints window: every breakpoint (execution + data
 // watchpoints), the exact condition each breaks on, plus enable/disable and delete.
 // Its own column beside Call Stack and SH-2 Assembly. Mutating through the BreakpointManager
@@ -4192,17 +4211,98 @@ void App::DrawBreakpoints()
         ImGui::EndPopup();
     }
 
+    // The Edit popup. Drawn from here (not inside the table) so it also copes with the list
+    // emptying while it is open. Fields are seeded when "Edit..." opens it.
+    auto drawEditPopup = [&]()
+    {
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        if (!ImGui::BeginPopupModal("Edit Breakpoint", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+        // Removed elsewhere (Delete, Clear All, the Access panel's Stop) while open: close.
+        bool exists = false;
+        for (const Breakpoint& b : mBreakpoints.All()) exists |= (b.id == gBpEdit.id);
+        if (!exists) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
+
+        bool submit = false;
+        ImGui::SetNextItemWidth(160.0f);
+        if (ImGui::BeginCombo("Type", kBpEditKindNames[gBpEdit.kind]))
+        {
+            for (int i = 0; i < 4; ++i)
+                if (ImGui::Selectable(kBpEditKindNames[i], gBpEdit.kind == i)) gBpEdit.kind = i;
+            ImGui::EndCombo();
+        }
+        const bool isExec = kBpEditKinds[gBpEdit.kind] == BpKind::Execution;
+
+        if (gBpEdit.focusAddr) { ImGui::SetKeyboardFocusHere(); gBpEdit.focusAddr = false; }
+        ImGui::SetNextItemWidth(160.0f);
+        submit |= ImGui::InputText("Address (hex)", gBpEdit.addr, sizeof(gBpEdit.addr),
+                                   ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsNoBlank);
+        ImGui::BeginDisabled(isExec);   // an execution breakpoint is always one instruction
+        ImGui::SetNextItemWidth(160.0f);
+        submit |= ImGui::InputText("Byte Count", gBpEdit.size, sizeof(gBpEdit.size),
+                                   ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsNoBlank);
+        ImGui::EndDisabled();
+        if (isExec) ImGui::SetItemTooltip("An execution breakpoint always covers one instruction.");
+
+        if (!gBpEdit.error.empty())
+            ImGui::TextColored(ui::Color(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1)),
+                               "%s", gBpEdit.error.c_str());
+
+        submit |= ImGui::Button("OK", ImVec2(80, 0));
+        ImGui::SameLine();
+        bool cancel = ImGui::Button("Cancel", ImVec2(80, 0));
+        cancel |= ImGui::IsKeyPressed(ImGuiKey_Escape);
+
+        if (submit)
+        {
+            const BpKind kind = kBpEditKinds[gBpEdit.kind];
+            uint32_t addr = 0, size = 2;
+            std::string err;
+            if (!ParseBpAddress(gBpEdit.addr, addr)) err = "Enter a hex address.";
+            else if (kind == BpKind::Execution)
+            {
+                if (addr & 1u) err = "Address must be even for an execution breakpoint.";
+            }
+            else if (!ParseBpByteCount(gBpEdit.size, size))
+                err = "Enter a byte count (decimal, or hex with 0x).";
+            else if (size == 0) err = "Byte count must be at least 1.";
+            else if (static_cast<uint64_t>(addr) + size > 0x100000000ull)
+                err = "Address plus byte count runs past 0xFFFFFFFF.";
+            if (err.empty())
+            {
+                switch (mBreakpoints.Edit(gBpEdit.id, kind, addr, size))
+                {
+                    case EditResult::Ok:
+                        // A memory breakpoint carries no guard, so its cached validation message is stale.
+                        if (kind != BpKind::Execution) mBpCondErrors.erase(gBpEdit.id);
+                        ImGui::CloseCurrentPopup();
+                        break;
+                    case EditResult::Duplicate:
+                        err = "Another breakpoint already has this type, address and size."; break;
+                    case EditResult::NotFound:
+                        ImGui::CloseCurrentPopup(); break;
+                    case EditResult::Invalid:
+                        err = "That type, address and byte count is not valid."; break;
+                }
+            }
+            gBpEdit.error = err;
+        }
+        else if (cancel) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    };
+
     if (n == 0)
     {
         ImGui::Separator();
         ImGui::TextDisabled("No breakpoints.");
         ImGui::TextDisabled("Set one from the SH-2 Assembly gutter, or right-click a byte");
         ImGui::TextDisabled("in the Memory panel and choose \"Add breakpoint\".");
+        drawEditPopup();
         ImGui::End();
         return;
     }
 
     uint64_t toRemove = 0;   // deferred so we never erase mid-iteration
+    uint64_t editRequest = 0;   // opened after the table: the popup must not live in a row's ID scope
     const ImGuiTableFlags tf = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
                                ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
     if (ImGui::BeginTable("bps", 4, tf))
@@ -4210,7 +4310,11 @@ void App::DrawBreakpoints()
         ImGui::TableSetupColumn("On",   ImGuiTableColumnFlags_WidthFixed, 26.0f);
         ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 78.0f);
         ImGui::TableSetupColumn("Breaks when\xe2\x80\xa6", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("",     ImGuiTableColumnFlags_WidthFixed, 58.0f);
+        // Sized from the two buttons it holds: a fixed 58px clipped the X at larger fonts.
+        const ImGuiStyle& bst = ImGui::GetStyle();
+        const float actionsW = ImGui::CalcTextSize("Go").x + ImGui::CalcTextSize("X").x +
+                               4.0f * bst.FramePadding.x + bst.ItemSpacing.x + 2.0f;
+        ImGui::TableSetupColumn("",     ImGuiTableColumnFlags_WidthFixed, actionsW);
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableHeadersRow();
 
@@ -4220,6 +4324,23 @@ void App::DrawBreakpoints()
             ImGui::PushID(static_cast<int>(b.id));
 
             ImGui::TableNextColumn();
+            // Whole-row Selectable (through the shared helper: AllowOverlap keeps the checkbox,
+            // guard box and buttons clickable) purely as the right-click target, so the plain
+            // text cells open the menu too. It covers the first frame-height band of the row;
+            // the guard InputText beneath keeps its own right-click (Cut/Copy/Paste).
+            const ImVec2 rowStart = ImGui::GetCursorScreenPos();
+            RowSelectable("##row", false, true);
+            if (ImGui::BeginPopupContextItem("bprowctx"))
+            {
+                ImGui::BeginDisabled(b.logAccess);
+                if (ImGui::MenuItem("Edit...")) editRequest = b.id;
+                ImGui::EndDisabled();
+                if (b.logAccess && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    ImGui::SetTooltip("This watchpoint belongs to the Find What Accesses panel.");
+                if (ImGui::MenuItem("Delete")) toRemove = b.id;
+                ImGui::EndPopup();
+            }
+            ImGui::SetCursorScreenPos(rowStart);   // the checkbox sits on top of the row target
             bool en = b.enabled;
             if (ImGui::Checkbox("##en", &en)) mBreakpoints.SetEnabled(b.id, en);
 
@@ -4283,7 +4404,24 @@ void App::DrawBreakpoints()
         }
         ImGui::EndTable();
     }
+    if (editRequest)
+    {
+        for (const Breakpoint& b : mBreakpoints.All())
+        {
+            if (b.id != editRequest) continue;
+            gBpEdit.id = b.id;
+            gBpEdit.kind = 0;
+            for (int i = 0; i < 4; ++i) if (kBpEditKinds[i] == b.kind) gBpEdit.kind = i;
+            std::snprintf(gBpEdit.addr, sizeof(gBpEdit.addr), "%08X", b.address);
+            std::snprintf(gBpEdit.size, sizeof(gBpEdit.size), "%u", b.size);
+            gBpEdit.error.clear();
+            gBpEdit.focusAddr = true;
+            ImGui::OpenPopup("Edit Breakpoint");
+            break;
+        }
+    }
     if (toRemove) { mBreakpoints.Remove(toRemove); mBpCondErrors.erase(toRemove); }
+    drawEditPopup();
 
     ImGui::End();
 }
@@ -4531,6 +4669,14 @@ void App::DrawAccessLog()
 {
     if (!ImGui::Begin("Access Log")) { ImGui::End(); return; }
 
+    // The watchpoint lives in the shared breakpoint list, where Clear All or Delete can remove
+    // it; when it is gone this panel is no longer watching.
+    if (mAccessWatchId != 0)
+    {
+        bool present = false;
+        for (const Breakpoint& bp : mBreakpoints.All()) present |= (bp.id == mAccessWatchId);
+        if (!present) mAccessWatchId = 0;
+    }
     const bool watching = mAccessWatchId != 0;
 
     // Controls: pick an address + access + span, then start watching. While a watch is

@@ -41,6 +41,15 @@ struct Breakpoint
     bool logAccess = false;
 };
 
+// Outcome of BreakpointManager::Edit. Anything but Ok leaves the manager untouched.
+enum class EditResult
+{
+    Ok,
+    NotFound,    // no breakpoint with that id
+    Duplicate,   // another breakpoint already has this type/address/size
+    Invalid      // odd execution address, zero size, or a range wrapping past 0xFFFFFFFF
+};
+
 class BreakpointManager
 {
 public:
@@ -75,6 +84,14 @@ public:
 
     // Add a memory breakpoint (dedup by address+kind+size). Returns its id.
     uint64_t AddMemory(uint32_t addr, uint32_t size, BpKind rw);
+
+    // Change an existing breakpoint's type, address and size in place (id, enabled state and list
+    // position are kept). Execution: size is forced to 2, the address must be even, and no other
+    // execution BP may sit there. Memory: size >= 1, the range must not wrap, and no other BP may
+    // share address+kind+size. Moving to a memory kind clears 'condition'; moving to Execution
+    // clears 'logAccess'; staying on the same kind keeps both. A no-op edit returns Ok without
+    // touching the generation; a real change bumps it once.
+    EditResult Edit(uint64_t id, BpKind kind, uint32_t address, uint32_t size);
 
     void SetEnabled(uint64_t id, bool enabled);
     void SetCondition(uint64_t id, const std::string& cond);   // client-side guard; no re-sync

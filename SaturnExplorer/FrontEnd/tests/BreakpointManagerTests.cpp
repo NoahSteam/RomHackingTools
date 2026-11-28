@@ -2,6 +2,7 @@
 // across both SH-2s (CPU-01): setting one from "either CPU" must dedup to a single entry
 // keyed by address alone, and the lookups the stop handler relies on must see it regardless
 // of which CPU argument a caller used to get there historically.
+#include "Debug/BreakpointEdit.h"
 #include "Debug/BreakpointManager.h"
 
 #include <cstdio>
@@ -163,6 +164,87 @@ int main()
         bps.SetEnabled(halting, false);
         c = bps.WatchCausesFor(all);
         Check(!c.halting && c.logging, "a disabled watchpoint is not a cause");
+    }
+
+    // ---- Edit ----
+    {
+        BreakpointManager bps;
+        bps.ToggleExecution(0x1000);
+        const uint64_t w = bps.AddMemory(0x06000000u, 4, BpKind::MemWrite);
+        const uint64_t r = bps.AddMemory(0x06000010u, 4, BpKind::MemRead);
+        const uint64_t ex = bps.All()[0].id;
+
+        Check(bps.Edit(999, BpKind::MemRead, 0, 1) == EditResult::NotFound, "Edit: unknown id is NotFound");
+
+        uint64_t g = bps.Generation();
+        Check(bps.Edit(ex, BpKind::Execution, 0x1001, 2) == EditResult::Invalid, "Edit: odd exec address is Invalid");
+        Check(bps.Edit(w, BpKind::MemWrite, 0x06000000u, 0) == EditResult::Invalid, "Edit: size 0 is Invalid");
+        Check(bps.Edit(w, BpKind::MemWrite, 0xFFFFFFFEu, 4) == EditResult::Invalid, "Edit: wrapping range is Invalid");
+        Check(bps.Generation() == g, "Edit: Invalid does not bump generation");
+        Check(bps.Edit(w, BpKind::MemWrite, 0x06000010u, 4) == EditResult::Ok,
+              "Edit: same address and size but a different kind is not a duplicate");
+        Check(bps.Edit(w, BpKind::MemWrite, 0x06000000u, 4) == EditResult::Ok, "Edit: put it back");
+        g = bps.Generation();
+        Check(bps.Edit(w, BpKind::MemRead, 0x06000010u, 4) == EditResult::Duplicate, "Edit: duplicate memory BP");
+        Check(bps.Generation() == g && bps.All()[1].kind == BpKind::MemWrite && bps.All()[1].address == 0x06000000u,
+              "Edit: a rejected edit modifies nothing");
+        Check(bps.Edit(r, BpKind::MemRead, 0xFFFFFFFCu, 4) == EditResult::Ok, "Edit: range ending at 0xFFFFFFFF is Ok");
+        Check(bps.Edit(r, BpKind::MemRead, 0x06000010u, 4) == EditResult::Ok, "Edit: move it back");
+
+        g = bps.Generation();
+        Check(bps.Edit(w, BpKind::MemWrite, 0x06000000u, 4) == EditResult::Ok, "Edit: no-op is Ok");
+        Check(bps.Generation() == g, "Edit: no-op does not bump generation");
+        Check(bps.Edit(ex, BpKind::Execution, 0x1000, 99) == EditResult::Ok && bps.Generation() == g,
+              "Edit: exec size is forced to 2, so this is still a no-op");
+
+        bps.SetEnabled(w, false);
+        g = bps.Generation();
+        Check(bps.Edit(w, BpKind::MemReadWrite, 0x06000100u, 8) == EditResult::Ok, "Edit: real change is Ok");
+        Check(bps.Generation() == g + 1, "Edit: real change bumps generation once");
+        const Breakpoint& e = bps.All()[1];
+        Check(e.id == w && !e.enabled && e.kind == BpKind::MemReadWrite && e.address == 0x06000100u && e.size == 8,
+              "Edit: id, enabled state and list position kept");
+    }
+    {
+        BreakpointManager bps;
+        bps.ToggleExecution(0x2000);
+        bps.ToggleExecution(0x3000);
+        const uint64_t a = bps.All()[0].id;
+        Check(bps.Edit(a, BpKind::Execution, 0x3000, 2) == EditResult::Duplicate, "Edit: duplicate execution BP");
+        Check(bps.Edit(a, BpKind::Execution, 0x2000, 2) == EditResult::Ok, "Edit: exec to its own address is Ok");
+        Check(bps.Edit(a, BpKind::Execution, 0x4000, 2) == EditResult::Ok && bps.All()[0].address == 0x4000u &&
+              bps.All()[0].size == 2 && bps.All()[0].cpu == 0, "Edit: exec moves");
+
+        bps.SetCondition(a, "r4 == 1");
+        Check(bps.Edit(a, BpKind::Execution, 0x4002, 2) == EditResult::Ok && bps.All()[0].condition == "r4 == 1",
+              "Edit: same kind keeps the condition");
+        Check(bps.Edit(a, BpKind::MemWrite, 0x4002, 4) == EditResult::Ok && bps.All()[0].condition.empty(),
+              "Edit: to a memory kind clears the condition");
+        bps.SetLogAccess(a, true);
+        Check(bps.Edit(a, BpKind::MemRead, 0x4002, 4) == EditResult::Ok && bps.All()[0].logAccess,
+              "Edit: memory to memory keeps logAccess");
+        Check(bps.Edit(a, BpKind::Execution, 0x4002, 7) == EditResult::Ok && !bps.All()[0].logAccess &&
+              bps.All()[0].size == 2, "Edit: to Execution clears logAccess and forces size 2");
+        Check(bps.Edit(a, BpKind::MemRead, 0x4003, 1) == EditResult::Ok, "Edit: odd address is fine for memory");
+    }
+    {
+        uint32_t v = 0;
+        Check(ParseBpAddress("06000000", v) && v == 0x06000000u, "addr: plain hex");
+        Check(ParseBpAddress("  0x1fF  ", v) && v == 0x1FFu, "addr: 0x prefix, spaces, mixed case");
+        Check(ParseBpAddress("0XFFFFFFFF", v) && v == 0xFFFFFFFFu, "addr: max");
+        Check(ParseBpAddress("0000000000FF", v) && v == 0xFFu, "addr: many leading zeros");
+        Check(!ParseBpAddress("", v) && !ParseBpAddress("   ", v) && !ParseBpAddress("0x", v), "addr: empty rejected");
+        Check(!ParseBpAddress("xyz", v) && !ParseBpAddress("12G4", v) && !ParseBpAddress("-1", v) &&
+              !ParseBpAddress("12 34", v), "addr: garbage rejected");
+        Check(!ParseBpAddress("100000000", v), "addr: overflow rejected");
+        Check(ParseBpByteCount("16", v) && v == 16, "count: decimal");
+        Check(ParseBpByteCount("0299", v) && v == 299, "count: leading zero is decimal, not octal");
+        Check(ParseBpByteCount(" 0x10 ", v) && v == 16, "count: 0x is hex");
+        Check(ParseBpByteCount("0", v) && v == 0, "count: zero parses (the model rejects it)");
+        Check(!ParseBpByteCount("", v) && !ParseBpByteCount("0x", v) && !ParseBpByteCount("1A", v) &&
+              !ParseBpByteCount("-4", v) && !ParseBpByteCount("4294967296", v) && !ParseBpByteCount("0x100000000", v),
+              "count: empty/garbage/overflow rejected");
+        Check(ParseBpByteCount("4294967295", v) && v == 0xFFFFFFFFu, "count: max");
     }
 
     if (gFail == 0) std::printf("All BreakpointManager tests passed.\n");
