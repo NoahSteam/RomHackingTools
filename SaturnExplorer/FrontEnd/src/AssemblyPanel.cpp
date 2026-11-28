@@ -712,7 +712,17 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         mNoticeAge -= ImGui::GetIO().DeltaTime;
         if (mNoticeAge <= 0.0f) mNotice.clear();
     }
-    FixedStatusLine(mNotice,
+    // No notice: say which frame is on screen when it is a recorded one. The line is reserved either way,
+    // so this moves nothing.
+    std::string recordedNote;
+    if (mNotice.empty() && mRecordedFrame != 0)
+    {
+        char rb[160];
+        std::snprintf(rb, sizeof(rb), "Showing recorded frame #%llu%s", mRecordedFrame,
+                      halted ? " (PC above is the live halt)" : "");
+        recordedNote = rb;
+    }
+    FixedStatusLine(mNotice.empty() ? recordedNote : mNotice,
                     mNoticeLevel == 2 ? ui::Color(IM_COL32(235, 100, 100, 255), IM_COL32(176, 32, 32, 255))
                   : mNoticeLevel == 1 ? ui::Color(IM_COL32(230, 180, 80, 255), IM_COL32(140, 90, 0, 255))
                                       : ui::Color(IM_COL32(150, 210, 150, 255), IM_COL32(30, 110, 50, 255)));

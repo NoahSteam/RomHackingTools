@@ -97,6 +97,11 @@ public:
     void SetBreakpointStop(bool active, int cpu, uint32_t pc)
     { mBpStopActive = active; mBpStopCpu = cpu; mBpStopPc = pc; }
 
+    // The recorded frame number the panel is showing instead of the live state (0 = the live state).
+    // While set, the idle notice line says so: the PC beside the CPU selector may be the live halt's
+    // while the listing and registers are that frame's.
+    void SetRecordedFrame(unsigned long long frame) { mRecordedFrame = frame; }
+
     // Jump the view to 'addr' on 'cpu' (the Log panel's "Jump to Assembly").
     void GoTo(int cpu, uint32_t addr);
 
@@ -147,6 +152,7 @@ private:
     bool     mBpStopActive = false;
     int      mBpStopCpu = 0;
     uint32_t mBpStopPc = 0;
+    unsigned long long mRecordedFrame = 0;
     bool     mAutoRefresh = true;      // re-read the code bytes every frame (live)
     // The address the view is framed on -- the PC while following, else the last navigation
     // target. It picks which captured region the list spans (see AsmCodeWindow.h); the list

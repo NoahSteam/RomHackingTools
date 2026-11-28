@@ -1193,6 +1193,11 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerScrubBarTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerScrubBarTests COMMAND SaturnExplorerScrubBarTests)
 
+    # Which context a debugger / transport command acts on while scrubbed, and whether it ends the scrub.
+    add_executable(SaturnExplorerDebuggerControlTests FrontEnd/tests/DebuggerControlTests.cpp)
+    target_include_directories(SaturnExplorerDebuggerControlTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerDebuggerControlTests COMMAND SaturnExplorerDebuggerControlTests)
+
     # The compare markers' session / timeline-epoch rules, exact frame lookup, and the slider
     # geometry they are drawn with (checked against ImGui's own SliderBehavior).
     add_executable(SaturnExplorerCompareMarkersTests

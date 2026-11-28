@@ -2320,7 +2320,7 @@ void App::DrawTransportBar()
 {
 #ifdef SE_ENABLE_LIVE
     if (!mbLiveSource) { return; }
-    se_context* const ctl = mLiveCtx ? mLiveCtx : mContext;   // real emulator, not the scrub view
+    se_context* const ctl = ControlContext();   // real emulator, not the scrub view
     const bool canControl = mbHasData && se_supports_frame_control(ctl);
     const int n = static_cast<int>(mRecorder.Count());
 
@@ -2349,11 +2349,9 @@ void App::DrawTransportBar()
         if (IconButton("##tp_play", Ico::Play, "Play"))
         {
             se_frame_resume(ctl);
-            DiscardPendingEdits();   // the frame they were staged on is being left behind
-            ScrubBarLeave(mbScrubbing, mScrubIndex);
+            LeaveScrubForRun();
             mbPaused = false;
             mStepHalt.Resumed();
-            VoidEditTarget();
         }
     }
     else if (IconButton("##tp_pause", Ico::Pause,
@@ -2433,6 +2431,29 @@ void App::DrawTransportBar()
 #endif
 }
 
+// The context every command acts on. While the scrub view is the displayed context mContext is that
+// read-only view, which no command reaches, so the live emulator (mLiveCtx, captured at the top of
+// BuildUI before the swap) is used; otherwise mContext already is the live one. Guarded by the view
+// being up because mLiveCtx is not cleared when a source closes.
+se_context* App::ControlContext() const
+{
+#ifdef SE_ENABLE_LIVE
+    if (ScrubViewUp() && mLiveCtx) return mLiveCtx;
+#endif
+    return mContext;
+}
+
+// What the transport's Play does on leaving the scrub view; every run / step command comes through here
+// (DebuggerControl.h says which), so how a scrub ends is decided in one place.
+void App::LeaveScrubForRun()
+{
+#ifdef SE_ENABLE_LIVE
+    DiscardPendingEdits();   // the frame they were staged on is being left behind
+    ScrubBarLeave(mbScrubbing, mScrubIndex);
+    VoidEditTarget();
+#endif
+}
+
 // Whether the connected emulator stamps its savestate blocks with the timeline they belong to
 // (protocol v22). Without it a block of a timeline a load abandoned cannot be told from one of the
 // new, so Play From Here -- which rewinds, and reuses frame numbers -- must not be offered: it
@@ -2460,6 +2481,8 @@ void App::StepFrameForward(se_context* ctl)
         VoidEditTarget();
         return;
     }
+    // Not LeaveScrubForRun: that discards staged edits, and an edit belongs to the frame it was made
+    // on (it is not dropped because the emulator steps on). The staged-edit rules are being reworked.
     ScrubBarLeave(mbScrubbing, mScrubIndex);
     VoidEditTarget();
     se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
@@ -2716,7 +2739,7 @@ bool App::ScrubToFrame(uint64_t frameNo)
         mCompareStatus = "That frame has left the rewind history.";
         return false;
     }
-    se_context* const ctl = mLiveCtx ? mLiveCtx : mContext;
+    se_context* const ctl = ControlContext();
     if (!mbPaused) { se_frame_pause(ctl); mbPaused = true; }
     mbScrubbing = true;
     mScrubTargetFrame = frameNo;
@@ -3191,6 +3214,7 @@ void App::DrawAssembly()
     mAssemblyPanel.SetOfferDecompile(true);
 #endif
     mAssemblyPanel.SetBreakpointStop(mStepHalt.HaltActive(), mStepHalt.HaltCpu(), mStepHalt.HaltPc());
+    mAssemblyPanel.SetRecordedFrame(sfe::RecordedFrameShown(ScrubViewUp() && mbScrubbing, mScrubShownFrame));
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mActions, mWatchPanel, mbLiveSource, req);
     // An in-place edit was written: the Log keeps the outcome (destination, old and new value, any warning) after the
     // panel's own one-line notice has faded.
@@ -3206,7 +3230,7 @@ void App::DrawAssembly()
     // Over and Step Out do: it is retired when the CPU arrives and the halt reads STEPPED. It used
     // to add a user breakpoint, which then stayed on the row and labelled the arrival a breakpoint
     // hit (macOS run, Step 4). No-op without frame control.
-    if (req.runTo && mbHasData && se_supports_frame_control(mContext))
+    if (req.runTo && mbHasData && se_supports_frame_control(ControlContext()))
         RunToTransient(req.runToAddr, mAssemblyPanel.Cpu());
     // Run control mirrored into the panel header, resolved against the panel's CPU.
     if (req.continueRun) Continue();
@@ -4433,7 +4457,7 @@ void App::DrawAccessLog()
         ImGui::Text("watching %08X (%s)", mAccessWatchAddr, kinds[mAccessKind]);
     }
 
-    if (!se_supports_frame_control(mContext))
+    if (!se_supports_frame_control(ControlContext()))
         ImGui::TextDisabled("Connect to a running emulator to capture accesses.");
     ImGui::Separator();
 
@@ -5032,9 +5056,18 @@ void App::DrawCallStack(IPlatform& platform)
                                                 mHaltWatchArmed));
         ImGui::SameLine();
         ImGui::Text("%s SH-2", mCallStackCpu ? "Slave" : "Master");
-        if (haveR) { ImGui::SameLine(); ImGui::Text("\xc2\xb7 PC %08X", r.pc); }
+        // While a recorded frame is shown, the banner still describes the HALT: its reason and its live
+        // PC, as the Assembly header does, not the PC the recorded frame's registers hold.
+        const unsigned long long recorded = sfe::RecordedFrameShown(ScrubViewUp() && mbScrubbing, mScrubShownFrame);
+        if (haveR)
+        {
+            const bool haltedHere = mStepHalt.HaltActive() && mCallStackCpu == mStepHalt.HaltCpu();
+            ImGui::SameLine();
+            ImGui::Text("\xc2\xb7 PC %08X", sfe::HeaderPc(recorded != 0, haltedHere, mStepHalt.HaltPc(), r.pc));
+        }
+        if (recorded != 0) { ImGui::SameLine(); ImGui::Text("\xc2\xb7 viewing recorded frame #%llu", recorded); }
 
-        const bool canStep = mbHasData && se_supports_frame_control(mContext);
+        const bool canStep = mbHasData && se_supports_frame_control(ControlContext());
         if (ImGui::Button("Continue")) { Continue(); }
         ImGui::SameLine();
         // Step Into / Over need an instruction-level halt (a breakpoint or prior step) so
@@ -5512,12 +5545,11 @@ void App::SyncBreakpointsToLive()
 // strips, Run to Here, and the step helpers). No-op without live frame control.
 void App::Continue()
 {
-    if (mbHasData && se_supports_frame_control(mContext))
+    se_context* const ctl = ControlContext();   // the emulator, not the scrub view the panel may be showing
+    if (mbHasData && se_supports_frame_control(ctl))
     {
-        se_frame_resume(mContext);
-#ifdef SE_ENABLE_LIVE
-        DiscardPendingEdits();
-#endif
+        se_frame_resume(ctl);
+        LeaveScrubForRun();
         mbPaused = false;
         mStepHalt.Resumed();   // the halt left behind is re-reported for a frame or two: not a new stop
     }
@@ -5570,6 +5602,8 @@ void App::StepInto(int cpu)
 #ifdef SE_ENABLE_LIVE
     se_live_step_insn(&mDataSource, 1);
 #endif
+    if (sfe::PlanCommand(sfe::DebugCommand::StepInto, true, mbScrubbing || ScrubViewUp()).leaveScrub)
+        LeaveScrubForRun();   // moving the game on ends the scrub, as Play does
     mbPaused = false;
     mStepHalt.Resumed();
     mStepHalt.BeginStep();   // hold the halted UI until the re-halt lands
@@ -5590,6 +5624,9 @@ void App::StepOver(int cpu)
         return;
     }
     const int stepped = SteppedCpu();
+    // The instruction at the HALT, not at the recorded frame on screen: read the live emulator's
+    // registers and memory (the backend follows mContext).
+    ScopedContextSwap liveRead(&mContext, ControlContext());
     se_sh2_regs r{};
     if (!mbHasData || se_get_sh2_regs(mContext, stepped, &r) != SE_OK) { return; }
     bool isSubCall = false;
@@ -5614,6 +5651,7 @@ void App::StepOut(int cpu)
         return;
     }
     const int stepped = SteppedCpu();
+    ScopedContextSwap liveRead(&mContext, ControlContext());   // the halt's registers, stack and shadow stack
     se_sh2_regs r{};
     if (!mbHasData || se_get_sh2_regs(mContext, stepped, &r) != SE_OK) { return; }
     // PR is not the frame's return address once the function has made a call of its own, so the
@@ -7818,12 +7856,12 @@ TopBarViewModel App::BuildTopBarViewModel() const
     vm.recording = mbRecording;
 #endif
     vm.paused = mbPaused;
-    vm.frameControl = mbHasData && mContext && se_supports_frame_control(mContext);
+    vm.frameControl = mbHasData && mContext && se_supports_frame_control(ControlContext());
 #ifdef SE_ENABLE_LIVE
     // Both halves must be there: a state has actually arrived, and the emulator can take one
     // back. A build without rewind support streams nothing, so this simply stays false.
     vm.canSaveState = mStateSlots.HaveState() &&
-                      se_supports_state_rewind(mLiveCtx ? mLiveCtx : mContext) != 0;
+                      se_supports_state_rewind(ControlContext()) != 0;
     vm.hasEmulatorStates = mEmuSlotCount > 0;
     // Pause, frame step and every load are applied at the emulator's frame gate, and a save-state
     // load needs its real savestate hooks: a build without them would take the request and do nothing.
@@ -7832,7 +7870,7 @@ TopBarViewModel App::BuildTopBarViewModel() const
                       LiveHas(SE_LIVE_CAP_STATE_REWIND);
     // Loading a slot sends the file's own state, so unlike Save it does not wait for one to be
     // streamed: right after a restart nothing has arrived yet, and the slots on disk still load.
-    vm.canLoadState = se_supports_state_rewind(mLiveCtx ? mLiveCtx : mContext) != 0 &&
+    vm.canLoadState = se_supports_state_rewind(ControlContext()) != 0 &&
                       LiveHas(SE_LIVE_CAP_FRAME_GATE) && LiveHas(SE_LIVE_CAP_STATE_REWIND);
     vm.hasEmulatorStates = vm.hasEmulatorStates && LiveHas(SE_LIVE_CAP_FRAME_GATE);
     // Explicit version check: LiveHas answers yes for a pre-v24 server, which has no ESV at all.
@@ -8548,7 +8586,7 @@ void App::DoLoadState(int slot)
         mLog.Error(mStateStatus);
         return;
     }
-    se_context* const ctl = mLiveCtx ? mLiveCtx : mContext;
+    se_context* const ctl = ControlContext();
     std::vector<uint8_t> image;
     uint64_t frame = 0;
     std::string error;
@@ -9095,18 +9133,16 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::TogglePause:
         if (mbPaused)
         {
-            se_frame_resume(mContext);
-#ifdef SE_ENABLE_LIVE
-            DiscardPendingEdits();
-#endif
+            se_frame_resume(ControlContext());
+            LeaveScrubForRun();
             mbPaused = false;
             mStepHalt.Resumed();
         }
-        else { se_frame_pause(mContext); mbPaused = true; }
+        else { se_frame_pause(ControlContext()); mbPaused = true; }
         break;
     case TopBarCommandType::StepFrame:
 #ifdef SE_ENABLE_LIVE
-        StepFrameForward(mLiveCtx ? mLiveCtx : mContext);   // the real emulator, not the scrub view
+        StepFrameForward(ControlContext());   // the real emulator, not the scrub view
 #else
         se_frame_step(mContext, 1);
         mbPaused = true;

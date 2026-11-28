@@ -31,6 +31,7 @@
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
 #include "CompareMarkers.h"      // Frame Memory Compare: the two timeline markers
 #include "ScrubBar.h"            // what the scrub slider's handle and label show
+#include "DebuggerControl.h"     // which context a command acts on while scrubbed
 #include "ScrubState.h"          // frame-identity rules for the scrub view and staged edits
 #include "CaptureRepeatTracker.h" // which live captures showed nothing new (A1-7)
 #include "MemoryComparePanel.h"  // Frame Memory Compare: the diff window
@@ -234,6 +235,12 @@ private:
     // Resume the halted emulator (shared by the toolbar, both run-control strips, Run to
     // Here, and the step helpers). No-op without live frame control.
     void Continue();
+    // The context every debugger / transport command acts on: the live emulator while the scrub view
+    // is the displayed context, else mContext (which then IS the live one). One place, see DebuggerControl.h.
+    se_context* ControlContext() const;
+    bool        ScrubViewUp() const { return mScrubContext && mContext == mScrubContext; }
+    // The ONE place a run / step command leaves the scrub view: exactly what the transport's Play does.
+    void        LeaveScrubForRun();
     void SyncTracepointsToLive();           // push the tracepoint set to the emulator (v8)
     void DrainTraceEvents();                // pull fired tracepoint events into the Log
     void DrainHwEvents();                   // ask for and pull hardware events into the Log (live only)

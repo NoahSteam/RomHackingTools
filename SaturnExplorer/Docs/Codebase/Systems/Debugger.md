@@ -1,6 +1,6 @@
 # Debugger execution, assembly, watches, and call stacks
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20).
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); scrubbed-command rule rechecked against 935f13e (2026-11-27).
 Pseudocode navigation/Watch integration rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 Evidence status: behavior below is verified from source unless explicitly qualified. This is a navigation map; source remains authoritative.
 
@@ -36,6 +36,17 @@ The frontend coordinates instruction-level debugging of the two SH-2 CPUs, while
 6. `RunToTransient` installs a temporary execution breakpoint **before** resuming. Its target CPU is recorded by `StepHaltMachine`; a different CPU reaching the shared PC breakpoint is resumed without completing the step. Arrival retires the temporary breakpoint and triggers synchronization.
 
 `StepHaltMachine` does not resume the emulator, evaluate expressions, log accesses or open panels. Those side effects remain in App. Reuse this separation when adding run-control behavior.
+
+### Commands while a recorded frame is shown
+
+While paused the user can scrub back; `App::mContext` is then the read-only scrub view and the real emulator is `mLiveCtx`. One rule, in [DebuggerControl.h](../../../FrontEnd/src/DebuggerControl.h) (`PlanCommand`, `ReadFromLive`, `HeaderPc`; `DebuggerControlTests`) and reached through `App::ControlContext()` / `App::LeaveScrubForRun()`:
+
+- Every command goes to the **live** emulator (`ControlContext()`: `mLiveCtx` while the scrub view is displayed, else `mContext`). A command sent to the scrub view reaches nobody; Continue from the Call Stack / Assembly strips used to do exactly that and silently did nothing.
+- Commands that **run or step** (Continue, Step Into/Over/Out, Run to Here, Step Frame, Play / the pause toggle's resume) also end the scrub as the transport's Play does: `App::LeaveScrubForRun()` is the one place that does it (what Play does: `ScrubBarLeave` and `VoidEditTarget` plus Play's existing staged-edit handling), so Play, Continue, Step Frame and Step Into share it. Step Over and Step Out read the PC, memory and call stack of the halt (a `ScopedContextSwap` to the live context), not of the recorded frame on screen.
+- Commands that only **configure** (breakpoints, tracepoints, watchpoints/access log, pokes, input) reach the live emulator (they already travel on `mDataSource`) and leave the scrub view up.
+- Reads that describe the **halt** (halt reason, halt PC from `StepHaltMachine`, "can step" via `ControlContext()`) are live; reads that describe the **displayed frame** (registers, memory, the call stack shown) stay on the scrub view. The Call Stack banner and the Assembly header both show the halt PC while halted; while a recorded frame is shown the banner appends "viewing recorded frame #N" and the Assembly panel's reserved notice line reads "Showing recorded frame #N" (plus "(PC above is the live halt)" when halted).
+
+Not scrubbed, nothing changes.
 
 ### Tracepoint to Log
 
