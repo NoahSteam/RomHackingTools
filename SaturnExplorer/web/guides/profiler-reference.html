@@ -121,7 +121,7 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
 <section id="open">
   <h2>Opening The Panel</h2>
   <p>Open it from <span class="ui">Windows → Debugger → Profiler</span>. It docks beside Watch by default and can be dragged out into its own window.</p>
-  <p>The profiler reads a <strong>Running Game In The Patched Mednafen</strong>. Connect with <span class="ui">Session → Source → Connect to Emulator (live)</span>. With a saved dump or savestate loaded, only the Memory tab has anything to show.</p>
+  <p>The profiler reads a running game in the patched Mednafen. Connect with <span class="ui">Session → Source → Connect to Emulator (live)</span>. With a saved dump or savestate loaded, only the Memory tab has anything to show.</p>
   <p>The panel keeps the last <span class="num">3,600</span> frames (60 s) and still shows them while the game is paused or stopped at a breakpoint. Averages and History strips use the newest <span class="num">600</span> (10 s).</p>
 </section>
 
@@ -177,7 +177,7 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
         <li><b>68000: X Idle (Stopped), Y Executing, Of Its Own Clock</b>: the sound processor's split between stopped and running.</li>
         <li><b>Function Attribution: On In k Of n Frames</b>: how many frames in the span ran with the Functions tab's timing switched on.</li>
         <li><b>VDP1 Command Work Exceeds The Frame In N Frames</b> (only when it happens): those frames drew in instant mode, so their work figure is above 100%.</li>
-        <li><b>Lost Records</b> (only when some were lost): see <a href="#lost">Lost Records</a>.</li>
+        <li><b>Lost Records</b> (once any have been lost this session): see <a href="#lost">Lost Records</a>.</li>
       </ul>
     </li>
     <li><b>History (0-100% Of The Frame, Newest On The Right).</b> One line per measure over the newest 600 frames: <span class="ui">Master SH-2 busy</span>, <span class="ui">Slave SH-2 busy</span> and <span class="ui">VDP1 command work</span>. The faint middle line is 50%. A frame that did not measure the value shows a short grey tick, and the line breaks where frames are missing.</li>
@@ -340,7 +340,7 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
   </figure>
   <figure class="shot">
     <a class="full" href="img/profiler/scrub-no-data.png" title="Open full size"><img src="img/profiler/scrub-no-data.png" width="730" height="184" alt="The Functions tab scrubbed to a frame with no record: the status line, in orange, reads No profiler data for frame 16812 (the Profiler was not capturing then, or the frame is older than the last 3600 kept), and the tab reads No Profiling Data."></a>
-    <figcaption>Scrubbed to a frame from before <span class="ui">Clear</span>: the status line gives the frame and the reason (1), the tab says <code>No Profiling Data</code> (2), and no figures are drawn.</figcaption>
+    <figcaption>Scrubbed to a frame the panel has no record of (here, one from before <span class="ui">Clear</span>): the status line gives the frame and the reason (1), the tab says <code>No Profiling Data</code> (2), and no figures are drawn.</figcaption>
   </figure>
   <figure class="shot">
     <a class="full" href="img/profiler/scrub-cut-span.png" title="Open full size"><img src="img/profiler/scrub-cut-span.png" width="1064" height="530" alt="The Frame tab scrubbed to frame 14211 with Average over at 10 s, 78 frames after a rewind. The status line reads Showing frame 14211 (scrubbed), newest is 14327; Averaging 78 of 600 frames (the rest are from before a rewind or state load). A faint vertical divider crosses the three History strips at the rewind, left of the red mark."></a>
