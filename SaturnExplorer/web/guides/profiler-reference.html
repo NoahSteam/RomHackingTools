@@ -5,7 +5,7 @@
 <title>Saturn Explorer — Profiler panel reference</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-/* Same tokens and reading column as profiler.html; screenshots fill the column and scale down with it. */
+/* Shared guide colours; a persistent contents panel beside the reading column. */
   :root {
     --bg: #e9edf1; --surface: #ffffff; --ink: #17212a; --muted: #4c5d6a; --rule: #d5dde3;
     --accent: #0d7f8f; --accent-soft: #d8eef1; --warn: #8a5a00; --warn-soft: #f4e6cc;
@@ -58,7 +58,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .back { font-size: 0.9rem; }
 nav.toc { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; font-size: 0.92rem; }
 
-/* 30-second box and caveat */
+/* Quick start and measurement caveat */
 .quick { background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--accent); border-radius: 6px; padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.6rem; }
 .quick h2 { border: 0; padding: 0; font-size: 1.1rem; }
 .caveat { background: var(--warn-soft); border-radius: 6px; padding: 0.7rem 1rem; font-size: 0.93rem; }
@@ -91,106 +91,173 @@ dd { margin: 0; color: var(--muted); }
   dd { margin-bottom: 0.6rem; }
 }
 footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 1rem; }
+
+/* Persistent navigation keeps the reading column at its original width. */
+.page-layout { max-width: 68rem; margin-inline: auto; display: grid; grid-template-columns: 15rem minmax(0, 48rem); gap: 3rem; align-items: start; }
+main { width: 100%; min-width: 0; margin: 0; }
+.sidebar { position: sticky; top: 1.5rem; max-height: calc(100dvh - 3rem); overflow-y: auto; border-right: 1px solid var(--rule); padding-right: 1rem; }
+.sidebar summary { font-weight: 700; padding: 0.5rem; cursor: pointer; }
+nav.toc { display: block; }
+.toc ul { list-style: none; padding: 0; gap: 0.15rem; }
+.toc a { display: block; padding: 0.35rem 0.6rem; border-radius: 4px; text-decoration: none; }
+.toc a:hover { background: var(--accent-soft); }
+.toc a[aria-current="location"] { background: var(--accent-soft); font-weight: 700; box-shadow: inset 3px 0 var(--accent); }
+.toc .subsections { padding-left: 0.8rem; font-size: 0.86rem; }
+.js .toc .subsections { display: none; }
+.js .toc li.active > .subsections { display: flex; }
+section[id], [id].extra, h3[id], li[id] { scroll-margin-top: 1.5rem; }
+.steps { padding-left: 1.4rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.extra { border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+.extra > summary { padding: 0.8rem 1rem; font-weight: 600; cursor: pointer; }
+.extra-body { padding: 0 1rem 1rem; display: flex; flex-direction: column; gap: 1rem; }
+summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.skip { position: fixed; left: 1rem; top: 0; transform: translateY(-120%); z-index: 10; padding: 0.6rem 1rem; background: var(--surface); }
+.skip:focus { transform: translateY(0); }
+#states table { table-layout: fixed; }
+#states th:nth-child(1) { width: 30%; }
+#states th:nth-child(2) { width: 14%; }
+#states th:nth-child(3) { width: 28%; }
+#states td { overflow-wrap: anywhere; }
+@media (min-width: 64rem) {
+  #contents > summary { list-style: none; cursor: default; pointer-events: none; }
+  #contents > summary::-webkit-details-marker { display: none; }
+}
+@media (max-width: 63.99rem) {
+  body { padding-top: 1rem; }
+  .page-layout { display: block; max-width: 48rem; }
+  .sidebar { top: 0; z-index: 5; max-height: 70dvh; padding: 0; border: 1px solid var(--rule); border-radius: 6px; margin-bottom: 1.5rem; background: var(--surface); }
+  #contents > summary { padding: 0.7rem 1rem; }
+  nav.toc { padding: 0 0.5rem 0.75rem; }
+  section[id], [id].extra, h3[id], li[id] { scroll-margin-top: 4.5rem; }
+  #states table { min-width: 44rem; }
+}
+@media print {
+  .sidebar, .skip { display: none; }
+  .page-layout { display: block; }
+}
+
 </style>
 </head>
 <body>
-<main>
+<a class="skip" href="#content">Skip to content</a>
+<div class="page-layout">
+<aside class="sidebar">
+  <details id="contents" open>
+    <summary>On this page</summary>
+    <nav class="toc" aria-label="On this page"><ul>
+      <li data-section="quick"><a href="#quick">Quick start</a></li>
+      <li data-section="open"><a href="#open">Open the profiler</a></li>
+      <li data-section="top"><a href="#top">Top bar</a></li>
+      <li data-section="frame"><a href="#frame">Frame tab</a><ul class="subsections"><li><a href="#workloads">Additional examples</a></li><li><a href="#lost">Lost records</a></li></ul></li>
+      <li data-section="buses"><a href="#buses">Buses tab</a></li>
+      <li data-section="memory"><a href="#memory">Memory tab</a></li>
+      <li data-section="functions"><a href="#functions">Functions tab</a><ul class="subsections"><li><a href="#function-details">Technical details</a></li><li><a href="#function-examples">Tooltip examples</a></li></ul></li>
+      <li data-section="scrub"><a href="#scrub">Review earlier frames</a><ul class="subsections"><li><a href="#rewind">After a rewind</a></li><li><a href="#scrub-examples">Additional examples</a></li></ul></li>
+      <li data-section="states"><a href="#states">Messages and troubleshooting</a><ul class="subsections"><li><a href="#state-examples">State examples</a></li><li><a href="#older">Older emulator compatibility</a></li></ul></li>
+      <li data-section="terms"><a href="#terms">Glossary</a></li>
+    </ul></nav>
+  </details>
+</aside>
+<main id="content">
 <header>
   <a class="back" href="index.html">← All guides</a>
   <span class="kicker">Saturn Explorer · profiler · reference</span>
-  <h1>The Profiler Panel, Field By Field</h1>
-  <p class="lede">What every tab, bar, column and message in the Profiler means, and how to read it. For how the profiler works and how its numbers were checked, see <a href="profiler.html">How the profiler works</a>.</p>
-  <p class="note">Click any screenshot to open it at full size.</p>
-  <nav class="toc" aria-label="On this page">
-    <a href="#quick">In 30 Seconds</a><a href="#open">Opening The Panel</a><a href="#top">Top Bar</a><a href="#frame">Frame</a><a href="#buses">Buses</a><a href="#memory">Memory</a><a href="#functions">Functions</a><a href="#scrub">Scrubbing Back</a><a href="#states">Messages And States</a><a href="#terms">Terms</a>
-  </nav>
+  <h1>Profiler panel reference</h1>
+  <p class="lede">Learn what the Profiler’s controls and measurements mean. For measurement details and validation, see <a href="profiler.html">How the profiler works</a>.</p>
+  <p class="note">Click any screenshot to open it at full size. Screenshots use V1, a validation program with known workloads.</p>
 </header>
 
 <section class="quick" id="quick">
-  <h2>In 30 Seconds</h2>
-  <ul>
-    <li><strong>Pick A Time Span</strong> with <span class="ui">Average over</span>. Every number is an average per frame over that span. A frame is one screen refresh (1/60 s).</li>
-    <li><strong>Frame Tab:</strong> one bar per processor. Blue is busy, orange is stalled on the bus, grey is asleep, dark is switched off. A master SH-2 bar that is almost all blue means the game is using its whole frame.</li>
-    <li><strong>Buses Tab:</strong> how many memory requests each chip receives per frame, and how many bytes DMA moved.</li>
-    <li><strong>Memory Tab:</strong> a map of each RAM area. Blue blocks hold varied data, orange blocks just changed.</li>
-    <li><strong>Functions Tab:</strong> tick the box to see which game functions use the most processor time. The emulator runs several times slower while it is ticked.</li>
-    <li><strong>"Not Available" Never Means Zero.</strong> It means that value was not measured. "(3 of 4 frames)" means only some frames in the span measured it.</li>
-  </ul>
+  <h2>Quick start</h2>
+  <ol class="steps">
+    <li>Connect to a running emulator with <span class="ui">Session → Source → Connect to Emulator (live)</span>, then open <span class="ui">Windows → Debugger → Profiler</span>.</li>
+    <li>Choose an averaging interval with <span class="ui">Average over</span>. It applies to the Frame, Buses and Functions measurements.</li>
+    <li>Use <a href="#frame">Frame</a> for processor activity, <a href="#buses">Buses</a> for memory traffic, or <a href="#memory">Memory</a> for RAM contents and changes.</li>
+    <li>Enable function timing in <a href="#functions">Functions</a> to find expensive game functions. This slows emulation significantly.</li>
+  </ol>
+  <p class="caveat"><strong>Unavailable does not mean zero.</strong> The value was not measured. A label such as <span class="ui">(3 of 4 frames)</span> means the average uses only those three frames.</p>
 </section>
 
 <section id="open">
-  <h2>Opening The Panel</h2>
-  <p>Open it from <span class="ui">Windows → Debugger → Profiler</span>. It docks beside Watch by default and can be dragged out into its own window.</p>
-  <p>The profiler reads a running game in the patched Mednafen. Connect with <span class="ui">Session → Source → Connect to Emulator (live)</span>. With a saved dump or savestate loaded, only the Memory tab has anything to show.</p>
-  <p>The panel keeps the last <span class="num">3,600</span> frames (60 s) and still shows them while the game is paused or stopped at a breakpoint. Averages and History strips use the newest <span class="num">600</span> (10 s).</p>
+  <h2>Open the profiler</h2>
+  <p>Open <span class="ui">Windows → Debugger → Profiler</span>. The panel docks beside Watch by default. Drag it out to use a separate window.</p>
+  <p>The profiler reads a running game in the patched Mednafen. Connect with <span class="ui">Session → Source → Connect to Emulator (live)</span>. With a saved dump or savestate, only the Memory tab has data.</p>
+  <p>The panel keeps the last <span class="num">3,600</span> frames (about 60 s at 60 Hz) and still shows them while the game is paused or stopped at a breakpoint. Averages and History strips cover up to <span class="num">600</span> frames (about 10 s at 60 Hz). When reviewing earlier frames, they end at the selected frame.</p>
 </section>
 
 <section id="top">
-  <h2>Top Bar</h2>
+  <h2>Top bar</h2>
   <figure class="shot narrow">
     <a class="full" href="img/profiler/header.png" title="Open full size"><img src="img/profiler/header.png" width="746" height="98" alt="The Profiler's top bar: an Average over list set to 1 s, a Clear button, the text 3600 frames recorded, an empty status line, and the four tabs Frame, Buses, Memory and Functions. Yellow numbered boxes mark each part."></a>
     <figcaption>The top bar, with each part numbered as in the list below.</figcaption>
   </figure>
   <ol class="callouts">
-    <li><b>Average Over.</b> The span every figure on the Frame, Buses and Functions tabs is averaged over: <span class="ui">Last frame</span>, <span class="ui">0.5 s</span> (30 frames), <span class="ui">1 s</span> (60), <span class="ui">5 s</span> (300) or <span class="ui">10 s</span> (600). Short spans react quickly; long ones smooth out spikes. The History strips always show the newest 600 frames.</li>
-    <li><b>Clear.</b> Forgets every recorded frame and the Memory tab's last sample. Use it to start fresh, for example just before the part of the game you care about.</li>
-    <li><b>N Frames Recorded.</b> How many frames the panel holds, up to 3,600. A longer span averages only the frames that exist.</li>
-    <li><b>Status Line.</b> Empty while live. When you scrub back it names the frame shown, or says why there is no data (see <a href="#scrub">Scrubbing Back</a>). Long text ends in "..."; hover for the rest.</li>
+    <li><b>Average over.</b> Sets the averaging interval for measurements on the Frame, Buses and Functions tabs: <span class="ui">Last frame</span>, <span class="ui">0.5 s</span> (30 frames), <span class="ui">1 s</span> (60), <span class="ui">5 s</span> (300) or <span class="ui">10 s</span> (600). Short intervals reveal spikes; longer intervals smooth fluctuations. History strips show individual frames, up to 600 at a time.</li>
+    <li><b>Clear.</b> Clears recorded profiler frames and the Memory tab’s previous sample. Use it before the part of the game you want to measure.</li>
+    <li><b>N frames recorded.</b> How many frames the panel holds, up to 3,600. A longer span averages only the frames that exist.</li>
+    <li><b>Status line.</b> Empty while live. When you scrub back it names the frame shown, or says why there is no data (see <a href="#scrub">Review earlier frames</a>). Long text ends in "..."; hover for the rest.</li>
     <li><b>Tabs.</b> Frame, Buses, Memory and Functions, described below.</li>
   </ol>
-  <figure class="shot narrow">
+  <details class="extra" id="average-examples">
+  <summary>Example: averaging intervals</summary>
+  <div class="extra-body">
+<figure class="shot narrow">
     <a class="full" href="img/profiler/window-list.png" title="Open full size"><img src="img/profiler/window-list.png" width="448" height="167" alt="The Average over list opened, showing Last frame, 0.5 s, 1 s, 5 s and 10 s, with 1 s highlighted."></a>
     <figcaption>The five choices of <span class="ui">Average over</span>.</figcaption>
   </figure>
-</section>
+  </div>
+</details>
+  </section>
 
 <section id="frame">
-  <h2>Frame Tab</h2>
-  <p>Shows where each frame's time goes, processor by processor. The screenshot shows the V1 test program running a DMA transfer during a VDP1 draw.</p>
+  <h2>Frame tab</h2>
+  <p>Shows processor activity and VDP1 command work for each frame.</p>
   <figure class="shot">
     <a class="full" href="img/profiler/frame-tab.png" title="Open full size"><img src="img/profiler/frame-tab.png" width="1228" height="454" alt="The Frame tab with eight numbered parts: frame length, colour legend, the two SH-2 bars, the value column, the VDP1, SCU DSP and 68000 bars, the VDP1 command count line, the Details lines and the History strips."></a>
-    <figcaption>V1 phase "DMA during draw": the master SH-2 is mostly asleep with a short orange bus stall, and VDP1 works 1.4% of the frame.</figcaption>
+    <figcaption>The master SH-2 is mostly asleep, with a short orange bus stall. VDP1 command work equals 1.4% of the frame’s cycle budget.</figcaption>
   </figure>
   <ol class="callouts">
-    <li><b>Frame Length: N SH-2 Cycles.</b> How long one frame is, counted in SH-2 clock cycles (about <span class="num">449 k</span> for a 60 Hz game). Every percentage on this tab is a share of this.</li>
+    <li><b>Frame length: N SH-2 cycles.</b> How long one frame is, counted in SH-2 clock cycles (about <span class="num">449 k</span> for a 60 Hz game). SH-2, VDP1 and SCU DSP percentages use this frame budget. The 68000 percentage uses its own clock.</li>
     <li><b>Legend.</b> The four colours of the processor bars:
       <ul>
-        <li><b>Busy (Includes Bus Waits)</b>, blue: time spent running code. It includes time waiting on slow memory, which is not shown separately.</li>
-        <li><b>Bus Stall</b>, orange: the SH-2 was held off the bus by a DMA transfer or an external halt.</li>
+        <li><b>Busy (includes bus waits)</b>, blue: time spent executing instructions or waiting on slow memory. Memory waits are included in blue, not shown separately.</li>
+        <li><b>Bus stall</b>, orange: the SH-2 was held off the bus by a DMA transfer or an external halt.</li>
         <li><b>Asleep</b>, grey: the SH-2 ran its <code>SLEEP</code> instruction and waited for an interrupt. Most games sleep until the next screen refresh once their work is done.</li>
         <li><b>Off</b>, dark: the slave SH-2 was powered down. Games that do not use the second processor show it off throughout.</li>
       </ul>
     </li>
-    <li><b>Master SH-2 And Slave SH-2 Bars.</b> Each bar is one processor's frame split into the four colours. Hover a segment to see its name and percentage. A mostly blue master bar means the game uses nearly all of its frame and is close to slowing down.</li>
-    <li><b>Value Column.</b> The busy percentage for the SH-2 rows, or the share for the single-colour rows. <span class="ui">off</span> means the slave was powered down for the whole span. <span class="ui">not available</span> means no frame in the span measured that row.</li>
-    <li><b>VDP1 Command Work, SCU DSP, 68000 (Sound).</b> One bar each, as a share of the frame:
+    <li><b>Master SH-2 and slave SH-2 bars.</b> Each bar is one processor's frame split into the four colours. Hover a segment to see its name and percentage. A mostly blue master bar leaves little idle time. Blue includes memory waits and busy loops, so it does not necessarily represent useful work.</li>
+    <li><b>Value column.</b> The busy percentage for the SH-2 rows, or the share for the single-colour rows. <span class="ui">off</span> means the slave was powered down for the whole span. <span class="ui">not available</span> means no frame in the span measured that row.</li>
+    <li><b>VDP1 command work, SCU DSP, 68000 (sound).</b> One bar each, as a share of the frame:
       <ul>
-        <li><b>VDP1 Command Work</b>: the drawing work VDP1 (the sprite and polygon chip) did on its command table. It is work, not elapsed time, so it can go above <span class="num">100%</span> when the emulator draws instantly.</li>
+        <li><b>VDP1 command work</b>: the drawing work VDP1 (the sprite and polygon chip) did on its command table. It is work, not elapsed time, so it can go above <span class="num">100%</span> when the emulator draws instantly.</li>
         <li><b>SCU DSP</b>: the SCU's small maths processor running its program. Many games do not use it.</li>
-        <li><b>68000 (Sound)</b>: the sound processor executing, as a share of its own clock.</li>
+        <li><b>68000 (sound)</b>: the sound processor executing, as a share of its own clock.</li>
       </ul>
     </li>
-    <li><b>VDP1: N Commands, N Draws Per Frame.</b> How many VDP1 commands were read and how many drawing passes started, per frame. If some draws were cut short, an orange <span class="ui">N unfinished</span> appears after it: the frame buffer swapped, or drawing restarted, before VDP1 reached the end of its list. A steady count of unfinished draws means VDP1 cannot keep up.</li>
+    <li><b>VDP1: N commands, N draws per frame.</b> How many VDP1 commands were read and how many drawing passes started, per frame. If some draws were cut short, an orange <span class="ui">N unfinished</span> appears after it: the frame buffer swapped, or drawing restarted, before VDP1 reached the end of its list. Repeated unfinished draws can indicate that VDP1 is not finishing before a swap or restart.</li>
     <li><b>Details.</b> Extra figures from current emulator builds:
       <ul>
-        <li><b>VDP1 Draw Budget Discarded By DMA</b>: drawing time VDP1 lost because a DMA was writing to its memory. It is a budget, not elapsed time.</li>
-        <li><b>68000: X Idle (Stopped), Y Executing, Of Its Own Clock</b>: the sound processor's split between stopped and running.</li>
-        <li><b>Function Attribution: On In k Of n Frames</b>: how many frames in the span ran with the Functions tab's timing switched on.</li>
-        <li><b>VDP1 Command Work Exceeds The Frame In N Frames</b> (only when it happens): those frames drew in instant mode, so their work figure is above 100%.</li>
-        <li><b>Lost Records</b> (once any have been lost this session): see <a href="#lost">Lost Records</a>.</li>
+        <li><b>VDP1 draw budget discarded by DMA</b>: drawing time VDP1 lost because a DMA was writing to its memory. It is a budget, not elapsed time.</li>
+        <li><b>68000: X idle (stopped), Y executing, of its own clock</b>: the sound processor's split between stopped and running.</li>
+        <li><b>Function attribution: on in k of n frames</b>: how many frames in the span ran with the Functions tab's timing switched on.</li>
+        <li><b>VDP1 command work exceeds the frame in N frames</b> (only when it happens): those frames drew in instant mode, so their work figure is above 100%.</li>
+        <li><b>Lost records</b> (once any have been lost this session): see <a href="#lost">Lost records</a>.</li>
       </ul>
     </li>
-    <li><b>History (0-100% Of The Frame, Newest On The Right).</b> One line per measure over the newest 600 frames: <span class="ui">Master SH-2 busy</span>, <span class="ui">Slave SH-2 busy</span> and <span class="ui">VDP1 command work</span>. The faint middle line is 50%. A frame that did not measure the value shows a short grey tick, and the line breaks where frames are missing.</li>
+    <li><b>History (0-100% of the frame, newest on the right).</b> One line per measure over the newest 600 frames: <span class="ui">Master SH-2 busy</span>, <span class="ui">Slave SH-2 busy</span> and <span class="ui">VDP1 command work</span>. The faint middle line is 50%. A frame that did not measure the value shows a short grey tick, and the line breaks where frames are missing.</li>
   </ol>
 
-  <h3>Other Workloads</h3>
+  <details class="extra" id="workloads">
+  <summary>Additional examples: processor bars and History</summary>
+  <div class="extra-body">
   <figure class="shot">
     <a class="full" href="img/profiler/frame-slave.png" title="Open full size"><img src="img/profiler/frame-slave.png" width="1228" height="157" alt="Frame tab rows with the Slave SH-2 row highlighted: its bar is fully blue and reads 100% busy, while the master SH-2 is asleep."></a>
-    <figcaption>V1 with the slave SH-2 switched on: it is <span class="num">100%</span> busy answering interrupts, while the master sleeps.</figcaption>
+    <figcaption>The slave SH-2 is fully busy while the master sleeps.</figcaption>
   </figure>
   <figure class="shot">
     <a class="full" href="img/profiler/frame-68000.png" title="Open full size"><img src="img/profiler/frame-68000.png" width="1228" height="268" alt="Frame tab with the 68000 (sound) row highlighted at 100%, and the Details line reading 68000: 0% idle (stopped), 100% executing, of its own clock."></a>
-    <figcaption>V1 running a busy loop on the 68000: its bar is full (1), and the Details line confirms it never stopped (2).</figcaption>
+    <figcaption>The 68000 bar is full (1); Details confirms it never stopped (2).</figcaption>
   </figure>
   <figure class="shot">
     <a class="full" href="img/profiler/frame-bar-tooltip.png" title="Open full size"><img src="img/profiler/frame-bar-tooltip.png" width="828" height="104" alt="Hovering the master SH-2 bar shows a tooltip reading Asleep (waiting for an interrupt): 100%."></a>
@@ -201,29 +268,31 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
     <figcaption>Hovering a History strip draws a crosshair and a tooltip naming that frame and its value, here <code>Frame 10166 (timeline 1)</code> and <code>100%</code>. The timeline number changes when the machine state is replaced, for example by loading a state. An older emulator shows <code>Frame: not available (this emulator does not number its frames)</code>.</figcaption>
   </figure>
 
-  <h3 id="lost">Lost Records</h3>
+    </div>
+</details>
+  <h3 id="lost">Lost records</h3>
   <figure class="shot">
     <a class="full" href="img/profiler/frame-lost-records.png" title="Open full size"><img src="img/profiler/frame-lost-records.png" width="1228" height="264" alt="The Details line Lost records: 165 dropped by the emulator's ring, 0 evicted by the driver's queue (in this window: 165 and 0), and a box around a small break in all three History lines."></a>
     <figcaption>Captured after Saturn Explorer was frozen for three seconds while the game kept running.</figcaption>
   </figure>
   <ol class="callouts">
-    <li><b>Lost Records.</b> Frames the panel never received. <i>Dropped</i>: Saturn Explorer fell behind the emulator, which keeps only its last 16 frames. <i>Evicted</i>: the panel fell behind Saturn Explorer. The bracket gives both counts for the current span. Averages stay correct, over fewer frames.</li>
-    <li><b>Break In The History Lines.</b> The lines stop and restart where frames are missing.</li>
+    <li><b>Lost records.</b> Frames the panel never received. <i>Dropped</i>: Saturn Explorer fell behind the emulator, which keeps only its last 16 frames. <i>Evicted</i>: the panel fell behind Saturn Explorer. The bracket gives both counts for the current span. Averages use only received frames; missing frames may hide spikes.</li>
+    <li><b>Break in the history lines.</b> The lines stop and restart where frames are missing.</li>
   </ol>
 </section>
 
 <section id="buses">
-  <h2>Buses Tab</h2>
-  <p>Shows how busy each part of the memory system is. The Saturn has three buses: the <strong>CPU Bus</strong> (the SH-2s' own memory), the <strong>A-Bus</strong> (cartridge slot and CD block) and the <strong>B-Bus</strong> (sound, VDP1 and VDP2). The screenshot shows V1's bus test, which makes a known number of requests to every device.</p>
+  <h2>Buses tab</h2>
+  <p>Shows memory traffic by bus and device, not the percentage of bus capacity used. The Saturn has three buses: the <strong>CPU Bus</strong> (the SH-2s' own memory), the <strong>A-Bus</strong> (cartridge slot and CD block) and the <strong>B-Bus</strong> (sound, VDP1 and VDP2).</p>
   <figure class="shot">
     <a class="full" href="img/profiler/buses-tab.png" title="Open full size"><img src="img/profiler/buses-tab.png" width="1228" height="624" alt="The Buses tab: a table of devices grouped under CPU bus, A-bus and B-bus with Reads and Writes per frame and a bar each, a line for requests on no bus, and the SCU DMA per frame table. Nine parts are numbered."></a>
-    <figcaption>V1 phase "Bus": 10 reads of the boot ROM, 20 of the SMPC, 30 of backup RAM and so on, exactly as the test program makes them.</figcaption>
+    <figcaption>Each device row shows its average reads and writes per frame. Bus rows total the devices beneath them.</figcaption>
   </figure>
   <ol class="callouts">
-    <li><b>SH-2 Bus Requests Per Frame.</b> The table's unit: requests the SH-2s' bus controller sent to memory. One 32-bit access is one request, even when the hardware splits it. A cache line fill counts as four; a read served from the cache counts as none. Hover <span class="ui">Writes</span> in the legend to see this in the app.</li>
-    <li><b>Cache Mode.</b> Whether the emulator models the SH-2 instruction cache: <span class="ui">instruction cache emulated</span> or <span class="ui">instruction cache not emulated</span>. Request counts depend on it, so only compare runs in the same mode. <span class="ui">both emulated and not emulated in this window</span> means the mode changed during the span. <span class="ui">not available (the game has not set it yet)</span> appears before the game has started.</li>
-    <li><b>Bus Rows</b> (CPU bus, A-bus, B-bus, in grey). The total of the device rows under each bus.</li>
-    <li><b>Device Rows.</b> One row per memory area:
+    <li><b>SH-2 bus requests per frame.</b> The table's unit: requests the SH-2s' bus controller sent to memory. One 32-bit access is one request, even when the hardware splits it. A cache line fill counts as four; a read served from the cache counts as none. Hover <span class="ui">Writes</span> in the legend to see this in the app.</li>
+    <li><b>Cache mode.</b> Whether the emulator models the SH-2 instruction cache: <span class="ui">instruction cache emulated</span> or <span class="ui">instruction cache not emulated</span>. Request counts depend on it, so only compare runs in the same mode. <span class="ui">both emulated and not emulated in this window</span> means the mode changed during the span. <span class="ui">not available (the game has not set it yet)</span> appears before the game has started.</li>
+    <li><b>Bus rows</b> (CPU bus, A-bus, B-bus, in grey). The total of the device rows under each bus.</li>
+    <li><b>Device rows.</b> One row per memory area:
       <div class="scroll"><table>
         <thead><tr><th>Bus</th><th>Devices</th></tr></thead>
         <tbody>
@@ -233,11 +302,11 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
         </tbody>
       </table></div>
     </li>
-    <li><b>Reads, Writes.</b> Requests per frame, averaged over the span. Large numbers are shortened: <span class="num">12.5 k</span> is 12,500, <span class="num">1.20 M</span> is 1.2 million.</li>
-    <li><b>Share Of The Busiest Device.</b> Each device's bar is scaled to the busiest device in the span, reads in blue and writes in orange. It shows at a glance where the traffic goes; the numbers on the left are the actual counts.</li>
-    <li><b>Not On Any Bus, Per Frame.</b> Requests to addresses that belong to no device: the A-bus dummy area and unmapped gaps. A healthy game makes few. Steady counts usually mean a program bug, or a test like V1 doing it on purpose. An older emulator counted these in the CD block, VDP2 and SCU rows; for such frames the line reads <span class="ui">A-bus dummy area and unmapped requests: not available</span>.</li>
-    <li><b>SCU DMA Per Frame.</b> For each of the SCU's three DMA channels (<span class="ui">Level 0</span> to <span class="ui">Level 2</span>): <span class="ui">Transfers</span> started per frame and <span class="ui">Bytes</span> requested per frame. An aborted transfer is still counted in full.</li>
-    <li><b>No SCU DMA In This Window.</b> Shown instead of routes when no DMA ran in the span.</li>
+    <li><b>Reads, writes.</b> Requests per frame, averaged over the span. Large numbers are shortened: <span class="num">12.5 k</span> is 12,500, <span class="num">1.20 M</span> is 1.2 million.</li>
+    <li><b>Share of the busiest device.</b> Each device's bar is scaled to the busiest device in the span, reads in blue and writes in orange. It shows at a glance where the traffic goes; the numbers on the left are the actual counts.</li>
+    <li><b>Not on any bus, per frame.</b> Requests to addresses that belong to no device: the A-bus dummy area and unmapped gaps. A healthy game makes few. Steady counts usually mean a program bug, or a test like V1 doing it on purpose. An older emulator counted these in the CD block, VDP2 and SCU rows; for such frames the line reads <span class="ui">A-bus dummy area and unmapped requests: not available</span>.</li>
+    <li><b>SCU DMA per frame.</b> For each of the SCU's three DMA channels (<span class="ui">Level 0</span> to <span class="ui">Level 2</span>): <span class="ui">Transfers</span> started per frame and <span class="ui">Bytes</span> requested per frame. An aborted transfer is still counted in full.</li>
+    <li><b>No SCU DMA in this window.</b> Shown instead of routes when no DMA ran in the span.</li>
   </ol>
   <figure class="shot">
     <a class="full" href="img/profiler/buses-dma.png" title="Open full size"><img src="img/profiler/buses-dma.png" width="648" height="164" alt="The SCU DMA table showing Level 0 with 1 transfer of 16.0 KiB, and below it the route line CPU bus to B-bus: 16.0 KiB."></a>
@@ -247,7 +316,7 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
 </section>
 
 <section id="memory">
-  <h2>Memory Tab</h2>
+  <h2>Memory tab</h2>
   <p>A block map of the six fixed RAM areas, coloured by what they contain. It works on any source, including saved dumps and savestates. It samples a few times a second, only while this tab is showing.</p>
   <figure class="shot">
     <a class="full" href="img/profiler/memory-tab.png" title="Open full size"><img src="img/profiler/memory-tab.png" width="1228" height="492" alt="The Memory tab: a legend, then for High work RAM, Low work RAM, VDP1 VRAM, VDP2 VRAM, Colour RAM and Sound RAM a heading line and a grid of small cells coloured dark, blue or orange."></a>
@@ -257,37 +326,40 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
     <li><b>Legend.</b> The three cell colours:
       <ul>
         <li><b>Uniform</b>, dark: the block is one byte value repeated, for example cleared memory. That does not mean the game is not using it.</li>
-        <li><b>Non-Uniform</b>, blue: the block holds more than one byte value, so something has been written there.</li>
-        <li><b>Changed Since Sample</b>, orange: the block's contents differ from the previous sample. It fades back to blue over the next samples if nothing changes again.</li>
+        <li><b>Non-uniform</b>, blue: the block contains more than one byte value. This does not prove the game actively uses it.</li>
+        <li><b>Changed since sample</b>, orange: the block's contents differ from the previous sample. It fades back to blue over the next samples if nothing changes again.</li>
       </ul>
       Hover <span class="ui">Changed since sample</span> in the app for the full rules.</li>
-    <li><b>Heading Line.</b> The area's name, size and start address, then the share of its blocks that are non-uniform and the share that changed since the last sample. The areas are High work RAM, Low work RAM, VDP1 VRAM, VDP2 VRAM, Colour RAM and Sound RAM.</li>
-    <li><b>Cell Grid.</b> Each cell is one block of the area, read left to right and top to bottom. An area is split into at most 1,024 blocks. Hover a cell to see its address range and state (<span class="ui">Uniform</span>, <span class="ui">Non-uniform</span>, <span class="ui">Changed recently</span> or <span class="ui">Changed since the last sample</span>). Click it to open that address in the Memory panel.</li>
+    <li><b>Heading line.</b> The area's name, size and start address, then the share of its blocks that are non-uniform and the share that changed since the last sample. The areas are High work RAM, Low work RAM, VDP1 VRAM, VDP2 VRAM, Colour RAM and Sound RAM.</li>
+    <li><b>Cell grid.</b> Each cell is one block of the area, read left to right and top to bottom. An area is split into at most 1,024 blocks. Hover a cell to see its address range and state (<span class="ui">Uniform</span>, <span class="ui">Non-uniform</span>, <span class="ui">Changed recently</span> or <span class="ui">Changed since the last sample</span>). Click it to open that address in the Memory panel.</li>
     <li><b>VDP1 VRAM.</b> The copy taken when VDP1 last finished drawing, so a change here means a draw finished, not that the game wrote at that instant. Before the first draw after boot or a state load, it is the live memory.</li>
   </ol>
   <p class="note">"Changed" compares two samples of the same capture. Sampling starts over, with nothing marked changed, when you switch source, the emulator restarts, the machine state is replaced (rewind, state load) or the displayed frame goes backwards. A jump never shows up as a change.</p>
 </section>
 
 <section id="functions">
-  <h2>Functions Tab</h2>
-  <p>Shows which game functions use the most SH-2 time. It is off by default because it slows the emulator down: the emulator has to look at every instruction both processors execute.</p>
+  <h2>Functions tab</h2>
+  <p>Shows which game functions use the most SH-2 time. Function timing is off by default; enabling it slows emulation significantly because every instruction must be inspected.</p>
   <figure class="shot">
     <a class="full" href="img/profiler/functions-tab.png" title="Open full size"><img src="img/profiler/functions-tab.png" width="1228" height="404" alt="The Functions tab with attribution switched on: a checkbox, a Both CPUs list, a summary line, a note about retained keys, and a table of functions with CPU, cycles per frame, share and a bar, ending in Other (not listed) and Not observed (estimate). Ten parts are numbered."></a>
-    <figcaption>V1's function test, which calls one function costing about <span class="num">12,000</span> cycles and one costing about <span class="num">4,000</span> each frame. The panel shows <span class="num">12.0 k</span> and <span class="num">4003</span>.</figcaption>
+    <figcaption>Two functions dominate the measured time: about 12,000 and 4,000 cycles per frame.</figcaption>
   </figure>
   <ol class="callouts">
-    <li><b>Attribute SH-2 Time To Functions.</b> Switches function timing on in the emulator. The note beside it says <span class="ui">(the emulator runs several times slower while this is on)</span>. It takes effect at the next frame. Timing also stops when you close the Profiler panel, so the emulator is never left in the slow mode.</li>
-    <li><b>CPU Filter.</b> <span class="ui">Both CPUs</span>, <span class="ui">Master SH-2</span> or <span class="ui">Slave SH-2</span>: which processor's functions to list. Shares are recomputed for the chosen processor.</li>
-    <li><b>Self Time, Callees Excluded - N Cycles Per Frame Attributed.</b> Time is charged to the function that is running, not to its caller. N is the total charged per frame: the 100% for the Share column.</li>
-    <li><b>Which Functions Are Listed.</b> Each frame the emulator tracks up to <span class="num">3,072</span> functions and keeps the <span class="num">64</span> that used the most time. The rest is added into <span class="ui">Other</span>, so nothing is dropped from the total.</li>
+    <li><b>Attribute SH-2 time to functions.</b> Enables function timing from the next frame. The emulator runs several times slower while it is enabled. Closing the Profiler turns it off.</li>
+    <li><b>CPU filter.</b> Choose <span class="ui">Both CPUs</span>, <span class="ui">Master SH-2</span> or <span class="ui">Slave SH-2</span>. Percentages are recalculated for the selection.</li>
+    <li><b>Self time.</b> Cycles spent in the function itself, excluding functions it calls. The attributed total per frame is the denominator for the Share column.</li>
+    <li><b>Which functions are listed.</b> Each frame the emulator tracks up to <span class="num">3,072</span> functions and keeps the <span class="num">64</span> that used the most time. The rest is added into <span class="ui">Other</span>, so nothing is dropped from the total.</li>
     <li><b>Columns.</b> <span class="ui">Function</span>, <span class="ui">CPU</span> (Master or Slave), <span class="ui">Cycles/frame</span> (SH-2 cycles per frame, averaged over the span) and <span class="ui">Share</span> (of the attributed total above).</li>
-    <li><b>Named Rows</b> (<code>sub_010468</code>, or a name from your symbols). A function entered by a recorded call, named by its start address or by the name you gave it. Double-click a row to open it in the SH-2 Assembly panel.</li>
-    <li><b>Address Rows</b> (<code>at 06010030</code>). Code with no recorded call, usually because it was already running when timing began or is an interrupt handler. It is listed by a 16-byte address range instead of a guess. If Saturn Explorer knows the function containing that address, the row is merged into it.</li>
-    <li><b>Other (Not Listed).</b> Time measured for functions that have no row. Hover it for the split: <span class="ui">not admitted to the per-frame table</span> (functions first seen after the table held 3,072), <span class="ui">below the top 64 of their frame</span>, and with an older emulator <span class="ui">from an emulator that does not split it</span>.</li>
-    <li><b>Not Observed (Estimate).</b> Busy time that no instruction was charged for, for example just after attribution was switched on or after a reset. It is an estimate from the Frame tab's counters, not a measurement, and is not part of Other or the percentages.</li>
+    <li><b>Named rows</b> (<code>sub_010468</code>, or a name from your symbols). A function entered by a recorded call, named by its start address or by the name you gave it. Double-click a row to open it in the SH-2 Assembly panel.</li>
+    <li><b>Address rows</b> (<code>at 06010030</code>). Code with no recorded call, usually because it was already running when timing began or is an interrupt handler. It is listed by a 16-byte address range instead of a guess. If Saturn Explorer knows the function containing that address, the row is merged into it.</li>
+    <li><b>Other (not listed).</b> Time measured for functions that have no row. Hover it for the split: <span class="ui">not admitted to the per-frame table</span> (functions first seen after the table held 3,072), <span class="ui">below the top 64 of their frame</span>, and with an older emulator <span class="ui">from an emulator that does not split it</span>.</li>
+    <li><b>Not observed (estimate).</b> Busy time that no instruction was charged for, for example just after attribution was switched on or after a reset. It is an estimate from the Frame tab's counters, not a measurement, and is not part of Other or the percentages.</li>
     <li><b>Bar.</b> Each row's cycles relative to the hottest function. <span class="ui">Other</span>'s bar is grey.</li>
   </ol>
-  <p>Notes that appear above the table only when they apply:</p>
+  <details class="extra" id="function-details">
+  <summary>Technical details: function table limits</summary>
+  <div class="extra-body">
+<p>Notes that appear above the table only when they apply:</p>
   <div class="scroll">
   <table>
     <thead><tr><th>Note</th><th>Meaning</th></tr></thead>
@@ -298,7 +370,12 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
     </tbody>
   </table>
   </div>
-  <figure class="shot">
+    </div>
+</details>
+  <details class="extra" id="function-examples">
+  <summary>Tooltip examples and partial timing</summary>
+  <div class="extra-body">
+<figure class="shot">
     <a class="full" href="img/profiler/functions-rawpc-tooltip.png" title="Open full size"><img src="img/profiler/functions-rawpc-tooltip.png" width="718" height="90" alt="Tooltip on an address row: No recorded call names this code (it was already running when profiling began), so it is listed by a 16-byte range of its PC."></a>
     <figcaption>The tooltip on an address row.</figcaption>
   </figure>
@@ -314,67 +391,82 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
     <a class="full" href="img/profiler/frame-10s-attribution.png" title="Open full size"><img src="img/profiler/frame-10s-attribution.png" width="1228" height="353" alt="The Frame tab with Average over set to 10 s, and the Details line reading Function attribution: on in 425 of 600 frames."></a>
     <figcaption>Back on the Frame tab, a 10 s span (1) after attribution was on for part of it: <span class="ui">on in 425 of 600 frames</span> (2). The Functions tab averages only over the frames that were attributed.</figcaption>
   </figure>
-</section>
+  </div>
+</details>
+  </section>
 
 <section id="scrub">
-  <h2>Scrubbing Back</h2>
+  <h2>Review earlier frames</h2>
+  <ol class="steps">
+    <li>Choose <span class="ui">Session → Source → Recording (live) → Start Recording</span> and let the game run.</li>
+    <li>Pause the game, then drag the frame scrub slider in the transport bar to an earlier recorded frame.</li>
+    <li>Choose <span class="ui">Last frame</span> in <span class="ui">Average over</span> to inspect that frame alone. A longer interval includes frames leading up to it.</li>
+  </ol>
   <p>While the game runs, the panel shows the newest frame. When you pause and scrub back, the <span class="ui">Frame</span>, <span class="ui">Buses</span> and <span class="ui">Functions</span> tabs switch to the frame you are looking at.</p>
   <ul>
     <li><b>Figures.</b> Every bar, table and count is for the scrubbed frame. A longer <span class="ui">Average over</span> span averages the frames ending at it, not the newest ones.</li>
-    <li><b>Status Line.</b> Reads <code>Showing frame N (scrubbed), newest is M</code>. It is empty while live or when scrubbed to the newest frame.</li>
-    <li><b>History Strips.</b> A red line with a small triangle marks the scrubbed frame. If that frame is more than 600 frames back, the strip shifts so the mark stays in view, and its heading says <span class="ui">the red mark is the frame shown</span>.</li>
-    <li><b>No Data.</b> The tab says <code>No Profiling Data</code> and the status line gives the reason. This is normal for frames more than 3,600 back, frames from before <span class="ui">Clear</span>, or an emulator that does not report timelines.</li>
-    <li><b>After A Rewind.</b> A rewind (<span class="ui">Play From Here</span>) or a state load starts a new timeline:
+    <li><b>Status line.</b> Reads <code>Showing frame N (scrubbed), newest is M</code>. It is empty while live or when scrubbed to the newest frame.</li>
+    <li><b>History strips.</b> A red line with a small triangle marks the scrubbed frame. If that frame is more than 600 frames back, the strip shifts so the mark stays in view, and its heading says <span class="ui">the red mark is the frame shown</span>.</li>
+    <li><b>No data.</b> The tab says <code>No Profiling Data</code> and the status line gives the reason. This is normal for frames more than 3,600 back, frames from before <span class="ui">Clear</span>, or an emulator that does not report timelines.</li>
+    <li id="rewind"><b>After a rewind.</b> A rewind (<span class="ui">Play From Here</span>) or a state load starts a new timeline:
       <ul>
         <li><b>Matching.</b> A replayed frame is never shown with the figures of the frame it replaced.</li>
         <li><b>Averaging.</b> A span stops at the rewind and averages only the frames since, on every tab, live or scrubbed.</li>
-        <li><b>Status Note.</b> When the span was cut short, the status line adds <code>Averaging k of n frames (the rest are from before a rewind or state load)</code>. The "of n" counts on the tabs use the shortened span too.</li>
-        <li><b>History Strips.</b> The line breaks at the rewind, with a faint vertical divider. Scrubbed to a frame from before the rewind, the strips end at the red mark, because the frames that followed were replaced.</li>
+        <li><b>Status note.</b> When the span was cut short, the status line adds <code>Averaging k of n frames (the rest are from before a rewind or state load)</code>. The "of n" counts on the tabs use the shortened span too.</li>
+        <li><b>History strips.</b> The line breaks at the rewind, with a faint vertical divider. Scrubbed to a frame from before the rewind, the strips end at the red mark, because the frames that followed were replaced.</li>
       </ul>
     </li>
-    <li><b>Memory Tab.</b> Unchanged: it samples the memory of whichever frame is displayed.</li>
+    <li><b>Memory tab.</b> Shows the memory of the selected frame; moving between frames resets change tracking.</li>
   </ul>
   <figure class="shot">
     <a class="full" href="img/profiler/scrub-status-mark.png" title="Open full size"><img src="img/profiler/scrub-status-mark.png" width="1228" height="542" alt="The Frame tab scrubbed back: the status line reads Showing frame 26123 (scrubbed), newest is 26381, and a red vertical mark with a small triangle crosses all three History strips just after a busy plateau ends."></a>
-    <figcaption>V1 scrubbed to frame 26123, the third frame of its function phase, with <span class="ui">Average over</span> at <span class="ui">Last frame</span>. The status line names the frame (1) and the red mark shows where it sits in the History strips (2), just after the busy-loop phase ended.</figcaption>
+    <figcaption>The status line identifies the selected frame (1). The red mark locates it in History (2).</figcaption>
   </figure>
-  <figure class="shot">
+  <details class="extra" id="scrub-examples">
+  <summary>Additional examples: missing data and rewind boundaries</summary>
+  <div class="extra-body">
+<figure class="shot">
     <a class="full" href="img/profiler/scrub-no-data.png" title="Open full size"><img src="img/profiler/scrub-no-data.png" width="730" height="184" alt="The Functions tab scrubbed to a frame with no record: the status line, in orange, reads No profiler data for frame 26202 (the Profiler was not capturing then, or the frame is older than the last 3600 kept), and the tab reads No Profiling Data."></a>
     <figcaption>Scrubbed to a frame the panel has no record of (here, one from before <span class="ui">Clear</span>): the status line gives the frame and the reason (1), the tab says <code>No Profiling Data</code> (2), and no figures are drawn.</figcaption>
   </figure>
   <figure class="shot">
     <a class="full" href="img/profiler/scrub-cut-span.png" title="Open full size"><img src="img/profiler/scrub-cut-span.png" width="1228" height="542" alt="The Frame tab scrubbed to frame 26202 with Average over at 10 s, 79 frames after a rewind. The status line reads Showing frame 26202 (scrubbed), newest is 26287; averaging 79 of 600 frames (the rest are from before a rewind or state load). A faint vertical divider crosses the three History strips at the rewind, left of the red mark."></a>
-    <figcaption>V1 rewound with <span class="ui">Play From Here</span> to frame 26123, run on, then scrubbed to 26202 with <span class="ui">Average over</span> at <span class="ui">10 s</span>. The span stops at the rewind and the status line says so (1): 79 of 600 frames. The faint divider (2) marks the rewind in the strips; to its left are the frames recorded before it, which the figures above leave out.</figcaption>
+    <figcaption>Only 79 of the requested 600 frames are used because a rewind shortened the interval (1). The faint divider marks the rewind (2).</figcaption>
   </figure>
-</section>
+  </div>
+</details>
+  </section>
 
 <section id="states">
-  <h2>Messages And States</h2>
+  <h2>Messages and troubleshooting</h2>
   <div class="scroll">
   <table>
-    <thead><tr><th>Message</th><th>Where</th><th>Meaning</th></tr></thead>
+    <thead><tr><th>Message</th><th>Where</th><th>Meaning</th><th>What to do</th></tr></thead>
     <tbody>
-      <tr><td>The profiler measures a running game. Connect to a live emulator (Session &gt; Source &gt; Connect to Emulator)…</td><td>Frame, Buses</td><td>Nothing is connected. Connect with <span class="ui">Session → Source → Connect to Emulator (live)</span>.</td></tr>
-      <tr><td>This emulator build does not report profiler counters. Rebuild the patched Mednafen…</td><td>Frame, Buses</td><td>The connected Mednafen is older than the profiler. Run <code>update.bat</code> or <code>update.sh</code>.</td></tr>
-      <tr><td>Waiting for the emulator to finish a frame...</td><td>Frame, Buses</td><td>Connected but no frame recorded yet: just after connecting or <span class="ui">Clear</span>, or while the emulator is paused.</td></tr>
-      <tr><td>No data loaded.</td><td>Memory</td><td>No source is loaded at all.</td></tr>
-      <tr><td>The machine state was replaced. This emulator does not say which timeline each capture is of, so sampling resumes after N more captures.</td><td>Memory</td><td>Only with an older emulator, after a state load or rewind. The tab waits until it is sure the memory it reads is from after the load.</td></tr>
-      <tr><td><i>Area</i> (size) not in this capture</td><td>Memory</td><td>The loaded source does not contain that RAM area, for example a dump without sound RAM.</td></tr>
-      <tr><td>(needs a live emulator)</td><td>Functions</td><td>The checkbox is greyed out until you connect.</td></tr>
-      <tr><td>(needs a Mednafen built with --enable-debugger and the current patch)</td><td>Functions</td><td>The connected Mednafen cannot time functions. Rebuild it with the installer.</td></tr>
-      <tr><td>No Profiling Data</td><td>Frame, Buses, Functions</td><td>Scrubbed to a frame the panel has no record of. The status line gives the reason. See <a href="#scrub">Scrubbing Back</a>.</td></tr>
-      <tr><td>Averaging k of n frames (the rest are from before a rewind or state load)</td><td>Status line</td><td>A rewind or state load cut the <span class="ui">Average over</span> span short: the figures average only the k frames since it.</td></tr>
-      <tr><td>No attributed frames in this window.</td><td>Functions</td><td>Attribution is off, or was off for the whole span.</td></tr>
-      <tr><td>Waiting for attributed frames...</td><td>Functions</td><td>Attribution is on but no timed frame has arrived yet. It stays while the emulator is paused or at a breakpoint.</td></tr>
-      <tr><td>No frame in this window carries the per-CPU split of the unlisted time (an older emulator). Choose both CPUs to see its functions.</td><td>Functions</td><td>With Master or Slave chosen on an older emulator. Choose <span class="ui">Both CPUs</span>.</td></tr>
-      <tr><td>not available</td><td>Frame, Buses</td><td>No frame in the span measured that value (an older emulator, or a figure the game has not produced yet). Never read it as zero.</td></tr>
-      <tr><td>(k of n frames)</td><td>after a value</td><td>Only k of the n frames in the span measured it. The value is the average over those k frames.</td></tr>
-      <tr><td>(all n frames)</td><td>68000 row</td><td>Shown when the Details line's idle/executing split covers fewer frames: the bar averages every frame, the Details line only the k that measured idle time.</td></tr>
-      <tr><td>off</td><td>Slave SH-2 row</td><td>The slave processor was powered down for the whole span.</td></tr>
+      <tr><td>The profiler measures a running game. Connect to a live emulator (Session &gt; Source &gt; Connect to Emulator)…</td><td>Frame, Buses</td><td>No live emulator is connected.</td><td>Connect through Session → Source → Connect to Emulator (live).</td></tr>
+      <tr><td>This emulator build does not report profiler counters. Rebuild the patched Mednafen…</td><td>Frame, Buses</td><td>The emulator does not support these counters.</td><td>Run update.bat or update.sh to update the patched emulator.</td></tr>
+      <tr><td>Waiting for the emulator to finish a frame...</td><td>Frame, Buses</td><td>Connected but no frame recorded yet: just after connecting or <span class="ui">Clear</span>, or while the emulator is paused.</td><td>Resume emulation and let a frame finish.</td></tr>
+      <tr><td>No data loaded.</td><td>Memory</td><td>No source is loaded at all.</td><td>Load a dump or savestate, or connect to an emulator.</td></tr>
+      <tr><td>The machine state was replaced. This emulator does not say which timeline each capture is of, so sampling resumes after N more captures.</td><td>Memory</td><td>Only with an older emulator, after a state load or rewind. The tab waits until it is sure the memory it reads is from after the load.</td><td>Resume emulation and wait for fresh captures, or update Mednafen.</td></tr>
+      <tr><td><i>Area</i> (size) not in this capture</td><td>Memory</td><td>The loaded source does not contain that RAM area, for example a dump without sound RAM.</td><td>Use a source that includes the missing RAM area.</td></tr>
+      <tr><td>(needs a live emulator)</td><td>Functions</td><td>The checkbox is greyed out until you connect.</td><td>Connect to a live emulator.</td></tr>
+      <tr><td>(needs a Mednafen built with --enable-debugger and the current patch)</td><td>Functions</td><td>The emulator cannot time functions.</td><td>Rebuild the patched Mednafen with debugger support.</td></tr>
+      <tr><td>No Profiling Data</td><td>Frame, Buses, Functions</td><td>Scrubbed to a frame the panel has no record of. The status line gives the reason. See <a href="#scrub">Review earlier frames</a>.</td><td>Select a recorded frame with profiler data; check the status line.</td></tr>
+      <tr><td>Averaging k of n frames (the rest are from before a rewind or state load)</td><td>Status line</td><td>A rewind or state load cut the <span class="ui">Average over</span> span short: the figures average only the k frames since it.</td><td>Wait for more frames, or choose a shorter averaging interval.</td></tr>
+      <tr><td>No attributed frames in this window.</td><td>Functions</td><td>Attribution is off, or was off for the whole span.</td><td>Enable function timing and let the game run.</td></tr>
+      <tr><td>Waiting for attributed frames...</td><td>Functions</td><td>Attribution is on but no timed frame has arrived yet. It stays while the emulator is paused or at a breakpoint.</td><td>Resume emulation and let a timed frame finish.</td></tr>
+      <tr><td>No frame in this window carries the per-CPU split of the unlisted time (an older emulator). Choose both CPUs to see its functions.</td><td>Functions</td><td>With Master or Slave chosen on an older emulator. Choose <span class="ui">Both CPUs</span>.</td><td>Select Both CPUs, or update Mednafen.</td></tr>
+      <tr><td>not available</td><td>Frame, Buses</td><td>No frame in the span measured that value (an older emulator, or a figure the game has not produced yet). Never read it as zero.</td><td>Check emulator compatibility and whether the game has produced the value.</td></tr>
+      <tr><td>(k of n frames)</td><td>after a value</td><td>Only k of the n frames in the span measured it. The value is the average over those k frames.</td><td>Read the average as covering only the measured frames.</td></tr>
+      <tr><td>(all n frames)</td><td>68000 row</td><td>Shown when the Details line's idle/executing split covers fewer frames: the bar averages every frame, the Details line only the k that measured idle time.</td><td>Use the coverage labels when comparing the bar with Details.</td></tr>
+      <tr><td>off</td><td>Slave SH-2 row</td><td>The slave processor was powered down for the whole span.</td><td>No action needed if the game does not use the slave.</td></tr>
     </tbody>
   </table>
   </div>
-  <figure class="shot narrow">
+  <details class="extra" id="state-examples">
+  <summary>State examples</summary>
+  <div class="extra-body">
+<figure class="shot narrow">
     <a class="full" href="img/profiler/state-disconnected.png" title="Open full size"><img src="img/profiler/state-disconnected.png" width="890" height="112" alt="The Frame tab with no emulator connected, reading The profiler measures a running game. Connect to a live emulator (Session &gt; Source &gt; Connect to Emulator) to see where each frame's time goes."></a>
     <figcaption>Not connected.</figcaption>
   </figure>
@@ -396,22 +488,28 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
   </figure>
   <figure class="shot narrow">
     <a class="full" href="img/profiler/state-functions-waiting.png" title="Open full size"><img src="img/profiler/state-functions-waiting.png" width="598" height="88" alt="The Functions tab just after ticking the checkbox while the emulator is stopped: Waiting for attributed frames."></a>
-    <figcaption>Just ticked, emulator stopped at a breakpoint.</figcaption>
+    <figcaption>Function timing enabled while stopped at a breakpoint.</figcaption>
   </figure>
-  <h3>With An Older Emulator</h3>
+    </div>
+</details>
+  <details class="extra" id="older">
+  <summary>Older emulator compatibility</summary>
+  <div class="extra-body">
   <p>A Mednafen built before the current profiler format still works, but shows fewer figures. The Frame tab shows <span class="ui">VDP1 drawing</span> (elapsed drawing time) instead of <span class="ui">VDP1 command work</span>, and has no Details section. If a span mixes old and new frames, both VDP1 rows appear, each over its own frames. They measure different things and are never added together. The Buses tab has no cache mode and no "not on any bus" line. Rebuilding with <code>update.bat</code> or <code>update.sh</code> brings everything back.</p>
-</section>
+  </div>
+</details>
+  </section>
 
 <section id="terms">
-  <h2>Terms</h2>
+  <h2>Glossary</h2>
   <dl>
-    <dt>Frame</dt><dd>One screen refresh, 1/60 s on a 60 Hz game. The profiler's unit of time.</dd>
-    <dt>SH-2 Cycle</dt><dd>One tick of the main processors' clock: about 27 million per second, depending on the video mode.</dd>
-    <dt>Master / Slave SH-2</dt><dd>The Saturn's two main processors. Every game uses the master. Many leave the slave off.</dd>
+    <dt>Frame</dt><dd>One screen refresh; about 16.7 ms at 60 Hz. The profiler’s unit of time.</dd>
+    <dt>SH-2 cycle</dt><dd>One tick of the main processors' clock: about 27 million per second, depending on the video mode.</dd>
+    <dt>Master / slave SH-2</dt><dd>The Saturn's two main processors. Every game uses the master. Many leave the slave off.</dd>
     <dt>Span</dt><dd>The frames chosen by <span class="ui">Average over</span>.</dd>
-    <dt>Bus Request</dt><dd>One request the SH-2 bus controller sends to memory, after the SH-2's cache.</dd>
+    <dt>Bus request</dt><dd>One request the SH-2 bus controller sends to memory, after the SH-2's cache.</dd>
     <dt>DMA</dt><dd>A transfer that copies memory without the processor doing it. The SCU has three channels (levels).</dd>
-    <dt>Self Time</dt><dd>Time spent in a function's own instructions, not in the functions it calls.</dd>
+    <dt>Self time</dt><dd>Time spent in a function's own instructions, not in the functions it calls.</dd>
     <dt>Attribution</dt><dd>Charging processor time to the function that is running. The Functions tab's checkbox switches it on.</dd>
     <dt>Record</dt><dd>One frame's measurements, sent from the emulator to Saturn Explorer.</dd>
   </dl>
@@ -420,5 +518,68 @@ footer { font-size: 0.86rem; color: var(--muted); border-top: 1px solid var(--ru
 
 <footer><a href="index.html">← All guides</a> · <a href="profiler.html">How the profiler works</a> · Part of <a href="https://github.com/NoahSteam/RomHackingTools">Saturn Explorer</a>. Opened from Saturn Explorer with Help → Profiler Reference (web).</footer>
 </main>
+</div>
+
+<script>
+(() => {
+  document.documentElement.classList.add('js');
+  const contents = document.getElementById('contents');
+  const mobile = window.matchMedia('(max-width: 63.99rem)');
+  const nav = document.querySelector('.toc');
+  const links = [...nav.querySelectorAll('a')];
+  const sections = [...document.querySelectorAll('main > section[id]')];
+  const syncMenu = () => { contents.open = !mobile.matches; };
+  syncMenu();
+  mobile.addEventListener('change', syncMenu);
+  // Open collapsed examples for direct links, including links from outside this page.
+  function revealHash() {
+    let target;
+    try { target = document.getElementById(decodeURIComponent(location.hash.slice(1))); }
+    catch { return; }
+    if (!target) return;
+    for (let el = target; el; el = el.parentElement) {
+      if (el.tagName === 'DETAILS') el.open = true;
+    }
+    requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
+  }
+  window.addEventListener('hashchange', revealHash);
+  if (location.hash) revealHash();
+  nav.addEventListener('click', event => {
+    if (!event.target.closest('a')) return;
+    if (mobile.matches) contents.open = false;
+  });
+  function updateCurrent() {
+    const offset = mobile.matches ? 112 : 96;
+    let current = sections[0];
+    for (const section of sections) {
+      if (section.getBoundingClientRect().top <= offset) current = section;
+    }
+    const group = nav.querySelector('[data-section="' + current.id + '"]');
+    nav.querySelectorAll('[data-section]').forEach(li => li.classList.toggle('active', li === group));
+    let activeLink = group.querySelector('a');
+    for (const link of group.querySelectorAll('.subsections a')) {
+      const target = document.getElementById(link.hash.slice(1));
+      if (target && target.getClientRects().length && target.getBoundingClientRect().top <= offset) activeLink = link;
+    }
+    links.forEach(link => {
+      if (link === activeLink) link.setAttribute('aria-current', 'location');
+      else link.removeAttribute('aria-current');
+    });
+  }
+  let queued = false;
+  const schedule = () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; updateCurrent(); });
+  };
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+  document.addEventListener('toggle', event => {
+    if (event.target === contents && !mobile.matches && !contents.open) contents.open = true;
+    schedule();
+  }, true);
+  updateCurrent();
+})();
+</script>
 </body>
 </html>
