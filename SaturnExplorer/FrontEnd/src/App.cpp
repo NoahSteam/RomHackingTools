@@ -4310,7 +4310,11 @@ void App::DrawBreakpoints()
         ImGui::TableSetupColumn("On",   ImGuiTableColumnFlags_WidthFixed, 26.0f);
         ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 78.0f);
         ImGui::TableSetupColumn("Breaks when\xe2\x80\xa6", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("",     ImGuiTableColumnFlags_WidthFixed, 58.0f);
+        // Sized from the two buttons it holds: a fixed 58px clipped the X at larger fonts.
+        const ImGuiStyle& bst = ImGui::GetStyle();
+        const float actionsW = ImGui::CalcTextSize("Go").x + ImGui::CalcTextSize("X").x +
+                               4.0f * bst.FramePadding.x + bst.ItemSpacing.x + 2.0f;
+        ImGui::TableSetupColumn("",     ImGuiTableColumnFlags_WidthFixed, actionsW);
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableHeadersRow();
 
@@ -4665,6 +4669,14 @@ void App::DrawAccessLog()
 {
     if (!ImGui::Begin("Access Log")) { ImGui::End(); return; }
 
+    // The watchpoint lives in the shared breakpoint list, where Clear All or Delete can remove
+    // it; when it is gone this panel is no longer watching.
+    if (mAccessWatchId != 0)
+    {
+        bool present = false;
+        for (const Breakpoint& bp : mBreakpoints.All()) present |= (bp.id == mAccessWatchId);
+        if (!present) mAccessWatchId = 0;
+    }
     const bool watching = mAccessWatchId != 0;
 
     // Controls: pick an address + access + span, then start watching. While a watch is
