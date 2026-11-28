@@ -2799,3 +2799,19 @@ if(TARGET SaturnExplorerFrontEnd AND NOT EMSCRIPTEN)
         endif()
     endforeach()
 endif()
+
+# The viewer-only web build compiles the front end WITHOUT SE_ENABLE_LIVE, and nothing on the desktop
+# does: code that names a live-only member (the recorder, the scrub view) outside the guard built
+# everywhere CI looks and broke only there (the Profiler did, for two releases). This compiles App.cpp,
+# where every such member lives, once more with the definition removed and everything else the same,
+# so that mistake fails the ordinary build. It links nothing and ships nothing.
+if(TARGET SaturnExplorerFrontEnd AND NOT EMSCRIPTEN)
+    add_library(SaturnExplorerFrontEndNoLiveCheck OBJECT FrontEnd/src/App.cpp)
+    target_include_directories(SaturnExplorerFrontEndNoLiveCheck PRIVATE
+        $<TARGET_PROPERTY:SaturnExplorerFrontEnd,INCLUDE_DIRECTORIES>)
+    target_compile_definitions(SaturnExplorerFrontEndNoLiveCheck PRIVATE
+        $<FILTER:$<TARGET_PROPERTY:SaturnExplorerFrontEnd,COMPILE_DEFINITIONS>,EXCLUDE,^SE_ENABLE_LIVE$>)
+    target_compile_options(SaturnExplorerFrontEndNoLiveCheck PRIVATE
+        $<TARGET_PROPERTY:SaturnExplorerFrontEnd,COMPILE_OPTIONS>)
+    add_dependencies(SaturnExplorerFrontEnd SaturnExplorerFrontEndNoLiveCheck)
+endif()
